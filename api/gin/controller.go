@@ -35,7 +35,18 @@ func Keys(c *gin.Context) {
 	if err == redis.Nil {
 		resultMap = make([]string, 0)
 	}
-	response(c, define.ErrorCodeSuccess, `获取成功`, resultMap)
+	//拿到key类型
+	returnList := make([]define.KeysList, 0)
+	for _, cacheKey := range resultMap {
+		keyType, err := redisCli.Type(cacheKey).Result()
+		if err == nil && keyType != `` {
+			returnList = append(returnList, define.KeysList{
+				CacheKey: cacheKey,
+				Type:     keyType,
+			})
+		}
+	}
+	response(c, define.ErrorCodeSuccess, `获取成功`, returnList)
 }
 
 func Search(c *gin.Context) {
@@ -226,6 +237,38 @@ func DelKey(c *gin.Context) {
 	}
 }
 
+func DelSub(c *gin.Context) {
+	var err error
+	reqBody := &define.DelSub{}
+	requestData(c, &reqBody)
+
+	var redisCli *redis.Client
+	if redisCli = getRedisClient(c, reqBody.UniKey); redisCli == nil {
+		return
+	}
+
+	if exist := checkKeyExist(c, redisCli, reqBody.CacheKey); exist == false {
+		return
+	}
+
+	if reqBody.CacheType == define.CacheString {
+		response(c, define.ErrorCodeRunError, `不支持字符串`, ``)
+	} else if reqBody.CacheType == define.CacheHash {
+		err = redisCli.HDel(reqBody.CacheKey, reqBody.Sub).Err()
+	} else if reqBody.CacheType == define.CacheList {
+		err = redisCli.LRem(reqBody.CacheKey, 0, reqBody.Sub).Err()
+	} else if reqBody.CacheType == define.CacheSet {
+		err = redisCli.SRem(reqBody.CacheKey, reqBody.Sub).Err()
+	} else if reqBody.CacheType == define.CacheZSet {
+		err = redisCli.ZRem(reqBody.CacheKey, reqBody.Sub).Err()
+	}
+	if err != nil {
+		response(c, define.ErrorCodeRunError, err.Error(), ``)
+	} else {
+		response(c, define.ErrorCodeSuccess, `删除成功`, ``)
+	}
+}
+
 func EditTtl(c *gin.Context) {
 	var err error
 	reqBody := &define.EditTTL{}
@@ -281,6 +324,10 @@ func CreateCache(c *gin.Context) {
 	if reqBody.BoolCreate == true {
 		if existInt := redisCli.Exists(reqBody.CacheKey).Val(); existInt > 0 {
 			response(c, define.ErrorKeyNotExist, fmt.Sprintf(`%s 已经存在`, reqBody.CacheKey), ``)
+			return
+		}
+	} else {
+		if exist := checkKeyExist(c, redisCli, reqBody.CacheKey); exist == false {
 			return
 		}
 	}

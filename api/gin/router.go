@@ -23,6 +23,8 @@ func InitRouter() (router *gin.Engine) {
 	router.POST(`/api/save/string`, SaveString)
 	//删除key
 	router.POST(`/api/del/key`, DelKey)
+	//删除sub key
+	router.POST(`/api/del/sub`, DelSub)
 	//更改ttl
 	router.POST(`/api/edit/ttl`, EditTtl)
 	//删除所有缓存

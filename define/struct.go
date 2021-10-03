@@ -61,6 +61,18 @@ type Response struct {
 	Data    interface{} `json:"Data"`
 }
 
+type KeysList struct {
+	CacheKey string
+	Type     string
+}
+
+type DelSub struct {
+	UniKey    string `json:"UniKey"`
+	CacheType string `json:"cacheType"`
+	CacheKey  string `json:"cacheKey"`
+	Sub       string `json:"sub"`
+}
+
 type CreateCache struct {
 	UniKey      string  `json:"UniKey"`
 	CacheType   string  `json:"cacheType"`
