@@ -2,6 +2,7 @@ package gin
 
 import (
 	"github.com/gin-gonic/gin"
+	log "github.com/sirupsen/logrus"
 	"net/http"
 )
 
@@ -31,6 +32,9 @@ func InitRouter() (router *gin.Engine) {
 	router.POST(`/api/delete/all`, DelAllKey)
 	//创建缓存
 	router.POST(`/api/create`, CreateCache)
+	//编辑二级缓存
+	router.POST(`/api/edit/sub`, EditSub)
+	log.SetLevel(log.DebugLevel)
 	return router
 }
 

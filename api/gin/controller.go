@@ -321,7 +321,7 @@ func CreateCache(c *gin.Context) {
 	}
 
 	//判断是否存在
-	if reqBody.BoolCreate == true {
+	if reqBody.BoolCreate == 1 {
 		if existInt := redisCli.Exists(reqBody.CacheKey).Val(); existInt > 0 {
 			response(c, define.ErrorKeyNotExist, fmt.Sprintf(`%s 已经存在`, reqBody.CacheKey), ``)
 			return
@@ -356,7 +356,7 @@ func CreateCache(c *gin.Context) {
 		response(c, define.ErrorCodeRunError, err.Error(), ``)
 	}
 	//处理过期时间
-	if reqBody.BoolCreate == true && reqBody.TTL != 0 {
+	if reqBody.BoolCreate == 1 && reqBody.TTL != 0 {
 		err = redisCli.Expire(reqBody.CacheKey, time.Duration(reqBody.TTL)*time.Second).Err()
 	}
 
@@ -364,6 +364,39 @@ func CreateCache(c *gin.Context) {
 		response(c, define.ErrorCodeRunError, err.Error(), ``)
 	} else {
 		response(c, define.ErrorCodeSuccess, `创建成功`, ``)
+	}
+}
+
+func EditSub(c *gin.Context) {
+	var err error
+	reqBody := &define.EditSub{}
+	requestData(c, &reqBody)
+	log.Errorf(`editSub %#v`, reqBody)
+
+	var redisCli *redis.Client
+	if redisCli = getRedisClient(c, reqBody.UniKey); redisCli == nil {
+		return
+	}
+
+	if exist := checkKeyExist(c, redisCli, reqBody.CacheKey); exist == false {
+		log.Errorf(`exist %v`, exist)
+		return
+	}
+	if reqBody.CacheType == define.CacheHash {
+		err = redisCli.HSet(reqBody.CacheKey, reqBody.CacheField, reqBody.CacheValue).Err()
+	} else if reqBody.CacheType == define.CacheList {
+		err = redisCli.LSet(reqBody.CacheKey, reqBody.CacheIndex, reqBody.CacheValue).Err()
+	} else if reqBody.CacheType == define.CacheZSet {
+		err = redisCli.ZAdd(reqBody.CacheKey, redis.Z{
+			Score:  reqBody.CacheScore,
+			Member: reqBody.CacheMember,
+		}).Err()
+	}
+
+	if err != nil {
+		response(c, define.ErrorCodeRunError, err.Error(), ``)
+	} else {
+		response(c, define.ErrorCodeSuccess, `编辑成功`, ``)
 	}
 }
 

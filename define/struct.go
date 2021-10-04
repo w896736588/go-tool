@@ -82,7 +82,18 @@ type CreateCache struct {
 	TTL         int     `json:"ttl"`
 	CacheMember string  `json:"cacheMember"`
 	CacheScore  float64 `json:"cacheScore"`
-	BoolCreate  bool    `json:"boolCreate"`
+	BoolCreate  int     `json:"boolCreate"`
 	LPushValue  string  `json:"lPushValue"`
 	RPushValue  string  `json:"rPushValue"`
+}
+
+type EditSub struct {
+	UniKey      string  `json:"UniKey"`
+	CacheType   string  `json:"cacheType"`
+	CacheKey    string  `json:"cacheKey"`
+	CacheField  string  `json:"cacheField"`
+	CacheValue  string  `json:"cacheValue"`
+	CacheIndex  int64   `json:"index"`
+	CacheMember string  `json:"cacheMember"`
+	CacheScore  float64 `json:"cacheScore"`
 }
