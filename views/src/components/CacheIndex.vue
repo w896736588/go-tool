@@ -79,7 +79,18 @@
                   </el-tag>
                   <el-button icon="el-icon-refresh-left " size="medium" @click="search(cache.cacheKey)" circle></el-button>
                 </template>
+                <template style="float:right;" v-if="cache.cacheKey !== ''">
+                  <el-button type="danger" size="mini" icon="el-icon-delete"
+                             style="margin-left: 10px;float:right;" @click="delCache()">删除
+                  </el-button>
+                  <el-button type="primary" size="mini" icon="el-icon-plus" style="margin-left: 10px;float:right;"
+                             @click="createSubCache" v-if="cache.cacheType !== cacheType.STRING">
+                  </el-button>
 
+                  <el-button type="primary" size="mini" icon="el-icon-check" style="margin-left: 10px;float:right;"
+                             @click="saveString()" v-if="cache.strShowType === 1 && cache.cacheType === cacheType.STRING">保存
+                  </el-button>
+                </template>
 
 
                 <el-form ref="form">
@@ -121,19 +132,18 @@
                       <el-table-column  v-if="cache.cacheType === cacheType.HASH || cache.cacheType === cacheType.LIST"
                         prop="value"
                         label="value"
-                        width="600" sortable>
+                        width="550" sortable>
                       </el-table-column>
                       <el-table-column v-if="cache.cacheType === cacheType.ZSET"
                         prop="score"
                         label="score"
-                        width="200" sortable>
+                        width="300" sortable>
                       </el-table-column>
                       <el-table-column
-
                         label="操作">
                         <template slot-scope="scope">
                           <el-button type="primary" v-if="cache.cacheType !== cacheType.SET" icon="el-icon-edit"  size="mini" @click="editSub(scope.row)"></el-button>
-                          &nbsp;&nbsp;
+                          &nbsp;
                           <el-button type="danger" v-if="cache.cacheType === cacheType.HASH" icon="el-icon-delete"  size="mini" @click="delSub(scope.row.field)"></el-button>
                           <el-button type="danger" v-if="cache.cacheType === cacheType.SET || cache.cacheType === cacheType.LIST || cache.cacheType === cacheType.ZSET" size="mini" icon="el-icon-delete" @click="delSub(scope.row.value)"></el-button>
                         </template>
@@ -142,18 +152,7 @@
                     </el-table>
                   </template>
                 </el-form>
-                <template style="float:right;" v-if="cache.cacheKey !== ''">
-                  <el-button type="danger" size="mini" icon="el-icon-delete"
-                             style="margin-left: 10px;float:right;" @click="delCache()">删除
-                  </el-button>
-                  <el-button type="primary" size="mini" icon="el-icon-plus" style="margin-left: 10px;float:right;"
-                             @click="createSubCache" v-if="cache.cacheType !== cacheType.STRING">
-                  </el-button>
 
-                  <el-button type="primary" size="mini" icon="el-icon-check" style="margin-left: 10px;float:right;"
-                             @click="saveString()" v-if="cache.strShowType === 1 && cache.cacheType === cacheType.STRING">保存
-                  </el-button>
-                </template>
               </el-card>
             </div>
           </el-col>
@@ -220,22 +219,20 @@
 
 
     <!--编辑弹窗-->
-    <el-dialog title="编辑缓存" :visible.sync="editCacheClass" :append-to-body="true" width="80%;">
-      <el-form>
-
-        <template v-if="editSubCache.cacheType === cacheType.LIST || editSubCache.cacheType === cacheType.HASH ">
-          <el-tag size="medium">
-            <el-checkbox class="string-option" v-model="editSubCache.strHasSerialize" @change="editSubUnserialize()">
-              serialize
-            </el-checkbox>
-          </el-tag>
-          <el-tag size="medium">
-            <el-checkbox class="string-option" v-model="editSubCache.strHasJson" @change="editSubJson()">json</el-checkbox>
-          </el-tag>
-        </template>
-
-        <el-form-item v-if="editSubCache.cacheType === cacheType.HASH" label="field" :label-width="addCacheInputWidth">
-          <el-input v-model="editSubCache.key" autocomplete="off"></el-input>
+    <el-dialog title="编辑缓存" :visible.sync="editCacheClass" :append-to-body="true" width="90%;">
+      <template v-if="editSubCache.cacheType === cacheType.LIST || editSubCache.cacheType === cacheType.HASH ">
+        <el-tag size="medium">
+          <el-checkbox class="string-option" v-model="editSubCache.strHasSerialize" @change="editSubUnserialize()">
+            serialize
+          </el-checkbox>
+        </el-tag>
+        <el-tag size="medium">
+          <el-checkbox class="string-option" v-model="editSubCache.strHasJson" @change="editSubJson()">json</el-checkbox>
+        </el-tag>
+      </template>
+      <el-form style="margin-top: 10px;">
+        <el-form-item style="margin-left:0;"  v-if="editSubCache.cacheType === cacheType.HASH"  >
+          <el-input v-model="editSubCache.field" autocomplete="off"></el-input>
         </el-form-item>
 
         <!--        编辑二级缓存-->
@@ -275,7 +272,6 @@ import Vue from "vue";
 import JsonViewer from 'vue-json-viewer'
 import Clipboard from 'clipboard'
 import Textarea from "./textarea";
-import { VueJsonp } from 'vue-jsonp'
 
 export default {
   name: "cacheIndex",
@@ -289,7 +285,7 @@ export default {
         ZSET: 'zset',
       },
       //接口地址
-      apiHost : '',
+      apiHost : 'http://localhost:7070',
       loading: false,
       //数据库
       redisCheck: '',
