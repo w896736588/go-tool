@@ -8,16 +8,12 @@ import ElementUI from 'element-ui';
 import '../src/css/reset_element.css';
 Vue.use(ElementUI);
 
-//引入jsonp
-import { VueJsonp } from 'vue-jsonp'
-Vue.use(VueJsonp)
-
 //引入axios
 import Axios from 'axios'
 import VueAxios from 'vue-axios'
 import { Message } from 'element-ui';
 Axios.defaults.timeout = 15000
-Axios.defaults.baseURL = '/api'
+Axios.defaults.baseURL = '/'
 Axios.defaults.headers.post['Content-Type'] = 'text/xml';
 Axios.interceptors.response.use(
   response => {

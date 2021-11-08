@@ -3,15 +3,17 @@
     <template>
       <el-card>
         <el-input style="width:400px;margin-right:20px;" v-model="keys" @keyup.enter.native="keysSearch" placeholder="请输入key"></el-input>
-        <el-radio v-for="(value,key) in redisList" v-model="redisCheck" :label="value.UniKey">{{
-            value.Name
-          }}
-        </el-radio>
+        <el-select v-model="redisCheck">
+          <el-option
+            v-for="(value,key) in redisList"
+            :key="value.UniKey"
+            :label="value.Name"
+            :value="value.UniKey">
+          </el-option>
+        </el-select>
         <el-button type="primary" @click="keysSearch">查询</el-button>
         <el-button icon="el-icon-refresh-left" @click="refresh" circle></el-button>
         <el-button type="primary" icon="el-icon-plus" @click="showAddCache" circle></el-button>
-        <el-input style="width:400px;margin-right:20px;" v-model="apiHost" placeholder="接口地址"></el-input>
-        <el-button type="primary" @click="setApiHost">设置</el-button>
         <el-row :gutter="10" style="margin-top: 10px;">
             <el-tag type="info" closable @close="deleteHistory(value)" style="margin-left: 5px;margin-top:5px;" v-for="(value,key) in historyList">
 <!--              <el-radio style="word-wrap:break-word;" v-model="historyCheck" @change="searchHistory(value)" :label="value.Search">{{ value.Search }}</el-radio>-->
@@ -287,7 +289,7 @@ export default {
         ZSET: 'zset',
       },
       //接口地址
-      apiHost : 'http://localhost:7070',
+      apiHost : '',
       loading: false,
       //数据库
       redisCheck: '',
@@ -350,7 +352,6 @@ export default {
   mounted: function () {
     this.getRedisList();
     this.addSubCache.cacheType = this.cacheType.STRING;
-    this.initApiHost();
   },
   components: {
     Textarea,
@@ -358,17 +359,6 @@ export default {
     Clipboard,
   },
   methods: {
-    initApiHost : function (){
-      let apiHost = localStorage.getItem('apiHost');
-      if(apiHost === null){
-        this.apiHost = 'http://localhost:7070';
-      }else{
-        this.apiHost = apiHost;
-      }
-    },
-    setApiHost : function (){
-      localStorage.setItem('apiHost', this.apiHost);
-    },
     getRedisList: function () {
       let _that = this
       Vue.axios.get(this.apiHost + '/api/redis/list').then(function (response) {
