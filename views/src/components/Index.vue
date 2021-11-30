@@ -8,7 +8,7 @@
       background-color="#545c64"
       text-color="#fff"
       active-text-color="#ffd04b">
-      <el-menu-item index="RedisCache">
+      <el-menu-item index="Redis">
         Redis缓存
       </el-menu-item>
       <el-menu-item index="Json">
@@ -20,6 +20,12 @@
       <el-menu-item index="Ip">
         IP查询
       </el-menu-item>
+      <el-menu-item index="Translate">
+        翻译
+      </el-menu-item>
+      <el-menu-item index="UrlEncode">
+        UrlEncode
+      </el-menu-item>
 
       <el-submenu index="Doc">
         <template slot="title">开发文档</template>
@@ -29,29 +35,35 @@
         <el-menu-item index="Doc-2">
           <a style="color:white;" target="_blank" href="https://work.weixin.qq.com/kf/">微信客服文档</a>
         </el-menu-item>
+        <el-menu-item index="Doc-3">
+          <a style="color:white;" target="_blank" href="https://element.eleme.cn/#/zh-CN/component/installation">ElementUI</a>
+        </el-menu-item>
       </el-submenu>
 
     </el-menu>
 <!--    内容-->
-    <RedisCache v-if="menuName === 'RedisCache'"></RedisCache>
-    <Json v-if="menuName === 'Json'"></Json>
-    <Unix v-if="menuName === 'Unix'"></Unix>
-    <Ip v-if="menuName === 'Ip'"></Ip>
+    <Redis v-show="menuName === 'Redis'"></Redis>
+    <Json v-show="menuName === 'Json'"></Json>
+    <Unix v-show="menuName === 'Unix'"></Unix>
+    <Ip v-show="menuName === 'Ip'"></Ip>
+    <UrlEncode v-show="menuName === 'UrlEncode'"></UrlEncode>
+    <Translate v-show="menuName === 'Translate'"></Translate>
   </div>
 
 </template>
 
 <script>
-import RedisCache from "./CacheIndex"
 import Json from "./Json"
 import Unix from "./Unix"
 import Ip from "./Ip"
-import WxDoc from "./WxDoc"
+import UrlEncode from "./UrlEncode"
+import Translate from "./Translate"
+import Redis from "./Cache"
 export default {
   data () {
     return {
-      name: "Index",
-      menuName : "RedisCache",
+      name: "Redis",
+      menuName : "Redis",
     }
   },
   methods: {
@@ -61,10 +73,11 @@ export default {
   },
   components : {
     Json,
-    RedisCache,
     Unix,
     Ip,
-    WxDoc,
+    UrlEncode,
+    Translate,
+    Redis,
   },
 }
 </script>

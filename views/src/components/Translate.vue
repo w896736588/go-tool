@@ -9,8 +9,8 @@
 export default {
   data () {
     return {
-      name: "Json",
-      src : "http://www.jsons.cn/",
+      name: "Translate",
+      src : "https://fanyi.youdao.com/",
     }
   },
 }

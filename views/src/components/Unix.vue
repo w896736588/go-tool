@@ -1,6 +1,6 @@
 <template>
   <div>
-    <iframe v-once :src="src" width="100%;" height="800px;" ></iframe>
+    <iframe v-once :src="src" width="100%;" height="630px;" ></iframe>
   </div>
 
 </template>
