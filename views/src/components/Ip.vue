@@ -10,7 +10,7 @@ export default {
   data () {
     return {
       name: "Ip",
-      src : "https://tool.lu/ip",
+      src : "https://ip.tool.chinaz.com/github.com",
     }
   },
 }
