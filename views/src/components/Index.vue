@@ -26,6 +26,9 @@
       <el-menu-item index="UrlEncode">
         UrlEncode
       </el-menu-item>
+      <el-menu-item index="QrCode">
+        二维码
+      </el-menu-item>
 
       <el-submenu index="Doc">
         <template slot="title">开发文档</template>
@@ -43,6 +46,7 @@
     </el-menu>
 <!--    内容-->
     <Redis v-show="menuName === 'Redis'"></Redis>
+    <QrCode v-show="menuName === 'QrCode'"></QrCode>
     <Json v-show="menuName === 'Json'"></Json>
     <Unix v-show="menuName === 'Unix'"></Unix>
     <Ip v-show="menuName === 'Ip'"></Ip>
@@ -59,6 +63,7 @@ import Ip from "./Ip"
 import UrlEncode from "./UrlEncode"
 import Translate from "./Translate"
 import Redis from "./Cache"
+import QrCode from "./QrCode"
 export default {
   data () {
     return {
@@ -78,6 +83,7 @@ export default {
     UrlEncode,
     Translate,
     Redis,
+    QrCode,
   },
 }
 </script>

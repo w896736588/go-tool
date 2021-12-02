@@ -9,8 +9,8 @@
 export default {
   data () {
     return {
-      name: "Translate",
-      src : "https://www.iciba.com/",
+      name: "QrCode",
+      src : "https://cli.im/",
     }
   },
 }
