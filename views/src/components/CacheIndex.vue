@@ -283,6 +283,7 @@ import Vue from "vue";
 import JsonViewer from 'vue-json-viewer'
 import Clipboard from 'clipboard'
 import Textarea from "./textarea";
+import {Message} from "element-ui";
 
 export default {
   name: "cacheIndex",
@@ -362,6 +363,7 @@ export default {
     }
   },
   mounted: function () {
+    console.log(123);
     this.getRedisList();
     this.addSubCache.cacheType = this.cacheType.STRING;
   },
@@ -370,15 +372,7 @@ export default {
       let _that = this
       Vue.axios.get(this.apiHost + '/api/redis/list').then(function (response) {
         _that.redisList = response.Data;
-        _that.redisList.forEach(item => {
-          if (item.Default === 1) {
-            _that.redisCheck = item.UniKey;
-            _that.keysSearch();
-          }
-        });
-        if(_that.redisCheck == ''){
-          _that.redisCheck = _that.redisList[0].UniKey;
-        }
+        _that.redisCheck = _that.redisList[0].UniKey;
         _that.getRedisDbSelect();
         _that.getCacheHistory();
       })
@@ -835,16 +829,20 @@ export default {
       this.addCacheClass = true;
     },
     success: function (msg) {
-      this.$notify({title: '提示', message: msg, type: 'success'});
+      Message.success(msg);
+      //this.$notify({title: '提示', message: msg, type: 'success'});
     },
     warning: function (msg) {
-      this.$notify({title: '提示', message: msg, type: 'warning'});
+      Message.warning(msg);
+      //this.$notify({title: '提示', message: msg, type: 'warning'});
     },
     info: function (msg) {
-      this.$notify({title: '提示', message: msg});
+      Message.info(msg);
+      //this.$notify({title: '提示', message: msg});
     },
     error: function (msg) {
-      this.$notify({title: '提示', message: msg, type: 'error'});
+      Message.error(msg);
+      //this.$notify({title: '提示', message: msg, type: 'error'});
     },
     chunk: function (arr, size) {
       let objArr = [];

@@ -8,6 +8,12 @@ import ElementUI from 'element-ui';
 import '../src/css/reset_element.css';
 Vue.use(ElementUI);
 
+//引入加载进度动画
+import NProgress from 'nprogress' // nprogress插件
+import 'nprogress/nprogress.css' // nprogress样式
+
+Vue.use(NProgress);
+
 //引入axios
 import Axios from 'axios'
 import VueAxios from 'vue-axios'
@@ -15,8 +21,25 @@ import { Message } from 'element-ui';
 Axios.defaults.timeout = 15000
 Axios.defaults.baseURL = '/'
 Axios.defaults.headers.post['Content-Type'] = 'text/xml';
+// 添加请求拦截器
+Axios.interceptors.request.use((config) => {
+    NProgress.done();
+    NProgress.start();
+    return config
+  },
+  (error) => {
+    NProgress.done();
+    return Promise.reject(error)
+  }
+)
 Axios.interceptors.response.use(
   response => {
+    setTimeout(function (){
+      NProgress.set(0.6);
+    },400)
+    setTimeout(function (){
+      NProgress.done();
+    },700);
     if(response.data.ErrCode === 1){
       window.location.reload();
     }else if(response.data.ErrCode !== 0 ){
