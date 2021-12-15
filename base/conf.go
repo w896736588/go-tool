@@ -51,6 +51,7 @@ func InitConfig() {
 			SshPassword: cast.ToString(mapTemp[`sshpassword`]),
 			Default:     cast.ToInt(mapTemp[`default`]),
 			UniKey:      helper.Md5(UniKey),
+			Connection:  true,
 		})
 	}
 	log.Debugf(`redisList %#v`, RedisList)

@@ -17,6 +17,12 @@ import (
 )
 
 func RedisList(c *gin.Context) {
+	for key, value := range *base.RedisList {
+		if _, ok := base.RedisRunList[value.UniKey]; !ok {
+			value.Connection = false
+		}
+		(*base.RedisList)[key] = value
+	}
 	response(c, define.ErrorCodeSuccess, `获取成功`, base.RedisList)
 }
 

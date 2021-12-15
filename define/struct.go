@@ -11,6 +11,7 @@ type RedisConfig struct {
 	SshPassword string
 	Default     int
 	UniKey      string
+	Connection  bool
 }
 type RequestBody struct {
 	UniKey         string `json:"UniKey"`

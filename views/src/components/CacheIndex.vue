@@ -8,6 +8,7 @@
             v-for="(value,key) in redisList"
             :key="value.UniKey"
             :label="value.Name"
+            :disabled="!value.Connection"
             :value="value.UniKey">
           </el-option>
         </el-select>
@@ -363,7 +364,6 @@ export default {
     }
   },
   mounted: function () {
-    console.log(123);
     this.getRedisList();
     this.addSubCache.cacheType = this.cacheType.STRING;
   },

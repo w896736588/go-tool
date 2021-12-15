@@ -16,11 +16,10 @@ var RedisRunList map[string]*redis.Client
 func InitRedis() {
 	RedisRunList = make(map[string]*redis.Client)
 	for _, redisConfig := range *RedisList {
-		redisRun, _ := getRedisClient(&redisConfig)
-		_, err := redisRun.Ping().Result()
+		redisRun, err := getRedisClient(&redisConfig)
 		if err != nil {
 			log.Error("普通 redis %#v 初始化 ping 异常", redisConfig)
-			panic(fmt.Sprintf("普通 redis %v 初始化 ping 异常", redisConfig))
+			continue
 		}
 		RedisRunList[redisConfig.UniKey] = redisRun
 	}
