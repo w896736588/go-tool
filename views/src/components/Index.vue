@@ -38,6 +38,9 @@
         <el-menu-item index="Doc-2">
           <a style="color:white;" target="_blank" href="https://work.weixin.qq.com/kf/">微信客服文档</a>
         </el-menu-item>
+        <el-menu-item index="Doc-4">
+          <a style="color:white;" target="_blank" href="https://open.work.weixin.qq.com/api/doc/90000/90135/90664">企业微信文档</a>
+        </el-menu-item>
         <el-menu-item index="Doc-3">
           <a style="color:white;" target="_blank" href="https://element.eleme.cn/#/zh-CN/component/installation">ElementUI</a>
         </el-menu-item>
