@@ -62,48 +62,48 @@
           <el-col :span="16">
             <div class="grid-content bg-purple">
               <el-card class="box-card" style="height:480px;overflow:auto;margin-left: -15px;margin-top:-15px;margin-right:-15px;">
+                <div slot="header" class="clearfix">
+                  <template v-if="cache.cacheKey !== ''">
+                    <el-tag size="medium">{{ cache.cacheType }}</el-tag>
+                    <el-tag size="medium" style="cursor: copy;" class="copyCacheKey" :data-clipboard-text="cache.cacheKey"
+                            @click="copyKey">{{ cache.cacheKey }}
+                    </el-tag>
+                  </template>
+                  <template v-if="cache.cacheKey !==  '' && cache.cacheType === 'string'">
+                    <el-tag size="medium">
+                      <el-checkbox class="string-option" v-model="cache.strHasSerialize" @change="unserialize()" >
+                        serialize
+                      </el-checkbox>
+                    </el-tag>
+                    <el-tag size="medium" >
+                      <el-checkbox class="string-option" v-model="cache.strHasJson" @change="json()" >json</el-checkbox>
+                    </el-tag>
+                  </template>
+                  <template v-if="cache.cacheKey !== ''">
+                    <el-tag size="medium" v-if="cache.startEditTTL === true">
+                      ttl：
+                      <input style="width:100px;border:0;" v-model="cache.ttl" type="text"/>
+                      <el-button size="mini" type="primary" @click="saveTTL" style="padding:3px">保存</el-button>
+                      <el-button size="mini" type="default" @click="cancelEditTTL" style="padding:3px;">取消</el-button>
+                    </el-tag>
+                    <el-tag size="medium" @click="editTTL" style="cursor:pointer" v-if="cache.startEditTTL === false">ttl：
+                      {{ cache.ttl }}
+                    </el-tag>
+                    <el-button icon="el-icon-refresh-left " size="medium" @click="search(cache.cacheKey)" circle></el-button>
+                  </template>
+                  <template style="float:right;" v-if="cache.cacheKey !== ''">
+                    <el-button type="danger" size="mini" icon="el-icon-delete"
+                               style="margin-left: 10px;float:right;" @click="delCache()">删除
+                    </el-button>
+                    <el-button type="primary" size="mini" icon="el-icon-plus" style="margin-left: 10px;float:right;"
+                               @click="createSubCache" v-if="cache.cacheType !== cacheType.STRING">
+                    </el-button>
 
-                <template v-if="cache.cacheKey !== ''">
-                  <el-tag size="medium">{{ cache.cacheType }}</el-tag>
-                  <el-tag size="medium" style="cursor: copy;" class="copyCacheKey" :data-clipboard-text="cache.cacheKey"
-                          @click="copyKey">{{ cache.cacheKey }}
-                  </el-tag>
-                </template>
-                <template v-if="cache.cacheKey !==  '' && cache.cacheType === 'string'">
-                  <el-tag size="medium">
-                    <el-checkbox class="string-option" v-model="cache.strHasSerialize" @change="unserialize()" >
-                      serialize
-                    </el-checkbox>
-                  </el-tag>
-                  <el-tag size="medium" >
-                    <el-checkbox class="string-option" v-model="cache.strHasJson" @change="json()" >json</el-checkbox>
-                  </el-tag>
-                </template>
-                <template v-if="cache.cacheKey !== ''">
-                  <el-tag size="medium" v-if="cache.startEditTTL === true">
-                    ttl：
-                    <input style="width:100px;border:0;" v-model="cache.ttl" type="text"/>
-                    <el-button size="mini" type="primary" @click="saveTTL" style="padding:3px">保存</el-button>
-                    <el-button size="mini" type="default" @click="cancelEditTTL" style="padding:3px;">取消</el-button>
-                  </el-tag>
-                  <el-tag size="medium" @click="editTTL" style="cursor:pointer" v-if="cache.startEditTTL === false">ttl：
-                    {{ cache.ttl }}
-                  </el-tag>
-                  <el-button icon="el-icon-refresh-left " size="medium" @click="search(cache.cacheKey)" circle></el-button>
-                </template>
-                <template style="float:right;" v-if="cache.cacheKey !== ''">
-                  <el-button type="danger" size="mini" icon="el-icon-delete"
-                             style="margin-left: 10px;float:right;" @click="delCache()">删除
-                  </el-button>
-                  <el-button type="primary" size="mini" icon="el-icon-plus" style="margin-left: 10px;float:right;"
-                             @click="createSubCache" v-if="cache.cacheType !== cacheType.STRING">
-                  </el-button>
-
-                  <el-button type="primary" size="mini" icon="el-icon-check" style="margin-left: 10px;float:right;"
-                             @click="saveString()" v-if="cache.strShowType === 1 && cache.cacheType === cacheType.STRING">保存
-                  </el-button>
-                </template>
-
+                    <el-button type="primary" size="mini" icon="el-icon-check" style="margin-left: 10px;float:right;"
+                               @click="saveString()" v-if="cache.strShowType === 1 && cache.cacheType === cacheType.STRING">保存
+                    </el-button>
+                  </template>
+                </div>
 
                 <el-form ref="form">
                   <el-form-item v-if="cache.cacheType === cacheType.STRING" style="margin-top:10px;">
