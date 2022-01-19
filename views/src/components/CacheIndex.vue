@@ -385,6 +385,7 @@ export default {
       this.historyList = [];
       this.getCacheHistory();
     },
+    //查询单个信息
     search: function (key) {
       this.selectRedisKey = key;
       let _that = this
@@ -434,6 +435,8 @@ export default {
             _that.addCacheInit();
           });
         } else {
+          //清空右侧数据
+          _that.cacheInit();
           _that.error('获取缓存类型失败，缓存可能已不存在');
         }
       });
@@ -473,6 +476,7 @@ export default {
       this.historyList = listTemp;
       localStorage.setItem(this.redisCheck + 'historyList', JSON.stringify(listTemp));
     },
+    //搜索缓存 这里是模糊查询 会返回多个
     keysSearch: function () {
       let _that = this;
       let params = {};
@@ -491,6 +495,10 @@ export default {
         _that.keysResult = response.Data;
         if (_that.keysResult.length === 1) {
           _that.search(_that.keysResult[0].CacheKey);
+        }
+        //清空
+        if(_that.keysResult.length === 0){
+          _that.cacheInit();
         }
         //记录查询key
         if (_that.keys !== '') {
@@ -724,6 +732,8 @@ export default {
       this.cache.strHasSerialize = false;
       this.cache.strHasJson = false;
       this.cache.cacheKey = '';
+      this.hashResult = [];
+      this.cache.cacheType = '';
     },
     delAll: function () {
       let deleteKeysList = [];
