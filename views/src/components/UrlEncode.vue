@@ -57,8 +57,12 @@ export default {
   methods : {
     initHistory : function (){
       let history = localStorage.getItem('encodeHistoryList')
-      this.history = JSON.parse(history);
-      console.log(this.history);
+      if(history === '' || history === null){
+        this.history = []
+      }else{
+        this.history = JSON.parse(history);
+      }
+
     },
     urlEncode : function (){
       this.textValueTrans = encodeURIComponent(this.textValue);
