@@ -20,16 +20,17 @@
         <el-popover
           placement="bottom"
           width="1000"
-          :visible.sync="historySearchVisible"
-          trigger="click">
+          v-model="historySearchVisible"
+          trigger="hover"
+          >
           <el-row :gutter="10" style="margin-top: 10px;">
-            <el-tag type="warning" closable @close="deleteHistory(value)" style="margin-left: 5px;" v-for="(value,key) in historyList" :key="key">
+            <el-tag effect="dark" type="success" closable @close="deleteHistory(value)" style="margin-left: 5px;" v-for="(value,key) in historyList" :key="key">
               <!--              <el-radio style="word-wrap:break-word;" v-model="historyCheck" @change="searchHistory(value)" :label="value.Search">{{ value.Search }}</el-radio>-->
               <span v-if="historyCheck === value.Search " style="font-size:13px;color:blue;word-wrap:break-word;cursor:default;"  @click="searchHistory(value)"  >{{ value.Search }}</span>
-              <span v-else style="font-size:13px;word-wrap:break-word;cursor:default;"  @click="searchHistory(value)"  >{{ value.Search }}</span>
+              <span v-else style="font-size:13px;word-wrap:break-word;cursor:default;"  @click="historySearchVisible=false;searchHistory(value);"  >{{ value.Search }}</span>
             </el-tag>
           </el-row>
-          <el-button slot="reference">历史记录</el-button>
+          <el-button slot="reference" @click="historySearchVisible = !historySearchVisible">历史记录</el-button>
         </el-popover>
       </el-card>
 
@@ -44,9 +45,9 @@
 
                 <div v-for="(value,key) in keysResult">
                   <div>
-                      <el-tag size="medium" style="margin-top:7px;">
-                        <el-link style="padding:3px;font-size: 13px;color:red;" v-if="selectRedisKey === value.CacheKey" @click="search(value.CacheKey)"> {{value.CacheKey}}</el-link>
-                        <el-link style="padding:3px;font-size: 13px;color:#409eff;" v-else @click="search(value.CacheKey)"> {{value.CacheKey}}</el-link>
+                      <el-tag size="medium" style="margin-top:7px;" effect="dark" type="success">
+                        <el-link style="padding:3px;font-size: 13px;" v-if="selectRedisKey === value.CacheKey" @click="search(value.CacheKey)"> {{value.CacheKey}}</el-link>
+                        <el-link style="padding:3px;font-size: 13px;color:white;" v-else @click="search(value.CacheKey)"> {{value.CacheKey}}</el-link>
                       </el-tag>
                   </div>
 
@@ -299,7 +300,7 @@ export default {
         ZSET: 'zset',
       },
       //是否显示历史搜索记录
-      historySearchVisible : true,
+      historySearchVisible : false,
       //接口地址
       apiHost : 'http://localhost:7070',
       loading: false,
