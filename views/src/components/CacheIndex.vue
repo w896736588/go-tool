@@ -24,7 +24,7 @@
           trigger="hover"
           >
           <el-row :gutter="10" style="margin-top: 10px;">
-            <el-tag effect="dark" type="success" closable @close="deleteHistory(value)" style="margin-left: 5px;" v-for="(value,key) in historyList" :key="key">
+            <el-tag effect="dark" type="success" closable @close="deleteHistory(value)" style="margin-left: 5px;margin-top:3px;" v-for="(value,key) in historyList" :key="key">
               <!--              <el-radio style="word-wrap:break-word;" v-model="historyCheck" @change="searchHistory(value)" :label="value.Search">{{ value.Search }}</el-radio>-->
               <span v-if="historyCheck === value.Search " style="font-size:13px;color:blue;word-wrap:break-word;cursor:default;"  @click="searchHistory(value)"  >{{ value.Search }}</span>
               <span v-else style="font-size:13px;word-wrap:break-word;cursor:default;"  @click="historySearchVisible=false;searchHistory(value);"  >{{ value.Search }}</span>
