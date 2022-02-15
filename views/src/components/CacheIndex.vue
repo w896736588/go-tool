@@ -24,7 +24,7 @@
           trigger="hover"
           >
           <el-row :gutter="10" style="margin-top: 10px;">
-            <el-tag effect="dark" type="success" closable @close="deleteHistory(value)" style="margin-left: 5px;margin-top:3px;" v-for="(value,key) in historyList" :key="key">
+            <el-tag effect="dark" type="" closable @close="deleteHistory(value)" style="margin-left: 5px;margin-top:5px;" v-for="(value,key) in historyList" :key="key">
               <!--              <el-radio style="word-wrap:break-word;" v-model="historyCheck" @change="searchHistory(value)" :label="value.Search">{{ value.Search }}</el-radio>-->
               <span v-if="historyCheck === value.Search " style="font-size:13px;color:blue;word-wrap:break-word;cursor:default;"  @click="searchHistory(value)"  >{{ value.Search }}</span>
               <span v-else style="font-size:13px;word-wrap:break-word;cursor:default;"  @click="historySearchVisible=false;searchHistory(value);"  >{{ value.Search }}</span>
@@ -45,9 +45,9 @@
 
                 <div v-for="(value,key) in keysResult">
                   <div>
-                      <el-tag size="medium" style="margin-top:7px;" effect="dark" type="success">
+                      <el-tag size="medium" style="margin-top:7px;" effect="light" >
                         <el-link style="padding:3px;font-size: 13px;" v-if="selectRedisKey === value.CacheKey" @click="search(value.CacheKey)"> {{value.CacheKey}}</el-link>
-                        <el-link style="padding:3px;font-size: 13px;color:white;" v-else @click="search(value.CacheKey)"> {{value.CacheKey}}</el-link>
+                        <el-link style="padding:3px;font-size: 13px;color:dodgerblue;" v-else @click="search(value.CacheKey)"> {{value.CacheKey}}</el-link>
                       </el-tag>
                   </div>
 
