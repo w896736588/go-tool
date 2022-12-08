@@ -3,7 +3,6 @@ package base
 import (
 	"fmt"
 	"golang.org/x/crypto/ssh"
-	"log"
 	"net"
 	"time"
 )
@@ -18,7 +17,7 @@ type ClientConfig struct {
 	LastResult string      //最近一次运行的结果
 }
 
-func (cliConf *ClientConfig) CreateClient(host string, port int64, username, password string) {
+func (cliConf *ClientConfig) CreateClient(host string, port int64, username, password string) error {
 	var (
 		client *ssh.Client
 		err    error
@@ -36,16 +35,17 @@ func (cliConf *ClientConfig) CreateClient(host string, port int64, username, pas
 		HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
 			return nil
 		},
-		Timeout: 10 * time.Second,
+		Timeout: 100 * time.Second,
 	}
 	addr := fmt.Sprintf("%s:%d", cliConf.Host, cliConf.Port)
 
 	//获取client
 	if client, err = ssh.Dial("tcp", addr, &config); err != nil {
-		log.Fatalln("error occurred:", err)
+		return err
 	}
 
 	cliConf.Client = client
+	return nil
 }
 
 func (cliConf *ClientConfig) RunShell(shell string) string {
@@ -56,12 +56,12 @@ func (cliConf *ClientConfig) RunShell(shell string) string {
 
 	//获取session，这个session是用来远程执行操作的
 	if session, err = cliConf.Client.NewSession(); err != nil {
-		log.Fatalln("error occurred:", err)
+		return `创建session失败：` + err.Error()
 	}
 
 	//执行shell
 	if output, err := session.CombinedOutput(shell); err != nil {
-		log.Fatalln("error occurred:", err)
+		return `执行失败：` + shell + ` error:` + err.Error()
 	} else {
 		cliConf.LastResult = string(output)
 	}

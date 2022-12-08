@@ -137,9 +137,18 @@ type WebSocketEventStruct struct {
 // @auth frog
 // @date 2022-12-02 15:02:13
 type SshExec struct {
-	ParamOne  string    `json:"ParamOne"`  //根据ExecType定义具体代表啥内容
-	ParamTwo  string    `json:"ParamTwo"`  //根据ExecType定义具体代表啥内容
-	EnvName   string    `json:"EnvName"`   //环境名
-	ExecType  string    `json:"ExecType"`  //执行类型
-	SshConfig SshConfig `json:"SshConfig"` //ssh连接配置
+	CodePath        string         `json:"CodePath"`        // 代码目录 docker_apps/yii_customer_service   weike_customer_service4
+	BranchName      string         `json:"BranchName"`      //分支名
+	ExecType        string         `json:"ExecType"`        //执行类型
+	SshConfig       SshConfig      `json:"SshConfig"`       //ssh连接配置
+	WechatKefuAppid string         `json:"WechatKefuAppid"` //微信客服appid
+	DockerList      []DockerConfig `json:"DockerList"`
+	DockerId        string         `json:"DockerId"`       //操作哪个docker
+	DockerCodePath  string         `json:"DockerCodePath"` //docker内代码路径
+	SupervisorName  string         `json:"SupervisorName"` //消费者名 all代表重启所有
+}
+
+type DockerConfig struct {
+	Name string `json:"Name"`
+	Id   string `json:"Id"`
 }

@@ -447,90 +447,38 @@ func SupervisorStatus(c *gin.Context) {
 func ShellExec(c *gin.Context) {
 	err := recover()
 	if err != nil {
-		fmt.Println(err)
+		response(c, define.ErrorCodeSuccess, `成功`, fmt.Sprintf(`%#v`, err))
 	}
 	reqBody := &define.SshExec{}
 	requestData(c, &reqBody)
 	log.Debugf(fmt.Sprintf(`%#v`, reqBody))
 	//初始化配置
 	cliConf := base.ClientConfig{}
-	cliConf.CreateClient(reqBody.SshConfig.Host, cast.ToInt64(reqBody.SshConfig.Port), reqBody.SshConfig.Username, reqBody.SshConfig.Password)
-	//类型
-	cdCommand := `cd /var/www/docker_apps/` + reqBody.EnvName + `/`
-	//查询当前分支
-	showCurrentBranchCommand := `sudo git symbolic-ref --short -q HEAD;`
-	ignoreAllCommand := `sudo git checkout .` //忽略所有变更
-	cleanAllCommand := `sudo git clean -df`   //清理所有新增文件
-	fetchCommand := `sudo git fetch`
-	checkoutCommand := `sudo git checkout `
-	pullCommand := `sudo git pull`
-	pullOriginCommand := `sudo git pull origin `
-	runCommandList := make([]string, 0)
+	createClientErr := cliConf.CreateClient(reqBody.SshConfig.Host, cast.ToInt64(reqBody.SshConfig.Port), reqBody.SshConfig.Username, reqBody.SshConfig.Password)
+	if createClientErr != nil {
+		response(c, define.ErrorCodeSuccess, `失败`, fmt.Sprintf(`执行失败：%s`, createClientErr.Error()))
+		return
+	}
+	handle := &Command{}
+	handle.Filter()
 	switch reqBody.ExecType {
-	case `query_current_branch`:
-		//查询当前分支
-		cdCommand += reqBody.ParamOne
-		runCommandList = append(runCommandList,
-			cdCommand,
-			showCurrentBranchCommand,
-		)
-		log.Debugf(`执行的命令 ` + strings.Join(runCommandList, `;`))
-		ret := cliConf.RunShell(strings.Join(runCommandList, `;`))
-		response(c, define.ErrorCodeSuccess, `成功`, ret)
+	case `query_current_branch`: //查询当前代码环境分支
+		response(c, define.ErrorCodeSuccess, `成功`, strings.Join(handle.QueryCurrentBranch(reqBody, cliConf), ``))
 		return
-	case `change_branch`:
-		//拿到当前分支
-		cdCommand += reqBody.ParamOne
-		checkoutCommand += reqBody.ParamTwo
-		pullOriginCommand += reqBody.ParamTwo
-
-		currentBranch := cliConf.RunShell(cdCommand + `;` + showCurrentBranchCommand)
-		currentBranch = strings.Replace(currentBranch, "\n", "", -1)
-		log.Debugf(`当前分支 ` + currentBranch)
-		//如果已经包含了此分支 那么不再处理
-		if strings.Contains(currentBranch, reqBody.ParamTwo) {
-			checkoutCommand = ``
-		}
-
-		//切换分支
-		runCommandList = append(runCommandList,
-			cdCommand,
-			ignoreAllCommand,
-			cleanAllCommand,
-			fetchCommand,
-			pullCommand,
-			checkoutCommand,
-			pullOriginCommand,
-			showCurrentBranchCommand,
-		)
-		runCommandList = helper.FilterEmptyString(&runCommandList)
-		log.Debug(`指定命令 ` + strings.Join(runCommandList, `;`))
-		ret := cliConf.RunShell(strings.Join(runCommandList, `;`))
-		response(c, define.ErrorCodeSuccess, `成功`, ret)
+	case `change_branch`: //切换分支
+		response(c, define.ErrorCodeSuccess, `成功`, strings.Join(handle.ChangeBranch(reqBody, cliConf), ``))
 		return
-	case `pull_branch_origin`:
-		//更新当前分支
-		cdCommand += reqBody.ParamOne
-		checkoutCommand += reqBody.ParamTwo
-		currentBranch := cliConf.RunShell(cdCommand + `;` + showCurrentBranchCommand)
-		currentBranch = strings.Replace(currentBranch, "\n", "", -1)
-		log.Debugf(`当前分支 ` + currentBranch)
-		pullOriginCommand += currentBranch
-
-		//切换分支
-		runCommandList = append(runCommandList,
-			cdCommand,
-			ignoreAllCommand,
-			cleanAllCommand,
-			fetchCommand,
-			pullCommand,
-			pullOriginCommand,
-			showCurrentBranchCommand,
-		)
-		runCommandList = helper.FilterEmptyString(&runCommandList)
-		log.Debug(`指定命令 ` + strings.Join(runCommandList, `;`))
-		ret := cliConf.RunShell(strings.Join(runCommandList, `;`))
-		response(c, define.ErrorCodeSuccess, `成功`, ret)
+	case `pull_branch_origin`: //拉取当前环境最新代码
+		response(c, define.ErrorCodeSuccess, `成功`, strings.Join(handle.PullBranchOrigin(reqBody, cliConf), ``))
+		return
+	case `wechat_kefu_status`: //查询微信客服所在的环境
+		response(c, define.ErrorCodeSuccess, `成功`, strings.Join(handle.WechatKefuStatus(reqBody, cliConf), ``))
+		return
+	case `wechat_kefu_change`: //切换微信客服到当前代码环境
+		response(c, define.ErrorCodeSuccess, `成功`, strings.Join(handle.WechatKefuChange(reqBody, cliConf), ``))
+		return
+	case `supervisor`: //消费者管理
+		response(c, define.ErrorCodeSuccess, `成功`, strings.Join(handle.Supervisor(reqBody, cliConf), ``))
 		return
 	}
 	response(c, define.ErrorCodeSuccess, `成功`, nil)
