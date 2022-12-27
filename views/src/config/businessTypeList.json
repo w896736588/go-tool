@@ -1,0 +1,7 @@
+[
+  {"Title": "git操作", "Name": "git"},
+  {"Title": "微信客服操作", "Name": "wechat_kefu"},
+  {"Title": "消费者管理", "Name": "supervisor"},
+  {"Title": "调整VIP版本", "Name": "vip"},
+  {"Title": "docker管理", "Name": "docker"}
+]

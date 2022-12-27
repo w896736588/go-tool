@@ -29,6 +29,9 @@ type Command struct {
 	runPhpCommand               string
 	wechatKefuLogCommand        string
 	SupervisorRestartAllCommand string
+	SupervisorRestartCommand 	string
+	SupervisorStatusCommand 	string
+	SupervisorConfigShowCommand string
 }
 
 // WechatKefuStatus
@@ -166,7 +169,10 @@ func (command *Command) Filter() {
 	//输出到指定日志
 	//command.runPhpCommand = `nohup php /var/www/%s/scan/protected/yiic OpenPushWechatKefuOpen %s > %s 2>&1 & `
 	command.wechatKefuLogCommand = `/var/www/%s/scan/protected/runtime/%s.log`
-	command.SupervisorRestartAllCommand = `supervisorctl restart all`
+	command.SupervisorRestartAllCommand = ` supervisorctl restart all`
+	command.SupervisorRestartCommand = ` supervisorctl restart %s`
+	command.SupervisorStatusCommand = `supervisorctl status `
+	command.SupervisorConfigShowCommand = `cat %s`
 }
 
 // WechatKefuChange 切换微信客服到当前环境
@@ -231,17 +237,67 @@ func getPsPid(runResultMsg string) string {
 	return ``
 }
 
-// Supervisor 消费者管理
+// SupervisorRestartAll 消费者管理
 // @auth frog
 // @date 2022-12-08 11:41:31
 // @param reqBody
 // @param cliConf
 // @return []string
-func (command *Command) Supervisor(reqBody *define.SshExec, cliConf base.ClientConfig) []string {
+func (command *Command) SupervisorRestartAll(reqBody *define.SshExec, cliConf base.ClientConfig) []string {
 	//消费者
 	retMsgList := make([]string, 0)
 	command.cdCommand += reqBody.CodePath
 	runCommand := fmt.Sprintf(command.dockerExecCommand, reqBody.DockerId) + ` ` + command.SupervisorRestartAllCommand
+	log.Debugf(`执行的命令 ` + runCommand)
+	ret := cliConf.RunShell(runCommand)
+	retMsgList = append(retMsgList, ret)
+	return retMsgList
+}
+
+// SupervisorRestart 重启消费者
+// @auth frog
+// @date 2022-12-26 09:21:38
+// @param reqBody
+// @param cliConf
+// @return []string
+func (command *Command) SupervisorRestart(reqBody *define.SshExec, cliConf base.ClientConfig) []string {
+	//消费者
+	retMsgList := make([]string, 0)
+	command.cdCommand += reqBody.CodePath
+	runCommand := fmt.Sprintf(command.dockerExecCommand, reqBody.DockerId) + ` ` + fmt.Sprintf(command.SupervisorRestartCommand , reqBody.SupervisorRestartName)
+	log.Debugf(`执行的命令 ` + runCommand)
+	ret := cliConf.RunShell(runCommand)
+	retMsgList = append(retMsgList, ret)
+	return retMsgList
+}
+
+// SupervisorStatusList 消费者列表
+// @auth frog
+// @date 2022-12-19 12:22:38
+// @param reqBody
+// @param cliConf
+// @return []string
+func (command *Command) SupervisorStatusList(reqBody *define.SshExec, cliConf base.ClientConfig) []string {
+	//消费者
+	retMsgList := make([]string, 0)
+	command.cdCommand += reqBody.CodePath
+	runCommand := fmt.Sprintf(command.dockerExecCommand, reqBody.DockerId) + ` ` + command.SupervisorStatusCommand
+	log.Debugf(`执行的命令 ` + runCommand)
+	ret := cliConf.RunShell(runCommand)
+	retMsgList = append(retMsgList, ret)
+	return retMsgList
+}
+
+// SupervisorConfigShow 查看supervisor配置内容
+// @auth frog
+// @date 2022-12-20 09:26:38
+// @param reqBody
+// @param cliConf
+// @return []string
+func (command *Command) SupervisorConfigShow(reqBody *define.SshExec, cliConf base.ClientConfig) []string {
+	//消费者
+	retMsgList := make([]string, 0)
+	runCommand := fmt.Sprintf(command.SupervisorConfigShowCommand , reqBody.SupervisorConfigPath)
 	log.Debugf(`执行的命令 ` + runCommand)
 	ret := cliConf.RunShell(runCommand)
 	retMsgList = append(retMsgList, ret)

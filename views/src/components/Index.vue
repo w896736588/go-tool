@@ -9,10 +9,22 @@
       text-color="#fff"
       active-text-color="#ffd04b">
       <el-menu-item index="Redis">
-        Redis缓存
+        Redis
       </el-menu-item>
       <el-menu-item index="Consumer">
-        测试环境
+        消费者
+      </el-menu-item>
+      <el-menu-item index="Git">
+        Git
+      </el-menu-item>
+      <el-menu-item index="WechatKefu">
+        微信客服
+      </el-menu-item>
+      <el-menu-item index="WechatKefu">
+        Model生成
+      </el-menu-item>
+      <el-menu-item index="Ssh">
+        SSH配置
       </el-menu-item>
 
       <el-submenu index="Doc">
@@ -54,6 +66,9 @@
 <!--    内容-->
     <Redis v-show="menuName === 'Redis'"></Redis>
     <Consumer v-show="menuName === 'Consumer'"></Consumer>
+    <WechatKefu v-show="menuName === 'WechatKefu'"></WechatKefu>
+    <Ssh v-show="menuName === 'Ssh'"></Ssh>
+    <Git v-show="menuName === 'Git'"></Git>
   </div>
 
 </template>
@@ -61,6 +76,9 @@
 <script>
 import Redis from "./Cache"
 import Consumer from "./Consumer"
+import WechatKefu from "./WechatKefu"
+import Ssh from "./Ssh"
+import Git from "./Git"
 export default {
   data () {
     return {
@@ -76,6 +94,9 @@ export default {
   components : {
     Redis,
     Consumer,
+    WechatKefu,
+    Ssh,
+    Git,
   },
 }
 </script>

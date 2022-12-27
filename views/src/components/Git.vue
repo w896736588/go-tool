@@ -1,0 +1,231 @@
+<template>
+  <el-card>
+    <el-select v-model="chooseParentType" @change="changeParentType" placeholder="请选择系统">
+      <el-option
+        v-for="(value,key) in parentTypeList"
+        :key="value.Name"
+        :label="value.Title"
+        :value="value.Name">
+      </el-option>
+    </el-select>
+
+    <!--    环境-->
+<!--    <el-select v-model="chooseEvnName" placeholder="请选择代码环境">-->
+<!--      <el-option-->
+<!--        v-for="(value,key) in codeEnvList" v-if="value.ParentType === chooseParentType"-->
+<!--        :key="value.Name"-->
+<!--        :label="value.Name"-->
+<!--        :value="value.Name">-->
+<!--      </el-option>-->
+<!--    </el-select>-->
+
+    <!--    git操作类型-->
+    <el-select v-model="ExecType" placeholder="请选择git操作">
+      <el-option
+        v-for="(value,key) in gitOpTypeList"
+        :key="value.ExecType"
+        :label="value.Name"
+        :value="value.ExecType">
+      </el-option>
+    </el-select>
+
+
+
+
+    <!--    分支名-->
+    <el-input v-if="ExecType === 'change_branch'" style="width:300px;margin-right:20px;"
+              v-model="BranchName" placeholder="请输入分支名"></el-input>
+
+    <el-button type="primary" @click="exec" >执 行</el-button>
+
+    <!--      代码环境-->
+    <div style="margin-top: 10px;">
+      <h3>代码环境</h3>
+      <el-row :gutter="20">
+        <el-col :span="4" v-for="(value,key) in codeEnvList" style="margin:5px;">
+          <div>
+            <el-radio size="medium " v-model="chooseEvnName" :label="value.Name">{{value.Name}}</el-radio>
+          </div>
+        </el-col>
+      </el-row>
+    </div>
+
+    <el-input style="margin-top: 20px;" type="textarea" v-model="execResult" rows="25"></el-input>
+  </el-card>
+
+</template>
+
+<script>
+import Vue from "vue";
+import {Message} from "element-ui";
+let codeList = require("../config/codeList.json")
+let dockerList = require("../config/dockerList.json")
+let gitOpTypeList = require("../config/gitOpTypeList.json")
+let businessTypeList = require("../config/businessTypeList.json")
+export default {
+  data() {
+    return {
+      name: "Consumer",
+      //接口地址
+      apiHost: 'http://localhost:7070',
+      //ssh config
+      sshConfig: {},
+      prodTestSshConfig : {},
+      //选中的环境
+      chooseEvnName: "common3",
+      //代码环境
+      codeEnvList: codeList,
+      //docker
+      dockerList: dockerList,
+      //按钮状态
+      btnLoading : {
+        wechatKefuStatus : false,
+        wechatKefuChange : false,
+      },
+      //操作业务类型
+      chooseBusinessType: "git",
+      businessTypeList: businessTypeList,
+      //操作父类型
+      chooseParentType: "xkf",
+      parentTypeList: [
+        {Title: "小客服", Name: "xkf"},
+        {Title: "企  微", Name: "wk"},
+        // {Title: "预发布", Name: "prodTest"},
+      ],
+      //总的操作类型
+      ExecType: "query_current_branch",
+      //操作类型
+      dialogSshConfig: false,
+      BranchName: "",  //分支名
+      execResult: "",//操作结果
+      gitOpTypeList: gitOpTypeList,
+    }
+  },
+  mounted: function () {
+    let sshConfig = this.getStore('sshConfig')
+    if (sshConfig !== null) {
+      this.sshConfig = JSON.parse(sshConfig)
+    }
+    let prodTestSshConfig = this.getStore('prodTestSshConfig')
+    if (prodTestSshConfig !== null) {
+      this.prodTestSshConfig = JSON.parse(prodTestSshConfig)
+    }
+  },
+  methods: {
+    //改变父类类型
+    changeParentType: function () {
+      this.chooseEvnName = ''
+      this.ExecType = ''
+      this.chooseBusinessType = ''
+    },
+    //改变业务类型
+    changeBusinessType: function () {
+      this.chooseEvnName = ""
+      this.ExecType = ''
+    },
+    //执行
+    exec: function () {
+      let _that = this
+      //找到环境配置
+      let env_config = {};
+      for (let i in this.codeEnvList) {
+        if (this.codeEnvList[i].Name === this.chooseEvnName) {
+          env_config = this.codeEnvList[i]
+          break
+        }
+      }
+      if (env_config === {}) {
+        _that.error("不存在的配置");
+        return
+      }
+      if(env_config.ParentType === 'prodTest'){
+        env_config.SshConfig = _that.prodTestSshConfig
+      }else{
+        env_config.SshConfig = _that.sshConfig
+      }
+      //根据类型判断
+      let params = {
+        SshConfig: env_config.SshConfig,
+        CodePath: env_config.CodePath,
+        BranchName: this.BranchName,
+        ExecType: this.ExecType,
+        WechatKefuAppid: this.chooseWechatKefuAppid,
+        DockerList: this.dockerList,
+        ParentType : env_config.ParentType,
+        DockerId: "",
+        DockerCodePath: env_config.DockerCodePath,
+      }
+      if (params.ExecType === 'change_branch' && params.BranchName === '') {
+        _that.error('分支名不能为空')
+        return
+      } else if (params.ExecType === 'supervisor_restart_all' && params.CodePath === '') {
+        _that.error('请选择代码环境')
+        return
+      }
+
+      //如果是切换微信客服 需要找到code对应的docker
+      for (let j in this.dockerList) {
+        if (env_config.DockerName === this.dockerList[j].Name) {
+          params.DockerId = this.dockerList[j].Id
+        }
+      }
+    if (params.ExecType === 'supervisor_restart_all' && params.DockerId === ``) {
+        _that.error('代码环境找不到对应的docker')
+        return
+      }
+      //按钮加载状态
+      _that.setBtnLoading(params)
+      Vue.axios.post(this.apiHost + '/api/shell/exec', params).then(function (response) {
+        _that.success('成功');
+        _that.execResult = response.Data
+        _that.cancelBtnLoading(params)
+      });
+    },
+    setBtnLoading : function (params){
+      if(params.ExecType === 'wechat_kefu_status'){
+        this.btnLoading.wechatKefuStatus = true
+      }else if(params.ExecType === 'wechat_kefu_change'){
+        this.btnLoading.wechatKefuChange = true
+      }
+      let _this = this
+      let _set_params = params
+      setTimeout(function (){
+        _this.cancelBtnLoading(_set_params)
+      } , 15000)
+    },
+    cancelBtnLoading : function (params){
+      if(params.ExecType === 'wechat_kefu_status'){
+        this.btnLoading.wechatKefuStatus = false
+      }else if(params.ExecType === 'wechat_kefu_change'){
+        this.btnLoading.wechatKefuChange = false
+      }
+    },
+    success: function (msg) {
+      Message.success(msg);
+      //this.$notify({title: '提示', message: msg, type: 'success'});
+    },
+    warning: function (msg) {
+      Message.warning(msg);
+      //this.$notify({title: '提示', message: msg, type: 'warning'});
+    },
+    info: function (msg) {
+      Message.info(msg);
+      //this.$notify({title: '提示', message: msg});
+    },
+    error: function (msg) {
+      Message.error(msg);
+      //this.$notify({title: '提示', message: msg, type: 'error'});
+    },
+    setStore: function (key, value) {
+      localStorage.setItem(key, value);
+    },
+    getStore: function (key) {
+      return localStorage.getItem(key);
+    }
+  },
+}
+</script>
+
+<style scoped>
+
+</style>

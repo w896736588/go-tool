@@ -9,252 +9,218 @@
       </el-option>
     </el-select>
 
-<!--    业务类型-->
-    <el-select v-model="chooseBusinessType" @change="changeBusinessType" placeholder="请选择操作业务">
+    <!--    环境-->
+    <el-select v-model="chooseEvnName" @change="changeCode" placeholder="请选择代码环境">
       <el-option
-        v-for="(value,key) in businessTypeList"
-        :key="value.Name"
-        :label="value.Title"
-        :value="value.Name">
-      </el-option>
-    </el-select>
-
-    <!--    微信客服-->
-    <el-select v-model="chooseWechatKefuAppid" placeholder="请选择微信客服" v-if="chooseBusinessType === 'wechat_kefu' && chooseParentType === 'xkf'">
-      <el-option
-        v-for="(value,key) in wechatKefuList"
-        :key="value.name"
-        :label="value.name"
-        :value="value.appid">
-      </el-option>
-    </el-select>
-
-<!--    环境-->
-    <el-select v-model="chooseEvnName" placeholder="请选择代码环境">
-      <el-option
-        v-for="(value,key) in env.codeEnvList" v-if="value.ParentType === chooseParentType"
+        v-for="(value,key) in codeEnvList" v-if="value.ParentType === chooseParentType"
         :key="value.Name"
         :label="value.Name"
         :value="value.Name">
       </el-option>
     </el-select>
 
-<!--    git操作类型-->
-    <el-select v-model="ExecType" v-if="chooseBusinessType === 'git'" placeholder="请选择git操作">
-      <el-option
-        v-for="(value,key) in gitOpTypeList"
-        :key="value.ExecType"
-        :label="value.Name"
-        :value="value.ExecType">
-      </el-option>
-    </el-select>
 
+    <!--  子操作选项列表-->
+    <el-card style="margin-top: 20px;">
+      消费者操作列表<br/><br/>
+      <el-button type="primary" @click="restartSupervisorAll">重启{{chooseEvnName}}所有消费者</el-button>
+      <el-button type="primary" @click="showSupervisorList" :loading="btnLoading.supervisorStatusListStatus">查看所有消费者</el-button>
+      <el-input style="width: 400px" autocomplete="off" placeholder="搜索名称" v-model="searchKey" @input="searchList"></el-input>
+    </el-card>
 
+    <el-row :gutter="20" style="margin-top: 10px" >
+      <el-col :span="6" v-for="(value,key) in supervisorConfigList" style="margin-top:5px;" v-if="value.show">
+        <div class="grid-content bg-purple">
+          <el-card class="box-card">
+            <div slot="header" class="clearfix">
+              <span>{{value.name}}</span>
+              <el-button style="float: right; padding: 3px 0" type="text" @click="toTop(value)">置顶</el-button>
+            </div>
+            <div class="supervisorCommand" style="overflow:hidden;">
+              命令:{{ value.commandS }} <br/>
+            </div>
+            <div class="supervisorCommand" style="overflow:hidden;">
+              状态：{{value.running_status}}
+            </div>
 
-<!--    分支名-->
-    <el-input v-if="ExecType === 'change_branch' && chooseBusinessType === 'git'" style="width:300px;margin-right:20px;" v-model="BranchName"
-              placeholder="请输入分支名"></el-input>
+            <div class="bottom clearfix">
+              <el-button type="text" class="button" @click="ExecType = 'supervisor_restart';exec(value)">重新启动</el-button>
+              <el-button type="text" class="button">停止</el-button>
+              <el-button type="text" class="button" @click="ExecType = 'supervisor_config_show';exec(value)">查看配置</el-button>
+              <el-button type="text" class="button">搜索溢出进程</el-button>
+            </div>
+          </el-card>
+        </div>
+      </el-col>
 
-    <el-button type="primary" @click="exec" v-if="chooseBusinessType === 'git'">执 行</el-button>
-    <el-button type="primary" icon="el-icon-setting" @click="dialogSshConfig = !dialogSshConfig">SSH设置</el-button>
-    <el-card style="margin-top: 20px;" v-if="dialogSshConfig">
-      <el-form ref="form" :model="sshConfig" label-width="80px">
-        <el-form-item label="账号名">
-          <el-input v-model="sshConfig.username"></el-input>
+    </el-row>
+
+    <el-dialog :title="supervisorConfigShow.name" :visible.sync="supervisorConfigShow.dialog">
+      <el-form :model="supervisorConfigShow">
+        <el-form-item label="配置地址" :label-width="30">
+          <el-input v-model="supervisorConfigShow.path" autocomplete="off"></el-input>
         </el-form-item>
-        <el-form-item label="密码">
-          <el-input v-model="sshConfig.password"></el-input>
-        </el-form-item>
-        <el-form-item label="IP地值">
-          <el-input v-model="sshConfig.host"></el-input>
-        </el-form-item>
-        <el-form-item label="端口">
-          <el-input v-model="sshConfig.port"></el-input>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="saveSshConfig">保存配置</el-button>
-          <el-button @click="dialogSshConfig = false">取消</el-button>
+        <el-form-item label="配置内容" :label-width="30">
+          <el-input style="margin-top: 20px;" type="textarea" v-model="supervisorConfigShow.content" rows="15"></el-input>
         </el-form-item>
       </el-form>
-    </el-card>
+      <div slot="footer" class="dialog-footer">
+        <el-button @click="supervisorConfigShow.dialog = false">取 消</el-button>
+      </div>
+    </el-dialog>
 
-<!--  子操作选项列表-->
-    <el-card style="margin-top: 20px;" v-if="chooseBusinessType === 'wechat_kefu'">
-      微信客服操作列表<br/><br/>
-      <el-button type="primary" @click="ExecType = 'wechat_kefu_change';exec()">切换到当前选择的环境</el-button>
-      <el-button type="primary" @click="ExecType = 'wechat_kefu_status';exec()">查看所在环境</el-button>
-<!--      <el-button type="primary" @click="">查看错误日志</el-button>-->
-    </el-card>
-
-    <el-input style="margin-top: 20px;" type="textarea" v-model="execResult" rows="25"></el-input>
+    <el-input style="margin-top: 20px;" type="textarea" v-model="execResult" rows="25" ></el-input>
   </el-card>
-  <!--    <el-card>-->
-  <!--      <el-input type="textarea" v-model="execResult" rows="20"></el-input>-->
-  <!--    </el-card>-->
+
+
 </template>
+
+<style>
+.supervisorCommand{
+  padding : 3px;
+  font-size:14px;
+}
+</style>
 
 <script>
 import Vue from "vue";
 import {Message} from "element-ui";
-
+let codeList = require("../config/codeList.json")
+let dockerList = require("../config/dockerList.json")
+let supervisorConfigList = require("../config/supervisorConfig.json")
 export default {
   data() {
     return {
       name: "Consumer",
-      tabPosition: 'left',
-      ws: null,
-      heartInternal: null,
-      wsUrl: 'ws://localhost:7778/redisWebSocket',
       //接口地址
       apiHost: 'http://localhost:7070',
       //ssh config
       sshConfig: {
-        username: "frog",
-        password: "frog987^%$321_220",
+        username: "",
+        password: "",
         host: "121.40.109.241",
         port: "22",
       },
       //选中的环境
       chooseEvnName: "common3",
-      //按环境
-      env: {
-        codeEnvList: [
-          {Name: "common3",   ParentType : "xkf", DockerName : "common3", DockerCodePath : "apps/yii_customer_service",  CodePath: "docker_apps/common3/yii_customer_service"},
-          {Name: "common31",  ParentType : "xkf", DockerName : "common3", DockerCodePath : "apps/yii_customer_service_sub01", CodePath: "docker_apps/common3/yii_customer_service_sub01"},
-          {Name: "common1",   ParentType : "xkf", DockerName : "common1", DockerCodePath : "apps/yii_customer_service", CodePath: "docker_apps/common1/yii_customer_service"},
-          {Name: "common11",  ParentType : "xkf", DockerName : "common1", DockerCodePath : "apps/yii_customer_service_sub01",CodePath: "docker_apps/common1/yii_customer_service_sub01"},
-          {Name: "common",    ParentType : "xkf", DockerName : "common", DockerCodePath : "apps/yii_customer_service",CodePath: "docker_apps/common/yii_customer_service"},
-          {Name: "common01",  ParentType : "xkf", DockerName : "common", DockerCodePath : "apps/yii_customer_service_sub01",CodePath: "docker_apps/common/yii_customer_service_sub01"},
-          {Name: "common2",   ParentType : "xkf", DockerName : "common2", DockerCodePath : "apps/yii_customer_service",CodePath: "docker_apps/common2/yii_customer_service"},
-          {Name: "common21",  ParentType : "xkf", DockerName : "common2", DockerCodePath : "apps/yii_customer_service_sub01",CodePath: "docker_apps/common2/yii_customer_service_sub01"},
-          {Name: "common4",   ParentType : "xkf", DockerName : "common4", DockerCodePath : "apps/yii_customer_service",CodePath: "docker_apps/common4/yii_customer_service"},
-          {Name: "common41",  ParentType : "xkf", DockerName : "common4", DockerCodePath : "apps/yii_customer_service_sub01",CodePath: "docker_apps/common4/yii_customer_service_sub01"},
-          {Name: "common5",   ParentType : "xkf", DockerName : "common5", DockerCodePath : "apps/yii_customer_service",CodePath: "docker_apps/common5/yii_customer_service"},
-          {Name: "common51",  ParentType : "xkf", DockerName : "common5", DockerCodePath : "apps/yii_customer_service_sub01",CodePath: "docker_apps/common5/yii_customer_service_sub01"},
-          {Name: "common6",   ParentType : "xkf", DockerName : "common6", DockerCodePath : "apps/yii_customer_service",CodePath: "docker_apps/common6/yii_customer_service"},
-          {Name: "common61",  ParentType : "xkf", DockerName : "common6", DockerCodePath : "apps/yii_customer_service_sub01",CodePath: "docker_apps/common6/yii_customer_service_sub01"},
-          {Name: "common7",   ParentType : "xkf", DockerName : "common7", DockerCodePath : "apps/yii_customer_service",CodePath: "docker_apps/common7/yii_customer_service"},
-          {Name: "common71",  ParentType : "xkf", DockerName : "common7", DockerCodePath : "apps/yii_customer_service_sub01",CodePath: "docker_apps/common7/yii_customer_service_sub01"},
-          {Name: "mike",   ParentType : "xkf", DockerName : "mike", DockerCodePath : "apps/yii_customer_service",CodePath: "docker_apps/mike/yii_customer_service"},
-          {Name: "mike1",  ParentType : "xkf", DockerName : "mike", DockerCodePath : "apps/yii_customer_service_sub01",CodePath: "docker_apps/mike/yii_customer_service_sub01"},
-        ],
-      },
+      //是否显示所有的消费者
+      showAllSupervisor : false,
+      //代码环境
+      codeEnvList: codeList,
       //docker
-      dockerList : [
-        {Name : "common3", Id : "18ecd50ae1fa"},
-        {Name : "common1", Id : "d8272fe87a7c"},
-        {Name : "common5", Id : "a5baf7b8a7d6"},
-        {Name : "common", Id : "80e8a36d2fda"},
-        {Name : "common6", Id : "7356a3e48e97"},
-        {Name : "common7", Id : "75ac41ec28f8"},
-        {Name : "common4", Id : "3ee4a2fe6420"},
-        {Name : "common2", Id : "43c29634dd7f"},
-        {Name : "mike", Id : "a1de0e28a81a"},
-      ],
-      //操作业务类型
-      chooseBusinessType : "git",
-      businessTypeList : [
-        {Title : "git操作", Name : "git"},
-        {Title : "微信客服操作", Name : "wechat_kefu"},
-        {Title : "消费者管理", Name : "supervisor"},
-        {Title : "调整VIP版本", Name : "vip"},
-        {Title : "docker管理", Name : "docker"},
-      ],
+      dockerList: dockerList,
+      //消费者列表
+      supervisorConfigList : [],
+      //按钮状态
+      btnLoading : {
+        supervisorStatusListStatus : false,
+        wechatKefuChange : false,
+      },
       //操作父类型
-      chooseParentType : "xkf",
-      parentTypeList : [
-        {Title : "小客服", Name : "xkf"},
-        {Title : "企微", Name : "wk"},
-      ],
-      //微信客服合集
-      chooseWechatKefuAppid : "",
-      wechatKefuList : [
-        {appid : "wpX2IKEAAA9PH4WJVe2nQgEfOh7MXD-A", name : "芝麻微客v2(授权接入)"},
-        {appid : "wpX2IKEAAA051WWUOg1vUqYoAVZ7PZ_A", name : "武汉芝麻小客服网络(授权接入)"},
-        {appid : "wpX2IKEAAABioq2s-opO6ttmo6XGlOBQ", name : "武汉气形网络(授权接入)"},
-        {appid : "wpX2IKEAAAfCrs43krHmtfHzxfgbx2lg", name : "零一网络科技（武汉）有限公司客服(授权接入)"},
-        {appid : "wpX2IKEAAAgKbVQf07vK27MIku8iRhBw", name : "芝麻小事网络科技(武汉)有限公司客服(授权接入)"},
-        {appid : "wpX2IKEAAAwS7tM_udiV9JL4FVibhXpw", name : "上海芝麻小事网络科技有限公司(授权接入)"},
-        {appid : "wpX2IKEAAAC90zLn5lOxRfXndUPkf43g", name : "微信客服芝麻小事(授权接入)"},
-        {appid : "ww5f432b3a24a9b9f1", name : "武汉芝麻小客服网络客服(密码接入)"},
-        {appid : "ww6b983da349fd945e", name : "上海芝麻小事网络科技有限公司(密码接入)"},
-        {appid : "ww6f5a28a32b2a0fe9", name : "武汉铁杵磨针网络科技有限公司(授权接入)"},
-        {appid : "ww10b0159168693b3f", name : "helen测试企业(密码接入)"},
-        {appid : "wwbbaa6ccaf7ef62fb", name : "KKK测测(密码接入)"},
-        {appid : "wpX2IKEAAASrpL2F1R3zB3QMPFT0esEw", name : "武汉芝麻小客服(授权接入)"},
+      chooseParentType: "xkf",
+      parentTypeList: [
+        {Title: "小客服", Name: "xkf"},
+        {Title: "企微", Name: "wk"},
       ],
       //总的操作类型
       ExecType: "query_current_branch",
       //操作类型
-      dialogSshConfig : false,
+      dialogSshConfig: false,
       BranchName: "",  //分支名
       execResult: "",//操作结果
-      gitOpTypeList: [
-        {
-          "Name": "查询当前分支",
-          "ExecType": "query_current_branch",
-        },
-        {
-          "Name": "更新当前分支到最新代码",
-          "ExecType": "pull_branch_origin",
-        },
-        {
-          "Name": "切换分支并更新到最新",
-          "ExecType": "change_branch",
-        },
-      ],
+      //搜索key
+      searchKey : "",
+      //消费者配置查看
+      supervisorConfigShow : {
+        name : "",
+        path : "",
+        content : "",
+        dialog : false,
+      }
     }
   },
   mounted: function () {
     let sshConfig = this.getStore('sshConfig')
-    if (sshConfig === null) {
-      this.sshConfig = {
-        username: "",
-        password: "",
-        host: "121.40.109.241",
-        port: "22",
-      }
+    if (sshConfig !== null) {
+      this.sshConfig = JSON.parse(sshConfig)
     }
+    //初始化命令
+    let sliceLength = 30
+    for(let i in supervisorConfigList){
+      let command = supervisorConfigList[i].command
+      supervisorConfigList[i].commandS = '...' + command.substr(command.length - sliceLength , sliceLength)
+    }
+    this.supervisorConfigList = supervisorConfigList
+    //拿到所有消费者
+    this.showSupervisorList()
+  },
+  onload: function(){
+    this.initSort()
   },
   methods: {
+    //选择代码环境
+    changeCode : function (){
+      this.showSupervisorList()
+    },
+    //搜索消费者列表
+    searchList : function (){
+      for(let i in supervisorConfigList){
+        if(supervisorConfigList[i].command.indexOf(this.searchKey) !== -1){
+          supervisorConfigList[i].show = true
+          continue;
+        }
+        if(supervisorConfigList[i].commandS.indexOf(this.searchKey) !== -1){
+          supervisorConfigList[i].show = true
+          continue;
+        }
+        if(supervisorConfigList[i].log_file.indexOf(this.searchKey) !== -1){
+          supervisorConfigList[i].show = true
+          continue;
+        }
+        if(supervisorConfigList[i].name.indexOf(this.searchKey) !== -1){
+          supervisorConfigList[i].show = true
+          continue;
+        }
+        if(supervisorConfigList[i].running_status.indexOf(this.searchKey) !== -1){
+          supervisorConfigList[i].show = true
+          continue;
+        }
+        if(supervisorConfigList[i].supervisor_config.indexOf(this.searchKey) !== -1){
+          supervisorConfigList[i].show = true
+          continue;
+        }
+        if(supervisorConfigList[i].supervisor_name.indexOf(this.searchKey) !== -1){
+          supervisorConfigList[i].show = true
+          continue;
+        }
+        supervisorConfigList[i].show = false
+      }
+    },
+    //重启所有的消费者
+    restartSupervisorAll : function (){
+      this.ExecType = 'supervisor_restart_all';
+      this.showAllSupervisor = false
+      this.exec()
+    },
+    //查看所有的消费者列表
+    showSupervisorList : function (){
+      this.ExecType = 'supervisor_status_list';
+      this.exec()
+    },
     //改变父类类型
-    changeParentType : function (){
-      this.chooseEvnName = ''
+    changeParentType: function () {
+      this.chooseEvnName = '配置'
       this.ExecType = ''
       this.chooseBusinessType = ''
     },
-    //改变业务类型
-    changeBusinessType : function (){
-      this.chooseEvnName = ""
-      this.ExecType = ''
-    },
-    //保存ssh配置
-    saveSshConfig: function () {
-      if(this.sshConfig.username === ''){
-        this.error('用户名不能为空')
-        return;
-      }else if(this.sshConfig.password === ''){
-        this.error('密码不能为空')
-        return;
-      }else if(this.sshConfig.host === ''){
-        this.error('连接IP不能为空')
-        return;
-      }else if(this.sshConfig.port === ''){
-        this.error('端口不能为空')
-        return;
-      }
-      this.setStore('sshConfig', JSON.stringify(this.sshConfig))
-      this.success('设置成功')
-      this.dialogSshConfig = false
-    },
     //执行
-    exec: function () {
+    exec: function (param) {
       let _that = this
       //找到环境配置
       let env_config = {};
-      for (let i in this.env.codeEnvList) {
-        if (this.env.codeEnvList[i].Name === this.chooseEvnName) {
-          env_config = this.env.codeEnvList[i]
+      for (let i in this.codeEnvList) {
+        if (this.codeEnvList[i].Name === this.chooseEvnName) {
+          env_config = this.codeEnvList[i]
           break
         }
       }
@@ -267,39 +233,151 @@ export default {
       let params = {
         SshConfig: env_config.SshConfig,
         CodePath: env_config.CodePath,
-        BranchName : this.BranchName,
-        ExecType : this.ExecType,
-        WechatKefuAppid : this.chooseWechatKefuAppid,
-        DockerList : this.dockerList,
-        DockerId : "",
-        DockerCodePath : env_config.DockerCodePath,
+        BranchName: this.BranchName,
+        ExecType: this.ExecType,
+        WechatKefuAppid: this.chooseWechatKefuAppid,
+        DockerList: this.dockerList,
+        DockerId: "",
+        DockerCodePath: env_config.DockerCodePath,
       }
-      if(params.ExecType === 'change_branch' && params.BranchName === ''){
-        _that.error('分支名不能为空')
+      if (params.ExecType === 'supervisor_restart_all' && params.CodePath === '') {
+        _that.error('请选择代码环境')
         return
-      }else if(params.ExecType === 'wechat_kefu_status' && params.WechatKefuAppid === ''){
-        _that.error('选择微信客服')
-        return
-      }else if(params.ExecType === 'wechat_kefu_change' && (params.WechatKefuAppid === '' || params.CodePath === '')){
-        _that.error('选择微信客服以及代码环境')
-        return
+      } else if(params.ExecType === 'supervisor_status_list' && params.CodePath === ''){
+        _that.error('请选择代码环境')
+      }
+      //查看消费者的配置内容
+      if(params.ExecType === 'supervisor_config_show'){
+        params.SupervisorConfigPath = param.supervisor_config
+      }else if(params.ExecType === 'supervisor_restart'){
+        params.SupervisorRestartName = param.supervisor_restart_name
       }
 
       //如果是切换微信客服 需要找到code对应的docker
-      for(let j in this.dockerList){
-        if(env_config.DockerName === this.dockerList[j].Name){
+      for (let j in this.dockerList) {
+        if (env_config.DockerName === this.dockerList[j].Name) {
           params.DockerId = this.dockerList[j].Id
         }
       }
-      if(params.ExecType === 'wechat_kefu_change' && params.DockerId === ``){
+      if (params.ExecType === 'supervisor_restart_all' && params.DockerId === ``) {
         _that.error('代码环境找不到对应的docker')
         return
       }
-
+      if (params.ExecType === 'supervisor_status_list' && params.DockerId === ``) {
+        _that.error('代码环境找不到对应的docker')
+        return
+      }
+      //按钮加载状态
+      _that.setBtnLoading(params)
       Vue.axios.post(this.apiHost + '/api/shell/exec', params).then(function (response) {
         _that.success('成功');
         _that.execResult = response.Data
+        _that.cancelBtnLoading(params)
+        if(params.ExecType === 'supervisor_status_list'){     //查看消费者列表
+          _that.supervisorStatusExplain();
+        }else if(params.ExecType === 'supervisor_config_show'){ //查看supervisor配置
+          _that.supervisorConfigShowMethod(param);
+        }
       });
+    },
+    //置顶
+    toTop : function (param){
+      this.sortConsumerList(param.supervisor_name)
+    },
+    //消费者排序 按照最后使用时间排序
+    sortConsumerList : function (supervisor_name){
+      console.log('点击了' + supervisor_name)
+      let currentTime = parseInt(Date.parse(new Date())/1000)
+      console.log('当前时间戳 ' + currentTime)
+      this.setStore('supervisor_' + supervisor_name , currentTime)
+      this.initSort()
+    },
+    initSort : function (){
+      let currentTime = parseInt(Date.parse(new Date())/1000)
+      for(let i in supervisorConfigList){
+        let supervisorName = supervisorConfigList[i].supervisor_name
+        let sortTime = this.getStore('supervisor_' + supervisorName)
+        if(sortTime === null || sortTime === undefined){
+          this.setStore('supervisor_' + supervisorName , currentTime)
+          supervisorConfigList[i].sortTime = currentTime - 99999999
+        }else{
+          supervisorConfigList[i].sortTime = sortTime
+        }
+      }
+      supervisorConfigList.sort(function (a,b){
+        return b.sortTime - a.sortTime
+      })
+      console.log(supervisorConfigList)
+    },
+    //查看消费者配置
+    supervisorConfigShowMethod : function (param){
+      this.supervisorConfigShow.dialog = true
+      this.supervisorConfigShow.path = param.supervisor_config
+      this.supervisorConfigShow.name = param.name
+      this.supervisorConfigShow.content = this.execResult
+    },
+    //分析消费者结果
+    supervisorStatusExplain : function (){
+      //分析结果
+      let consumerStatusList = this.execResult.split('\n')
+      for(let i in consumerStatusList){
+        //根据；分割
+        let name_params = consumerStatusList[i].split('    ')
+        //循环判断
+        let name_params_two = this.filterArray(name_params);
+        //获取supervisor进程名
+        if(name_params_two.length === 0){
+          continue;
+        }
+        let name = name_params_two[0]
+        let name_params_four = this.filterArray(name.split(':'));
+        if(name_params_four.length === 0){
+          continue;
+        }
+        //给与状态
+        for(let n in this.supervisorConfigList){
+          if(this.supervisorConfigList[n].supervisor_name === name_params_four[0]){
+            this.supervisorConfigList[n].running_status = name_params_two[1]
+            //重启名
+            if(name_params_four.length === 2){
+              this.supervisorConfigList[n].supervisor_restart_name = name_params_four[0] + ':'
+            }else{
+              this.supervisorConfigList[n].supervisor_restart_name = name_params_four[0]
+            }
+            this.supervisorConfigList[n].show = true
+          }
+        }
+      }
+      this.initSort();
+    },
+    setBtnLoading : function (params){
+      if(params.ExecType === 'supervisor_status_list'){
+        this.btnLoading.supervisorStatusListStatus = true
+      }else if(params.ExecType === 'wechat_kefu_change'){
+        this.btnLoading.wechatKefuChange = true
+      }
+      let _this = this
+      let _set_params = params
+      setTimeout(function (){
+        _this.cancelBtnLoading(_set_params)
+      } , 15000)
+    },
+    cancelBtnLoading : function (params){
+      if(params.ExecType === 'supervisor_status_list'){
+        this.btnLoading.supervisorStatusListStatus = false
+      }else if(params.ExecType === 'wechat_kefu_change'){
+        this.btnLoading.wechatKefuChange = false
+      }
+    },
+    //过滤数组空数据
+    filterArray : function (array){
+      let return_array = [];
+      for(let m in array){
+        if(array[m] !== ''){
+          return_array.push(array[m])
+        }
+      }
+      return return_array;
     },
     success: function (msg) {
       Message.success(msg);
@@ -327,6 +405,4 @@ export default {
 }
 </script>
 
-<style scoped>
 
-</style>

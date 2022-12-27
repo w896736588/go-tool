@@ -477,8 +477,17 @@ func ShellExec(c *gin.Context) {
 	case `wechat_kefu_change`: //切换微信客服到当前代码环境
 		response(c, define.ErrorCodeSuccess, `成功`, strings.Join(handle.WechatKefuChange(reqBody, cliConf), ``))
 		return
-	case `supervisor`: //消费者管理
-		response(c, define.ErrorCodeSuccess, `成功`, strings.Join(handle.Supervisor(reqBody, cliConf), ``))
+	case `supervisor_restart_all`: //消费者管理
+		response(c, define.ErrorCodeSuccess, `成功`, strings.Join(handle.SupervisorRestartAll(reqBody, cliConf), ``))
+		return
+	case `supervisor_status_list`: //消费者列表
+		response(c, define.ErrorCodeSuccess, `成功`, strings.Join(handle.SupervisorStatusList(reqBody, cliConf), ``))
+		return
+	case `supervisor_config_show` : //查看supervisor配置
+		response(c, define.ErrorCodeSuccess, `成功`, strings.Join(handle.SupervisorConfigShow(reqBody, cliConf), ``))
+		return
+	case `supervisor_restart` : //重启消费者
+		response(c, define.ErrorCodeSuccess, `成功`, strings.Join(handle.SupervisorRestart(reqBody, cliConf), ``))
 		return
 	}
 	response(c, define.ErrorCodeSuccess, `成功`, nil)

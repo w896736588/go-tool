@@ -1,0 +1,142 @@
+[
+  {
+    "Name": "common3",
+    "ParentType": "xkf",
+    "DockerName": "common3",
+    "DockerCodePath": "apps/yii_customer_service",
+    "CodePath": "docker_apps/common3/yii_customer_service"
+  },
+  {
+    "Name": "common31",
+    "ParentType": "xkf",
+    "DockerName": "common3",
+    "DockerCodePath": "apps/yii_customer_service_sub01",
+    "CodePath": "docker_apps/common3/yii_customer_service_sub01"
+  },
+  {
+    "Name": "common1",
+    "ParentType": "xkf",
+    "DockerName": "common1",
+    "DockerCodePath": "apps/yii_customer_service",
+    "CodePath": "docker_apps/common1/yii_customer_service"
+  },
+  {
+    "Name": "common11",
+    "ParentType": "xkf",
+    "DockerName": "common1",
+    "DockerCodePath": "apps/yii_customer_service_sub01",
+    "CodePath": "docker_apps/common1/yii_customer_service_sub01"
+  },
+  {
+    "Name": "common",
+    "ParentType": "xkf",
+    "DockerName": "common",
+    "DockerCodePath": "apps/yii_customer_service",
+    "CodePath": "docker_apps/common/yii_customer_service"
+  },
+  {
+    "Name": "common01",
+    "ParentType": "xkf",
+    "DockerName": "common",
+    "DockerCodePath": "apps/yii_customer_service_sub01",
+    "CodePath": "docker_apps/common/yii_customer_service_sub01"
+  },
+  {
+    "Name": "common2",
+    "ParentType": "xkf",
+    "DockerName": "common2",
+    "DockerCodePath": "apps/yii_customer_service",
+    "CodePath": "docker_apps/common2/yii_customer_service"
+  },
+  {
+    "Name": "common21",
+    "ParentType": "xkf",
+    "DockerName": "common2",
+    "DockerCodePath": "apps/yii_customer_service_sub01",
+    "CodePath": "docker_apps/common2/yii_customer_service_sub01"
+  },
+  {
+    "Name": "common4",
+    "ParentType": "xkf",
+    "DockerName": "common4",
+    "DockerCodePath": "apps/yii_customer_service",
+    "CodePath": "docker_apps/common4/yii_customer_service"
+  },
+  {
+    "Name": "common41",
+    "ParentType": "xkf",
+    "DockerName": "common4",
+    "DockerCodePath": "apps/yii_customer_service_sub01",
+    "CodePath": "docker_apps/common4/yii_customer_service_sub01"
+  },
+  {
+    "Name": "common5",
+    "ParentType": "xkf",
+    "DockerName": "common5",
+    "DockerCodePath": "apps/yii_customer_service",
+    "CodePath": "docker_apps/common5/yii_customer_service"
+  },
+  {
+    "Name": "common51",
+    "ParentType": "xkf",
+    "DockerName": "common5",
+    "DockerCodePath": "apps/yii_customer_service_sub01",
+    "CodePath": "docker_apps/common5/yii_customer_service_sub01"
+  },
+  {
+    "Name": "common6",
+    "ParentType": "xkf",
+    "DockerName": "common6",
+    "DockerCodePath": "apps/yii_customer_service",
+    "CodePath": "docker_apps/common6/yii_customer_service"
+  },
+  {
+    "Name": "common61",
+    "ParentType": "xkf",
+    "DockerName": "common6",
+    "DockerCodePath": "apps/yii_customer_service_sub01",
+    "CodePath": "docker_apps/common6/yii_customer_service_sub01"
+  },
+  {
+    "Name": "common7",
+    "ParentType": "xkf",
+    "DockerName": "common7",
+    "DockerCodePath": "apps/yii_customer_service",
+    "CodePath": "docker_apps/common7/yii_customer_service"
+  },
+  {
+    "Name": "common71",
+    "ParentType": "xkf",
+    "DockerName": "common7",
+    "DockerCodePath": "apps/yii_customer_service_sub01",
+    "CodePath": "docker_apps/common7/yii_customer_service_sub01"
+  },
+  {
+    "Name": "mike",
+    "ParentType": "xkf",
+    "DockerName": "mike",
+    "DockerCodePath": "apps/yii_customer_service",
+    "CodePath": "docker_apps/mike/yii_customer_service"
+  },
+  {
+    "Name": "mike1",
+    "ParentType": "xkf",
+    "DockerName": "mike",
+    "DockerCodePath": "apps/yii_customer_service_sub01",
+    "CodePath": "docker_apps/mike/yii_customer_service_sub01"
+  },
+  {
+    "Name": "common3_weixin_shop_sync",
+    "ParentType": "xkf",
+    "DockerName": "common3",
+    "DockerCodePath": "apps/weixin-shop-sync",
+    "CodePath": "docker_apps/common3/weixin-shop-sync"
+  },
+  {
+    "Name": "common1_weixin_shop_sync",
+    "ParentType": "xkf",
+    "DockerName": "common1",
+    "DockerCodePath": "apps/weixin-shop-sync",
+    "CodePath": "docker_apps/common1/weixin-shop-sync"
+  }
+]

@@ -1,0 +1,19 @@
+[
+  {"appid": "wpX2IKEAAA9PH4WJVe2nQgEfOh7MXD-A", "name": "芝麻微客v2(授权接入)"},
+  {"appid" :  "wwe269d827b8a41451" , "name" :  "芝麻微客V2（密码接入）"},
+  {"appid": "wpX2IKEAAA051WWUOg1vUqYoAVZ7PZ_A", "name": "武汉芝麻小客服网络(授权接入)"},
+  {"appid": "wpX2IKEAAABioq2s-opO6ttmo6XGlOBQ", "name": "武汉气形网络(授权接入)"},
+  {"appid": "wpX2IKEAAAfCrs43krHmtfHzxfgbx2lg", "name": "零一网络科技（武汉）有限公司客服(授权接入)"},
+  {"appid": "wpX2IKEAAAgKbVQf07vK27MIku8iRhBw", "name": "芝麻小事网络科技(武汉)有限公司客服(授权接入)"},
+  {"appid": "wpX2IKEAAAwS7tM_udiV9JL4FVibhXpw", "name": "上海芝麻小事网络科技有限公司(授权接入)"},
+  {"appid": "wpX2IKEAAAC90zLn5lOxRfXndUPkf43g", "name": "微信客服芝麻小事(授权接入)"},
+  {"appid": "ww5f432b3a24a9b9f1", "name": "武汉芝麻小客服网络客服(密码接入)"},
+  {"appid": "ww6b983da349fd945e", "name": "上海芝麻小事网络科技有限公司(密码接入)"},
+  {"appid": "ww6f5a28a32b2a0fe9", "name": "武汉铁杵磨针网络科技有限公司(授权接入)"},
+  {"appid": "ww10b0159168693b3f", "name": "helen测试企业(密码接入)"},
+  {"appid": "wwbbaa6ccaf7ef62fb", "name": "KKK测测(密码接入)"},
+  {"appid": "wpX2IKEAAASrpL2F1R3zB3QMPFT0esEw", "name": "武汉芝麻小客服(授权接入 废弃的？)"},
+  {"appid": "wpX2IKEAAAQwI-guiE3FASBSxy8wF4Cg", "name": "专属测试01（授权接入）"},
+  {"appid": "wwdaafee9c7a461ced", "name": "武汉芝麻小客服(授权接入)"},
+  {"appid": "", "name": "其他微信客服"}
+]
