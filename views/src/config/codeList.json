@@ -126,17 +126,129 @@
     "CodePath": "docker_apps/mike/yii_customer_service_sub01"
   },
   {
-    "Name": "common3_weixin_shop_sync",
-    "ParentType": "xkf",
+    "Name": "common3",
+    "ParentType": "weixin_shop_golang",
     "DockerName": "common3",
     "DockerCodePath": "apps/weixin-shop-sync",
     "CodePath": "docker_apps/common3/weixin-shop-sync"
   },
   {
-    "Name": "common1_weixin_shop_sync",
-    "ParentType": "xkf",
+    "Name": "common1",
+    "ParentType": "weixin_shop_golang",
     "DockerName": "common1",
     "DockerCodePath": "apps/weixin-shop-sync",
     "CodePath": "docker_apps/common1/weixin-shop-sync"
+  },
+  {
+    "Name": "common",
+    "ParentType": "weixin_shop_golang",
+    "DockerName": "common",
+    "DockerCodePath": "apps/weixin-shop-sync",
+    "CodePath": "docker_apps/common/weixin-shop-sync"
+  },
+  {
+    "Name": "common2",
+    "ParentType": "weixin_shop_golang",
+    "DockerName": "common2",
+    "DockerCodePath": "apps/weixin-shop-sync",
+    "CodePath": "docker_apps/common2/weixin-shop-sync"
+  },
+  {
+    "Name": "common4",
+    "ParentType": "weixin_shop_golang",
+    "DockerName": "common4",
+    "DockerCodePath": "apps/weixin-shop-sync",
+    "CodePath": "docker_apps/common4/weixin-shop-sync"
+  },
+  {
+    "Name": "common5",
+    "ParentType": "weixin_shop_golang",
+    "DockerName": "common5",
+    "DockerCodePath": "apps/weixin-shop-sync",
+    "CodePath": "docker_apps/common5/weixin-shop-sync"
+  },
+  {
+    "Name": "common6",
+    "ParentType": "weixin_shop_golang",
+    "DockerName": "common6",
+    "DockerCodePath": "apps/weixin-shop-sync",
+    "CodePath": "docker_apps/common6/weixin-shop-sync"
+  },
+  {
+    "Name": "common7",
+    "ParentType": "weixin_shop_golang",
+    "DockerName": "common7",
+    "DockerCodePath": "apps/weixin-shop-sync",
+    "CodePath": "docker_apps/common7/weixin-shop-sync"
+  },
+  {
+    "Name": "mike",
+    "ParentType": "weixin_shop_golang",
+    "DockerName": "mike",
+    "DockerCodePath": "apps/weixin-shop-sync",
+    "CodePath": "docker_apps/common1/weixin-shop-sync"
+  },
+  {
+    "Name": "work",
+    "ParentType": "wk",
+    "DockerName": "",
+    "DockerCodePath": "",
+    "CodePath": "weike_customer_service"
+  },
+  {
+    "Name": "weike",
+    "ParentType": "wk",
+    "DockerName": "",
+    "DockerCodePath": "",
+    "CodePath": "weike_customer_service2"
+  },
+  {
+    "Name": "work2",
+    "ParentType": "wk",
+    "DockerName": "",
+    "DockerCodePath": "",
+    "CodePath": "weike_customer_service3"
+  },
+  {
+    "Name": "work3",
+    "ParentType": "wk",
+    "DockerName": "",
+    "DockerCodePath": "",
+    "CodePath": "weike_customer_service4"
+  },
+  {
+    "Name": "work5",
+    "ParentType": "wk",
+    "DockerName": "",
+    "DockerCodePath": "",
+    "CodePath": "weike_customer_service5"
+  },
+  {
+    "Name": "work6",
+    "ParentType": "wk",
+    "DockerName": "",
+    "DockerCodePath": "",
+    "CodePath": "weike_customer_service6"
+  },
+  {
+    "Name": "work7",
+    "ParentType": "wk",
+    "DockerName": "",
+    "DockerCodePath": "",
+    "CodePath": "weike_customer_service7"
+  },
+  {
+    "Name": "work8",
+    "ParentType": "wk",
+    "DockerName": "",
+    "DockerCodePath": "",
+    "CodePath": "weike_customer_service8"
+  },
+  {
+    "Name": "work9",
+    "ParentType": "wk",
+    "DockerName": "",
+    "DockerCodePath": "",
+    "CodePath": "weike_customer_service9"
   }
 ]

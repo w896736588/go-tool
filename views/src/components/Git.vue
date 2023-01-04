@@ -9,29 +9,19 @@
       </el-option>
     </el-select>
 
-    <!--    git操作类型-->
-    <el-select v-model="gitOpType" @change="gitOpTypeChange" placeholder="请选择git操作">
-      <el-option
-        v-for="(value,key) in gitOpTypeList"
-        :key="value.ExecType"
-        :label="value.Name"
-        :value="value.ExecType">
-      </el-option>
-    </el-select>
-
     <!--    分支名-->
-    <el-input v-if="ExecType === 'change_branch'" style="width:300px;margin-right:20px;"
+    <el-input style="width:300px;margin-right:20px;"
               v-model="BranchName" placeholder="请输入分支名"></el-input>
 
-    <el-button type="primary" :loading="btnLoading.exec" @click="exec" >执 行</el-button>
+    <el-button type="primary" :loading="btnLoading.change" @click="gitOpType = 'change_branch';exec()" >切换分支</el-button>
 
-    <el-button type="primary" :loading="btnLoading.pull" @click="gitOpType = 'pull_branch_origin';exec()">{{chooseEvnName}}切换到最新代码</el-button>
+
 
     <!--      代码环境-->
     <div style="margin-top: 10px;">
-      <h3>代码环境</h3>
+      <h3>{{chooseParentName}} - {{chooseEvnName}} &nbsp;<el-button type="primary" size="mini" :loading="btnLoading.pull" @click="gitOpType = 'pull_branch_origin';exec()">↓ {{chooseEvnName}} pull</el-button></h3>
       <el-row :gutter="20">
-        <el-col :span="4" v-for="(value,key) in codeEnvList" style="margin:5px;">
+        <el-col :span="4" v-for="(value,key) in codeEnvList" style="margin:5px;" v-if="value.ParentType === chooseParentType">
           <div>
             <el-radio @change="codeChange" size="medium " v-model="chooseEvnName" :label="value.Name">{{value.Name}}</el-radio>
           </div>
@@ -49,7 +39,6 @@ import Vue from "vue";
 import {Message} from "element-ui";
 let codeList = require("../config/codeList.json")
 let dockerList = require("../config/dockerList.json")
-let gitOpTypeList = require("../config/gitOpTypeList.json")
 let businessTypeList = require("../config/businessTypeList.json")
 export default {
   data() {
@@ -70,15 +59,18 @@ export default {
       btnLoading : {
         exec : false,
         pull : false,
+        change : false,
       },
       //操作业务类型
       chooseBusinessType: "git",
       businessTypeList: businessTypeList,
       //操作父类型
       chooseParentType: "xkf",
+      chooseParentName : "小客服（php）",
       parentTypeList: [
-        {Title: "小客服", Name: "xkf"},
-        {Title: "企  微", Name: "wk"},
+        {Title: "小客服（php）", Name: "xkf"},
+        {Title: "企微（php）", Name: "wk"},
+        {Title: "视频号小店（golang）", Name: "weixin_shop_golang"},
         // {Title: "预发布", Name: "prodTest"},
       ],
       //总的操作类型
@@ -87,11 +79,13 @@ export default {
       dialogSshConfig: false,
       BranchName: "",  //分支名
       execResult: "",//操作结果
-      gitOpTypeList: gitOpTypeList,
       gitOpType : 'pull_branch_origin',
     }
   },
   mounted: function () {
+    if(process.env.NODE_ENV === 'production'){
+      this.apiHost = '';
+    }
     let sshConfig = this.getStore('sshConfig')
     if (sshConfig !== null) {
       this.sshConfig = JSON.parse(sshConfig)
@@ -118,6 +112,11 @@ export default {
       this.chooseEvnName = ''
       this.ExecType = ''
       this.chooseBusinessType = ''
+      for(let i in this.parentTypeList){
+        if(this.parentTypeList[i].Name === this.chooseParentType){
+          this.chooseParentName = this.parentTypeList[i].Title
+        }
+      }
     },
     //改变业务类型
     changeBusinessType: function () {
@@ -130,20 +129,27 @@ export default {
       //找到环境配置
       let env_config = {};
       for (let i in this.codeEnvList) {
-        if (this.codeEnvList[i].Name === this.chooseEvnName) {
+        if (this.codeEnvList[i].Name === this.chooseEvnName && this.codeEnvList[i].ParentType === this.chooseParentType) {
           env_config = this.codeEnvList[i]
           break
         }
       }
-      if (env_config === {}) {
+      if (env_config === {} || env_config === undefined || env_config === 'undefined' || !env_config) {
         _that.error("不存在的配置");
         return
       }
-      env_config.SshConfig = _that.sshConfig
+      if(!_that.sshConfig || !_that.sshConfig.username || _that.sshConfig.username === ''){
+        _that.error("请先配置ssh");
+        return
+      }
+      if(this.CodePath === ''){
+        _that.error("请选择代码环境");
+        return
+      }
       this.ExecType = this.gitOpType
       //根据类型判断
       let params = {
-        SshConfig: env_config.SshConfig,
+        SshConfig: _that.sshConfig,
         CodePath: env_config.CodePath,
         BranchName: this.BranchName,
         ExecType: this.ExecType,
@@ -180,7 +186,12 @@ export default {
       });
     },
     setBtnLoading : function (params){
-      this.btnLoading.exec = true
+      if(params.ExecType === 'pull_branch_origin'){
+        this.btnLoading.pull = true
+      }else if (params.ExecType === 'change_branch'){
+        this.btnLoading.change = true
+      }
+
       let _this = this
       let _set_params = params
       setTimeout(function (){
@@ -188,7 +199,11 @@ export default {
       } , 15000)
     },
     cancelBtnLoading : function (params){
-        this.btnLoading.exec = false
+      if(params.ExecType === 'pull_branch_origin'){
+        this.btnLoading.pull = false
+      }else if (params.ExecType === 'change_branch'){
+        this.btnLoading.change = false
+      }
     },
     success: function (msg) {
       Message.success(msg);

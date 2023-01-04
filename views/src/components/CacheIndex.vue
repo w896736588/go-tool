@@ -381,6 +381,9 @@ export default {
     }
   },
   mounted: function () {
+    if(process.env.NODE_ENV === 'production'){
+      this.apiHost = '';
+    }
     this.getRedisList();
     this.addSubCache.cacheType = this.cacheType.STRING;
   },

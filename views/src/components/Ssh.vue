@@ -72,6 +72,9 @@ export default {
     }
   },
   mounted: function () {
+    if(process.env.NODE_ENV === 'production'){
+      this.apiHost = '';
+    }
     let sshConfig = this.getStore('sshConfig')
     if (sshConfig !== null) {
       this.sshConfig = JSON.parse(sshConfig)
