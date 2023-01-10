@@ -483,11 +483,14 @@ func ShellExec(c *gin.Context) {
 	case `supervisor_status_list`: //消费者列表
 		response(c, define.ErrorCodeSuccess, `成功`, strings.Join(handle.SupervisorStatusList(reqBody, cliConf), ``))
 		return
-	case `supervisor_config_show` : //查看supervisor配置
+	case `supervisor_config_show`: //查看supervisor配置
 		response(c, define.ErrorCodeSuccess, `成功`, strings.Join(handle.SupervisorConfigShow(reqBody, cliConf), ``))
 		return
-	case `supervisor_restart` : //重启消费者
+	case `supervisor_restart`: //重启消费者
 		response(c, define.ErrorCodeSuccess, `成功`, strings.Join(handle.SupervisorRestart(reqBody, cliConf), ``))
+		return
+	case `git_status`: //git status
+		response(c, define.ErrorCodeSuccess, `成功`, strings.Join(handle.QueryStatus(reqBody, cliConf), ``))
 		return
 	}
 	response(c, define.ErrorCodeSuccess, `成功`, nil)

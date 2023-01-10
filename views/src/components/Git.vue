@@ -19,7 +19,11 @@
 
     <!--      代码环境-->
     <div style="margin-top: 10px;">
-      <h3>{{chooseParentName}} - {{chooseEvnName}} &nbsp;<el-button type="primary" size="mini" :loading="btnLoading.pull" @click="gitOpType = 'pull_branch_origin';exec()">↓ {{chooseEvnName}} pull</el-button></h3>
+      <h3>
+        {{chooseParentName}} - {{chooseEvnName}} &nbsp;
+        <el-button type="primary" size="mini" :loading="btnLoading.pull" @click="gitOpType = 'pull_branch_origin';exec()">↓ {{chooseEvnName}} pull</el-button>
+        <el-button type="primary" size="mini" :loading="btnLoading.status" @click="gitOpType = 'git_status';exec()"> {{chooseEvnName}} status</el-button>
+      </h3>
       <el-row :gutter="20">
         <el-col :span="4" v-for="(value,key) in codeEnvList" style="margin:5px;" v-if="value.ParentType === chooseParentType">
           <div>
@@ -60,6 +64,7 @@ export default {
         exec : false,
         pull : false,
         change : false,
+        status : false,
       },
       //操作业务类型
       chooseBusinessType: "git",
@@ -94,11 +99,12 @@ export default {
     if (prodTestSshConfig !== null) {
       this.prodTestSshConfig = JSON.parse(prodTestSshConfig)
     }
+    this.gitOpType = 'query_current_branch'
+    this.exec()
   },
   methods: {
     //改变代码环境
     codeChange : function (){
-      console.log(this.chooseEvnName)
       this.gitOpType = 'query_current_branch'
       this.exec()
     },
@@ -190,6 +196,8 @@ export default {
         this.btnLoading.pull = true
       }else if (params.ExecType === 'change_branch'){
         this.btnLoading.change = true
+      }else if(params.ExecType === 'git_status'){
+        this.btnLoading.status = true
       }
 
       let _this = this
@@ -203,6 +211,8 @@ export default {
         this.btnLoading.pull = false
       }else if (params.ExecType === 'change_branch'){
         this.btnLoading.change = false
+      }else if(params.ExecType === 'git_status'){
+        this.btnLoading.status = false
       }
     },
     success: function (msg) {

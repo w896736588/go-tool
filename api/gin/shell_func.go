@@ -142,6 +142,27 @@ func (command *Command) QueryCurrentBranch(reqBody *define.SshExec, cliConf base
 	command.cdCommand += reqBody.CodePath
 	runCommandList = append(runCommandList,
 		command.cdCommand,
+		command.showCurrentBranchCommand,
+	)
+	log.Debugf(`执行的命令 ` + strings.Join(runCommandList, `;`))
+	ret := cliConf.RunShell(strings.Join(runCommandList, `;`))
+	retMsgList = append(retMsgList, ret)
+	return retMsgList
+}
+
+// QueryStatus 状态
+// @auth frog
+// @date 2022-12-07 11:31:24
+// @param reqBody
+// @param cliConf
+// @return []string
+func (command *Command) QueryStatus(reqBody *define.SshExec, cliConf base.ClientConfig) []string {
+	//查询当前分支
+	retMsgList := make([]string, 0)
+	runCommandList := make([]string, 0)
+	command.cdCommand += reqBody.CodePath
+	runCommandList = append(runCommandList,
+		command.cdCommand,
 		command.GitStatusCommand,
 	)
 	log.Debugf(`执行的命令 ` + strings.Join(runCommandList, `;`))
