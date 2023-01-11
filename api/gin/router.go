@@ -12,7 +12,7 @@ func InitRouter() (router *gin.Engine) {
 
 	//REDIS接口
 	//展示所有的
-	router.GET(`/api/redis/list`, RedisList)
+	router.POST(`/api/redis/list`, RedisList)
 	//查询某个key
 	router.POST(`/api/search`, Search)
 	//模糊搜索key
@@ -39,7 +39,7 @@ func InitRouter() (router *gin.Engine) {
 	//编辑二级缓存
 	router.POST(`/api/edit/sub`, EditSub)
 	//找到所有启用的消费者服务
-	router.POST(`/api/supervisor/status`, SupervisorStatus)
+	//router.POST(`/api/supervisor/status`, SupervisorStatus)
 
 	//shell exec
 	router.POST(`/api/shell/exec`, ShellExec)

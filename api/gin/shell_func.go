@@ -27,9 +27,10 @@ type Command struct {
 	dockerExecCommand           string
 	dockerKillCommand           string
 	runPhpCommand               string
-	wechatKefuLogCommand        string
+	showLogCommand              string
 	SupervisorRestartAllCommand string
 	SupervisorRestartCommand    string
+	SupervisorStopCommand       string
 	SupervisorStatusCommand     string
 	SupervisorConfigShowCommand string
 	GitStatusCommand            string
@@ -188,12 +189,11 @@ func (command *Command) Filter() {
 	command.dockerExecCommand = `sudo docker exec %s `
 	command.dockerKillCommand = `kill -9 %s`
 	command.runPhpCommand = ` php /var/www/%s/scan/protected/yiic OpenPushWechatKefuOpen %s & `
-	//输出到指定日志
-	//command.runPhpCommand = `nohup php /var/www/%s/scan/protected/yiic OpenPushWechatKefuOpen %s > %s 2>&1 & `
-	command.wechatKefuLogCommand = `/var/www/%s/scan/protected/runtime/%s.log`
+	command.showLogCommand = `/var/www/%s/scan/protected/runtime/%s.log`
 	command.SupervisorRestartAllCommand = ` supervisorctl restart all`
 	command.SupervisorRestartCommand = ` supervisorctl restart %s`
 	command.SupervisorStatusCommand = `supervisorctl status `
+	command.SupervisorStopCommand = `supervisorctl stop %s`
 	command.SupervisorConfigShowCommand = `cat %s`
 	command.GitStatusCommand = `git status`
 }
@@ -230,7 +230,7 @@ func (command *Command) WechatKefuChange(reqBody *define.SshExec, cliConf base.C
 
 	}
 	//日志路径
-	//logFilePath := fmt.Sprintf(command.wechatKefuLogCommand , reqBody.DockerCodePath , reqBody.WechatKefuAppid)
+	//logFilePath := fmt.Sprintf(command.showLogCommand , reqBody.DockerCodePath , reqBody.WechatKefuAppid)
 	//先往日志文件写入一行日志
 	//echoLogCommand := fmt.Sprintf(command.dockerExecCommand , reqBody.DockerId) + ` touch ` + logFilePath
 	//log.Debugf(`写入日志命令 ` + echoLogCommand)
@@ -287,9 +287,30 @@ func (command *Command) SupervisorRestart(reqBody *define.SshExec, cliConf base.
 	//消费者
 	retMsgList := make([]string, 0)
 	command.cdCommand += reqBody.CodePath
-	runCommand := fmt.Sprintf(command.dockerExecCommand, reqBody.DockerId) + ` ` + fmt.Sprintf(command.SupervisorRestartCommand, reqBody.SupervisorRestartName)
-	log.Debugf(`执行的命令 ` + runCommand)
-	ret := cliConf.RunShell(runCommand)
+	runCommandList := make([]string, 0)
+	runCommandList = append(runCommandList,
+		fmt.Sprintf(command.dockerExecCommand, reqBody.DockerId)+` `+fmt.Sprintf(command.SupervisorRestartCommand, reqBody.SupervisorRestartName),
+		fmt.Sprintf(command.dockerExecCommand, reqBody.DockerId)+` `+command.SupervisorStatusCommand+` | grep `+reqBody.SupervisorRestartName,
+	)
+
+	log.Debugf(`执行的命令 ` + strings.Join(runCommandList, `;`))
+	ret := cliConf.RunShell(strings.Join(runCommandList, `;`))
+	retMsgList = append(retMsgList, ret)
+	return retMsgList
+}
+
+func (command *Command) SupervisorStop(reqBody *define.SshExec, cliConf base.ClientConfig) []string {
+	//消费者
+	retMsgList := make([]string, 0)
+	command.cdCommand += reqBody.CodePath
+	runCommandList := make([]string, 0)
+	runCommandList = append(runCommandList,
+		fmt.Sprintf(command.dockerExecCommand, reqBody.DockerId)+` `+fmt.Sprintf(command.SupervisorStopCommand, reqBody.SupervisorRestartName),
+		fmt.Sprintf(command.dockerExecCommand, reqBody.DockerId)+` `+command.SupervisorStatusCommand+` | grep `+reqBody.SupervisorRestartName,
+	)
+
+	log.Debugf(`执行的命令 ` + strings.Join(runCommandList, `;`))
+	ret := cliConf.RunShell(strings.Join(runCommandList, `;`))
 	retMsgList = append(retMsgList, ret)
 	return retMsgList
 }
@@ -321,6 +342,23 @@ func (command *Command) SupervisorConfigShow(reqBody *define.SshExec, cliConf ba
 	//消费者
 	retMsgList := make([]string, 0)
 	runCommand := fmt.Sprintf(command.SupervisorConfigShowCommand, reqBody.SupervisorConfigPath)
+	log.Debugf(`执行的命令 ` + runCommand)
+	ret := cliConf.RunShell(runCommand)
+	retMsgList = append(retMsgList, ret)
+	return retMsgList
+}
+
+// ShowLog 查看日志
+// @auth frog
+// @date 2023-01-10 12:04:20
+// @param reqBody
+// @param cliConf
+// @return []string
+func (command *Command) ShowLog(reqBody *define.SshExec, cliConf base.ClientConfig) []string {
+	//消费者
+	retMsgList := make([]string, 0)
+	command.cdCommand += reqBody.CodePath
+	runCommand := `tail -f -n 1000 ` + fmt.Sprintf(command.showLogCommand, reqBody.CodePath) + `/` + reqBody.LogFile
 	log.Debugf(`执行的命令 ` + runCommand)
 	ret := cliConf.RunShell(runCommand)
 	retMsgList = append(retMsgList, ret)

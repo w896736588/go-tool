@@ -18,7 +18,21 @@ import (
 )
 
 func RedisList(c *gin.Context) {
-	for key, value := range *base.RedisList {
+	reqBody := &define.SshExec{}
+	requestData(c, &reqBody)
+
+	for _, value := range reqBody.RedisConfigList {
+		if base.RedisRunList[value.UniKey] == nil {
+			//初始化链接
+			redisRun, err := base.GetRedisClient(&value)
+			if err != nil {
+				continue
+			}
+			base.RedisRunList[value.UniKey] = redisRun
+		}
+	}
+
+	for key, value := range reqBody.RedisConfigList {
 		if _, ok := base.RedisRunList[value.UniKey]; !ok {
 			value.Connection = false
 		}
@@ -431,14 +445,14 @@ func EditSub(c *gin.Context) {
 // SupervisorStatus supervisor 状态
 // @author frog
 // @date 2022-04-11 15:22:27
-func SupervisorStatus(c *gin.Context) {
-	reqBody := &define.SshDo{}
-	requestData(c, &reqBody)
-	ret := base.Exec(reqBody, `supervisorctl status`)
-	//解析ret
-	supervisorNameList := strings.Split(strings.Replace(ret, "\n", " #ENTER# ", -1), `#ENTER#`)
-	response(c, define.ErrorCodeSuccess, `成功`, supervisorNameList)
-}
+//func SupervisorStatus(c *gin.Context) {
+//	reqBody := &define.SshDo{}
+//	requestData(c, &reqBody)
+//	ret := base.Exec(reqBody, `supervisorctl status`)
+//	//解析ret
+//	supervisorNameList := strings.Split(strings.Replace(ret, "\n", " #ENTER# ", -1), `#ENTER#`)
+//	response(c, define.ErrorCodeSuccess, `成功`, supervisorNameList)
+//}
 
 // ShellExec 执行shell命令
 // @auth frog
@@ -489,8 +503,14 @@ func ShellExec(c *gin.Context) {
 	case `supervisor_restart`: //重启消费者
 		response(c, define.ErrorCodeSuccess, `成功`, strings.Join(handle.SupervisorRestart(reqBody, cliConf), ``))
 		return
+	case `supervisor_stop`: //停止消费者
+		response(c, define.ErrorCodeSuccess, `成功`, strings.Join(handle.SupervisorStop(reqBody, cliConf), ``))
+		return
 	case `git_status`: //git status
 		response(c, define.ErrorCodeSuccess, `成功`, strings.Join(handle.QueryStatus(reqBody, cliConf), ``))
+		return
+	case `show_log`:
+		response(c, define.ErrorCodeSuccess, `成功`, strings.Join(handle.ShowLog(reqBody, cliConf), ``))
 		return
 	}
 	response(c, define.ErrorCodeSuccess, `成功`, nil)

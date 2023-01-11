@@ -1,19 +1,13 @@
 package define
 
 type RedisConfig struct {
-	Name        string
-	Host        string
-	Password    string
-	PoolSize    string
-	SshHost     string
-	SshPort     string
-	SshUser     string
-	SshPassword string
-	SshName     string
-	SshPrefix   string
-	Default     int
-	UniKey      string
-	Connection  bool
+	Name       string
+	Host       string
+	Password   string
+	PoolSize   string
+	Default    int
+	UniKey     string
+	Connection bool
 }
 type RequestBody struct {
 	UniKey         string `json:"UniKey"`
@@ -137,17 +131,19 @@ type WebSocketEventStruct struct {
 // @auth frog
 // @date 2022-12-02 15:02:13
 type SshExec struct {
-	ParentType 			 string 		   `json:"ParentType"`      //系统类别
-	CodePath        	 string            `json:"CodePath"`        // 代码目录 docker_apps/yii_customer_service   weike_customer_service4
-	BranchName      	 string            `json:"BranchName"`      //分支名
-	ExecType        	 string            `json:"ExecType"`        //执行类型
-	SshConfig       	 SshConfig         `json:"SshConfig"`       //ssh连接配置
-	WechatKefuAppid 	 string            `json:"WechatKefuAppid"` //微信客服appid
-	DockerList      	 []DockerConfig    `json:"DockerList"`
-	DockerId        	 string            `json:"DockerId"`       //操作哪个docker
-	DockerCodePath  	 string            `json:"DockerCodePath"` //docker内代码路径
-	SupervisorRestartName  	 string            `json:"SupervisorRestartName"` //消费者重启名
-	SupervisorConfigPath string    		   `json:"SupervisorConfigPath"` // 消费者配置内容
+	ParentType            string         `json:"ParentType"`      //系统类别
+	CodePath              string         `json:"CodePath"`        // 代码目录 docker_apps/yii_customer_service   weike_customer_service4
+	BranchName            string         `json:"BranchName"`      //分支名
+	ExecType              string         `json:"ExecType"`        //执行类型
+	SshConfig             SshConfig      `json:"SshConfig"`       //ssh连接配置
+	WechatKefuAppid       string         `json:"WechatKefuAppid"` //微信客服appid
+	DockerList            []DockerConfig `json:"DockerList"`
+	DockerId              string         `json:"DockerId"`              //操作哪个docker
+	DockerCodePath        string         `json:"DockerCodePath"`        //docker内代码路径
+	SupervisorRestartName string         `json:"SupervisorRestartName"` //消费者重启名
+	SupervisorConfigPath  string         `json:"SupervisorConfigPath"`  // 消费者配置内容
+	RedisConfigList       []RedisConfig  `json:"redisConfigList"`       //redis配置列表
+	LogFile               string         `json:"LogFile"`               //日志文件名
 }
 
 type DockerConfig struct {

@@ -13,7 +13,6 @@ import (
 	"redis_manager/base"
 	"redis_manager/define"
 	"redis_manager/helper"
-	"strings"
 	"time"
 )
 
@@ -457,14 +456,14 @@ func EditSub(c *gin.Context) {
 // SupervisorStatus supervisor 状态
 // @author frog
 // @date 2022-04-11 15:22:27
-func SupervisorStatus(c *gin.Context) {
-	reqBody := &define.SshDo{}
-	requestData(c, &reqBody)
-	ret := base.Exec(reqBody, `supervisorctl status`)
-	//解析ret
-	supervisorNameList := strings.Split(strings.Replace(ret, "\n", " #ENTER# ", -1), `#ENTER#`)
-	response(c, define.ErrorCodeSuccess, `成功`, supervisorNameList)
-}
+//func SupervisorStatus(c *gin.Context) {
+//	reqBody := &define.SshDo{}
+//	requestData(c, &reqBody)
+//	ret := base.Exec(reqBody, `supervisorctl status`)
+//	//解析ret
+//	supervisorNameList := strings.Split(strings.Replace(ret, "\n", " #ENTER# ", -1), `#ENTER#`)
+//	response(c, define.ErrorCodeSuccess, `成功`, supervisorNameList)
+//}
 
 func requestData(c *gin.Context, requestBody interface{}) {
 	body, err := ioutil.ReadAll(c.Request.Body)

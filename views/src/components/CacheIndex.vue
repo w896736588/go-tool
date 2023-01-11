@@ -290,7 +290,7 @@ import JsonViewer from 'vue-json-viewer'
 import Clipboard from 'clipboard'
 import Textarea from "./textarea";
 import {Message} from "element-ui";
-
+let redisList = require("../config/redisList.json")
 export default {
   name: "cacheIndex",
   components : {
@@ -307,6 +307,7 @@ export default {
         SET: 'set',
         ZSET: 'zset',
       },
+      redisConfigList : [],
       //是否显示历史搜索记录
       historySearchVisible : false,
       //接口地址
@@ -325,6 +326,7 @@ export default {
         ttl: 0,                  //过期时间 0 永久
         startEditTTL: false,     //是否开始编辑ttl
       },
+      sshConfig: {},
       historyCheck : '',
       //keys
       keys: '',
@@ -384,13 +386,25 @@ export default {
     if(process.env.NODE_ENV === 'production'){
       this.apiHost = '';
     }
+    let sshConfig = this.getStore('sshConfig')
+    if (sshConfig !== null) {
+      this.sshConfig = JSON.parse(sshConfig)
+    }
+    //增加uniKey
+    for( let i in redisList){
+      redisList[i].UniKey = redisList[i].Name
+    }
+    this.redisConfigList = redisList
     this.getRedisList();
     this.addSubCache.cacheType = this.cacheType.STRING;
   },
   methods: {
     getRedisList: function () {
       let _that = this
-      Vue.axios.get(this.apiHost + '/api/redis/list').then(function (response) {
+      Vue.axios.post(this.apiHost + '/api/redis/list' , {
+        sshConfig : _that.sshConfig,
+
+      }).then(function (response) {
         _that.redisList = response.Data;
         _that.redisCheck = _that.redisList[0].UniKey;
         _that.getRedisDbSelect();
@@ -891,6 +905,12 @@ export default {
         objArr[i] = arrTemp;
       }
       return objArr;
+    },
+    setStore: function (key, value) {
+      localStorage.setItem(key, value);
+    },
+    getStore: function (key) {
+      return localStorage.getItem(key);
     }
   }
 }

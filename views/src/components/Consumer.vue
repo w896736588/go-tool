@@ -45,7 +45,7 @@
 
             <div class="bottom clearfix">
               <el-button type="text" class="button" @click="ExecType = 'supervisor_restart';exec(value)">重新启动</el-button>
-              <el-button type="text" class="button">停止</el-button>
+              <el-button type="text" class="button" @click="ExecType = 'supervisor_stop';exec(value)">停止</el-button>
               <el-button type="text" class="button" @click="ExecType = 'supervisor_config_show';exec(value)">查看配置</el-button>
               <el-button type="text" class="button">搜索溢出进程</el-button>
             </div>
@@ -114,7 +114,8 @@ export default {
       //按钮状态
       btnLoading : {
         supervisorStatusListStatus : false,
-        wechatKefuChange : false,
+        restart : false,
+        stop : false,
       },
       //操作父类型
       chooseParentType: "xkf",
@@ -173,10 +174,6 @@ export default {
           continue;
         }
         if(supervisorConfigList[i].commandS.indexOf(this.searchKey) !== -1){
-          supervisorConfigList[i].show = true
-          continue;
-        }
-        if(supervisorConfigList[i].log_file.indexOf(this.searchKey) !== -1){
           supervisorConfigList[i].show = true
           continue;
         }
@@ -252,7 +249,7 @@ export default {
       //查看消费者的配置内容
       if(params.ExecType === 'supervisor_config_show'){
         params.SupervisorConfigPath = param.supervisor_config
-      }else if(params.ExecType === 'supervisor_restart'){
+      }else if(params.ExecType === 'supervisor_restart' || params.ExecType === 'supervisor_stop'){
         params.SupervisorRestartName = param.supervisor_restart_name
       }
 
@@ -276,7 +273,7 @@ export default {
         _that.success('成功');
         _that.execResult = response.Data
         _that.cancelBtnLoading(params)
-        if(params.ExecType === 'supervisor_status_list'){     //查看消费者列表
+        if(params.ExecType === 'supervisor_status_list' || params.ExecType === 'supervisor_restart' || params.ExecType === 'supervisor_stop'){     //查看消费者列表
           _that.supervisorStatusExplain();
         }else if(params.ExecType === 'supervisor_config_show'){ //查看supervisor配置
           _that.supervisorConfigShowMethod(param);
@@ -356,8 +353,10 @@ export default {
     setBtnLoading : function (params){
       if(params.ExecType === 'supervisor_status_list'){
         this.btnLoading.supervisorStatusListStatus = true
-      }else if(params.ExecType === 'wechat_kefu_change'){
-        this.btnLoading.wechatKefuChange = true
+      }else if(params.ExecType === 'supervisor_restart'){
+        this.btnLoading.restart = true
+      }else if(params.ExecType === 'supervisor_stop'){
+        this.btnLoading.stop = true
       }
       let _this = this
       let _set_params = params
@@ -368,8 +367,10 @@ export default {
     cancelBtnLoading : function (params){
       if(params.ExecType === 'supervisor_status_list'){
         this.btnLoading.supervisorStatusListStatus = false
-      }else if(params.ExecType === 'wechat_kefu_change'){
-        this.btnLoading.wechatKefuChange = false
+      }else if(params.ExecType === 'supervisor_restart'){
+        this.btnLoading.restart = false
+      }if(params.ExecType === 'supervisor_stop'){
+        this.btnLoading.stop = false
       }
     },
     //过滤数组空数据
