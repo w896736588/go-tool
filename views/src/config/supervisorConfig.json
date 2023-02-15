@@ -96,5 +96,19 @@
     "supervisor_config" : "/var/www/dockerfiles/dev_test/docker_volumes/supervisor/etc/supervisor/conf.d/stat_app.conf",
     "supervisor_name" : "pub_statAppConsumer",
     "running_status" : ""
+  },
+  {
+    "name" : "AI智能菜单调用第三方接口回复处理",
+    "command" : "php /var/www/apps/yii_customer_service/scan/protected/yiic AiSmartBusinessStream",
+    "supervisor_config" : "/var/www/dockerfiles/dev_test/docker_volumes/supervisor/etc/supervisor/conf.d/AiSmartBusinessStream.conf",
+    "supervisor_name" : "AiSmartBusinessStream",
+    "running_status" : ""
+  },
+  {
+    "name" : "粉丝海报兑奖码生成",
+    "command" : "php /var/www/apps/yii_customer_service/scan/protected/yiic FansPosterPrizeCode",
+    "supervisor_config" : "/var/www/dockerfiles/dev_test/docker_volumes/supervisor/etc/supervisor/conf.d/FansPosterPrizeCode.conf",
+    "supervisor_name" : "FansPosterPrizeCode",
+    "running_status" : ""
   }
 ]

@@ -23,6 +23,9 @@
       <el-menu-item index="Vip">
         版本变更
       </el-menu-item>
+      <el-menu-item index="Model">
+        Model生成
+      </el-menu-item>
       <el-menu-item index="Ssh">
         服务器配置
       </el-menu-item>
@@ -70,6 +73,7 @@
     <Ssh v-show="menuName === 'Ssh'"></Ssh>
     <Git v-show="menuName === 'Git'"></Git>
     <Vip v-show="menuName === 'Vip'"></Vip>
+    <Model v-show="menuName === 'Model'"></Model>
   </div>
 
 </template>
@@ -81,6 +85,7 @@ import WechatKefu from "./WechatKefu"
 import Ssh from "./Ssh"
 import Git from "./Git"
 import Vip from "./Vip"
+import Model from "./Model"
 export default {
   data () {
     return {
@@ -100,6 +105,7 @@ export default {
     Ssh,
     Git,
     Vip,
+    Model,
   },
 }
 </script>

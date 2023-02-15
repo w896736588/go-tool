@@ -8,6 +8,7 @@ import (
 	"redis_manager/define"
 	"redis_manager/helper"
 	"strings"
+	"time"
 )
 
 // Command
@@ -49,7 +50,7 @@ func (command *Command) WechatKefuStatus(reqBody *define.SshExec, cliConf base.C
 		retMsgList = append(retMsgList, `找不到该应用`)
 		return retMsgList
 	}
-	retMsgList = append(retMsgList, fmt.Sprintf(`所属管理员ID %s %s`, appInfo.UserId, define.ENTER))
+	retMsgList = append(retMsgList, fmt.Sprintf(`所属管理员ID %s %s %s`, appInfo.UserId, appInfo.Appid, define.ENTER))
 	var runCommand string
 	for _, value := range reqBody.DockerList {
 		runCommand = fmt.Sprintf(command.queryDockerProcessByName, value.Id, appInfo.Appid)
@@ -239,6 +240,9 @@ func (command *Command) WechatKefuChange(reqBody *define.SshExec, cliConf base.C
 			}
 		}
 	}
+	//丢一个topic
+	time.Sleep(time.Second)
+	base.PublishMsg(reqBody.SshConfig.Host, `4150`, `0`, `wechat_kefu_open_`+appInfo.Appid)
 	phpRunCommand := fmt.Sprintf(command.dockerExecCommand, reqBody.DockerId) + fmt.Sprintf(command.runPhpCommand, reqBody.DockerCodePath, appInfo.Appid)
 	log.Debugf(`执行进程命令 ` + phpRunCommand)
 	cliConf.RunShell(phpRunCommand)

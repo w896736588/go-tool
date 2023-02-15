@@ -173,9 +173,6 @@ export default {
       }
       if (params.ExecType === 'change_branch' && params.BranchName === '') {
         return
-      } else if (params.ExecType === 'supervisor_restart_all' && params.CodePath === '') {
-        _that.error('请选择代码环境')
-        return
       }
 
       //需要找到code对应的docker
@@ -184,7 +181,7 @@ export default {
           params.DockerId = this.dockerList[j].Id
         }
       }
-      if (params.DockerId === ``) {
+      if (env_config.ParentType !== 'wk' && params.DockerId === ``) {
         _that.error('代码环境找不到对应的docker')
         return
       }
@@ -196,6 +193,7 @@ export default {
         _that.cancelBtnLoading(params)
         if(params.ExecType === 'change_branch'){
           _that.showChangeBranch = false
+          _that.BranchName = ''
         }
         setTimeout(function (){
           _that.textareaScroll()
