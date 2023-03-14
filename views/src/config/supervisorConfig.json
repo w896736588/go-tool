@@ -110,5 +110,12 @@
     "supervisor_config" : "/var/www/dockerfiles/dev_test/docker_volumes/supervisor/etc/supervisor/conf.d/FansPosterPrizeCode.conf",
     "supervisor_name" : "FansPosterPrizeCode",
     "running_status" : ""
+  },
+  {
+    "name" : "自动同意售后单",
+    "command" : "php /var/www/apps/yii_customer_service/scan/protected/yiic WxShopAftersaleAutoAudit",
+    "supervisor_config" : "/var/www/dockerfiles/dev_test/docker_volumes/supervisor/etc/supervisor/conf.d/WxShopAfterSaleAutoAudit.conf",
+    "supervisor_name" : "WxShopAfterSaleAutoAudit",
+    "running_status" : ""
   }
 ]

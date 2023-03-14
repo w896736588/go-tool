@@ -21,7 +21,7 @@
         微信客服
       </el-menu-item>
       <el-menu-item index="Vip">
-        版本变更
+        版本变更/系统登录
       </el-menu-item>
       <el-menu-item index="Model">
         Model生成

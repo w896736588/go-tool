@@ -76,7 +76,7 @@ func GetAdminUserId(account string, dbConfig define.MysqlConfig) define.TblUser 
 // UpdateVip 变更vip版本
 // @auth frog
 // @date 2023-01-17 16:03:11
-func UpdateVip(adminUserId, systemType, vipLevel string, dbConfig define.MysqlConfig) string {
+func UpdateVip(adminUserId, expiredDay, systemType, vipLevel string, dbConfig define.MysqlConfig) string {
 	dbConfig.Dbname = `xkf_test`
 	db := GetDbConn(dbConfig)
 	if db == nil {
@@ -88,21 +88,15 @@ func UpdateVip(adminUserId, systemType, vipLevel string, dbConfig define.MysqlCo
 	} else {
 		vipTable = `tbl_official_account_vip`
 	}
-
+	//时间
+	t := time.Now().Unix()
+	t += 86400 * cast.ToInt64(expiredDay)
 	var ret sql.Result
 	var err error
-	if vipLevel == `0` { //免费版
-		expiredTime := time.Now().Format(`2006-01-02 15:04:05`)
-		sqlStr := `update ` + vipTable + ` set expired_time = ? where user_id =?`
-		log.Debugf(`更新vip表 %s %s %s %s`, vipTable, sqlStr, expiredTime, adminUserId)
-		ret, err = db.Exec(sqlStr, expiredTime, adminUserId)
-
-	} else {
-		expiredTime := time.Unix(cast.ToInt64(time.Now().Unix()+365*86400), 0).Format(`2006-01-02 15:04:05`)
-		sqlStr := `update ` + vipTable + ` set expired_time = ? , vip_type = ? where user_id =?`
-		log.Debugf(`更新vip表 %s %s %s %s %s`, vipTable, sqlStr, vipLevel, expiredTime, adminUserId)
-		ret, err = db.Exec(sqlStr, expiredTime, vipLevel, adminUserId)
-	}
+	expiredTime := time.Unix(t, 0).Format(`2006-01-02 15:04:05`)
+	sqlStr := `update ` + vipTable + ` set expired_time = ? , vip_type = ? where user_id =?`
+	log.Debugf(`更新vip表 %s %s %s %s %s`, vipTable, sqlStr, vipLevel, expiredTime, adminUserId)
+	ret, err = db.Exec(sqlStr, expiredTime, vipLevel, adminUserId)
 	if err != nil {
 		log.Errorf(`更新%s失败 %s`, vipTable, err.Error())
 		return `更新失败`

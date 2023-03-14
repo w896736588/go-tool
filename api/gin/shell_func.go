@@ -403,7 +403,7 @@ func (command *Command) ChangeVipType(reqBody *define.SshExec) []string {
 		retMsgList = append(retMsgList, `找不到该账号`)
 		return retMsgList
 	}
-	ret := base.UpdateVip(userInfo.Id, cast.ToString(reqBody.SystemType), cast.ToString(reqBody.VipLevel), reqBody.XkfDevDbConfig)
+	ret := base.UpdateVip(userInfo.Id, cast.ToString(reqBody.ExpiredDay), cast.ToString(reqBody.SystemType), cast.ToString(reqBody.VipLevel), reqBody.XkfDevDbConfig)
 	//移除缓存
 	for _, value := range reqBody.RedisConfigList {
 		if base.RedisRunList[value.UniKey] != nil {

@@ -149,6 +149,7 @@ type SshExec struct {
 	Account               string         `json:"Account"`               //管理员ID或者账号
 	VipLevel              interface{}    `json:"VipLevel"`              //vip版本
 	SystemType            interface{}    `json:"SystemType"`            //系统类型
+	ExpiredDay            interface{}    `json:"expiredDay"`            //VIP过期时间
 }
 
 type DockerConfig struct {
