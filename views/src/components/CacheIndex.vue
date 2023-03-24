@@ -314,7 +314,7 @@ export default {
       apiHost : 'http://localhost:7070',
       loading: false,
       //数据库
-      redisCheck: 'common3-xkf',
+      redisCheck: 'common3',
       redisList: [],
       //key
       cache: {

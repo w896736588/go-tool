@@ -2,7 +2,7 @@
   <el-card>
     <el-card style="margin-top: 20px;" >
       <div slot="header" class="clearfix">
-        <span>测试环境配置(首次保存后F5刷新一次页面)</span>
+        <span>小客服测试环境配置(首次保存后F5刷新一次页面)</span>
       </div>
       <el-form ref="form" :model="sshConfig" label-width="80px">
         <el-form-item label="账号名">
@@ -19,6 +19,29 @@
         </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="saveSshConfig('dev')">保存配置</el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
+    <el-card style="margin-top: 20px;" >
+      <div slot="header" class="clearfix">
+        <span>企微测试环境配置(首次保存后F5刷新一次页面)</span>
+      </div>
+      <el-form ref="form" :model="wkSshConfig" label-width="80px">
+        <el-form-item label="账号名">
+          <el-input v-model="wkSshConfig.username"></el-input>
+        </el-form-item>
+        <el-form-item label="密码">
+          <el-input type="password" v-model="wkSshConfig.password"></el-input>
+        </el-form-item>
+        <el-form-item label="IP地值">
+          <el-input v-model="wkSshConfig.host"></el-input>
+        </el-form-item>
+        <el-form-item label="端口">
+          <el-input v-model="wkSshConfig.port"></el-input>
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" @click="saveSshConfig('wk_dev')">保存配置</el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -89,6 +112,13 @@ export default {
         host: "121.40.109.241",
         port: "22",
       },
+      //wk ssh config
+      wkSshConfig: {
+        username: "",
+        password: "",
+        host: "47.99.70.6",
+        port: "22",
+      },
       //数据库
       devDbConfig : {
         host : "",
@@ -113,6 +143,11 @@ export default {
     let sshConfig = this.getStore('sshConfig')
     if (sshConfig !== null) {
       this.sshConfig = JSON.parse(sshConfig)
+    }
+
+    let wkSshConfig = this.getStore('wkSshConfig')
+    if (wkSshConfig !== null) {
+      this.wkSshConfig = JSON.parse(wkSshConfig)
     }
 
     let prodTestSshConfig = this.getStore('prodTestSshConfig')
@@ -160,6 +195,22 @@ export default {
           return;
         }
         this.setStore('sshConfig', JSON.stringify(this.sshConfig))
+        this.success('设置成功')
+      }else if(prefix === 'wk_dev'){
+        if (this.wkSshConfig.username === '') {
+          this.error('用户名不能为空')
+          return;
+        } else if (this.wkSshConfig.password === '') {
+          this.error('密码不能为空')
+          return;
+        } else if (this.wkSshConfig.host === '') {
+          this.error('连接IP不能为空')
+          return;
+        } else if (this.wkSshConfig.port === '') {
+          this.error('端口不能为空')
+          return;
+        }
+        this.setStore('wkSshConfig', JSON.stringify(this.wkSshConfig))
         this.success('设置成功')
       }
 

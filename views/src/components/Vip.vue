@@ -115,7 +115,7 @@ export default {
           "value" : "1",
         },
         {
-          "loginName" : "子环境环境",
+          "loginName" : "子环境",
           "value" : "2",
         },
         {

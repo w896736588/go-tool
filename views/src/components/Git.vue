@@ -2,34 +2,25 @@
   <el-card>
     <!--      代码环境-->
     <div>
-      <h3 style="display: inline-block;">
-        {{chooseParentName}} - {{chooseEvnName}} &nbsp;
+      <el-card class="box-card" v-for="(parentTypeValue,k) in parentTypeList" style="margin-top: 10px;">
+        <h3 style="display: inline-block;">
+          {{parentTypeValue.Title}}
+        </h3>
+        <el-row :gutter="20">
+          <el-col :span="2" v-for="(value,key) in codeEnvList" style="margin:5px;" v-if="value.ParentType === parentTypeValue.Name">
+            <div>
+              <el-radio @change="codeChange(value)" size="medium " v-model="chooseEvnName" :label="value.Name">{{value.NameTitle}}</el-radio>
+            </div>
+          </el-col>
+        </el-row>
+      </el-card>
 
-      </h3>
-      <el-select v-model="chooseParentType" @change="changeParentType" placeholder="请选择系统">
-        <el-option
-          v-for="(value,key) in parentTypeList"
-          :key="value.Name"
-          :label="value.Title"
-          :value="value.Name">
-        </el-option>
-      </el-select>
-      <el-row :gutter="20">
-        <el-col :span="2" v-for="(value,key) in codeEnvList" style="margin:5px;" v-if="value.ParentType === chooseParentType">
-          <div>
-            <el-radio @change="codeChange" size="medium " v-model="chooseEvnName" :label="value.Name">{{value.Name}}</el-radio>
-          </div>
-        </el-col>
-      </el-row>
     </div>
     <br/>
     <el-button type="primary" :loading="btnLoading.pull" @click="ExecType = 'pull_branch_origin';exec()">拉取最新代码</el-button>
     <el-button type="primary" :loading="btnLoading.status" @click="ExecType = 'git_status';exec()">查看分支变更</el-button>
     <el-input v-if="showChangeBranch" style="width:300px;margin-right:20px;" v-model="BranchName" placeholder="请输入分支名"></el-input>
     <el-button type="primary" :loading="btnLoading.change" @click="showChangeBranch = true;ExecType = 'change_branch';exec()" >切换分支</el-button>
-<!--    日志操作：-->
-<!--    <el-button type="primary" :loading="btnLoading.status" v-if="chooseParentType === 'xkf'" @click="showLog('application.log')"> application.log</el-button>-->
-<!--    <el-button type="primary" :loading="btnLoading.status" v-if="chooseParentType === 'xkf'" @click="showLog('default.log')"> default.log</el-button>-->
 
     <el-input style="margin-top: 20px;" id="resultTextarea" type="textarea" v-model="execResult" rows="25"></el-input>
   </el-card>
@@ -50,6 +41,7 @@ export default {
       apiHost: 'http://localhost:7070',
       //ssh config
       sshConfig: {},
+      wkSshConfig: {},
       prodTestSshConfig : {},
       //输入框
       showChangeBranch : false,
@@ -70,8 +62,7 @@ export default {
       chooseBusinessType: "git",
       businessTypeList: businessTypeList,
       //操作父类型
-      chooseParentType: "xkf",
-      chooseParentName : "小客服（php）",
+      chooseSshName : "xkf",
       parentTypeList: [
         {Title: "小客服（php）", Name: "xkf"},
         {Title: "企微（php）", Name: "wk"},
@@ -95,12 +86,28 @@ export default {
       this.sshConfig = JSON.parse(sshConfig)
     }
     if(!this.sshConfig || !this.sshConfig.username || this.sshConfig.username === ''){
-      this.error("请先配置ssh");
+      this.error("请先配置小客服ssh");
+      return
+    }
+    let wkSshConfig = this.getStore('wkSshConfig')
+    if (wkSshConfig !== null) {
+      this.wkSshConfig = JSON.parse(wkSshConfig)
+    }
+    if(!this.wkSshConfig || !this.wkSshConfig.username || this.wkSshConfig.username === ''){
+      this.error("请先配置企微ssh");
       return
     }
     let prodTestSshConfig = this.getStore('prodTestSshConfig')
     if (prodTestSshConfig !== null) {
       this.prodTestSshConfig = JSON.parse(prodTestSshConfig)
+    }
+    //处理codeList
+    for(let i in this.codeEnvList){
+      if(this.codeEnvList[i].NameTitle){
+        continue;
+      }
+      this.codeEnvList[i].NameTitle = this.codeEnvList[i].Name
+      this.codeEnvList[i].Name = this.codeEnvList[i].Name + "-" + this.codeEnvList[i].ParentType
     }
     this.ExecType = 'query_current_branch'
     this.exec()
@@ -125,20 +132,10 @@ export default {
       this.exec()
     },
     //改变代码环境
-    codeChange : function (){
+    codeChange : function (value){
       this.ExecType = 'query_current_branch'
+      this.chooseSshName = value.SshName
       this.exec()
-    },
-    //改变父类类型
-    changeParentType: function () {
-      this.chooseEvnName = ''
-      this.ExecType = ''
-      this.chooseBusinessType = ''
-      for(let i in this.parentTypeList){
-        if(this.parentTypeList[i].Name === this.chooseParentType){
-          this.chooseParentName = this.parentTypeList[i].Title
-        }
-      }
     },
     //改变业务类型
     changeBusinessType: function () {
@@ -159,8 +156,14 @@ export default {
         return
       }
       //根据类型判断
+      let chooseSshConfig = _that.sshConfig
+      if(this.chooseSshName === 'wk'){
+        chooseSshConfig = _that.wkSshConfig
+      }else if(this.chooseSshName === "xkf"){
+        chooseSshConfig = _that.sshConfig
+      }
       let params = {
-        SshConfig: _that.sshConfig,
+        SshConfig: chooseSshConfig,
         CodePath: env_config.CodePath,
         BranchName: this.BranchName,
         ExecType: this.ExecType,
@@ -204,7 +207,7 @@ export default {
       //找到环境配置
       let env_config = {};
       for (let i in this.codeEnvList) {
-        if (this.codeEnvList[i].Name === this.chooseEvnName && this.codeEnvList[i].ParentType === this.chooseParentType) {
+        if (this.codeEnvList[i].Name === this.chooseEvnName) {
           env_config = this.codeEnvList[i]
           break
         }

@@ -453,6 +453,6 @@ func (command *Command) QueryVipType(reqBody *define.SshExec) []string {
 		return retMsgList
 	}
 	vipInfo := base.QueryVip(userInfo.Id, cast.ToString(reqBody.SystemType), reqBody.XkfDevDbConfig)
-	retMsgList = append(retMsgList, `vip版本：`+define.VipMap[vipInfo.VipType]+`，过期时间：`+vipInfo.ExpiredTime)
+	retMsgList = append(retMsgList, `管理员ID：`+userInfo.Id+`，vip版本：`+define.VipMap[vipInfo.VipType]+`，过期时间：`+vipInfo.ExpiredTime)
 	return retMsgList
 }
