@@ -1,66 +1,59 @@
 <template>
   <el-card>
-    <el-select v-model="chooseParentType" @change="changeParentType" placeholder="请选择系统">
-      <el-option
-        v-for="(value,key) in parentTypeList"
-        :key="value.Name"
-        :label="value.Title"
-        :value="value.Name">
-      </el-option>
-    </el-select>
-
-    <!--    环境-->
-    <el-select v-model="chooseEvnName" @change="changeCode" placeholder="请选择代码环境">
-      <el-option
-        v-for="(value,key) in codeEnvList" v-if="value.ParentType === chooseParentType"
-        :key="value.Name"
-        :label="value.Name"
-        :value="value.Name">
-      </el-option>
-    </el-select>
-
-
     <!--  子操作选项列表-->
-    <el-card style="margin-top: 20px;">
-      消费者操作列表<br/><br/>
+    <el-card>
+      <h3>
+        消费者操作
+      </h3>
+      <el-select v-model="chooseParentType" @change="changeParentType" placeholder="请选择系统">
+        <el-option
+          v-for="(value,key) in parentTypeList"
+          :key="value.Name"
+          :label="value.Title"
+          :value="value.Name">
+        </el-option>
+      </el-select>
+
+      <!--    环境-->
+      <el-select v-model="chooseEvnName" @change="changeCode" placeholder="请选择代码环境">
+        <el-option
+          v-for="(value,key) in codeEnvList" v-if="value.ParentType === chooseParentType"
+          :key="value.Name"
+          :label="value.NameTitle"
+          :value="value.Name">
+        </el-option>
+      </el-select>
       <el-button type="primary" @click="restartSupervisorAll">重启{{chooseEvnName}}所有消费者</el-button>
       <el-button type="primary" @click="showSupervisorList" :loading="btnLoading.supervisorStatusListStatus">查看所有消费者</el-button>
-      <el-input style="width: 400px" autocomplete="off" placeholder="搜索名称" v-model="searchKey" @input="searchList"></el-input>
+      <el-input style="width: 400px" autocomplete="off" placeholder="搜索名称/进程名/程序名等" v-model="searchKey" @input="searchList"></el-input>
     </el-card>
 
     <el-row :gutter="24" style="margin-top: 10px" >
-      <el-col :span="13">
-        <el-col :span="12" v-for="(value,key) in supervisorConfigList" style="margin-top:5px;" v-if="value.show">
-          <div class="grid-content bg-purple">
-            <el-card class="box-card">
-              <div slot="header" class="clearfix">
-                <span>{{value.name}}</span>
-                <el-button style="float: right; padding: 3px 0" type="text" @click="toTop(value)">置顶</el-button>
-              </div>
-              <div class="supervisorCommand" style="overflow:hidden;">
-                命令:{{ value.commandS }} <br/>
-              </div>
-              <div class="supervisorCommand" style="overflow:hidden;">
-                状态：{{value.running_status}}
-              </div>
+      <el-col :span="6" v-for="(value,key) in supervisorConfigList" style="margin-top:5px;" v-if="value.show">
+        <div class="grid-content bg-purple">
+          <el-card class="box-card">
+            <div slot="header" class="clearfix">
+              <span>{{value.name}}</span>
+              <el-button style="float: right; padding: 3px 0" type="text" @click="toTop(value)">置顶</el-button>
+            </div>
+            <div class="supervisorCommand" style="overflow:hidden;">
+              命令:{{ value.commandS }} <br/>
+            </div>
+            <div class="supervisorCommand" style="overflow:hidden;">
+              状态：{{value.running_status}}
+            </div>
 
-              <div class="bottom clearfix">
-                <el-button type="text" class="button" @click="ExecType = 'supervisor_restart';exec(value)">重新启动</el-button>
-                <el-button type="text" class="button" @click="ExecType = 'supervisor_stop';exec(value)">停止</el-button>
-                <el-button type="text" class="button" @click="ExecType = 'supervisor_config_show';exec(value)">查看配置</el-button>
-                <el-button type="text" class="button" @click="execDockerFunc('searchProcess' , value)">搜索溢出进程</el-button>
-              </div>
-            </el-card>
-          </div>
-        </el-col>
+            <div class="bottom clearfix">
+              <el-button type="text" class="button" @click="ExecType = 'supervisor_restart';exec(value)">重新启动</el-button>
+              <el-button type="text" class="button" @click="ExecType = 'supervisor_stop';exec(value)">停止</el-button>
+              <el-button type="text" class="button" @click="ExecType = 'supervisor_config_show';exec(value)">查看配置</el-button>
+              <el-button type="text" class="button" @click="execDockerFunc('searchProcess' , value)">搜索溢出进程</el-button>
+            </div>
+          </el-card>
+        </div>
       </el-col>
-      <el-col :span="9">
-        <el-input style="margin-top: 20px;width:600px;" type="textarea" v-model="execResult" rows="25" ></el-input>
-      </el-col>
-
-
     </el-row>
-
+    <el-input style="margin-top: 20px;width:100%;" type="textarea" v-model="execResult" rows="25" ></el-input>
     <el-dialog :title="supervisorConfigShow.name" :visible.sync="supervisorConfigShow.dialog">
       <el-form :model="supervisorConfigShow">
         <el-form-item label="配置地址" :label-width="30">
@@ -89,30 +82,22 @@
 <script>
 import Vue from "vue";
 import {Message} from "element-ui";
-let codeList = require("../config/codeList.json")
-let dockerList = require("../config/dockerList.json")
-let supervisorConfigList = require("../config/supervisorConfig.json")
 export default {
   data() {
     return {
       name: "Consumer",
       //接口地址
-      apiHost: 'http://localhost:7070',
+      apiHost: '',
       //ssh config
-      sshConfig: {
-        username: "",
-        password: "",
-        host: "121.40.109.241",
-        port: "22",
-      },
+      sshConfig: {},
       //选中的环境
-      chooseEvnName: "common3",
+      chooseEvnName: "common3-xkf",
       //是否显示所有的消费者
       showAllSupervisor : false,
       //代码环境
-      codeEnvList: codeList,
+      codeEnvList: [],
       //docker
-      dockerList: dockerList,
+      dockerList: [],
       //消费者列表
       supervisorConfigList : [],
       //按钮状态
@@ -147,21 +132,11 @@ export default {
     }
   },
   mounted: function () {
-    if(process.env.NODE_ENV === 'production'){
-      this.apiHost = '';
-    }
-    let sshConfig = this.getStore('sshConfig')
-    if (sshConfig !== null) {
-      this.sshConfig = JSON.parse(sshConfig)
-    }
-    //初始化命令
-    let sliceLength = 30
-    for(let i in supervisorConfigList){
-      let command = supervisorConfigList[i].command
-      supervisorConfigList[i].commandS = '...' + command.substr(command.length - sliceLength , sliceLength)
-    }
-    this.supervisorConfigList = supervisorConfigList
-    //拿到所有消费者
+    this.sshConfig = this.$helperConfig.getXkfDevSshConfig()
+    this.apiHost = this.$helperConfig.getApiHost()
+    this.codeEnvList = this.$helperConfig.getCodeEnvList()
+    this.supervisorConfigList = this.$helperConfig.getSupervisorConfigList()
+    this.dockerList = this.$helperConfig.getDockerList()
     this.showSupervisorList()
   },
   onload: function(){
@@ -177,7 +152,7 @@ export default {
         if(command_params.length > 1){
           this.dockerExecCommand = 'ps -aux|grep -i ' + command_params[command_params.length - 1]
         }else{
-          this.error('进程名找不到')
+          this.$helperNotify.error('进程名找不到')
           return
         }
       }
@@ -237,16 +212,10 @@ export default {
     //执行
     exec: function (param) {
       let _that = this
-      //找到环境配置
-      let env_config = {};
-      for (let i in this.codeEnvList) {
-        if (this.codeEnvList[i].Name === this.chooseEvnName) {
-          env_config = this.codeEnvList[i]
-          break
-        }
-      }
+      //找到代码配置
+      let env_config = this.$helperConfig.getCodeEnvConfigByCodeEnvName(this.codeEnvList , this.chooseEvnName)
       if (env_config === {}) {
-        _that.error("不存在的配置");
+        _that.$helperNotify.error("不存在的配置");
         return
       }
       env_config.SshConfig = _that.sshConfig
@@ -254,19 +223,17 @@ export default {
       let params = {
         SshConfig: env_config.SshConfig,
         CodePath: env_config.CodePath,
-        BranchName: this.BranchName,
         ExecType: this.ExecType,
-        WechatKefuAppid: this.chooseWechatKefuAppid,
         DockerList: this.dockerList,
-        DockerId: "",
+        DockerId: this.$helperConfig.getDockerIdByCodeEnvConfig(this.dockerList , env_config),
         DockerCodePath: env_config.DockerCodePath,
         DockerExecCommand : this.dockerExecCommand,
       }
       if (params.ExecType === 'supervisor_restart_all' && params.CodePath === '') {
-        _that.error('请选择代码环境')
+        _that.$helperNotify.error('请选择代码环境')
         return
       } else if(params.ExecType === 'supervisor_status_list' && params.CodePath === ''){
-        _that.error('请选择代码环境')
+        _that.$helperNotify.error('请选择代码环境')
       }
       //查看消费者的配置内容
       if(params.ExecType === 'supervisor_config_show'){
@@ -275,24 +242,18 @@ export default {
         params.SupervisorRestartName = param.supervisor_restart_name
       }
 
-      //如果是切换微信客服 需要找到code对应的docker
-      for (let j in this.dockerList) {
-        if (env_config.DockerName === this.dockerList[j].Name) {
-          params.DockerId = this.dockerList[j].Id
-        }
-      }
       if (params.ExecType === 'supervisor_restart_all' && params.DockerId === ``) {
-        _that.error('代码环境找不到对应的docker')
+        _that.$helperNotify.error('代码环境找不到对应的docker')
         return
       }
       if (params.ExecType === 'supervisor_status_list' && params.DockerId === ``) {
-        _that.error('代码环境找不到对应的docker')
+        _that.$helperNotify.error('代码环境找不到对应的docker')
         return
       }
       //按钮加载状态
       _that.setBtnLoading(params)
       Vue.axios.post(this.apiHost + '/api/shell/exec', params).then(function (response) {
-        _that.success('成功');
+        _that.$helperNotify.success('成功');
         _that.execResult = response.Data
         _that.cancelBtnLoading(params)
         if(params.ExecType === 'supervisor_status_list' || params.ExecType === 'supervisor_restart' || params.ExecType === 'supervisor_stop'){     //查看消费者列表
@@ -308,28 +269,25 @@ export default {
     },
     //消费者排序 按照最后使用时间排序
     sortConsumerList : function (supervisor_name){
-      console.log('点击了' + supervisor_name)
       let currentTime = parseInt(Date.parse(new Date())/1000)
-      console.log('当前时间戳 ' + currentTime)
-      this.setStore('supervisor_' + supervisor_name , currentTime)
+      this.$helperStore.setStore('supervisor_' + supervisor_name , currentTime)
       this.initSort()
     },
     initSort : function (){
       let currentTime = parseInt(Date.parse(new Date())/1000)
-      for(let i in supervisorConfigList){
-        let supervisorName = supervisorConfigList[i].supervisor_name
-        let sortTime = this.getStore('supervisor_' + supervisorName)
+      for(let i in this.supervisorConfigList){
+        let supervisorName = this.supervisorConfigList[i].supervisor_name
+        let sortTime = this.$helperStore.getStore('supervisor_' + supervisorName)
         if(sortTime === null || sortTime === undefined){
-          this.setStore('supervisor_' + supervisorName , currentTime)
-          supervisorConfigList[i].sortTime = currentTime - 99999999
+          this.$helperStore.setStore('supervisor_' + supervisorName , currentTime)
+          this.supervisorConfigList[i].sortTime = currentTime - 99999999
         }else{
-          supervisorConfigList[i].sortTime = sortTime
+          this.supervisorConfigList[i].sortTime = sortTime
         }
       }
-      supervisorConfigList.sort(function (a,b){
+      this.supervisorConfigList.sort(function (a,b){
         return b.sortTime - a.sortTime
       })
-      console.log(supervisorConfigList)
     },
     //查看消费者配置
     supervisorConfigShowMethod : function (param){
@@ -405,29 +363,6 @@ export default {
       }
       return return_array;
     },
-    success: function (msg) {
-      // Message.success(msg);
-      this.$notify({title: '提示', message: msg, type: 'success' , duration : 1000});
-    },
-    warning: function (msg) {
-      // Message.warning(msg);
-      this.$notify({title: '提示', message: msg, type: 'warning' , duration : 1000});
-    },
-    info: function (msg) {
-      // Message.info(msg);
-      //this.$notify({title: '提示', message: msg});
-      this.$notify({title: '提示', message: msg, type: 'info' , duration : 1000});
-    },
-    error: function (msg) {
-      // Message.error(msg);
-      this.$notify({title: '提示', message: msg, type: 'error' , duration : 1000});
-    },
-    setStore: function (key, value) {
-      localStorage.setItem(key, value);
-    },
-    getStore: function (key) {
-      return localStorage.getItem(key);
-    }
   },
 }
 </script>

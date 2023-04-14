@@ -2,15 +2,27 @@
   <el-card>
     <el-card>
 <!--      代码环境-->
-      <div style="margin-top: 10px;">
-        <h3>
-          代码环境 - {{chooseEvnName}}
-          <el-input style="width:500px;display: inline-block;" v-model="chooseWechatKefuAppid" placeholder="请输入微信客服appid或应用id"></el-input>
-        </h3>  &nbsp;
+      <div>
+        <h3 style="display: inline-block;">
+        当前所选环境的微信客服
+        </h3>
         <el-row :gutter="20">
+          <el-col :span="5" v-for="(value,key) in wechatKefuList" style="margin:5px;display: inline-block;">
+            <div>
+              <el-radio size="medium " v-model="chooseWechatKefuAppid" :label="value.app_id">
+                {{ value.app_name }}
+              </el-radio>
+            </div>
+          </el-col>
+        </el-row>
+<!--        <el-input style="width:500px;display: inline-block;margin-top:5px;" v-model="chooseWechatKefuAppid" placeholder="请输入微信客服appid或应用id"></el-input>-->
+        <h3 style="display: inline-block;">
+          环境
+        </h3>
+        <el-row :gutter="20" style="margin-top:5px;">
           <el-col v-if="value.ParentType === 'xkf'" :span="2" v-for="(value,key) in codeEnvList" style="margin:5px;">
             <div>
-              <el-radio size="medium " v-model="chooseEvnName" :label="value.Name">{{value.Name}}</el-radio>
+              <el-radio size="medium " v-model="chooseEvnName" @change="queryEnvWechatKefuList" :label="value.Name">{{value.NameTitle}}</el-radio>
             </div>
           </el-col>
         </el-row>
@@ -28,24 +40,23 @@
 <script>
 import Vue from "vue";
 import {Message} from "element-ui";
-let codeList = require("../config/codeList.json")
-let dockerList = require("../config/dockerList.json")
-let wechatKefuList = require("../config/wechatKefuList.json")
 export default {
   data() {
     return {
       name: "WechatKefu",
+      userNameList : [],
       //接口地址
-      apiHost: 'http://localhost:7070',
+      apiHost: '',
       //ssh config
       sshConfig: {},
+      wkSshConfig : {},
       xkfDevDbConfig : {},
       //选中的环境
-      chooseEvnName: "common3",
+      chooseEvnName: "common3-xkf",
       //代码环境
-      codeEnvList: codeList,
+      codeEnvList: [],
       //docker
-      dockerList: dockerList,
+      dockerList: [],
       //按钮状态
       btnLoading : {
         wechatKefuStatus : false,
@@ -54,39 +65,28 @@ export default {
       //微信客服合集
       chooseWechatKefuName: "",
       chooseWechatKefuAppid: "",
-      wechatKefuList: wechatKefuList,
-      BranchName: "",  //分支名
+      wechatKefuList: [],
       execResult: "",//操作结果
     }
   },
   mounted: function () {
-    if(process.env.NODE_ENV === 'production'){
-      this.apiHost = '';
-    }
-    let sshConfig = this.getStore('sshConfig')
-    if (sshConfig !== null) {
-      this.sshConfig = JSON.parse(sshConfig)
-    }
-
-    let xkfDevDbConfig = this.getStore('devTestDbConfig')
-    if (xkfDevDbConfig !== null) {
-      this.xkfDevDbConfig = JSON.parse(xkfDevDbConfig)
-    }
+    this.sshConfig = this.$helperConfig.getXkfDevSshConfig()
+    this.apiHost = this.$helperConfig.getApiHost()
+    this.wkSshConfig = this.$helperConfig.getWkDevSshConfig()
+    this.xkfDevDbConfig = this.$helperConfig.getXkfDevDbConfig()
+    this.codeEnvList = this.$helperConfig.getCodeEnvList()
+    this.dockerList = this.$helperConfig.getDockerList()
+    this.userNameList = this.$helperConfig.getUsernameList()
+    this.queryEnvWechatKefuList()
   },
   methods: {
     //执行
     exec: function () {
       let _that = this
       //找到环境配置
-      let env_config = {};
-      for (let i in this.codeEnvList) {
-        if (this.codeEnvList[i].Name === this.chooseEvnName) {
-          env_config = this.codeEnvList[i]
-          break
-        }
-      }
+      let env_config = this.$helperConfig.getCodeEnvConfigByCodeEnvName(this.codeEnvList , this.chooseEvnName)
       if (env_config === {}) {
-        _that.error("不存在的配置");
+        _that.$helperNotify.error("不存在的配置");
         return
       }
       env_config.SshConfig = _that.sshConfig
@@ -94,38 +94,56 @@ export default {
       let params = {
         SshConfig: env_config.SshConfig,
         CodePath: env_config.CodePath,
-        BranchName: this.BranchName,
         ExecType: this.ExecType,
         WechatKefuAppid: this.chooseWechatKefuAppid,
         DockerList: this.dockerList,
-        DockerId: "",
+        DockerId: this.$helperConfig.getDockerIdByCodeEnvConfig(this.dockerList , env_config),
         DockerCodePath: env_config.DockerCodePath,
         xkfDevDbConfig : this.xkfDevDbConfig,
       }
       if (params.ExecType === 'wechat_kefu_status' && params.WechatKefuAppid === '') {
-        _that.error('请输入应用id或appid')
+        _that.$helperNotify.error('请输入应用id或appid')
         return
       } else if (params.ExecType === 'wechat_kefu_change' && (params.WechatKefuAppid === '' || params.CodePath === '')) {
-        _that.error('选择微信客服以及代码环境')
+        _that.$helperNotify.error('选择微信客服以及代码环境')
         return
       }
-
-      //如果是切换微信客服 需要找到code对应的docker
-      for (let j in this.dockerList) {
-        if (env_config.DockerName === this.dockerList[j].Name) {
-          params.DockerId = this.dockerList[j].Id
-        }
-      }
       if (params.ExecType === 'wechat_kefu_change' && params.DockerId === ``) {
-        _that.error('代码环境找不到对应的docker')
+        _that.$helperNotify.error('代码环境找不到对应的docker')
         return
       }
       //按钮加载状态
       _that.setBtnLoading(params)
       Vue.axios.post(this.apiHost + '/api/shell/exec', params).then(function (response) {
-        _that.success('成功');
+        _that.$helperNotify.success('成功');
         _that.execResult = response.Data
         _that.cancelBtnLoading(params)
+      });
+    },
+    queryEnvWechatKefuList : function (){
+      let _that = this
+      _that.chooseWechatKefuAppid = ''
+      //找到环境配置
+      let env_config = this.$helperConfig.getCodeEnvConfigByCodeEnvName(this.codeEnvList , this.chooseEvnName)
+      if (env_config === {}) {
+        _that.$helperNotify.error("不存在的配置");
+        return
+      }
+      this.$helperConfig.get
+      console.log(env_config)
+      //根据类型判断
+      let params = {
+        Account : this.$helperConfig.getUserNameByEnvCode(this.userNameList , env_config.NameTitle),
+        ExecType: 'query_env_wechatkefu_list',
+        xkfDevDbConfig : this.xkfDevDbConfig,
+      }
+      //按钮加载状态
+      _that.setBtnLoading(params)
+      Vue.axios.post(this.apiHost + '/api/shell/exec', params).then(function (response) {
+        _that.$helperNotify.success('成功');
+        _that.execResult = response.Data
+        _that.cancelBtnLoading(params)
+        _that.wechatKefuList = JSON.parse(response.Data)
       });
     },
     setBtnLoading : function (params){
@@ -147,29 +165,6 @@ export default {
         this.btnLoading.wechatKefuChange = false
       }
     },
-    success: function (msg) {
-      // Message.success(msg);
-      this.$notify({title: '提示', message: msg, type: 'success' , duration : 1000});
-    },
-    warning: function (msg) {
-      // Message.warning(msg);
-      this.$notify({title: '提示', message: msg, type: 'warning' , duration : 1000});
-    },
-    info: function (msg) {
-      // Message.info(msg);
-      //this.$notify({title: '提示', message: msg});
-      this.$notify({title: '提示', message: msg, type: 'info' , duration : 1000});
-    },
-    error: function (msg) {
-      // Message.error(msg);
-      this.$notify({title: '提示', message: msg, type: 'error' , duration : 1000});
-    },
-    setStore: function (key, value) {
-      localStorage.setItem(key, value);
-    },
-    getStore: function (key) {
-      return localStorage.getItem(key);
-    }
   },
 }
 </script>

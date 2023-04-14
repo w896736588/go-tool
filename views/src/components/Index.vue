@@ -8,7 +8,7 @@
       background-color="#545c64"
       text-color="#fff"
       active-text-color="#ffd04b">
-      <el-menu-item index="Redis">
+      <el-menu-item index="CacheIndex">
         Redis
       </el-menu-item>
       <el-menu-item index="Consumer">
@@ -25,6 +25,9 @@
       </el-menu-item>
       <el-menu-item index="Link">
         登录/链接
+      </el-menu-item>
+      <el-menu-item index="Docker">
+        Docker
       </el-menu-item>
       <el-menu-item index="Model">
         Model生成
@@ -70,20 +73,22 @@
 
     </el-menu>
 <!--    内容-->
-    <Redis v-show="menuName === 'Redis'"></Redis>
+
     <Consumer v-show="menuName === 'Consumer'"></Consumer>
+    <CacheIndex v-show="menuName === 'CacheIndex'"></CacheIndex>
     <WechatKefu v-show="menuName === 'WechatKefu'"></WechatKefu>
     <Ssh v-show="menuName === 'Ssh'"></Ssh>
     <Git v-show="menuName === 'Git'"></Git>
     <Vip v-show="menuName === 'Vip'"></Vip>
     <Model v-show="menuName === 'Model'"></Model>
     <Link v-show="menuName === 'Link'"></Link>
+    <Docker v-show="menuName === 'Docker'"></Docker>
   </div>
 
 </template>
 
 <script>
-import Redis from "./Cache"
+import CacheIndex from "./CacheIndex"
 import Consumer from "./Consumer"
 import WechatKefu from "./WechatKefu"
 import Ssh from "./Ssh"
@@ -91,20 +96,28 @@ import Git from "./Git"
 import Vip from "./Vip"
 import Model from "./Model"
 import Link from "./Link"
+import Docker from "./Docker"
 export default {
   data () {
     return {
-      name: "Redis",
-      menuName : "Redis",
+      name: "CacheIndex",
+      menuName : "CacheIndex",
+    }
+  },
+  mounted : function (){
+    this.menuName = this.$helperStore.getStore('lastMenuName')
+    if(!this.$helperConfig.getXkfDevSshConfig() || !this.$helperConfig.getWkDevSshConfig() || !this.$helperConfig.getXkfDevDbConfig()){
+      this.menuName = 'Ssh';
     }
   },
   methods: {
     handleSelect(key, keyPath) {
       this.menuName = keyPath[0];
+      this.$helperStore.setStore('lastMenuName' , this.menuName)
     }
   },
   components : {
-    Redis,
+    CacheIndex,
     Consumer,
     WechatKefu,
     Ssh,
@@ -112,6 +125,7 @@ export default {
     Vip,
     Model,
     Link,
+    Docker,
   },
 }
 </script>

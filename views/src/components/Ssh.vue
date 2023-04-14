@@ -2,7 +2,7 @@
   <el-card>
     <el-card style="margin-top: 20px;" >
       <div slot="header" class="clearfix">
-        <span>小客服测试环境配置(首次保存后F5刷新一次页面)</span>
+        <span>小客服测试环境配置</span>
       </div>
       <el-form ref="form" :model="sshConfig" label-width="80px">
         <el-form-item label="账号名">
@@ -25,7 +25,7 @@
 
     <el-card style="margin-top: 20px;" >
       <div slot="header" class="clearfix">
-        <span>企微测试环境配置(首次保存后F5刷新一次页面)</span>
+        <span>企微测试环境配置</span>
       </div>
       <el-form ref="form" :model="wkSshConfig" label-width="80px">
         <el-form-item label="账号名">
@@ -49,7 +49,7 @@
 
     <el-card style="margin-top: 20px;" >
       <div slot="header" class="clearfix">
-        <span>小客服主库测试环境数据库配置(首次保存后F5刷新一次页面)</span>
+        <span>小客服主库测试环境数据库配置</span>
       </div>
       <el-form ref="form" :model="sshConfig" label-width="80px">
         <el-form-item label="host">

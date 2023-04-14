@@ -1,7 +1,7 @@
 @echo off
  
 
-start ./main.exe
+start ./build/xkf_tool.exe
 
 
 start chrome http://localhost:7070/

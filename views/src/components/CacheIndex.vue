@@ -1,186 +1,211 @@
 <template>
-  <div v-loading="loading">
-    <template>
-      <el-card>
-        <el-input style="width:400px;margin-right:20px;" v-model="keys" @keyup.enter.native="keysSearch" placeholder="请输入key"></el-input>
-        <el-select v-model="redisCheck" @change="redisDbChange">
-          <el-option
-            v-for="(value,key) in redisList"
-            :key="value.UniKey"
-            :label="value.Name"
-            :disabled="!value.Connection"
-            :value="value.UniKey">
-          </el-option>
-        </el-select>
-        <el-button type="primary" @click="keysSearch">查询</el-button>
-        <el-button icon="el-icon-refresh-left" @click="refresh" circle></el-button>
-        <el-button type="primary" icon="el-icon-plus" @click="showAddCache" circle></el-button>
+  <el-card>
+    <el-card>
+      <el-input style="width:600px;" v-model="keys" @keyup.enter.native="keysSearch"
+                placeholder="请输入key"></el-input>
+      <el-select v-model="redisCheck" @change="redisDbChange">
+        <el-option
+          v-for="(value,key) in redisList"
+          :key="value.Name"
+          :label="value.Name"
+          :value="value.Name">
+        </el-option>
+      </el-select>
+      <el-button type="primary" @click="keysSearch">查询</el-button>
+      <el-button icon="el-icon-refresh-left" @click="refresh" circle></el-button>
+      <el-button type="primary" icon="el-icon-plus" @click="showAddCache" circle></el-button>
 
-<!--        历史查找-->
-        <el-popover
-          placement="bottom"
-          width="1000"
-          v-model="historySearchVisible"
-          trigger="hover"
-          >
-          <el-row :gutter="10" style="margin-top: 10px;">
-            <el-tag effect="dark" type="" closable @close="deleteHistory(value)" style="margin-left: 5px;margin-top:5px;" v-for="(value,key) in historyList" :key="key">
-              <!--              <el-radio style="word-wrap:break-word;" v-model="historyCheck" @change="searchHistory(value)" :label="value.Search">{{ value.Search }}</el-radio>-->
-              <span v-if="historyCheck === value.Search " style="font-size:13px;color:blue;word-wrap:break-word;cursor:default;"  @click="searchHistory(value)"  >{{ value.Search }}</span>
-              <span v-else style="font-size:13px;word-wrap:break-word;cursor:default;"  @click="historySearchVisible=false;searchHistory(value);"  >{{ value.Search }}</span>
-            </el-tag>
-          </el-row>
-          <el-button slot="reference" @click="historySearchVisible = !historySearchVisible">历史记录</el-button>
-        </el-popover>
-      </el-card>
+      <!--        历史查找-->
+      <el-popover
+        placement="bottom"
+        width="1000"
+        v-model="historySearchVisible"
+        trigger="hover"
+      >
+        <el-row :gutter="10" style="margin-top: 10px;">
+          <el-tag effect="dark" type="" closable @close="deleteHistory(value)"
+                  style="margin-left: 5px;margin-top:5px;" v-for="(value,key) in historyList" :key="key">
+            <!--              <el-radio style="word-wrap:break-word;" v-model="historyCheck" @change="searchHistory(value)" :label="value.Search">{{ value.Search }}</el-radio>-->
+            <span v-if="historyCheck === value.Search "
+                  style="font-size:13px;color:blue;word-wrap:break-word;cursor:default;"
+                  @click="searchHistory(value)">{{ value.Search }}</span>
+            <span v-else style="font-size:13px;word-wrap:break-word;cursor:default;"
+                  @click="historySearchVisible=false;searchHistory(value);">{{ value.Search }}</span>
+          </el-tag>
+        </el-row>
+        <el-button slot="reference" @click="historySearchVisible = !historySearchVisible">历史记录</el-button>
+      </el-popover>
+    </el-card>
+    <br/>
+    <el-row :gutter="20">
+      <el-col :span="8">
+        <el-card class="box-card" style="">
+          <div class="grid-content bg-purple" style="height:480px;overflow:auto;">
+            <el-button type="danger" style="margin-bottom: 7px;" @click="delAll" v-if="keysResult.length > 0 "
+                       size="mini">删除以下缓存
+            </el-button>
+            <el-checkbox style="float: right;" @change="changeSimpleShow" v-model="boolSimpleShow">优化显示/排序</el-checkbox>
 
-      <el-card class="box-card">
-        <el-row :gutter="20">
-          <el-col :span="8">
-            <el-card class="box-card" style="margin-left: -15px;margin-top:-15px;padding:0px;">
-              <div class="grid-content bg-purple" style="height:480px;overflow:auto;">
-                <el-button type="danger" style="margin-bottom: 7px;" @click="delAll" v-if="keysResult.length > 0 "
-                           size="mini">删除以下缓存
+            <div v-for="(value,key) in keysResult">
+              <div>
+                <el-tag size="medium" effect="light" style="margin-top:3px;">
+                  <el-link style="padding:3px;font-size: 13px;" v-if="selectRedisKey === value.CacheKey"
+                           @click="search(value.CacheKey)"> {{ value.showName }}
+                  </el-link>
+                  <el-link style="padding:3px;font-size: 11px;color:dodgerblue;" v-else
+                           @click="search(value.CacheKey)"> {{ value.showName }}
+                  </el-link>
+                </el-tag>
+              </div>
+
+            </div>
+          </div>
+        </el-card>
+
+      </el-col>
+      <el-col :span="16">
+        <div class="grid-content bg-purple">
+          <el-card class="box-card"
+                   style="height:520px;overflow:auto;">
+            <div slot="header" class="clearfix">
+              <template v-if="cache.cacheKey !== ''">
+                <el-tag size="medium">{{ cache.cacheType }}</el-tag>
+                <el-tag size="medium" style="cursor: copy;" class="copyCacheKey"
+                        :data-clipboard-text="cache.cacheKey"
+                        @click="copyKey">{{ cache.cacheKey }}
+                </el-tag>
+              </template>
+              <template v-if="cache.cacheKey !==  '' && cache.cacheType === 'string'">
+                <el-tag size="medium">
+                  <el-checkbox class="string-option" v-model="cache.strHasSerialize" @change="unserialize()">
+                    serialize
+                  </el-checkbox>
+                </el-tag>
+                <el-tag size="medium">
+                  <el-checkbox class="string-option" v-model="cache.strHasJson" @change="json()">json
+                  </el-checkbox>
+                </el-tag>
+              </template>
+              <template v-if="cache.cacheKey !== ''">
+                <el-tag size="medium" v-if="cache.startEditTTL === true">
+                  ttl：
+                  <input style="width:100px;border:0;" v-model="cache.ttl" type="text"/>
+                  <el-button size="mini" type="primary" @click="saveTTL" style="padding:3px">保存</el-button>
+                  <el-button size="mini" type="default" @click="cancelEditTTL" style="padding:3px;">取消</el-button>
+                </el-tag>
+                <el-tag size="medium" @click="editTTL" style="cursor:pointer" v-if="cache.startEditTTL === false">
+                  ttl：
+                  {{ cache.ttl }}
+                </el-tag>
+                <el-button icon="el-icon-refresh-left " size="medium" @click="search(cache.cacheKey)"
+                           circle></el-button>
+              </template>
+              <template style="float:right;" v-if="cache.cacheKey !== ''">
+                <el-button type="danger" size="mini" icon="el-icon-delete"
+                           style="margin-left: 10px;float:right;" @click="delCache()">删除
+                </el-button>
+                <el-button type="primary" size="mini" icon="el-icon-plus" style="margin-left: 10px;float:right;"
+                           @click="createSubCache" v-if="cache.cacheType !== cacheType.STRING">
                 </el-button>
 
-                <div v-for="(value,key) in keysResult">
-                  <div>
-                      <el-tag size="medium" style="margin-top:7px;" effect="light" >
-                        <el-link style="padding:3px;font-size: 13px;" v-if="selectRedisKey === value.CacheKey" @click="search(value.CacheKey)"> {{value.CacheKey}}</el-link>
-                        <el-link style="padding:3px;font-size: 13px;color:dodgerblue;" v-else @click="search(value.CacheKey)"> {{value.CacheKey}}</el-link>
-                      </el-tag>
-                  </div>
-
-                </div>
-              </div>
-            </el-card>
-
-          </el-col>
-          <el-col :span="16">
-            <div class="grid-content bg-purple">
-              <el-card class="box-card" style="height:520px;overflow:auto;margin-left: -15px;margin-top:-15px;margin-right:-15px;">
-                <div slot="header" class="clearfix">
-                  <template v-if="cache.cacheKey !== ''">
-                    <el-tag size="medium">{{ cache.cacheType }}</el-tag>
-                    <el-tag size="medium" style="cursor: copy;" class="copyCacheKey" :data-clipboard-text="cache.cacheKey"
-                            @click="copyKey">{{ cache.cacheKey }}
-                    </el-tag>
-                  </template>
-                  <template v-if="cache.cacheKey !==  '' && cache.cacheType === 'string'">
-                    <el-tag size="medium">
-                      <el-checkbox class="string-option" v-model="cache.strHasSerialize" @change="unserialize()" >
-                        serialize
-                      </el-checkbox>
-                    </el-tag>
-                    <el-tag size="medium" >
-                      <el-checkbox class="string-option" v-model="cache.strHasJson" @change="json()" >json</el-checkbox>
-                    </el-tag>
-                  </template>
-                  <template v-if="cache.cacheKey !== ''">
-                    <el-tag size="medium" v-if="cache.startEditTTL === true">
-                      ttl：
-                      <input style="width:100px;border:0;" v-model="cache.ttl" type="text"/>
-                      <el-button size="mini" type="primary" @click="saveTTL" style="padding:3px">保存</el-button>
-                      <el-button size="mini" type="default" @click="cancelEditTTL" style="padding:3px;">取消</el-button>
-                    </el-tag>
-                    <el-tag size="medium" @click="editTTL" style="cursor:pointer" v-if="cache.startEditTTL === false">ttl：
-                      {{ cache.ttl }}
-                    </el-tag>
-                    <el-button icon="el-icon-refresh-left " size="medium" @click="search(cache.cacheKey)" circle></el-button>
-                  </template>
-                  <template style="float:right;" v-if="cache.cacheKey !== ''">
-                    <el-button type="danger" size="mini" icon="el-icon-delete"
-                               style="margin-left: 10px;float:right;" @click="delCache()">删除
-                    </el-button>
-                    <el-button type="primary" size="mini" icon="el-icon-plus" style="margin-left: 10px;float:right;"
-                               @click="createSubCache" v-if="cache.cacheType !== cacheType.STRING">
-                    </el-button>
-
-                    <el-button type="primary" size="mini" icon="el-icon-check" style="margin-left: 10px;float:right;"
-                               @click="saveString()" v-if="cache.strShowType === 1 && cache.cacheType === cacheType.STRING">保存
-                    </el-button>
-                  </template>
-                </div>
-
-                <el-form ref="form">
-                  <el-form-item v-if="cache.cacheType === cacheType.STRING" style="margin-top:10px;">
-                    <el-input type="textarea" v-if="cache.strShowType === 1 " v-model="searchResult"
-                              rows="20"></el-input>
-                    <el-input type="textarea" class="readonlyTextarea" v-if="cache.strShowType === 2 " readonly
-                              v-model="searchResult" style="background: #eeee;" rows="20"></el-input>
-
-                    <json-viewer :value="searchResult" v-if="cache.strShowType === 3 " :expand-depth="10" copyable
-                                 sort></json-viewer>
-                  </el-form-item>
-
-                  <template v-if="cache.cacheType === cacheType.HASH || cache.cacheType === cacheType.LIST || cache.cacheType === cacheType.SET || cache.cacheType === cacheType.ZSET " style="margin-top:10px;">
-                    <el-table
-                      :data="hashResult"
-                      style="width: 100%;font-size:13px;">
-
-                      <el-table-column   v-if=" cache.cacheType === cacheType.LIST"
-                                         prop="index"
-                                         :key="Math.random()"
-                                         label="index"
-                                         width="180" sortable>
-                      </el-table-column>
-
-                      <el-table-column   v-if="cache.cacheType === cacheType.HASH"
-                                         prop="field"
-                                         :key="Math.random()"
-                                         label="field"
-                                         width="180" sortable>
-                      </el-table-column>
-                      <el-table-column   v-if="cache.cacheType === cacheType.ZSET"
-                                         prop="member"
-                                         :key="Math.random()"
-                                         label="member"
-                                         width="500" sortable>
-                      </el-table-column>
-
-
-
-                      <el-table-column  v-if="cache.cacheType === cacheType.HASH || cache.cacheType === cacheType.LIST"
-                        prop="value"
-                        label="value"
-                        width="550" sortable>
-                        <template slot-scope="scope">
-                          {{scope.row.value | strLenFilter}}
-                        </template>
-                      </el-table-column>
-                      <el-table-column v-if="cache.cacheType === cacheType.SET"
-                        prop="value"
-                        label="value"
-                        width="600" sortable>
-                        <template slot-scope="scope">
-                          {{scope.row.value | strLenFilter}}
-                        </template>
-                      </el-table-column>
-                      <el-table-column
-                        label="操作">
-                        <template slot-scope="scope">
-                          <el-button type="primary" v-if="cache.cacheType !== cacheType.SET" icon="el-icon-edit"  size="mini" @click="editSub(scope.row)"></el-button>
-                          &nbsp;
-                          <el-button type="danger" v-if="cache.cacheType === cacheType.HASH" icon="el-icon-delete"  size="mini" @click="delSub(scope.row.field)"></el-button>
-                          <el-button type="danger" v-if="cache.cacheType === cacheType.SET || cache.cacheType === cacheType.LIST || cache.cacheType === cacheType.ZSET" size="mini" icon="el-icon-delete" @click="delSub(scope.row.value)"></el-button>
-                        </template>
-
-                      </el-table-column>
-                    </el-table>
-                  </template>
-                </el-form>
-
-              </el-card>
+                <el-button type="primary" size="mini" icon="el-icon-check" style="margin-left: 10px;float:right;"
+                           @click="saveString()"
+                           v-if="cache.strShowType === 1 && cache.cacheType === cacheType.STRING">保存
+                </el-button>
+              </template>
             </div>
-          </el-col>
-        </el-row>
-      </el-card>
-    </template>
+
+            <el-form ref="form">
+              <el-form-item v-if="cache.cacheType === cacheType.STRING" style="margin-top:10px;">
+                <el-input type="textarea" v-if="cache.strShowType === 1 " v-model="searchResult"
+                          rows="20"></el-input>
+                <el-input type="textarea" class="readonlyTextarea" v-if="cache.strShowType === 2 " readonly
+                          v-model="searchResult" style="background: #eeee;" rows="20"></el-input>
+
+                <json-viewer :value="searchResult" v-if="cache.strShowType === 3 " :expand-depth="10" copyable
+                             sort></json-viewer>
+              </el-form-item>
+
+              <template
+                v-if="cache.cacheType === cacheType.HASH || cache.cacheType === cacheType.LIST || cache.cacheType === cacheType.SET || cache.cacheType === cacheType.ZSET "
+                style="margin-top:10px;">
+                <el-table
+                  :data="hashResult"
+                  style="width: 100%;font-size:13px;">
+
+                  <el-table-column v-if=" cache.cacheType === cacheType.LIST"
+                                   prop="index"
+                                   :key="Math.random()"
+                                   label="index"
+                                   width="180" sortable>
+                  </el-table-column>
+
+                  <el-table-column v-if="cache.cacheType === cacheType.HASH"
+                                   prop="field"
+                                   :key="Math.random()"
+                                   label="field"
+                                   width="180" sortable>
+                  </el-table-column>
+                  <el-table-column v-if="cache.cacheType === cacheType.ZSET"
+                                   prop="member"
+                                   :key="Math.random()"
+                                   label="member"
+                                   width="500" sortable>
+                  </el-table-column>
+                  <el-table-column v-if="cache.cacheType === cacheType.ZSET"
+                                   prop="score"
+                                   :key="Math.random()"
+                                   label="score"
+                                   width="200" sortable>
+                  </el-table-column>
+
+
+                  <el-table-column v-if="cache.cacheType === cacheType.HASH || cache.cacheType === cacheType.LIST"
+                                   prop="value"
+                                   label="value"
+                                   width="550" sortable>
+                    <template slot-scope="scope">
+                      {{ scope.row.value | strLenFilter }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column v-if="cache.cacheType === cacheType.SET"
+                                   prop="value"
+                                   label="value"
+                                   width="600" sortable>
+                    <template slot-scope="scope">
+                      {{ scope.row.value | strLenFilter }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column
+                    label="操作">
+                    <template slot-scope="scope">
+                      <el-button type="primary" v-if="cache.cacheType !== cacheType.SET" icon="el-icon-edit"
+                                 size="mini" @click="editSub(scope.row)"></el-button>
+                      &nbsp;
+                      <el-button type="danger" v-if="cache.cacheType === cacheType.HASH" icon="el-icon-delete"
+                                 size="mini" @click="delSub(scope.row.field)"></el-button>
+                      <el-button type="danger"
+                                 v-if="cache.cacheType === cacheType.SET || cache.cacheType === cacheType.LIST "
+                                 size="mini" icon="el-icon-delete" @click="delSub(scope.row.value)"></el-button>
+                      <el-button type="danger" v-if="cache.cacheType === cacheType.ZSET" size="mini"
+                                 icon="el-icon-delete" @click="delSub(scope.row.member)"></el-button>
+
+                    </template>
+
+                  </el-table-column>
+                </el-table>
+              </template>
+            </el-form>
+
+          </el-card>
+        </div>
+      </el-col>
+    </el-row>
 
     <!--新增弹窗-->
     <el-dialog title="新增缓存" :visible.sync="addCacheClass" :append-to-body="true" width="70%;">
       <el-form>
-        <el-form-item label="类型" :label-width="addCacheInputWidth" >
+        <el-form-item label="类型" :label-width="addCacheInputWidth">
           <el-select v-model="addSubCache.cacheType" placeholder="选择缓存类型">
             <el-option label="字符串" value="string"></el-option>
             <el-option label="哈希" value="hash"></el-option>
@@ -189,11 +214,12 @@
             <el-option label="有序集合" value="zset"></el-option>
           </el-select>
         </el-form-item>
-        <el-form-item label="key" :label-width="addCacheInputWidth" >
+        <el-form-item label="key" :label-width="addCacheInputWidth">
           <el-input v-model="addSubCache.cacheKey" autocomplete="off"></el-input>
         </el-form-item>
 
-        <el-form-item v-if="addSubCache.cacheType === cacheType.HASH" label="field" :label-width="addCacheInputWidth">
+        <el-form-item v-if="addSubCache.cacheType === cacheType.HASH" label="field"
+                      :label-width="addCacheInputWidth">
           <el-input v-model="addSubCache.cacheField" autocomplete="off"></el-input>
         </el-form-item>
         <el-form-item label="value"
@@ -215,17 +241,18 @@
         </el-form-item>
 
 
-
         <el-form-item v-if="addSubCache.cacheType === cacheType.SET || addSubCache.cacheType === cacheType.ZSET  "
                       label="member" :label-width="addCacheInputWidth">
           <el-input v-model="addSubCache.cacheMember" autocomplete="off"></el-input>
         </el-form-item>
-        <el-form-item v-if="addSubCache.cacheType === cacheType.ZSET  " label="score" :label-width="addCacheInputWidth">
+        <el-form-item v-if="addSubCache.cacheType === cacheType.ZSET  " label="score"
+                      :label-width="addCacheInputWidth">
           <el-input v-model="addSubCache.cacheScore" autocomplete="off"></el-input>
         </el-form-item>
         <el-form-item label="ttl/秒" :label-width="addCacheInputWidth" v-if="addSubCache.boolCreate === 1">
           <el-input v-model="addSubCache.ttl" autocomplete="off"></el-input>
         </el-form-item>
+
 
       </el-form>
       <div slot="footer" class="dialog-footer">
@@ -244,31 +271,35 @@
           </el-checkbox>
         </el-tag>
         <el-tag size="medium">
-          <el-checkbox class="string-option" v-model="editSubCache.strHasJson" @change="editSubJson()">json</el-checkbox>
+          <el-checkbox class="string-option" v-model="editSubCache.strHasJson" @change="editSubJson()">json
+          </el-checkbox>
         </el-tag>
       </template>
       <el-form style="margin-top: 5px;">
-        <el-form-item style="margin-left:0;"  v-if="editSubCache.cacheType === cacheType.HASH"  >
+        <el-form-item style="margin-left:0;" v-if="editSubCache.cacheType === cacheType.HASH">
           <el-input v-model="editSubCache.field" autocomplete="off"></el-input>
         </el-form-item>
 
         <!--        编辑二级缓存-->
-        <el-form-item style="margin-top:10px;" v-if="editSubCache.cacheType === cacheType.LIST || editSubCache.cacheType === cacheType.HASH ">
+        <el-form-item style="margin-top:10px;"
+                      v-if="editSubCache.cacheType === cacheType.LIST || editSubCache.cacheType === cacheType.HASH ">
           <el-input type="textarea" v-if="editSubCache.strShowType === 1" v-model="editSubCache.value"
                     rows="20"></el-input>
 
           <el-input type="textarea" class="readonlyTextarea" v-if="editSubCache.strShowType === 2 " readonly
                     v-model="editSubCache.searchResult" style="background: #eeee;" rows="20"></el-input>
 
-          <json-viewer :value="editSubCache.searchResult" v-if="editSubCache.strShowType === 3 " :expand-depth="10" copyable
+          <json-viewer :value="editSubCache.searchResult" v-if="editSubCache.strShowType === 3 " :expand-depth="10"
+                       copyable
                        sort></json-viewer>
         </el-form-item>
 
         <el-form-item v-if="editSubCache.cacheType === cacheType.ZSET  "
                       label="member" :label-width="addCacheInputWidth">
-          <el-input v-model="editSubCache.member" autocomplete="off" disabled ></el-input>
+          <el-input v-model="editSubCache.member" autocomplete="off" disabled></el-input>
         </el-form-item>
-        <el-form-item v-if="editSubCache.cacheType === cacheType.ZSET  " label="score" :label-width="addCacheInputWidth">
+        <el-form-item v-if="editSubCache.cacheType === cacheType.ZSET  " label="score"
+                      :label-width="addCacheInputWidth">
           <el-input v-model="editSubCache.score" autocomplete="off"></el-input>
         </el-form-item>
 
@@ -278,8 +309,8 @@
         <el-button type="primary" @click="funcEditSubCache">确 定</el-button>
       </div>
     </el-dialog>
+  </el-card>
 
-  </div>
 
 </template>
 
@@ -290,10 +321,11 @@ import JsonViewer from 'vue-json-viewer'
 import Clipboard from 'clipboard'
 import Textarea from "./textarea";
 import {Message} from "element-ui";
-let redisList = require("../config/redisList.json")
+
+
 export default {
   name: "cacheIndex",
-  components : {
+  components: {
     Textarea,
     JsonViewer,
     Clipboard,
@@ -307,11 +339,11 @@ export default {
         SET: 'set',
         ZSET: 'zset',
       },
-      redisConfigList : [],
+      redisConfigList: [],
       //是否显示历史搜索记录
-      historySearchVisible : false,
+      historySearchVisible: false,
       //接口地址
-      apiHost : 'http://localhost:7070',
+      apiHost: '',
       loading: false,
       //数据库
       redisCheck: 'common3',
@@ -327,7 +359,7 @@ export default {
         startEditTTL: false,     //是否开始编辑ttl
       },
       sshConfig: {},
-      historyCheck : '',
+      historyCheck: '',
       //keys
       keys: '',
       keysResult: [],
@@ -344,7 +376,7 @@ export default {
       addCacheClass: false,
       addCacheInputWidth: "150px",
       addSubCache: {
-        boolCreate : 1,     //1：外部新增一个list   2：list中增加一个值   3 ：编辑list中的一个值
+        boolCreate: 1,     //1：外部新增一个list   2：list中增加一个值   3 ：编辑list中的一个值
         cacheType: '',     //string hash
         cacheKey: '',
         cacheField: '',
@@ -352,74 +384,103 @@ export default {
         ttl: 0,           //默认永久
         cacheMember: '', //集合的值
         cacheScore: '',   //有序集合分值
-        lPushValue : '',
-        rPushValue : '',
+        lPushValue: '',
+        rPushValue: '',
       },
       //编辑二级缓存
-      editCacheClass : false,
-      editSubCache : {
-        cacheKey : '',
-        cacheType : '',
-        key : 0,  //list
-        value : '',
-        field : '', //哈希
+      editCacheClass: false,
+      editSubCache: {
+        cacheKey: '',
+        cacheType: '',
+        key: 0,  //list
+        value: '',
+        field: '', //哈希
         strShowType: 1,          //编辑用的 string和list 才有： 1 textarea （原值） , 2 反序列化 , 3 json展示
         strHasSerialize: false,  //是否序列化
         strHasJson: false,       //是否json展示
-        searchResult : '',       //json  和 序列化后的值
-        member : '',
-        score : 0,
-      }
+        searchResult: '',       //json  和 序列化后的值
+        member: '',
+        score: 0,
+      },
+      //简版显示
+      boolSimpleShow : false,
     }
   },
-  filters : {
-    strLenFilter : function (value){
+  filters: {
+    strLenFilter: function (value) {
       let length = 70
-      if(value.length > length){
-        return value.substr(0,length) + '...'
-      }else{
+      if (value.length > length) {
+        return value.substr(0, length) + '...'
+      } else {
         return value
       }
     }
   },
   mounted: function () {
-    if(process.env.NODE_ENV === 'production'){
-      this.apiHost = '';
-    }
-    let sshConfig = this.getStore('sshConfig')
-    if (sshConfig !== null) {
-      this.sshConfig = JSON.parse(sshConfig)
-    }
-    //增加uniKey
-    for( let i in redisList){
-      redisList[i].UniKey = redisList[i].Name
-    }
-    this.redisConfigList = redisList
+    this.sshConfig = this.$helperConfig.getXkfDevSshConfig()
+    this.apiHost = this.$helperConfig.getApiHost()
+    this.redisConfigList = this.$helperConfig.getRedisList()
     this.getRedisList();
     this.addSubCache.cacheType = this.cacheType.STRING;
+    this.boolSimpleShow = this.getStore('boolSimpleShow') === 'true'
   },
   methods: {
     getRedisList: function () {
       let _that = this
-      Vue.axios.post(this.apiHost + '/api/redis/list' , {
-        sshConfig : _that.sshConfig,
-        redisConfigList : _that.redisConfigList
+      Vue.axios.post(this.apiHost + '/api/redis/list', {
+        sshConfig: _that.sshConfig,
+        redisConfigList: _that.redisConfigList
       }).then(function (response) {
         _that.redisList = response.Data;
-        _that.redisCheck = _that.redisList[0].UniKey;
+        _that.redisCheck = _that.redisList[0].Name;
         _that.getRedisDbSelect();
         _that.getCacheHistory();
       })
     },
-    getRedisDbSelect : function (){
-      this.redisCheck = localStorage.getItem('redisDbSelect');
+    getRedisDbSelect: function () {
+      this.redisCheck = this.getStore('redisCheck')
+      console.log(this.redisCheck)
     },
-    redisDbChange : function (e){
-      localStorage.setItem('redisDbSelect',e);
+    redisDbChange: function (value) {
       this.historyList = [];
       this.getCacheHistory();
       this.cacheInit();
       this.keysResult = [];
+      console.log(value)
+      console.log(this.redisCheck)
+      this.setStore('redisCheck', this.redisCheck)
+    },
+    initRedisList : function (){
+      for(let i in this.keysResult){
+        this.keysResult[i].showName = this.keysResult[i].CacheKey
+      }
+    },
+    //变更简版显示
+    changeSimpleShow : function (boolSimpleShow){
+      this.boolSimpleShow = boolSimpleShow
+      this.setStore('boolSimpleShow' , this.boolSimpleShow)
+      this.sortRedisList();
+    },
+    sortRedisList : function (){
+      //优化显示
+      for(let i in this.keysResult){
+        console.log(this.boolSimpleShow)
+        if(this.boolSimpleShow){
+          if(this.keys !== ''){
+            let indexKey = this.keysResult[i].showName.indexOf(this.keys)
+            console.log(indexKey)
+            if(indexKey !== false){ //只支持从头开始的匹配
+              let length = this.keysResult[i].showName.length
+              let sub_length = indexKey + this.keys.length
+              this.keysResult[i].showName = "[...]" + this.keysResult[i].showName.substr(sub_length , length - sub_length)
+            }
+          }
+        }else{
+          if(this.keysResult[i].showName.substr(0 , 5) === '[...]'){
+            this.keysResult[i].showName = this.keysResult[i].CacheKey
+          }
+        }
+      }
     },
     //查询单个信息
     search: function (key) {
@@ -445,22 +506,22 @@ export default {
                 _that.hashResult.push({"key": index, "value": data[index]});
               }
               _that.cache.strShowType = 0;
-            }else if (_that.cache.cacheType === _that.cacheType.LIST) {
+            } else if (_that.cache.cacheType === _that.cacheType.LIST) {
               _that.hashResult = [];
               for (let index in data) {
                 _that.hashResult.push({"index": index, "value": data[index]});
               }
               _that.cache.strShowType = 0;
-            }else if (_that.cache.cacheType === _that.cacheType.HASH) {
+            } else if (_that.cache.cacheType === _that.cacheType.HASH) {
               _that.hashResult = [];
               for (let index in data) {
                 _that.hashResult.push({"field": index, "value": data[index]});
               }
               _that.cache.strShowType = 0;
-            }else if (_that.cache.cacheType === _that.cacheType.ZSET) {
+            } else if (_that.cache.cacheType === _that.cacheType.ZSET) {
               _that.hashResult = [];
               for (let index in data) {
-                _that.hashResult.push({"member": data[index].Member , "score" : data[index].Score });
+                _that.hashResult.push({"member": data[index].Member, "score": data[index].Score});
               }
               _that.cache.strShowType = 0;
             } else if (_that.cache.cacheType === _that.cacheType.STRING) {
@@ -522,18 +583,20 @@ export default {
         params = {UniKey: this.redisCheck, Search: '*'};
         return false;
       } else {
-        params = {UniKey: this.redisCheck, Search: this.keys };
-        tempParams = {UniKey: this.redisCheck, Search: '*' + this.keys + '*' };
+        params = {UniKey: this.redisCheck, Search: this.keys};
+        tempParams = {UniKey: this.redisCheck, Search: '*' + this.keys + '*'};
         this.historyCheck = this.keys;
       }
       this.loading = true;
       Vue.axios.post(this.apiHost + '/api/keys', tempParams).then(function (response) {
         _that.keysResult = response.Data;
+        _that.initRedisList()
+        _that.sortRedisList()
         if (_that.keysResult.length === 1) {
           _that.search(_that.keysResult[0].CacheKey);
         }
         //清空
-        if(_that.keysResult.length === 0){
+        if (_that.keysResult.length === 0) {
           _that.cacheInit();
         }
         //记录查询key
@@ -546,23 +609,23 @@ export default {
         _that.loading = false;
       });
     },
-    getKeysType : function (){
+    getKeysType: function () {
       let _that = this;
       let keys_list = [];
-      for(var key in _that.keysResult){
+      for (var key in _that.keysResult) {
         keys_list.push(_that.keysResult[key].CacheKey);
       }
 
-      let chunks = _that.chunk(keys_list,50);
-      for (let j in chunks){
+      let chunks = _that.chunk(keys_list, 50);
+      for (let j in chunks) {
         Vue.axios.post(this.apiHost + '/api/keys/type', {
           UniKey: this.redisCheck,
-          KeysList : chunks[j]
+          KeysList: chunks[j]
         }).then(function (response) {
           let keysTypeResult = response.Data;
-          for(let key in _that.keysResult){
-            for(let key2 in keysTypeResult){
-              if(_that.keysResult[key].CacheKey === keysTypeResult[key2].CacheKey) {
+          for (let key in _that.keysResult) {
+            for (let key2 in keysTypeResult) {
+              if (_that.keysResult[key].CacheKey === keysTypeResult[key2].CacheKey) {
                 _that.keysResult[key].Type = keysTypeResult[key2].Type;
                 _that.keysResult[key].Loading = false;
               }
@@ -587,10 +650,10 @@ export default {
       if (this.cache.strHasSerialize === true) {
         let params = {SerializeStr: this.searchSourceResult};
         Vue.axios.post(this.apiHost + '/api/unserialize', params).then(function (response) {
-          if(response.ErrCode !== 0){
+          if (response.ErrCode !== 0) {
             _that.cache.strHasSerialize = false;
             _that.cache.strShowType = 1;
-          }else{
+          } else {
             _that.searchResult = _that.transResponseData(response.Data);
             _that.cache.strShowType = 2;
           }
@@ -609,10 +672,10 @@ export default {
       if (this.editSubCache.strHasSerialize === true) {
         let params = {SerializeStr: this.editSubCache.value};
         Vue.axios.post(this.apiHost + '/api/unserialize', params).then(function (response) {
-          if(response.ErrCode !== 0){
+          if (response.ErrCode !== 0) {
             _that.editSubCache.strHasSerialize = false;
             _that.editSubCache.strShowType = 1;
-          }else{
+          } else {
             _that.editSubCache.searchResult = _that.transResponseData(response.Data);
             _that.editSubCache.strShowType = 2;
           }
@@ -662,7 +725,6 @@ export default {
       let params = {UniKey: this.redisCheck, Value: this.searchResult, "Key": this.cache.cacheKey};
       Vue.axios.post(this.apiHost + '/api/del/key', params).then(function (response) {
         _that.success('删除成功');
-        console.log(_that.cache.cacheKey);
         let newKeysList = [];
         for (let k in _that.keysResult) {
           if (_that.keysResult[k].CacheKey !== _that.cache.cacheKey) {
@@ -670,24 +732,23 @@ export default {
           }
         }
         _that.keysResult = newKeysList;
-        console.log(_that.keysResult);
         _that.cacheInit();
       });
     },
-    funcEditSubCache : function (){
-      if(this.editSubCache.strShowType !== 1){
+    funcEditSubCache: function () {
+      if (this.editSubCache.strShowType !== 1) {
         this.error('请取消格式化或序列化');
         return false;
       }
       let params = {
-        UniKey : this.redisCheck,
-        cacheType : this.editSubCache.cacheType,
-        cacheKey : this.editSubCache.cacheKey,
-        cacheValue : this.editSubCache.value,
-        index : parseInt(this.editSubCache.index),
-        cacheMember : this.editSubCache.member,
-        cacheScore : parseFloat(this.editSubCache.score),
-        cacheField : this.editSubCache.field,
+        UniKey: this.redisCheck,
+        cacheType: this.editSubCache.cacheType,
+        cacheKey: this.editSubCache.cacheKey,
+        cacheValue: this.editSubCache.value,
+        index: parseInt(this.editSubCache.index),
+        cacheMember: this.editSubCache.member,
+        cacheScore: parseFloat(this.editSubCache.score),
+        cacheField: this.editSubCache.field,
       };
 
       let _that = this;
@@ -707,8 +768,9 @@ export default {
     },
     copyKey: function () {
       let clipboard = new Clipboard('.copyCacheKey')
+      let _that = this
       clipboard.on('success', e => {
-        this.success('复制成功');
+        _that.$helperNotify.success('复制成功');
       })
       clipboard.on('error', e => {
         // 不支持复制
@@ -773,7 +835,7 @@ export default {
     },
     delAll: function () {
       let deleteKeysList = [];
-      for(var i in this.keysResult){
+      for (var i in this.keysResult) {
         deleteKeysList.push(this.keysResult[i].CacheKey);
       }
       let _that = this;
@@ -803,22 +865,22 @@ export default {
       Vue.axios.post(this.apiHost + '/api/create', params).then(function (response) {
         _that.success('创建成功');
         _that.addCacheClass = false;
-        if (_that.addSubCache.boolCreate === 1){
+        if (_that.addSubCache.boolCreate === 1) {
           _that.keysSearch();
         } else {
           _that.search(_that.cache.cacheKey);
         }
       });
     },
-    delSub : function (sub){
+    delSub: function (sub) {
       let params = {
-        UniKey : this.redisCheck,
-        cacheType : this.cache.cacheType,
-        cacheKey : this.cache.cacheKey,
-        sub : sub + '' ,
+        UniKey: this.redisCheck,
+        cacheType: this.cache.cacheType,
+        cacheKey: this.cache.cacheKey,
+        sub: sub + '',
       };
       let _that = this;
-      if(this.cache.cacheType === this.cacheType.LIST){
+      if (this.cache.cacheType === this.cacheType.LIST) {
         this.$confirm('确定删除list中所有值为[' + sub + ']的缓存吗?', '提示', {
           confirmButtonText: '确定',
           cancelButtonText: '取消',
@@ -831,14 +893,14 @@ export default {
         }).catch(() => {
           return false;
         });
-      }else{
+      } else {
         Vue.axios.post(this.apiHost + '/api/del/sub', params).then(function (response) {
           _that.success('删除成功');
           _that.search(_that.cache.cacheKey);
         });
       }
     },
-    editSub : function (row){
+    editSub: function (row) {
       //直接把cache赋值给addCache竟然是引用传值？？？
       this.editSubCache.cacheType = this.cache.cacheType;
       this.editSubCache.cacheKey = this.cache.cacheKey;
@@ -855,19 +917,19 @@ export default {
       this.editSubCache.field = row.field;//hash的
       this.editCacheClass = true;
     },
-    addCacheInit : function (){
+    addCacheInit: function () {
       this.addSubCache.boolCreate = 1;
-      this.addSubCache.cacheType= '';
-      this.addSubCache.cacheKey= '';
-      this.addSubCache.cacheField= '';
-      this.addSubCache.cacheValue= '';
-      this.addSubCache.ttl= 0;
-      this.addSubCache.cacheMember= '';
-      this.addSubCache.cacheScore= '';
+      this.addSubCache.cacheType = '';
+      this.addSubCache.cacheKey = '';
+      this.addSubCache.cacheField = '';
+      this.addSubCache.cacheValue = '';
+      this.addSubCache.ttl = 0;
+      this.addSubCache.cacheMember = '';
+      this.addSubCache.cacheScore = '';
       this.addSubCache.lPushValue = '';
       this.addSubCache.rPushValue = ''
     },
-    createSubCache : function (){
+    createSubCache: function () {
       //直接把cache赋值给addCache竟然是引用传值？？？
       this.addSubCache.cacheType = this.cache.cacheType;
       this.addSubCache.cacheKey = this.cache.cacheKey;
@@ -876,30 +938,30 @@ export default {
     },
     success: function (msg) {
       // Message.success(msg);
-      this.$notify({title: '提示', message: msg, type: 'success' , duration : 1000});
+      this.$notify({title: '提示', message: msg, type: 'success', duration: 1000});
     },
     warning: function (msg) {
       // Message.warning(msg);
-      this.$notify({title: '提示', message: msg, type: 'warning' , duration : 1000});
+      this.$notify({title: '提示', message: msg, type: 'warning', duration: 1000});
     },
     info: function (msg) {
       // Message.info(msg);
       //this.$notify({title: '提示', message: msg});
-      this.$notify({title: '提示', message: msg, type: 'info' , duration : 1000});
+      this.$notify({title: '提示', message: msg, type: 'info', duration: 1000});
     },
     error: function (msg) {
       // Message.error(msg);
-      this.$notify({title: '提示', message: msg, type: 'error' , duration : 1000});
+      this.$notify({title: '提示', message: msg, type: 'error', duration: 1000});
     },
     chunk: function (arr, size) {
       let objArr = [];
       let index = 0;
-      let objArrLen = arr.length/size;
-      for(let i=0;i<objArrLen;i++){
+      let objArrLen = arr.length / size;
+      for (let i = 0; i < objArrLen; i++) {
         let arrTemp = [];
-        for(let j=0;j < size;j++){
+        for (let j = 0; j < size; j++) {
           arrTemp[j] = arr[index++];
-          if(index === arr.length){
+          if (index === arr.length) {
             break;
           }
         }
@@ -918,55 +980,3 @@ export default {
 
 </script>
 
-<style scoped>
-.box-card {
-  margin-top: 1px;
-}
-
-.el-dropdown-link {
-  cursor: pointer;
-  color: #409EFF;
-  font-size: 13px;
-  margin-left: 10px;
-}
-
-.readonlyTextarea:first-child {
-  background-color: #bbbbbb;
-}
-
-.el-col {
-  border-radius: 4px;
-}
-
-.bg-purple-dark {
-  background: #99a9bf;
-}
-
-.bg-purple-light {
-  background: #e5e9f2;
-}
-
-.grid-content {
-  border-radius: 4px;
-  min-height: 36px;
-}
-
-
-.string-option {
-  font-size: 13px !important;
-  color: #409EFF;
-}
-
-.el-link{
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
-}
-span{
-  font-size:13px !important;
-}
-
-.el-col {
-  min-width: 40px;
-}
-</style>

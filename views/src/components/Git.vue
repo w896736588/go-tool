@@ -1,27 +1,34 @@
 <template>
   <el-card>
-    <!--      代码环境-->
-    <div>
-      <el-card class="box-card" v-for="(parentTypeValue,k) in parentTypeList" style="margin-top: 10px;">
+    <el-card>
+      <div v-for="(parentTypeValue,k) in parentTypeList">
         <h3 style="display: inline-block;">
-          {{parentTypeValue.Title}}
+          {{ parentTypeValue.Title }}
         </h3>
         <el-row :gutter="20">
-          <el-col :span="2" v-for="(value,key) in codeEnvList" style="margin:5px;" v-if="value.ParentType === parentTypeValue.Name">
+          <el-col :span="2" v-for="(value,key) in codeEnvList" style="margin:5px;"
+                  v-if="value.ParentType === parentTypeValue.Name">
             <div>
-              <el-radio @change="codeChange(value)" size="medium " v-model="chooseEvnName" :label="value.Name">{{value.NameTitle}}</el-radio>
+              <el-radio @change="codeChange(value)" size="medium " v-model="chooseEvnName" :label="value.Name">
+                {{ value.NameTitle }}
+              </el-radio>
             </div>
           </el-col>
         </el-row>
-      </el-card>
 
-    </div>
-    <br/>
-    <el-button type="primary" :loading="btnLoading.pull" @click="ExecType = 'pull_branch_origin';exec()">拉取最新代码</el-button>
-    <el-button type="primary" :loading="btnLoading.status" @click="ExecType = 'git_status';exec()">查看分支变更</el-button>
-    <el-input v-if="showChangeBranch" style="width:300px;margin-right:20px;" v-model="BranchName" placeholder="请输入分支名"></el-input>
-    <el-button type="primary" :loading="btnLoading.change" @click="showChangeBranch = true;ExecType = 'change_branch';exec()" >切换分支</el-button>
+      </div>
+      <br/>
+      <el-button type="primary" :loading="btnLoading.pull" @click="ExecType = 'pull_branch_origin';exec()">拉取最新代码
+      </el-button>
+      <el-button type="primary" :loading="btnLoading.status" @click="ExecType = 'git_status';exec()">查看分支变更</el-button>
+      <el-input v-if="showChangeBranch" style="width:300px;margin-right:20px;" v-model="BranchName"
+                placeholder="请输入分支名"></el-input>
+      <el-button type="primary" :loading="btnLoading.change"
+                 @click="showChangeBranch = true;ExecType = 'change_branch';exec()">切换分支
+      </el-button>
 
+
+    </el-card>
     <el-input style="margin-top: 20px;" id="resultTextarea" type="textarea" v-model="execResult" rows="25"></el-input>
   </el-card>
 
@@ -30,6 +37,7 @@
 <script>
 import Vue from "vue";
 import {Message} from "element-ui";
+
 let codeList = require("../config/codeList.json")
 let dockerList = require("../config/dockerList.json")
 let businessTypeList = require("../config/businessTypeList.json")
@@ -38,31 +46,30 @@ export default {
     return {
       name: "Consumer",
       //接口地址
-      apiHost: 'http://localhost:7070',
+      apiHost: '',
       //ssh config
       sshConfig: {},
       wkSshConfig: {},
-      prodTestSshConfig : {},
       //输入框
-      showChangeBranch : false,
+      showChangeBranch: false,
       //选中的环境
-      chooseEvnName: "common3",
+      chooseEvnName: "common3-xkf",
       //代码环境
-      codeEnvList: codeList,
+      codeEnvList: [],
       //docker
-      dockerList: dockerList,
+      dockerList: [],
       //按钮状态
-      btnLoading : {
-        exec : false,
-        pull : false,
-        change : false,
-        status : false,
+      btnLoading: {
+        exec: false,
+        pull: false,
+        change: false,
+        status: false,
       },
       //操作业务类型
       chooseBusinessType: "git",
       businessTypeList: businessTypeList,
       //操作父类型
-      chooseSshName : "xkf",
+      chooseSshName: "xkf",
       parentTypeList: [
         {Title: "小客服（php）", Name: "xkf"},
         {Title: "企微（php）", Name: "wk"},
@@ -78,61 +85,31 @@ export default {
     }
   },
   mounted: function () {
-    if(process.env.NODE_ENV === 'production'){
-      this.apiHost = '';
-    }
-    let sshConfig = this.getStore('sshConfig')
-    if (sshConfig !== null) {
-      this.sshConfig = JSON.parse(sshConfig)
-    }
-    if(!this.sshConfig || !this.sshConfig.username || this.sshConfig.username === ''){
-      this.error("请先配置小客服ssh");
-      return
-    }
-    let wkSshConfig = this.getStore('wkSshConfig')
-    if (wkSshConfig !== null) {
-      this.wkSshConfig = JSON.parse(wkSshConfig)
-    }
-    if(!this.wkSshConfig || !this.wkSshConfig.username || this.wkSshConfig.username === ''){
-      this.error("请先配置企微ssh");
-      return
-    }
-    let prodTestSshConfig = this.getStore('prodTestSshConfig')
-    if (prodTestSshConfig !== null) {
-      this.prodTestSshConfig = JSON.parse(prodTestSshConfig)
-    }
-    //处理codeList
-    for(let i in this.codeEnvList){
-      if(this.codeEnvList[i].NameTitle){
-        continue;
-      }
-      this.codeEnvList[i].NameTitle = this.codeEnvList[i].Name
-      this.codeEnvList[i].Name = this.codeEnvList[i].Name + "-" + this.codeEnvList[i].ParentType
-    }
+    this.apiHost = this.$helperConfig.getApiHost()
+    this.sshConfig = this.$helperConfig.getXkfDevSshConfig()
+    this.wkSshConfig = this.$helperConfig.getWkDevSshConfig()
+    this.codeEnvList = this.$helperConfig.getCodeEnvList()
+    this.dockerList = this.$helperConfig.getDockerList()
     this.ExecType = 'query_current_branch'
     this.exec()
   },
   methods: {
     //textarea滚动到最后
-    textareaScroll : function (){
+    textareaScroll: function () {
       var d = document.getElementById("resultTextarea").scrollHeight;
       document.getElementById("resultTextarea").scrollTop = d;
     },
     //查看日志
-    showLog : function (logName){
+    showLog: function (logName) {
       this.ExecType = 'docker_exec'
       let _that = this
       //找到环境配置
-      let env_config = this.getEnvConfig();
-      if (env_config === {} || env_config === undefined || env_config === 'undefined' || !env_config) {
-        _that.error("不存在的配置");
-        return
-      }
+      let env_config = this.$helperConfig.getCodeEnvConfigByCodeEnvName(this.codeEnvList , this.chooseEvnName)
       this.dockerExecCommand = 'tail -n 1000 /var/www/' + env_config['DockerCodePath'] + '/' + env_config['LogPath'] + '/' + logName
       this.exec()
     },
     //改变代码环境
-    codeChange : function (value){
+    codeChange: function (value) {
       this.ExecType = 'query_current_branch'
       this.chooseSshName = value.SshName
       this.exec()
@@ -146,20 +123,12 @@ export default {
     exec: function () {
       let _that = this
       //找到环境配置
-      let env_config = this.getEnvConfig();
-      if (env_config === {} || env_config === undefined || env_config === 'undefined' || !env_config) {
-        _that.error("不存在的配置");
-        return
-      }
-      if(this.CodePath === ''){
-        _that.error("请选择代码环境");
-        return
-      }
+      let env_config = this.$helperConfig.getCodeEnvConfigByCodeEnvName(this.codeEnvList , this.chooseEvnName)
       //根据类型判断
       let chooseSshConfig = _that.sshConfig
-      if(this.chooseSshName === 'wk'){
+      if (this.chooseSshName === 'wk') {
         chooseSshConfig = _that.wkSshConfig
-      }else if(this.chooseSshName === "xkf"){
+      } else if (this.chooseSshName === "xkf") {
         chooseSshConfig = _that.sshConfig
       }
       let params = {
@@ -167,22 +136,14 @@ export default {
         CodePath: env_config.CodePath,
         BranchName: this.BranchName,
         ExecType: this.ExecType,
-        WechatKefuAppid: this.chooseWechatKefuAppid,
         DockerList: this.dockerList,
-        ParentType : env_config.ParentType,
-        DockerId: "",
+        ParentType: env_config.ParentType,
+        DockerId: _that.$helperConfig.getDockerIdByCodeEnvConfig(this.dockerList , env_config),
         DockerCodePath: env_config.DockerCodePath,
-        DockerExecCommand : _that.dockerExecCommand,
+        DockerExecCommand: _that.dockerExecCommand,
       }
       if (params.ExecType === 'change_branch' && params.BranchName === '') {
         return
-      }
-
-      //需要找到code对应的docker
-      for (let j in this.dockerList) {
-        if (env_config.DockerName === this.dockerList[j].Name) {
-          params.DockerId = this.dockerList[j].Id
-        }
       }
       if (env_config.ParentType !== 'wk' && params.DockerId === ``) {
         _that.error('代码环境找不到对应的docker')
@@ -194,73 +155,56 @@ export default {
         _that.success('成功');
         _that.execResult = response.Data
         _that.cancelBtnLoading(params)
-        if(params.ExecType === 'change_branch'){
+        if (params.ExecType === 'change_branch') {
           _that.showChangeBranch = false
           _that.BranchName = ''
         }
-        setTimeout(function (){
+        setTimeout(function () {
           _that.textareaScroll()
-        } , 500)
+        }, 500)
       });
     },
-    getEnvConfig : function (){
-      //找到环境配置
-      let env_config = {};
-      for (let i in this.codeEnvList) {
-        if (this.codeEnvList[i].Name === this.chooseEvnName) {
-          env_config = this.codeEnvList[i]
-          break
-        }
-      }
-      return env_config;
-    },
-    setBtnLoading : function (params){
-      if(params.ExecType === 'pull_branch_origin'){
+    setBtnLoading: function (params) {
+      if (params.ExecType === 'pull_branch_origin') {
         this.btnLoading.pull = true
-      }else if (params.ExecType === 'change_branch'){
+      } else if (params.ExecType === 'change_branch') {
         this.btnLoading.change = true
-      }else if(params.ExecType === 'git_status'){
+      } else if (params.ExecType === 'git_status') {
         this.btnLoading.status = true
       }
 
       let _this = this
       let _set_params = params
-      setTimeout(function (){
+      setTimeout(function () {
         _this.cancelBtnLoading(_set_params)
-      } , 15000)
+      }, 15000)
     },
-    cancelBtnLoading : function (params){
-      if(params.ExecType === 'pull_branch_origin'){
+    cancelBtnLoading: function (params) {
+      if (params.ExecType === 'pull_branch_origin') {
         this.btnLoading.pull = false
-      }else if (params.ExecType === 'change_branch'){
+      } else if (params.ExecType === 'change_branch') {
         this.btnLoading.change = false
-      }else if(params.ExecType === 'git_status'){
+      } else if (params.ExecType === 'git_status') {
         this.btnLoading.status = false
       }
     },
     success: function (msg) {
       // Message.success(msg);
-      this.$notify({title: '提示', message: msg, type: 'success' , duration : 1000});
+      this.$notify({title: '提示', message: msg, type: 'success', duration: 1000});
     },
     warning: function (msg) {
       // Message.warning(msg);
-      this.$notify({title: '提示', message: msg, type: 'warning' , duration : 1000});
+      this.$notify({title: '提示', message: msg, type: 'warning', duration: 1000});
     },
     info: function (msg) {
       // Message.info(msg);
       //this.$notify({title: '提示', message: msg});
-      this.$notify({title: '提示', message: msg, type: 'info' , duration : 1000});
+      this.$notify({title: '提示', message: msg, type: 'info', duration: 1000});
     },
     error: function (msg) {
       // Message.error(msg);
-      this.$notify({title: '提示', message: msg, type: 'error' , duration : 1000});
+      this.$notify({title: '提示', message: msg, type: 'error', duration: 1000});
     },
-    setStore: function (key, value) {
-      localStorage.setItem(key, value);
-    },
-    getStore: function (key) {
-      return localStorage.getItem(key);
-    }
   },
 }
 </script>

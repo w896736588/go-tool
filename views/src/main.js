@@ -13,6 +13,13 @@ import NProgress from 'nprogress' // nprogress插件
 import 'nprogress/nprogress.css' // nprogress样式
 
 Vue.use(NProgress);
+//自定义通用方法
+import helperStore from './utils/store'
+Vue.prototype.$helperStore = helperStore
+import helperNotify from './utils/notify'
+Vue.prototype.$helperNotify = helperNotify
+import helperConfig from './utils/config'
+Vue.prototype.$helperConfig = helperConfig
 
 //引入axios
 import Axios from 'axios'

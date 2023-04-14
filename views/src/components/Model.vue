@@ -1,5 +1,6 @@
 <template>
   <el-card>
+    <el-card>
     <div>
       <h3 style="display: inline-block;">
         Model生成(下方贴入navicat建表语句，见示例)
@@ -9,6 +10,7 @@
     <br/>
 
     <el-input style="margin-top: 20px;" id="resultTextarea" :placeholder="modelSqlPlaceholder" type="textarea" v-model="modelSql" rows="10"></el-input>
+  </el-card>
     <el-input style="margin-top: 20px;" id="modelTextarea" type="textarea" v-model="modelResult" rows="20"></el-input>
   </el-card>
 
@@ -67,7 +69,7 @@ export default {
       }
       let tableName = this.getTableName()
       let tableClassName = this.getTableClassName(tableName)
-      let tableDesc = this.getTableDesc()
+      let tableDesc = this.getTableDesc(tableName)
       let author = this.sshConfig.username
       let date = this.getCurrentDate()
       let cols = this.getCols()
@@ -146,9 +148,12 @@ export default {
       }
       return `${year}-${month}-${strDate}`
     },
-    getTableDesc: function () {
+    getTableDesc: function (tableName) {
       let reg = /COMMENT='.+';/;
       let matchResult = this.modelSql.match(reg);
+      if(matchResult === null){
+        return tableName
+      }
       let tableDesc = ""
       if (matchResult.length > 0) {
         tableDesc = matchResult[0]
