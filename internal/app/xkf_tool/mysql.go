@@ -3,10 +3,10 @@ package xkf_tool
 import (
 	"database/sql"
 	"fmt"
+	"gitee.com/Sxiaobai/gs/gstool"
 	_ "github.com/go-sql-driver/mysql"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cast"
-	"redis_manager/internal/pkg/lib_tool"
 	"time"
 )
 
@@ -111,5 +111,5 @@ func QueryEnvWechatKefuList(adminUserId string) string {
 			appList = append(appList, appInfo)
 		}
 	}
-	return lib_tool.JsonEncode(appList)
+	return gstool.JsonEncode(appList)
 }

@@ -1,8 +1,10 @@
-package gin
+package xkf_tool_gin
 
 import (
 	"encoding/json"
 	"fmt"
+	"gitee.com/Sxiaobai/gs/gsdb"
+	"gitee.com/Sxiaobai/gs/gstool"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis"
 	log "github.com/sirupsen/logrus"
@@ -10,12 +12,12 @@ import (
 	"github.com/techoner/gophp/serialize"
 	"io/ioutil"
 	"net/http"
-	"redis_manager/internal/app/xkf_tool"
-	"redis_manager/internal/pkg/lib_db"
-	"redis_manager/internal/pkg/lib_tool"
 	"strings"
 	"time"
+	"xkf_tool/internal/app/xkf_tool"
 )
+
+var RedisHandleList []gsdb.RedisConfig
 
 func RedisList(c *gin.Context) {
 	reqBody := &xkf_tool.SshExec{}
@@ -24,21 +26,21 @@ func RedisList(c *gin.Context) {
 	for _, value := range reqBody.RedisConfigList {
 		if xkf_tool.RedisRunList[value.Name] == nil {
 			//初始化链接
-			redisRun, err := lib_db.RedisCreateRedisClient(&value)
+			redisRun, err := gsdb.RedisCreateRedisClient(&value)
 			if err != nil {
 				continue
 			}
 			xkf_tool.RedisRunList[value.Name] = redisRun
 		}
 	}
-	xkf_tool.RedisList = make([]lib_db.RedisConfig, 0)
+	RedisHandleList = make([]gsdb.RedisConfig, 0)
 	for _, value := range reqBody.RedisConfigList {
 		if xkf_tool.RedisRunList[value.Name] != nil {
-			xkf_tool.RedisList = append(xkf_tool.RedisList, value)
+			RedisHandleList = append(RedisHandleList, value)
 		}
 
 	}
-	response(c, xkf_tool.ErrorCodeSuccess, `获取成功`, xkf_tool.RedisList)
+	response(c, xkf_tool.ErrorCodeSuccess, `获取成功`, RedisHandleList)
 }
 
 func Keys(c *gin.Context) {
@@ -467,7 +469,7 @@ func ShellExec(c *gin.Context) {
 	requestData(c, &reqBody)
 	log.Debugf(reqBody.ExecType)
 	//初始化配置
-	cliConf := lib_tool.ClientConfig{}
+	cliConf := gstool.ClientConfig{}
 	if reqBody.SshConfig.Host != `` {
 		createClientErr := cliConf.CreateClient(reqBody.SshConfig.Host, cast.ToInt64(reqBody.SshConfig.Port), reqBody.SshConfig.Username, reqBody.SshConfig.Password)
 		if createClientErr != nil {
@@ -480,7 +482,7 @@ func ShellExec(c *gin.Context) {
 	handle.Filter()
 	//初始化mysql
 	if reqBody.XkfDevDbConfig.Host != `` && xkf_tool.XkfDevMysql == nil {
-		xkf_tool.XkfDevMysql, err = lib_db.MysqlCreateConn(reqBody.XkfDevDbConfig)
+		xkf_tool.XkfDevMysql, err = gsdb.MysqlCreateConn(reqBody.XkfDevDbConfig)
 		if err != nil {
 			xkf_tool.Logger.Errorf(`初始化mysql错误 %#v`, err)
 		}
@@ -491,7 +493,7 @@ func ShellExec(c *gin.Context) {
 		appUrlDbConfig := reqBody.XkfDevDbConfig
 		appUrlDbConfig.Dbname = `appurl_test`
 		fmt.Println(fmt.Sprintf(`数据库配置%#v`, appUrlDbConfig))
-		xkf_tool.AppurlDevMysql, err = lib_db.MysqlCreateConn(appUrlDbConfig)
+		xkf_tool.AppurlDevMysql, err = gsdb.MysqlCreateConn(appUrlDbConfig)
 		if err != nil {
 			xkf_tool.Logger.Errorf(`初始化mysql错误 %#v`, err)
 		}
@@ -573,7 +575,7 @@ func requestData(c *gin.Context, requestBody interface{}) {
 }
 
 func response(c *gin.Context, errcode int, errmsg string, body interface{}) {
-	returnJson := lib_tool.JsonEncode(&xkf_tool.Response{
+	returnJson := gstool.JsonEncode(&xkf_tool.Response{
 		Errcode: errcode,
 		Errmsg:  errmsg,
 		Data:    body,

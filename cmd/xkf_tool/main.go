@@ -1,19 +1,20 @@
 package main
 
 import (
-	"fmt"
 	log "github.com/sirupsen/logrus"
 	"os"
 	"os/signal"
-	"redis_manager/api/gin"
-	"redis_manager/internal/app/xkf_tool"
 	"syscall"
+	"xkf_tool/internal/app/xkf_tool"
+	"xkf_tool/internal/app/xkf_tool_gin"
 )
 
 func main() {
 	xkf_tool.InitConfig()
-	router := gin.InitRouter()
-	err := router.Run(fmt.Sprintf(`:%s`, xkf_tool.ConfigViper.GetString(`run.port`)))
+	//host port
+	port := xkf_tool.ConfigViper.GetString(`run.port`)
+	host := `localhost`
+	err := xkf_tool_gin.InitRouter(host, port)
 	if err != nil {
 		log.Errorf(`%s`, err.Error())
 		return

@@ -1,57 +1,60 @@
-package gin
+package xkf_tool_gin
 
 import (
+	"gitee.com/Sxiaobai/gs/gsgin"
 	"github.com/gin-gonic/gin"
-	log "github.com/sirupsen/logrus"
 	"net/http"
 )
 
-func InitRouter() (router *gin.Engine) {
-	router = gin.Default()
-	router.Use(Cors())
+func InitRouter(host, port string) error {
+	gsGin := gsgin.GSGin{
+		Host: host,
+		Port: port,
+	}
+	gsGin.CreateRouter()
+	gsGin.SetAllow()
 
 	//REDIS接口
 	//展示所有的
-	router.POST(`/api/redis/list`, RedisList)
+	gsGin.GinH.POST(`/api/redis/list`, RedisList)
 	//查询某个key
-	router.POST(`/api/search`, Search)
+	gsGin.GinH.POST(`/api/search`, Search)
 	//模糊搜索key
-	router.POST(`/api/keys`, Keys)
+	gsGin.GinH.POST(`/api/keys`, Keys)
 	//批量获取缓存类型
-	router.POST(`/api/keys/type`, KeysType)
+	gsGin.GinH.POST(`/api/keys/type`, KeysType)
 	//获取key类型
-	router.POST(`/api/key/type`, GetKeyType)
+	gsGin.GinH.POST(`/api/key/type`, GetKeyType)
 	//序列化和反序列化
-	router.POST(`/api/serialize`, PhpSerialize)
-	router.POST(`/api/unserialize`, PhpUnSerialize)
+	gsGin.GinH.POST(`/api/serialize`, PhpSerialize)
+	gsGin.GinH.POST(`/api/unserialize`, PhpUnSerialize)
 	//保存string
-	router.POST(`/api/save/string`, SaveString)
+	gsGin.GinH.POST(`/api/save/string`, SaveString)
 	//删除key
-	router.POST(`/api/del/key`, DelKey)
+	gsGin.GinH.POST(`/api/del/key`, DelKey)
 	//删除sub key
-	router.POST(`/api/del/sub`, DelSub)
+	gsGin.GinH.POST(`/api/del/sub`, DelSub)
 	//更改ttl
-	router.POST(`/api/edit/ttl`, EditTtl)
+	gsGin.GinH.POST(`/api/edit/ttl`, EditTtl)
 	//删除所有缓存
-	router.POST(`/api/delete/all`, DelAllKey)
+	gsGin.GinH.POST(`/api/delete/all`, DelAllKey)
 	//创建缓存
-	router.POST(`/api/create`, CreateCache)
+	gsGin.GinH.POST(`/api/create`, CreateCache)
 	//编辑二级缓存
-	router.POST(`/api/edit/sub`, EditSub)
+	gsGin.GinH.POST(`/api/edit/sub`, EditSub)
 	//找到所有启用的消费者服务
 	//router.POST(`/api/supervisor/status`, SupervisorStatus)
 
 	//shell exec
-	router.POST(`/api/shell/exec`, ShellExec)
+	gsGin.GinH.POST(`/api/shell/exec`, ShellExec)
 
 	//前端页面
-	router.Static(`/static`, `./views/dist/static`)
-	router.LoadHTMLFiles(`views/dist/index.html`)
-	router.GET("/", func(context *gin.Context) {
+	gsGin.GinH.Static(`/static`, `./views/dist/static`)
+	gsGin.GinH.LoadHTMLFiles(`views/dist/index.html`)
+	gsGin.GinH.GET("/", func(context *gin.Context) {
 		context.HTML(200, "index.html", nil)
 	})
-	log.SetLevel(log.DebugLevel)
-	return router
+	return gsGin.GinH.Run()
 }
 
 func Cors() gin.HandlerFunc {
