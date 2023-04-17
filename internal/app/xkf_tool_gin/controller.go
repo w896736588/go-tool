@@ -9,7 +9,6 @@ import (
 	"github.com/go-redis/redis"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cast"
-	"github.com/techoner/gophp/serialize"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -239,23 +238,13 @@ func PhpUnSerialize(c *gin.Context) {
 	var err error
 	reqBody := &xkf_tool.SerializeBody{}
 	requestData(c, &reqBody)
-
-	out, err := serialize.UnMarshal([]byte(reqBody.SerializeStr))
+	var out string
+	out, err = gstool.PhpUnSerialize(reqBody.SerializeStr)
 	if err != nil {
 		response(c, xkf_tool.ErrorCodeRunError, err.Error(), reqBody.SerializeStr)
 		return
 	}
-	var returnStr string
-	switch out.(type) {
-	case string:
-		returnStr = cast.ToString(out)
-		break
-	default:
-		jsonStr, _ := json.Marshal(out)
-		returnStr = cast.ToString(jsonStr)
-		break
-	}
-	response(c, xkf_tool.ErrorCodeSuccess, `成功`, returnStr)
+	response(c, xkf_tool.ErrorCodeSuccess, `成功`, out)
 }
 
 func DelKey(c *gin.Context) {

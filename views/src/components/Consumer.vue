@@ -164,6 +164,7 @@ export default {
     },
     //搜索消费者列表
     searchList : function (){
+      let supervisorConfigList = this.supervisorConfigList
       for(let i in supervisorConfigList){
         if(supervisorConfigList[i].command.toLowerCase().indexOf(this.searchKey.toLowerCase()) !== -1){
           supervisorConfigList[i].show = true

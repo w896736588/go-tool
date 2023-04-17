@@ -3,7 +3,6 @@ package xkf_tool_gin
 import (
 	"gitee.com/Sxiaobai/gs/gsgin"
 	"github.com/gin-gonic/gin"
-	"net/http"
 )
 
 func InitRouter(host, port string) error {
@@ -54,25 +53,5 @@ func InitRouter(host, port string) error {
 	gsGin.GinH.GET("/", func(context *gin.Context) {
 		context.HTML(200, "index.html", nil)
 	})
-	return gsGin.GinH.Run()
-}
-
-func Cors() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		method := c.Request.Method
-
-		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header(`Access-Control-Allow-Private-Network`, `*`)
-		c.Header("Access-Control-Allow-Headers", "Content-Type,AccessToken,X-CSRF-Token, Authorization, Token")
-		c.Header("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE, UPDATE")
-		c.Header("Access-Control-Expose-Headers", "Content-Length, Access-Control-Allow-Origin, Access-Control-Allow-Headers, Cache-Control, Content-Language, Content-Type")
-		c.Header("Access-Control-Allow-Credentials", "true")
-
-		//放行所有OPTIONS方法
-		if method == "OPTIONS" {
-			c.AbortWithStatus(http.StatusOK)
-		}
-		// 处理请求
-		c.Next()
-	}
+	return gsGin.GinH.Run(gsGin.Host + `:` + gsGin.Port)
 }

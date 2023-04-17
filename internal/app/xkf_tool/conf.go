@@ -6,6 +6,7 @@ import (
 	"gitee.com/Sxiaobai/gs/gstool"
 	"github.com/go-redis/redis"
 	"github.com/spf13/viper"
+	"runtime"
 )
 
 var ConfigViper *viper.Viper
@@ -15,11 +16,14 @@ var XkfDevMysql *sql.DB
 var AppurlDevMysql *sql.DB
 var Logger *gstool.LibLog
 var ProducerMap map[string]*gsnsq.NsqStruct
+var RootPath string
 
 func InitConfig() {
-	Logger = gstool.CreateLogger(gstool.DirUpNum(4), `logs/xkf_tool`)
+	_, RootPath, _, _ = runtime.Caller(0)
+	RootPath = gstool.DirUpNum(RootPath, 4)
+	Logger = gstool.CreateLogger(RootPath, `logs/xkf_tool`)
 	ConfigViper = viper.New()
-	ConfigViper.AddConfigPath(`config`)
+	ConfigViper.AddConfigPath(RootPath + `/config`)
 	ConfigViper.SetConfigName(`config`)
 	ConfigViper.SetConfigType(`ini`)
 	RedisRunList = make(map[string]*redis.Client)
