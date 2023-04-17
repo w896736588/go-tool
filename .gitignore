@@ -4,3 +4,4 @@
 /config/config.ini
 /config/redis.json
 /build/
+/logs/
