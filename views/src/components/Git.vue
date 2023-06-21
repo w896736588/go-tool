@@ -18,13 +18,13 @@
 
       </div>
       <br/>
-      <el-button type="primary" :loading="btnLoading.pull" @click="ExecType = 'pull_branch_origin';exec()">拉取最新代码
+      <el-button type="primary" :loading="loadingStatus['pull_branch_origin']" @click="ExecType = 'pull_branch_origin';exec()">拉取最新代码
       </el-button>
-      <el-button type="primary" :loading="btnLoading.status" @click="ExecType = 'git_status';exec()">查看分支变更</el-button>
-      <el-input v-if="showChangeBranch" style="width:300px;margin-right:20px;" v-model="BranchName"
-                placeholder="请输入分支名"></el-input>
-      <el-button type="primary" :loading="btnLoading.change"
-                 @click="showChangeBranch = true;ExecType = 'change_branch';exec()">切换分支
+      <el-button type="primary" :loading="loadingStatus['git_status']" @click="ExecType = 'git_status';exec()">查看分支变更</el-button>
+      <el-input v-if="showChangeBranch" style="width:300px;margin-right:20px;" v-model="BranchName" placeholder="请输入分支名"></el-input>
+      <el-button type="primary" :loading="loadingStatus['change_branch']" @click="showChangeBranch = true;ExecType = 'change_branch';exec()">切换分支
+      </el-button>
+      <el-button type="primary" :loading="loadingStatus['query_current_branch']" @click="ExecType = 'query_current_branch';chooseSshName = chooseEvnName.SshName;exec()">查看分支
       </el-button>
 
 
@@ -82,6 +82,7 @@ export default {
       dialogSshConfig: false,
       BranchName: "",  //分支名
       execResult: "",//操作结果
+      loadingStatus : {},
     }
   },
   mounted: function () {
@@ -91,6 +92,7 @@ export default {
     this.codeEnvList = this.$helperConfig.getCodeEnvList()
     this.dockerList = this.$helperConfig.getDockerList()
     this.ExecType = 'query_current_branch'
+    this.loadingStatus = this.$helperLoad.getExecTypeStatus()
     this.exec()
   },
   methods: {
@@ -146,15 +148,15 @@ export default {
         return
       }
       if (env_config.ParentType !== 'wk' && params.DockerId === ``) {
-        _that.error('代码环境找不到对应的docker')
+        _that.$helperNotify.error('代码环境找不到对应的docker')
         return
       }
       //按钮加载状态
-      _that.setBtnLoading(params)
+      _that.setLoading(params)
       Vue.axios.post(this.apiHost + '/api/shell/exec', params).then(function (response) {
-        _that.success('成功');
+        _that.$helperNotify.success('成功');
         _that.execResult = response.Data
-        _that.cancelBtnLoading(params)
+        _that.cancelLoading(params)
         if (params.ExecType === 'change_branch') {
           _that.showChangeBranch = false
           _that.BranchName = ''
@@ -164,46 +166,18 @@ export default {
         }, 500)
       });
     },
-    setBtnLoading: function (params) {
-      if (params.ExecType === 'pull_branch_origin') {
-        this.btnLoading.pull = true
-      } else if (params.ExecType === 'change_branch') {
-        this.btnLoading.change = true
-      } else if (params.ExecType === 'git_status') {
-        this.btnLoading.status = true
-      }
-
-      let _this = this
-      let _set_params = params
-      setTimeout(function () {
-        _this.cancelBtnLoading(_set_params)
-      }, 15000)
+    setLoading : function (params){
+      this.loadingStatus[params.ExecType] = true
+      let that = this
+      setTimeout(function (){
+        that.loadingStatus[params.ExecType] = false
+      } , 25000)
     },
-    cancelBtnLoading: function (params) {
-      if (params.ExecType === 'pull_branch_origin') {
-        this.btnLoading.pull = false
-      } else if (params.ExecType === 'change_branch') {
-        this.btnLoading.change = false
-      } else if (params.ExecType === 'git_status') {
-        this.btnLoading.status = false
-      }
-    },
-    success: function (msg) {
-      // Message.success(msg);
-      this.$notify({title: '提示', message: msg, type: 'success', duration: 1000});
-    },
-    warning: function (msg) {
-      // Message.warning(msg);
-      this.$notify({title: '提示', message: msg, type: 'warning', duration: 1000});
-    },
-    info: function (msg) {
-      // Message.info(msg);
-      //this.$notify({title: '提示', message: msg});
-      this.$notify({title: '提示', message: msg, type: 'info', duration: 1000});
-    },
-    error: function (msg) {
-      // Message.error(msg);
-      this.$notify({title: '提示', message: msg, type: 'error', duration: 1000});
+    cancelLoading : function (params){
+      let that = this
+      setTimeout(function (){
+        that.loadingStatus[params.ExecType] = false
+      } , 1000)
     },
   },
 }

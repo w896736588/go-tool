@@ -11,7 +11,7 @@
           :value="value.Name">
         </el-option>
       </el-select>
-      <el-button type="primary" @click="keysSearch">查询</el-button>
+      <el-button type="primary" :loading="loadingStatus['redis_search']" @click="keysSearch">查询</el-button>
       <el-button icon="el-icon-refresh-left" @click="refresh" circle></el-button>
       <el-button type="primary" icon="el-icon-plus" @click="showAddCache" circle></el-button>
 
@@ -41,14 +41,16 @@
       <el-col :span="8">
         <el-card class="box-card" style="">
           <div class="grid-content bg-purple" style="height:480px;overflow:auto;">
-            <el-button type="danger" style="margin-bottom: 7px;" @click="delAll" v-if="keysResult.length > 0 "
+            <el-button :loading="loadingStatus['redis_delete_batch']" type="danger" style="margin-bottom: 7px;" @click="delAll" v-if="keysResult.length > 0 "
                        size="mini">删除以下缓存
             </el-button>
-            <el-checkbox style="float: right;" @change="changeSimpleShow" v-model="boolSimpleShow">优化显示/排序</el-checkbox>
-
+            <el-checkbox v-if="keysResult.length > 0" style="margin-top:3px;margin-left:3px;" @change="changeSimpleShow" v-model="boolSimpleShow">优化显示/排序</el-checkbox>
+            <br/>
+            <el-input type="text" v-if="keysResult.length > 0" v-model="filterValue" size="small" style="width:91%;" placeholder="输入搜索过滤" @input="filterList"></el-input>
+            <span style="font-size: 11px;" v-if="keysResult.length > 0"  >({{searchNum}})</span>
             <div v-for="(value,key) in keysResult">
               <div>
-                <el-tag size="medium" effect="light" style="margin-top:3px;">
+                <el-tag size="medium" effect="light" style="margin-top:3px;" v-if="value.boolShow">
                   <el-link style="padding:3px;font-size: 13px;" v-if="selectRedisKey === value.CacheKey"
                            @click="search(value.CacheKey)"> {{ value.showName }}
                   </el-link>
@@ -366,6 +368,7 @@ export default {
       //string result
       searchResult: "",
       searchSourceResult: "",
+      searchNum : 0,
       //hash result
       hashResult: [],
       //history
@@ -404,6 +407,8 @@ export default {
       },
       //简版显示
       boolSimpleShow : false,
+      loadingStatus : {},
+      filterValue : '',
     }
   },
   filters: {
@@ -422,9 +427,25 @@ export default {
     this.redisConfigList = this.$helperConfig.getRedisList()
     this.getRedisList();
     this.addSubCache.cacheType = this.cacheType.STRING;
+    this.loadingStatus = this.$helperLoad.getExecTypeStatus()
     this.boolSimpleShow = this.getStore('boolSimpleShow') === 'true'
   },
   methods: {
+    filterList : function (event){
+      this.searchNum = 0
+      //优化显示
+      for(let i in this.keysResult){
+        if(this.filterValue !== ''){
+          let indexKey = this.keysResult[i].showName.indexOf(this.filterValue)
+          this.keysResult[i].boolShow = indexKey >= 0;
+        }else{
+          this.keysResult[i].boolShow = true
+        }
+        if(this.keysResult[i].boolShow){
+          this.searchNum++
+        }
+      }
+    },
     getRedisList: function () {
       let _that = this
       Vue.axios.post(this.apiHost + '/api/redis/list', {
@@ -446,14 +467,13 @@ export default {
       this.getCacheHistory();
       this.cacheInit();
       this.keysResult = [];
-      console.log(value)
-      console.log(this.redisCheck)
       this.setStore('redisCheck', this.redisCheck)
     },
     initRedisList : function (){
       for(let i in this.keysResult){
         this.keysResult[i].showName = this.keysResult[i].CacheKey
       }
+      this.filterList()
     },
     //变更简版显示
     changeSimpleShow : function (boolSimpleShow){
@@ -464,11 +484,9 @@ export default {
     sortRedisList : function (){
       //优化显示
       for(let i in this.keysResult){
-        console.log(this.boolSimpleShow)
         if(this.boolSimpleShow){
           if(this.keys !== ''){
             let indexKey = this.keysResult[i].showName.indexOf(this.keys)
-            console.log(indexKey)
             if(indexKey !== false){ //只支持从头开始的匹配
               let length = this.keysResult[i].showName.length
               let sub_length = indexKey + this.keys.length
@@ -491,7 +509,8 @@ export default {
       this.cache.strHasJson = false;
       this.cache.UniKey = this.redisCheck
       this.cache.cacheKey = key
-
+      this.cache.ExecType = 'redis_search'
+      this.setLoading(this.cache)
       //拿到key类型
       Vue.axios.post(this.apiHost + '/api/key/type', this.cache).then(function (response) {
         if (response.Data !== '') {
@@ -530,6 +549,7 @@ export default {
               _that.cache.strShowType = 1;
             }
             _that.addCacheInit();
+            _that.cancelLoading(_that.cache)
           });
         } else {
           //清空右侧数据
@@ -588,10 +608,13 @@ export default {
         this.historyCheck = this.keys;
       }
       this.loading = true;
+      tempParams.ExecType = 'redis_search';
+      this.setLoading(tempParams)
       Vue.axios.post(this.apiHost + '/api/keys', tempParams).then(function (response) {
         _that.keysResult = response.Data;
         _that.initRedisList()
         _that.sortRedisList()
+        _that.cancelLoading(tempParams)
         if (_that.keysResult.length === 1) {
           _that.search(_that.keysResult[0].CacheKey);
         }
@@ -836,19 +859,24 @@ export default {
     delAll: function () {
       let deleteKeysList = [];
       for (var i in this.keysResult) {
-        deleteKeysList.push(this.keysResult[i].CacheKey);
+        if(this.keysResult[i].boolShow){
+          deleteKeysList.push(this.keysResult[i].CacheKey);
+        }
       }
       let _that = this;
       let params = {UniKey: this.redisCheck, Keys: deleteKeysList};
+      params.ExecType = 'redis_delete_batch'
       this.$confirm('确定删除' + deleteKeysList.length + '个缓存吗?', '提示', {
         confirmButtonText: '确定',
         cancelButtonText: '取消',
         type: 'warning'
       }).then(() => {
+        _that.setLoading(params)
         Vue.axios.post(this.apiHost + '/api/delete/all', params).then(function (response) {
           _that.success('删除成功');
           _that.cacheInit();
           _that.keysSearch();
+          _that.cancelLoading(params)
         });
       }).catch(() => {
 
@@ -974,7 +1002,20 @@ export default {
     },
     getStore: function (key) {
       return localStorage.getItem(key);
-    }
+    },
+    setLoading : function (params){
+      this.loadingStatus[params.ExecType] = true
+      let that = this
+      setTimeout(function (){
+        that.loadingStatus[params.ExecType] = false
+      } , 25000)
+    },
+    cancelLoading : function (params){
+      let that = this
+      setTimeout(function (){
+        that.loadingStatus[params.ExecType] = false
+      } , 1000)
+    },
   }
 }
 

@@ -23,17 +23,20 @@
           :value="value.Name">
         </el-option>
       </el-select>
-      <el-button type="primary" @click="restartSupervisorAll">重启{{ chooseEvnName }}所有消费者</el-button>
-      <el-button type="primary" @click="supervisorStatusList" :loading="btnLoading.supervisorStatusListStatus">查看所有消费者
-      </el-button>
+      <el-button type="primary" :loading="loadingStatus['supervisor_restart_all']" @click="restartSupervisorAll">重启{{ chooseEvnName }}所有消费者</el-button>
+      <el-button type="primary" :loading="loadingStatus['supervisor_status_list']" @click="supervisorStatusList">查看所有消费者</el-button>
+<!--      <el-tooltip class="item" effect="dark" content="关闭不常用消费者,可降低20%内存占用" placement="top">-->
+<!--        <el-button type="primary" :loading="loadingStatus['reduce_memory']" @click="reduce_memory">降低内存</el-button>-->
+<!--      </el-tooltip>-->
+
       <!--        <el-button type="primary" @click="supervisorStatusList" >更新所有消费者-->
       <!--        </el-button>-->
       <el-input style="width: 400px" autocomplete="off" placeholder="搜索名称/进程名/程序名等" v-model="searchKey"
-                @input="searchList"></el-input>
+                @input="searchList"></el-input> <span style="font-size: 11px;">({{searchNum}})</span>
       <!--      <el-row style="margin-top: 10px;">-->
       <!--        <el-tag>ffff</el-tag>-->
       <!--      </el-row>-->
-            <br/>
+            <br/> <br/>
             <el-tag v-for="sortConsumer in useSortConsumerList" closable style="cursor:default;margin:5px;" @click="searchKey = sortConsumer.name;searchList()" @close="delSortConsumer(sortConsumer)">
               {{sortConsumer.showName}}
             </el-tag>
@@ -53,7 +56,8 @@
             <!--            </div>-->
             <div class="supervisorCommand" style="overflow:hidden;" v-if="value.running_status">
               <span>{{ value.name }}</span><br/>
-              {{ value.running_status }}
+              {{ value.running_status }}<br/>
+              process num {{value.processNum}}
             </div>
 
             <div class="supervisorCommand" style="overflow:hidden;" v-if="!value.running_status">
@@ -70,11 +74,11 @@
               <el-button type="text" class="button" size="small"
                          @click="ExecType = 'supervisor_config_show';exec(value);showResultDialog=true;">查看配置
               </el-button>
-              <el-button type="text" class="button" size="small"
-                         @click="ExecType = 'supervisor_config_show';exec(value);showResultDialog=true;">后台运行
+              <el-button type="text" class="button" size="small" disabled
+                         @click="showInteractionFunc(value)">后台运行
               </el-button>
 
-              <el-button type="text" class="button" size="small"
+              <el-button type="text" class="button" size="small" disabled
                          @click="execDockerFunc('searchProcess' , value)">孤儿进程</el-button>
             </div>
           </el-card>
@@ -120,6 +124,8 @@
         <el-button type="primary" @click="dialogShowEditName = false;editNameValueFunc()">确 定</el-button>
       </span>
     </el-dialog>
+
+    <Interaction ref="Interaction" :visible="showInteraction" :title="showInteractionTitle" :sshConfig="showInteractionSshConfig" @before-close="showInteractionBeforeClose"></Interaction>
   </el-card>
 
 
@@ -134,10 +140,13 @@
 
 <script>
 import Vue from "vue";
-import {Message} from "element-ui";
 import store from "../utils/store";
+import Interaction from "./Interaction"
 
 export default {
+  components : {
+    Interaction,
+  },
   data() {
     return {
       name: "Consumer",
@@ -153,18 +162,13 @@ export default {
       dialogShowEditName: false,
       inputNameValue: '',
       editNameValue: {},
+      searchNum : 0,
       //代码环境
       codeEnvList: [],
       //docker
       dockerList: [],
       //存储所有的消费者配置文件
       configMap: {},
-      //按钮状态
-      btnLoading: {
-        supervisorStatusListStatus: false,
-        restart: false,
-        stop: false,
-      },
       //操作父类型
       chooseParentType: "xkf",
       parentTypeList: [
@@ -192,6 +196,11 @@ export default {
         dialog: false,
       },
       supervisorOriginConfList: [],
+      //终端
+      showInteraction : false,
+      showInteractionTitle : "",
+      showInteractionSshConfig : {},
+      loadingStatus : {},
     }
   },
   mounted: function () {
@@ -199,8 +208,16 @@ export default {
     this.wkSshConfig = this.$helperConfig.getWkDevSshConfig()
     this.apiHost = this.$helperConfig.getApiHost()
     this.codeEnvList = this.$helperConfig.getCodeEnvList()
+    let tmpCodeEnvList = []
+    for(let i in this.codeEnvList){
+      if(this.codeEnvList[i].CodePath.indexOf('sub01') === -1){
+        tmpCodeEnvList.push(this.codeEnvList[i])
+      }
+    }
+    this.codeEnvList = tmpCodeEnvList
     this.getOriginSupervisorConfig()
     this.dockerList = this.$helperConfig.getDockerList()
+    this.loadingStatus = this.$helperLoad.getExecTypeStatus()
     this.refreshUseSortConsumer()
   },
   onload: function () {
@@ -212,6 +229,35 @@ export default {
     }
   },
   methods: {
+    //降低内存
+    reduce_memory : function (){
+      this.searchKey = 'STOPPED';
+      this.searchList()
+      this.ExecType = 'supervisor_stop'
+      let consumerNameList = this.$helperConfig.getReduceMemoryConsumerName()
+      for(let key in this.configMap[this.chooseParentType]){
+        let boolFind = false
+        for(let j in consumerNameList){
+          if(this.configMap[this.chooseParentType][key].name === consumerNameList[j]){
+            boolFind = true
+            break
+          }
+        }
+        if(boolFind){
+          this.exec(this.configMap[this.chooseParentType][key]);
+        }
+      }
+    },
+    showInteractionFunc : function (value){
+      this.showInteractionTitle = value.name;
+      if (this.chooseParentType === 'xkf') {
+        this.showInteractionSshConfig = this.sshConfig
+      } else {
+        this.showInteractionSshConfig = this.wkSshConfig
+      }
+      this.showInteraction = true
+      this.$refs.Interaction.createShell4()
+    },
     //拿到config 列表
     getOriginSupervisorConfig: function () {
       let _that = this
@@ -259,30 +305,37 @@ export default {
     },
     //搜索消费者列表
     searchList: function () {
+      let searchNum = 0
       for (let i in this.configMap[this.chooseParentType]) {
         if (this.configMap[this.chooseParentType][i].name && this.configMap[this.chooseParentType][i].name.toLowerCase().indexOf(this.searchKey.toLowerCase()) !== -1) {
           this.configMap[this.chooseParentType][i].show = true
+          searchNum++;
           continue;
         }
 
         if (this.configMap[this.chooseParentType][i].running_status && this.configMap[this.chooseParentType][i].running_status.toLowerCase().indexOf(this.searchKey.toLowerCase()) !== -1) {
           this.configMap[this.chooseParentType][i].show = true
+          searchNum++;
           continue;
         }
         if (this.configMap[this.chooseParentType][i].supervisor_config && this.configMap[this.chooseParentType][i].supervisor_config.toLowerCase().indexOf(this.searchKey.toLowerCase()) !== -1) {
           this.configMap[this.chooseParentType][i].show = true
+          searchNum++;
           continue;
         }
         if (this.configMap[this.chooseParentType][i].supervisor_name && this.configMap[this.chooseParentType][i].supervisor_name.toLowerCase().indexOf(this.searchKey.toLowerCase()) !== -1) {
           this.configMap[this.chooseParentType][i].show = true
+          searchNum++;
           continue;
         }
         if (this.configMap[this.chooseParentType][i].showName && this.configMap[this.chooseParentType][i].showName.indexOf(this.searchKey.toLowerCase()) !== -1) {
           this.configMap[this.chooseParentType][i].show = true
+          searchNum++;
           continue;
         }
         this.configMap[this.chooseParentType][i].show = false
       }
+      this.searchNum = searchNum
     },
     //重启所有的消费者
     restartSupervisorAll: function () {
@@ -298,10 +351,19 @@ export default {
       if (this.chooseParentType === 'xkf') {
         //找到代码配置
         env_config = this.$helperConfig.getCodeEnvConfigByCodeEnvName(this.codeEnvList, this.chooseEvnName)
-        env_config.SshConfig = _that.sshConfig
       } else {
         env_config = {}
-        env_config.SshConfig = _that.wkSshConfig
+      }
+      let dockerId = this.$helperConfig.getDockerIdByCodeEnvConfig(this.dockerList, env_config)
+      //根据dockerId获取wk
+      for(let dockerKey in this.dockerList){
+        if(this.dockerList[dockerKey].Id === dockerId){
+          if(this.dockerList[dockerKey].SshName === 'wk'){
+            env_config.SshConfig = _that.wkSshConfig
+          }else{
+            env_config.SshConfig = _that.sshConfig
+          }
+        }
       }
 
       //根据类型判断
@@ -311,7 +373,7 @@ export default {
         ParentType: this.chooseParentType,
         ExecType: this.ExecType,
         DockerList: this.dockerList,
-        DockerId: this.$helperConfig.getDockerIdByCodeEnvConfig(this.dockerList, env_config),
+        DockerId: dockerId,
         DockerCodePath: env_config.DockerCodePath,
         DockerExecCommand: this.dockerExecCommand,
       }
@@ -321,15 +383,16 @@ export default {
         }
         if (params.ExecType === 'supervisor_status_list' && params.DockerId === ``) {
           _that.$helperNotify.error('代码环境找不到对应的docker')
+          _that.cancelLoading(params)
           return
         }
       }
       //按钮加载状态
-      _that.setBtnLoading(params)
+      _that.setLoading(params)
       Vue.axios.post(this.apiHost + '/api/shell/exec', params).then(function (response) {
         _that.$helperNotify.success('成功');
         _that.execResult = response.Data
-        _that.cancelBtnLoading(params)
+        _that.cancelLoading(params)
         _that.supervisorStatusExplain();
         _that.searchList()
       });
@@ -359,12 +422,22 @@ export default {
         env_config = this.$helperConfig.getCodeEnvConfigByCodeEnvName(this.codeEnvList, this.chooseEvnName)
         if (env_config === {}) {
           _that.$helperNotify.error("不存在的配置");
+          _that.cancelLoading(params)
           return
         }
-        env_config.SshConfig = _that.sshConfig
       } else {
         env_config = {}
-        env_config.SshConfig = _that.wkSshConfig
+      }
+      let dockerId = this.$helperConfig.getDockerIdByCodeEnvConfig(this.dockerList, env_config)
+      //根据dockerId获取wk
+      for(let dockerKey in this.dockerList){
+        if(this.dockerList[dockerKey].Id === dockerId){
+          if(this.dockerList[dockerKey].SshName === 'wk'){
+            env_config.SshConfig = _that.wkSshConfig
+          }else{
+            env_config.SshConfig = _that.sshConfig
+          }
+        }
       }
 
       //根据类型判断
@@ -374,13 +447,14 @@ export default {
         ExecType: this.ExecType,
         DockerList: this.dockerList,
         ParentType: this.chooseParentType,
-        DockerId: this.$helperConfig.getDockerIdByCodeEnvConfig(this.dockerList, env_config),
+        DockerId: dockerId,
         DockerCodePath: env_config.DockerCodePath,
         DockerExecCommand: this.dockerExecCommand,
       }
       if (this.chooseParentType === 'xkf') {
         if (params.ExecType === 'supervisor_restart_all' && params.CodePath === '') {
           _that.$helperNotify.error('请选择代码环境')
+          _that.cancelLoading(params)
           return
         }
 
@@ -391,9 +465,11 @@ export default {
       } else if (params.ExecType === 'supervisor_restart' || params.ExecType === 'supervisor_stop') {
         params.SupervisorRestartName = param.supervisor_restart_name
       }
+      console.log(param)
 
       if (params.ExecType === 'supervisor_restart_all' && params.DockerId === ``) {
         _that.$helperNotify.error('代码环境找不到对应的docker')
+        _that.cancelLoading(params)
         return
       }
 
@@ -408,11 +484,11 @@ export default {
       }
 
       //按钮加载状态
-      _that.setBtnLoading(params)
+      _that.setLoading(params)
       Vue.axios.post(this.apiHost + '/api/shell/exec', params).then(function (response) {
         _that.$helperNotify.success('成功');
         _that.execResult = response.Data
-        _that.cancelBtnLoading(params)
+        _that.cancelLoading(params)
         if (params.ExecType === 'supervisor_restart' || params.ExecType === 'supervisor_stop') {     //查看消费者列表
           _that.supervisorStopRestartExplain(param);
           _that.settingResult = response.Data
@@ -493,7 +569,7 @@ export default {
       this.useSortConsumerList.sort(function(a, b) {
         return b.key - a.key;
       });
-      this.useSortConsumerList = this.useSortConsumerList.slice(0 , 10)
+      this.useSortConsumerList = this.useSortConsumerList.slice(0 , 20)
       for (let j in this.useSortConsumerList){
         let showName = this.$helperStore.getStore(this.useSortConsumerList[j].name)
         if(showName === null || showName === undefined){
@@ -549,12 +625,17 @@ export default {
     },
     //分析消费者结果
     supervisorStatusExplain: function () {
+      //重置某些参数
+      for (let n in this.configMap[this.chooseParentType]) {
+        this.configMap[this.chooseParentType][n].processNum = 0
+      }
       //分析结果
       let consumerStatusList = this.execResult.split('\n')
-      console.log(consumerStatusList)
       for (let i in consumerStatusList) {
         //根据；分割
-        let name_params = consumerStatusList[i].split('    ')
+        let name_params = []
+        name_params.push(consumerStatusList[i].match(/^[^\s]+/g)[0])
+        name_params.push(consumerStatusList[i].replace(name_params[0] , ''))
         //循环判断
         let name_params_two = this.filterArray(name_params);
         //获取supervisor进程名
@@ -569,6 +650,7 @@ export default {
         //给与状态
         for (let n in this.configMap[this.chooseParentType]) {
           if (this.configMap[this.chooseParentType][n].supervisor_name === name_params_four[0]) {
+
             this.configMap[this.chooseParentType][n].running_status = name_params_two[1]
             //重启名
             if (name_params_four.length === 2) {
@@ -577,6 +659,7 @@ export default {
               this.configMap[this.chooseParentType][n].supervisor_restart_name = name_params_four[0]
             }
             this.configMap[this.chooseParentType][n].show = true
+            this.configMap[this.chooseParentType][n].processNum++;
             break;
           } else {
             this.configMap[this.chooseParentType][n].show = true;
@@ -589,30 +672,6 @@ export default {
         }
       }
     },
-    setBtnLoading: function (params) {
-      if (params.ExecType === 'supervisor_status_list') {
-        this.btnLoading.supervisorStatusListStatus = true
-      } else if (params.ExecType === 'supervisor_restart') {
-        this.btnLoading.restart = true
-      } else if (params.ExecType === 'supervisor_stop') {
-        this.btnLoading.stop = true
-      }
-      let _this = this
-      let _set_params = params
-      setTimeout(function () {
-        _this.cancelBtnLoading(_set_params)
-      }, 15000)
-    },
-    cancelBtnLoading: function (params) {
-      if (params.ExecType === 'supervisor_status_list') {
-        this.btnLoading.supervisorStatusListStatus = false
-      } else if (params.ExecType === 'supervisor_restart') {
-        this.btnLoading.restart = false
-      }
-      if (params.ExecType === 'supervisor_stop') {
-        this.btnLoading.stop = false
-      }
-    },
     //过滤数组空数据
     filterArray: function (array) {
       let return_array = [];
@@ -623,7 +682,21 @@ export default {
       }
       return return_array;
     },
+    showInteractionBeforeClose : function (done){
+      this.showInteraction = false
+    },
+    setLoading : function (params){
+      this.loadingStatus[params.ExecType] = true
+      let that = this
+      setTimeout(function (){
+        that.loadingStatus[params.ExecType] = false
+      } , 25000)
+    },
+    cancelLoading : function (params){
+      this.loadingStatus[params.ExecType] = false
+    },
   },
+
 }
 </script>
 

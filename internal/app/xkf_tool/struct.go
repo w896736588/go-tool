@@ -158,6 +158,7 @@ type DockerConfig struct {
 }
 
 type TblWechatapp struct {
+	Id      string `json:"_id"`
 	Appid   string `json:"app_id"`
 	AppType string `json:"app_type"`
 	UserId  string `json:"user_id"`

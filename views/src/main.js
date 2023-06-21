@@ -22,6 +22,10 @@ import helperConfig from './utils/config'
 Vue.prototype.$helperConfig = helperConfig
 import helperApi from './utils/api'
 Vue.prototype.$helperApi = helperApi
+import helperLoad from './utils/load'
+Vue.prototype.$helperLoad = helperLoad
+import ElButtonCustom from './components/base/button'
+Vue.component('el-button-custom', ElButtonCustom)
 
 //引入axios
 import Axios from 'axios'

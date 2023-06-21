@@ -2,17 +2,27 @@
   <div>
     <el-card>
       <el-card>
-      <h3 style="display: inline-block;">
-        Docker管理
-      </h3>
-      <div v-for="(valueDocker,k) in dockerList" :key="k" class="text item" style="margin-top:15px;">
-        {{ valueDocker.Name }}
-        <el-link type="primary" @click="">检查</el-link>
-        <el-link type="danger" @click="restartDocker(valueDocker)">重启</el-link>
-        <el-link type="primary" @click="showCompose(valueDocker)">查看compose</el-link>
-      </div>
-    </el-card>
-    <el-input style="margin-top: 20px;" id="resultTextarea" type="textarea" v-model="execResult" rows="25"></el-input>
+        <h3 style="display: inline-block;">
+          Docker管理
+        </h3>
+        <el-row :gutter="20">
+          <el-col :span="2" v-for="(valueDocker,key) in dockerList" style="margin:5px;">
+            <div>
+              <el-radio @change="chooseDocketFunc(valueDocker)"  v-model="chooseDocketId" size="medium " :label="valueDocker.Name">
+                {{ valueDocker.Name }}
+              </el-radio>
+            </div>
+          </el-col>
+        </el-row>
+
+        <br/>
+        <el-button type="primary" disabled>检查</el-button>
+        <el-button type="primary" :loading="loadingStatus['restart_docker']" @click="restartDocker(chooseDocker)">重启
+        </el-button>
+        <el-button type="primary" :loading="loadingStatus['show_compose']" @click="showCompose(chooseDocker)">查看compose
+        </el-button>
+      </el-card>
+      <el-input style="margin-top: 20px;" id="resultTextarea" type="textarea" v-model="execResult" rows="25"></el-input>
     </el-card>
   </div>
 </template>
@@ -43,34 +53,22 @@ export default {
       ExecType: "",
       execResult: "",//操作结果
       redisConfigList: [],
+      loadingStatus: {},
+      chooseDocker: {"Name": "common3", "Id": "xkf_common3" , "SshName" : "xkf"},
+      chooseDocketId : 'common3',
     }
   },
   mounted: function () {
-    if (process.env.NODE_ENV === 'production') {
-      this.apiHost = '';
-    }
-    let sshConfig = this.getStore('sshConfig')
-    if (sshConfig !== null) {
-      this.sshConfig = JSON.parse(sshConfig)
-    }
-    if (!this.sshConfig || !this.sshConfig.username || this.sshConfig.username === '') {
-      this.error("请先配置ssh");
-      return
-    }
-    let xkfDevDbConfig = this.getStore('devTestDbConfig')
-    if (xkfDevDbConfig !== null) {
-      this.xkfDevDbConfig = JSON.parse(xkfDevDbConfig)
-    }
-    let wkSshConfig = this.getStore('wkSshConfig')
-    if (wkSshConfig !== null) {
-      this.wkSshConfig = JSON.parse(wkSshConfig)
-    }
-    if(!this.wkSshConfig || !this.wkSshConfig.username || this.wkSshConfig.username === ''){
-      this.error("请先配置企微ssh");
-      return
-    }
+    this.apiHost = this.$helperConfig.getApiHost()
+    this.sshConfig = this.$helperConfig.getXkfDevSshConfig()
+    this.xkfDevDbConfig = this.$helperConfig.getXkfDevSshConfig()
+    this.wkSshConfig = this.$helperConfig.getWkDevSshConfig()
+    this.loadingStatus = this.$helperLoad.getExecTypeStatus()
   },
   methods: {
+    chooseDocketFunc : function (value){
+      this.chooseDocker = value
+    },
     //执行
     exec: function () {
       let _that = this
@@ -80,8 +78,10 @@ export default {
         DockerList: _that.dockerList,
         ExecType: 'check_all_docker_status',
       }
+      _that.setLoading(params)
       Vue.axios.post(this.apiHost + '/api/shell/exec', params).then(function (response) {
-        _that.success('成功');
+        _that.$helperNotify.success('成功');
+        _that.cancelLoading(params)
         _that.execResult = response.Data
       });
     },
@@ -102,8 +102,10 @@ export default {
         DockerCodeName: dockerValue.Name,
         ExecType: 'restart_docker',
       }
+      _that.setLoading(params)
       Vue.axios.post(this.apiHost + '/api/shell/exec', params).then(function (response) {
-        _that.success('成功');
+        _that.$helperNotify.success('成功');
+        _that.cancelLoading(params)
         _that.execResult = response.Data
       });
     },
@@ -116,8 +118,10 @@ export default {
         DockerCodeName: dockerValue.Name,
         ExecType: 'show_compose',
       }
+      _that.setLoading(params)
       Vue.axios.post(this.apiHost + '/api/shell/exec', params).then(function (response) {
-        _that.success('成功');
+        _that.$helperNotify.success('成功');
+        _that.cancelLoading(params)
         _that.execResult = response.Data
       });
     },
@@ -125,29 +129,19 @@ export default {
       this.execResult = linkValue.link
       window.open(this.execResult, '_blank');
     },
-    success: function (msg) {
-      // Message.success(msg);
-      this.$notify({title: '提示', message: msg, type: 'success', duration: 1000});
+    setLoading: function (params) {
+      this.loadingStatus[params.ExecType] = true
+      let that = this
+      setTimeout(function () {
+        that.loadingStatus[params.ExecType] = false
+      }, 25000)
     },
-    warning: function (msg) {
-      // Message.warning(msg);
-      this.$notify({title: '提示', message: msg, type: 'warning', duration: 1000});
+    cancelLoading: function (params) {
+      let that = this
+      setTimeout(function (){
+        that.loadingStatus[params.ExecType] = false
+      } , 1000)
     },
-    info: function (msg) {
-      // Message.info(msg);
-      //this.$notify({title: '提示', message: msg});
-      this.$notify({title: '提示', message: msg, type: 'info', duration: 1000});
-    },
-    error: function (msg) {
-      // Message.error(msg);
-      this.$notify({title: '提示', message: msg, type: 'error', duration: 1000});
-    },
-    setStore: function (key, value) {
-      localStorage.setItem(key, value);
-    },
-    getStore: function (key) {
-      return localStorage.getItem(key);
-    }
   },
 }
 </script>

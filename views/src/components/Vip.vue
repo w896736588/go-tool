@@ -45,7 +45,8 @@
         </h3><br/>
         <el-input style="width:300px;margin-right:20px;" v-model="expiredDay" placeholder="天数"></el-input>
         <br/>
-        <el-button type="primary" @click="exec()" style="margin-top: 10px;">变更</el-button>
+        <el-button type="primary" :loading="loadingStatus['change_vip_type']" @click="exec()" style="margin-top: 10px;">变更</el-button>
+        <el-button type="primary" :loading="loadingStatus['query_vip_info']" @click="queryVipInfo()" style="margin-top: 10px;">查询</el-button>
 
       </div>
 
@@ -98,29 +99,15 @@ export default {
       ExecType: "",
       execResult: "",//操作结果
       redisConfigList: [],
+      loadingStatus : {},
     }
   },
   mounted: function () {
-    if (process.env.NODE_ENV === 'production') {
-      this.apiHost = '';
-    }
-    let sshConfig = this.getStore('sshConfig')
-    if (sshConfig !== null) {
-      this.sshConfig = JSON.parse(sshConfig)
-    }
-    if (!this.sshConfig || !this.sshConfig.username || this.sshConfig.username === '') {
-      this.error("请先配置ssh");
-      return
-    }
-    let xkfDevDbConfig = this.getStore('devTestDbConfig')
-    if (xkfDevDbConfig !== null) {
-      this.xkfDevDbConfig = JSON.parse(xkfDevDbConfig)
-    }
-    //增加uniKey
-    for (let i in redisList) {
-      redisList[i].UniKey = redisList[i].Name
-    }
-    this.redisConfigList = redisList
+    this.apiHost = this.$helperConfig.getApiHost()
+    this.sshConfig = this.$helperConfig.getXkfDevSshConfig()
+    this.xkfDevDbConfig = this.$helperConfig.getXkfDevDbConfig()
+    this.redisConfigList = this.$helperConfig.getRedisList()
+    this.loadingStatus = this.$helperLoad.getExecTypeStatus()
   },
   methods: {
     //执行
@@ -138,11 +125,13 @@ export default {
         expiredDay: this.expiredDay,
       }
       if (this.account === '-1' || this.account === '') {
-        this.error('请输入或选择账号');
+        _that.$helperNotify.error('请输入或选择账号');
         return
       }
+      _that.setLoading(params)
       Vue.axios.post(this.apiHost + '/api/shell/exec', params).then(function (response) {
-        _that.success('成功');
+        _that.$helperNotify.success('成功');
+        _that.cancelLoading(params)
         _that.execResult = response.Data
       });
     },
@@ -162,34 +151,26 @@ export default {
       if (this.account === '-1' || this.account === '' || this.chooseSystemType === '' || this.chooseSystemType === -1) {
         return
       }
+      this.setLoading(params)
       Vue.axios.post(this.apiHost + '/api/shell/exec', params).then(function (response) {
-        _that.success('成功');
+        _that.$helperNotify.success('成功');
+        _that.cancelLoading(params)
         _that.execResult = response.Data
       });
     },
-    success: function (msg) {
-      // Message.success(msg);
-      this.$notify({title: '提示', message: msg, type: 'success', duration: 1000});
+    setLoading: function (params) {
+      this.loadingStatus[params.ExecType] = true
+      let that = this
+      setTimeout(function () {
+        that.loadingStatus[params.ExecType] = false
+      }, 25000)
     },
-    warning: function (msg) {
-      // Message.warning(msg);
-      this.$notify({title: '提示', message: msg, type: 'warning', duration: 1000});
+    cancelLoading: function (params) {
+      let that = this
+      setTimeout(function (){
+        that.loadingStatus[params.ExecType] = false
+      } , 1000)
     },
-    info: function (msg) {
-      // Message.info(msg);
-      //this.$notify({title: '提示', message: msg});
-      this.$notify({title: '提示', message: msg, type: 'info', duration: 1000});
-    },
-    error: function (msg) {
-      // Message.error(msg);
-      this.$notify({title: '提示', message: msg, type: 'error', duration: 1000});
-    },
-    setStore: function (key, value) {
-      localStorage.setItem(key, value);
-    },
-    getStore: function (key) {
-      return localStorage.getItem(key);
-    }
   },
 }
 </script>

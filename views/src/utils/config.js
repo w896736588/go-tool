@@ -42,6 +42,25 @@ function getApiHost(){
   }
   return 'http://localhost:7070';
 }
+//拿到socket地址
+function getWsHost(){
+  if (process.env.NODE_ENV === 'production') {
+    return 'wss://localhost:7071/conn';
+  }
+  return 'wss://localhost:7071/conn';
+}
+
+/**
+ * 拿到降低内存的消费者
+ */
+function getReduceMemoryConsumerName(){
+  return [
+    'chatLogExportTask.conf','chatLogExportTask.conf','coupon_analyze.conf','coupon_send.conf','fanspostermsg.conf','instantLottery.conf','OuterLinkSendSms.conf',
+    'outlink.conf','pub_fans_poster_finish.conf','pushToMaple.conf','templateMassSend0.conf','WxTagTransfer.conf','WeixinShopAutoSyncProduct.conf',
+    'weixinShopAddressSync.conf','WeixinShopBatchChangeLogistics.conf','WeixinShopLogisticsSubscribe.conf','WeixinShopSendSms.conf','WeixinShopSetDeliveryNotice.conf',
+    'copyDraft.conf','MaterialSync.conf','excelAnalysisService.conf','export_tag_fans.conf','redMessConsumer.conf',
+  ];
+}
 
 //拿到代码环境
 function getCodeEnvList(){
@@ -105,6 +124,7 @@ function getSupervisorConfigList(supervisorOriginConfList , chooseParentType){
       "supervisor_name" : configParam[1],
       "running_status" : "",
       "showName" : showName,
+      "processNum" : 0,
     })
   }
   return addConfigList
@@ -170,4 +190,6 @@ export default {
   getCodeEnvConfigByCodeEnvName,
   getDockerIdByCodeEnvConfig,
   getUserNameByEnvCode,
+  getWsHost,
+  getReduceMemoryConsumerName,
 }

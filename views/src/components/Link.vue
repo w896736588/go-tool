@@ -18,10 +18,10 @@
       <el-input style="width:300px;display: inline-block;margin-top:5px;" v-model="inputAccount" placeholder="输入账号名登录"></el-input>
       <br/>
       <br/>
-      <el-button type="primary" size="medium" v-for="(value,k) in loginTypeList" @click="login(value)">{{value.loginName}}</el-button>
+      <el-button type="primary" :loading="loadingStatus['login_xkf' + value.value]" size="medium" v-for="(value,k) in loginTypeList" @click="login(value)">{{value.loginName}}</el-button>
       <br/>
       <br/>
-      <el-button type="primary" plain size="medium" v-for="(value,k) in loginTypeChildList" @click="login(value)">{{value.loginName}}</el-button>
+      <el-button type="primary" :loading="loadingStatus['login_xkf' + value.value]" plain size="medium" v-for="(value,k) in loginTypeChildList" @click="login(value)">{{value.loginName}}</el-button>
 
 <!--      <div v-for="(value,k) in userNameList" :key="k" class="text item" style="margin-top:10px;">-->
 <!--        {{value.Name}}-->
@@ -128,7 +128,8 @@ export default {
       //总的操作类型
       ExecType: "",
       execResult: "",//操作结果
-      linkList : []
+      linkList : [],
+      loadingStatus : {},
     }
   },
   mounted: function () {
@@ -137,6 +138,13 @@ export default {
     this.xkfDevDbConfig = this.$helperConfig.getXkfDevDbConfig()
     this.userNameList = this.$helperConfig.getUsernameList()
     this.linkList = this.$helperConfig.getLinkList()
+    this.loadingStatus = this.$helperLoad.getExecTypeStatus()
+    for(let i in this.loginTypeList){
+      this.loadingStatus['login_xkf' + this.loginTypeList[i].value] = false;
+    }
+    for(let i in this.loginTypeChildList){
+      this.loadingStatus['login_xkf' + this.loginTypeChildList[i].value] = false;
+    }
   },
   methods: {
     changeCodeEnv : function (){
@@ -190,11 +198,26 @@ export default {
       if(loginTypeValue.value === '3' || loginTypeValue.value === '4'){
         params.Account = '2@163.com'
       }
+      _that.setLoading(params , loginTypeValue)
       Vue.axios.post(this.apiHost + '/api/shell/exec', params).then(function (response) {
         _that.$helperNotify.success('成功');
         _that.execResult = response.Data
+        _that.cancelLoading(params , loginTypeValue)
         window.open(response.Data,'_blank');
       });
+    },
+    setLoading: function (params , value) {
+      this.loadingStatus[params.ExecType + value.value] = true
+      let that = this
+      setTimeout(function () {
+        that.loadingStatus[params.ExecType + value.value] = false
+      }, 25000)
+    },
+    cancelLoading: function (params , value) {
+      let that = this
+      setTimeout(function (){
+        that.loadingStatus[params.ExecType+ value.value] = false
+      } , 1000)
     },
   },
 }

@@ -470,10 +470,11 @@ func ShellExec(c *gin.Context) {
 	reqBody := &xkf_tool.SshExec{}
 	requestData(c, &reqBody)
 
-	//初始化shell
-	cliTerConf := xkf_tool.GetRunShellCliTer(&reqBody.SshConfig)
+	//初始化shell3
+	cliTerConf, wkCliTerConf := xkf_tool.InitRunShell3(reqBody)
+	//初始化shell4
+	xkf_tool.InitRunShell4(reqBody)
 
-	wkCliTerConf := xkf_tool.GetRunShellCliTer(&reqBody.WkSshConfig)
 	handle := &Command{}
 	handle.Filter()
 	//初始化mysql
@@ -490,7 +491,7 @@ func ShellExec(c *gin.Context) {
 		response(c, xkf_tool.ErrorCodeSuccess, `成功`, strings.Join(handle.PullBranchOrigin(reqBody, cliTerConf), ``))
 		return
 	case `wechat_kefu_status`: //查询微信客服所在的环境
-		response(c, xkf_tool.ErrorCodeSuccess, `成功`, strings.Join(handle.WechatKefuStatus(reqBody, cliTerConf, wkCliTerConf), ``))
+		response(c, xkf_tool.ErrorCodeSuccess, `成功`, handle.WechatKefuStatus(reqBody, cliTerConf, wkCliTerConf))
 		return
 	case `wechat_kefu_change`: //切换微信客服到当前代码环境
 		response(c, xkf_tool.ErrorCodeSuccess, `成功`, strings.Join(handle.WechatKefuChange(reqBody, cliTerConf, wkCliTerConf), ``))
@@ -542,6 +543,9 @@ func ShellExec(c *gin.Context) {
 		return
 	case `SupervisorConfList`:
 		response(c, xkf_tool.ErrorCodeSuccess, `成功`, strings.Join(handle.SupervisorConfList(reqBody, cliTerConf), ``))
+		return
+	case `WechatKefuChannelQrList`:
+		response(c, xkf_tool.ErrorCodeSuccess, `成功`, handle.QueryWechatQrCdeList(reqBody))
 		return
 	}
 	response(c, xkf_tool.ErrorCodeSuccess, `成功`, nil)

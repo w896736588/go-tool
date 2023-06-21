@@ -1,9 +1,9 @@
 module xkf_tool
 
-go 1.17
+go 1.18
 
 require (
-	gitee.com/Sxiaobai/gs v0.0.0-20230504102000-8cd503b6a8ef
+	gitee.com/Sxiaobai/gs v0.0.0-20230526061628-e8117c82d47e
 	github.com/gin-gonic/gin v1.9.0
 	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/go-sql-driver/mysql v1.7.0
@@ -24,6 +24,7 @@ require (
 	github.com/go-playground/validator/v10 v10.11.2 // indirect
 	github.com/goccy/go-json v0.10.0 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
+	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.0.9 // indirect

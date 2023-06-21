@@ -32,6 +32,9 @@
       <el-menu-item index="Model">
         Model生成
       </el-menu-item>
+<!--      <el-menu-item index="Tools">-->
+<!--        小工具-->
+<!--      </el-menu-item>-->
       <el-menu-item index="Ssh">
         服务器配置
       </el-menu-item>
@@ -42,7 +45,7 @@
           <a style="color:white;" target="_blank" href="https://developers.weixin.qq.com/doc/offiaccount/Getting_Started/Overview.html">微信开发文档</a>
         </el-menu-item>
         <el-menu-item index="Doc-2">
-          <a style="color:white;" target="_blank" href="https://work.weixin.qq.com/kf/">微信客服文档</a>
+          <a style="color:white;" target="_blank" href="https://kf.weixin.qq.com/api/doc/path/93304">微信客服文档</a>
         </el-menu-item>
         <el-menu-item index="Doc-4">
           <a style="color:white;" target="_blank" href="https://open.work.weixin.qq.com/api/doc/90000/90135/90664">企业微信文档</a>
@@ -52,24 +55,24 @@
         </el-menu-item>
       </el-submenu>
 
-      <el-submenu index="DocTool">
-        <template slot="title">工具地址</template>
-        <el-menu-item index="DocTool-1">
-          <a style="color:white;" target="_blank" href="https://www.json.cn/">Json格式化</a>
-        </el-menu-item>
-        <el-menu-item index="DocTool-2">
-          <a style="color:white;" target="_blank" href="https://tool.lu/timestamp/">时间戳</a>
-        </el-menu-item>
-        <el-menu-item index="DocTool-4">
-          <a style="color:white;" target="_blank" href="https://ip.tool.chinaz.com/github.com">Ip查询</a>
-        </el-menu-item>
-        <el-menu-item index="DocTool-3">
-          <a style="color:white;" target="_blank" href="https://fanyi.baidu.com/">翻译</a>
-        </el-menu-item>
-        <el-menu-item index="DocTool-3">
-          <a style="color:white;" target="_blank" href="https://cli.im/">二维码</a>
-        </el-menu-item>
-      </el-submenu>
+<!--      <el-submenu index="DocTool">-->
+<!--        <template slot="title">工具地址</template>-->
+<!--        <el-menu-item index="DocTool-1">-->
+<!--          <a style="color:white;" target="_blank" href="https://www.json.cn/">Json格式化</a>-->
+<!--        </el-menu-item>-->
+<!--        <el-menu-item index="DocTool-2">-->
+<!--          <a style="color:white;" target="_blank" href="https://tool.lu/timestamp/">时间戳</a>-->
+<!--        </el-menu-item>-->
+<!--        <el-menu-item index="DocTool-4">-->
+<!--          <a style="color:white;" target="_blank" href="https://ip.tool.chinaz.com/github.com">Ip查询</a>-->
+<!--        </el-menu-item>-->
+<!--        <el-menu-item index="DocTool-3">-->
+<!--          <a style="color:white;" target="_blank" href="https://fanyi.baidu.com/">翻译</a>-->
+<!--        </el-menu-item>-->
+<!--        <el-menu-item index="DocTool-3">-->
+<!--          <a style="color:white;" target="_blank" href="https://cli.im/">二维码</a>-->
+<!--        </el-menu-item>-->
+<!--      </el-submenu>-->
 
     </el-menu>
 <!--    内容-->
@@ -83,6 +86,7 @@
     <Model v-show="menuName === 'Model'"></Model>
     <Link v-show="menuName === 'Link'"></Link>
     <Docker v-show="menuName === 'Docker'"></Docker>
+<!--    <Tools v-show="menuName === 'Tools'"></Tools>-->
   </div>
 
 </template>
@@ -97,6 +101,7 @@ import Vip from "./Vip"
 import Model from "./Model"
 import Link from "./Link"
 import Docker from "./Docker"
+import Tools from "./Tools"
 export default {
   data () {
     return {
@@ -126,6 +131,7 @@ export default {
     Model,
     Link,
     Docker,
+    Tools,
   },
 }
 </script>

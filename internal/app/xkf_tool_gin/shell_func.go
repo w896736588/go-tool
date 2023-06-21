@@ -2,7 +2,6 @@ package xkf_tool_gin
 
 import (
 	"fmt"
-	"gitee.com/Sxiaobai/gs/gsdefine"
 	"gitee.com/Sxiaobai/gs/gstool"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cast"
@@ -37,6 +36,7 @@ type Command struct {
 	GitStatusCommand             string
 	WkSupervisorConfListCommand  string
 	XkfSupervisorConfListCommand string
+	QueryWechatKefuExistCommand  string
 }
 
 // WechatKefuStatus
@@ -44,38 +44,35 @@ type Command struct {
 // @date 2022-12-07 11:20:36
 // @param reqBody
 // @param cliConf
-func (command *Command) WechatKefuStatus(reqBody *xkf_tool.SshExec, cliConf *gstool.GsShell, wkCliTerConf *gstool.GsShell) []string {
+func (command *Command) WechatKefuStatus(reqBody *xkf_tool.SshExec, cliConf *gstool.GsShell, wkCliTerConf *gstool.GsShell) string {
 	//查询微信客服所在的环境
 	retMsgList := make([]string, 0)
 	//拿到appid
 	appInfo := xkf_tool.QueryWechatAppid(reqBody.WechatKefuAppid)
 	if appInfo.Appid == `` || appInfo.AppType != `wechat_kefu` {
 		retMsgList = append(retMsgList, `找不到该应用`)
-		return retMsgList
+		return `找不到该应用`
 	}
-	retMsgList = append(retMsgList, fmt.Sprintf(`所属管理员ID %s %s %s`, appInfo.UserId, appInfo.Appid, xkf_tool.ENTER))
-	var runCommand string
-	var runResultMsg string
-	var err error
-	for _, value := range reqBody.DockerList {
-		runCommand = fmt.Sprintf(command.queryDockerProcessByName, value.Id, appInfo.Appid)
-		if value.SshName == `wk` {
-			runResultMsg, err = wkCliTerConf.RunShell3([]byte(runCommand))
-		} else {
-			runResultMsg, err = cliConf.RunShell3([]byte(runCommand))
-		}
 
-		if err != nil {
-			xkf_tool.Logger.Errorf(`执行命令失败%s %s`, runCommand, err.Error())
-		}
-		if !strings.Contains(runResultMsg, `OpenPushWechatKefuOpen`) {
-			runResultMsg = ``
-		} else {
-			runResultMsg = `已启动`
-		}
-		retMsgList = append(retMsgList, value.Name+` `+runResultMsg+gsdefine.Enter)
+	shellCommand := fmt.Sprintf(command.QueryWechatKefuExistCommand, appInfo.Appid)
+	fmt.Println(`执行的命令 ` + shellCommand)
+	wkRunResultMsg, errWk := wkCliTerConf.RunShell3([]byte(shellCommand))
+	xkfRunResultMsg, errXkf := cliConf.RunShell3([]byte(shellCommand))
+	returnMsg := ``
+	if errWk != nil {
+		xkf_tool.Logger.Errorf(`执行命令失败%s %s`, shellCommand, errWk.Error())
+		returnMsg += fmt.Sprintf(`执行命令失败%s %s`, shellCommand, errWk.Error()) + xkf_tool.ENTER
 	}
-	return retMsgList
+	if errXkf != nil {
+		xkf_tool.Logger.Errorf(`执行命令失败%s %s`, shellCommand, errXkf.Error())
+		returnMsg += fmt.Sprintf(`执行命令失败%s %s`, shellCommand, errWk.Error()) + xkf_tool.ENTER
+	}
+	appMsg := fmt.Sprintf(`所属管理员ID %s %s %s`, appInfo.UserId, appInfo.Appid, xkf_tool.ENTER)
+	if returnMsg != `` {
+		return appMsg + returnMsg
+	} else {
+		return appMsg + wkRunResultMsg + xkf_tool.ENTER + xkfRunResultMsg
+	}
 }
 
 // PullBranchOrigin 拉取当前分支最新代码
@@ -239,6 +236,7 @@ func (command *Command) Filter() {
 	command.GitStatusCommand = `git status`
 	command.XkfSupervisorConfListCommand = `cd /var/www/dockerfiles/dev_test/docker_volumes/supervisor/etc/supervisor/conf.d/; ls | grep '\.conf$' | awk '{printf ""$1"---"; system("head -n 1 "$1)}'`
 	command.WkSupervisorConfListCommand = `cd /etc/supervisor/conf.d/; ls | grep '\.conf$' | awk '{printf ""$1"---"; system("head -n 1 "$1)}'`
+	command.QueryWechatKefuExistCommand = `sudo docker ps |awk '{print $NF}'|grep -v NAMES|xargs -I {} bash -c " echo {} && sudo docker exec {} ps -ef | grep -i %s "`
 }
 
 // WechatKefuChange 切换微信客服到当前环境
@@ -290,8 +288,8 @@ func (command *Command) WechatKefuChange(reqBody *xkf_tool.SshExec, cliConf *gst
 			xkf_tool.Logger.Errorf(`推送消息失败 %s`, err.Error())
 		}
 	}
-
 	phpRunCommand := fmt.Sprintf(command.dockerExecCommand, reqBody.DockerId) + fmt.Sprintf(command.runPhpCommand, reqBody.DockerCodePath, appInfo.Appid)
+	gstool.FmtPrintlnLog(`执行命令 %s`, phpRunCommand)
 	_, err := cliConf.RunShell3([]byte(phpRunCommand))
 	if err != nil {
 		xkf_tool.Logger.Errorf(`执行命令失败 %s %s`, phpRunCommand, err.Error())
@@ -303,7 +301,9 @@ func (command *Command) WechatKefuChange(reqBody *xkf_tool.SshExec, cliConf *gst
 		xkf_tool.Logger.Errorf(`执行命令失败 %s %s`, runCommand2, err.Error())
 	}
 	//查询结果
-	return command.WechatKefuStatus(reqBody, cliConf, wkCliTerConf)
+	returnMsgList := make([]string, 0)
+	returnMsgList = append(returnMsgList, command.WechatKefuStatus(reqBody, cliConf, wkCliTerConf))
+	return returnMsgList
 }
 
 func getPsPid(runResultMsg string) string {
@@ -627,4 +627,49 @@ func (command *Command) SupervisorConfList(reqBody *xkf_tool.SshExec, cliConf *g
 	}
 	retMsgList = append(retMsgList, ret)
 	return retMsgList
+}
+
+//QueryWechatQrCdeList 微信客服二维码列表
+func (command *Command) QueryWechatQrCdeList(reqBody *xkf_tool.SshExec) string {
+	appInfo := xkf_tool.QueryWechatAppid(reqBody.WechatKefuAppid)
+	channelList, err := xkf_tool.XkfDevMysql.GetAll(`select _id,channel_name from tbl_channel where wechatapp_id = ? `, appInfo.Id)
+	if err != nil {
+		return `获取渠道列表失败`
+	}
+	staffList, err := xkf_tool.XkfDevMysql.GetAll(`select name,user_id from tbl_staff where parent_user_id = ? `, appInfo.UserId)
+	if err != nil {
+		return `获取客服列表失败`
+	}
+	returnMap := make([]map[string]interface{}, 0)
+	if err != nil {
+		xkf_tool.Logger.Errorf(`获取渠道列表失败`)
+		return `获取渠道列表失败`
+	} else {
+		for _, channelInfo := range *channelList {
+			tempMap := make(map[string]interface{})
+			channelRelList, err := xkf_tool.XkfDevMysql.GetAll(`select user_id,short_code from tbl_channel_user_rel where wechatapp_id = ? and channel_id = ? and status = 1`, appInfo.Id, channelInfo.G(`_id`).ToInt())
+			if err != nil {
+				continue
+			}
+			tempMap[`_id`] = channelInfo.G(`_id`).ToStr()
+			tempMap[`channel_name`] = channelInfo.G(`channel_name`).ToStr()
+			linkList := make([]map[string]string, 0)
+			for _, channelRel := range *channelRelList {
+				staffName := ``
+				for _, staffInfo := range *staffList {
+					if staffInfo.G(`user_id`).ToStr() == channelRel.G(`user_id`).ToStr() {
+						staffName = staffInfo.G(`name`).ToStr()
+						break
+					}
+				}
+				linkList = append(linkList, map[string]string{
+					`staff_name`: staffName,
+					`short_code`: channelRel.G(`short_code`).ToStr(),
+				})
+			}
+			tempMap[`link_list`] = linkList
+			returnMap = append(returnMap, tempMap)
+		}
+		return gstool.JsonEncode(returnMap)
+	}
 }

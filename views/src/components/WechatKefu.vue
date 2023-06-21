@@ -9,7 +9,7 @@
         <el-row :gutter="20">
           <el-col :span="5" v-for="(value,key) in wechatKefuList" style="margin:5px;display: inline-block;">
             <div>
-              <el-radio size="medium " v-model="chooseWechatKefuAppid" :label="value.app_id">
+              <el-radio size="medium " @change="changeWechatKefu" v-model="chooseWechatKefuAppid" :label="value.app_id">
                 {{ value.app_name }}
               </el-radio>
             </div>
@@ -28,21 +28,50 @@
         </el-row>
       </div>
       <br/>
-      <el-button type="primary" :loading="btnLoading.wechatKefuChange" @click="ExecType = 'wechat_kefu_change';exec()">切换到当前选择的环境</el-button>
-      <el-button type="primary" :loading="btnLoading.wechatKefuStatus" @click="ExecType = 'wechat_kefu_status';exec()">查看所在环境</el-button>
+      <el-button type="primary" :loading="loadingStatus['wechat_kefu_change']" @click="exec('wechat_kefu_change')">切换到当前选择的环境</el-button>
+      <el-button type="primary" :loading="loadingStatus['wechat_kefu_status']" @click="exec('wechat_kefu_status')">查看所在环境</el-button>
+      <el-button type="primary" :loading="loadingStatus['WechatKefuChannelQrList']" @click="queryEnvWechatKefuQrList()">二维码访问</el-button>
+    </el-card>
+    <el-card style="margin-top: 10px;">
+      <h3 style="display: inline-block;">
+        二维码
+      </h3>
+      <div v-for="(value,key) in qrList">
+        <h4 style="display: inline-block;">
+          {{value.channel_name}}
+        </h4>
+
+        <el-row :gutter="20" style="margin-top:5px;">
+          <el-col v-for="(link,key1) in value.link_list" :span="2"  style="margin:5px;">
+            <div>
+              <el-button round style="display: inline-block;" @click="showQrCode(link)">{{link.staff_name}}</el-button>
+            </div>
+          </el-col>
+        </el-row>
+
+      </div>
     </el-card>
 
     <el-input style="margin-top: 20px;" type="textarea" v-model="execResult" rows="25"></el-input>
+    <el-dialog :title="showQrCodeTitle" :visible.sync="isShowCard" width="500px" center>
+      <div style="display: flex;margin: auto;">
+        <div id="qrCode" ref="qrCodeDiv" style="margin: auto;" center></div>
+      </div>
+      <div style="word-break:break-all;margin: 5px;">{{qrCodeContent}}</div>
+    </el-dialog>
   </el-card>
 
 </template>
 
 <script>
 import Vue from "vue";
-import {Message} from "element-ui";
+import QRCode from 'qrcodejs2';
 export default {
   data() {
     return {
+      isShowCard : false,
+      qrCodeContent : '',
+      showQrCodeTitle : '',
       name: "WechatKefu",
       userNameList : [],
       //接口地址
@@ -57,16 +86,15 @@ export default {
       codeEnvList: [],
       //docker
       dockerList: [],
-      //按钮状态
-      btnLoading : {
-        wechatKefuStatus : false,
-        wechatKefuChange : false,
-      },
       //微信客服合集
       chooseWechatKefuName: "",
       chooseWechatKefuAppid: "",
       wechatKefuList: [],
       execResult: "",//操作结果
+      ercode : "@/assets/2code.png",
+
+      qrList : [],
+      loadingStatus : {},
     }
   },
   mounted: function () {
@@ -77,12 +105,39 @@ export default {
     this.codeEnvList = this.$helperConfig.getCodeEnvList()
     this.dockerList = this.$helperConfig.getDockerList()
     this.userNameList = this.$helperConfig.getUsernameList()
+    this.loadingStatus = this.$helperLoad.getExecTypeStatus()
     this.queryEnvWechatKefuList()
   },
+  components: {
+    QRCode
+  },
   methods: {
+    changeWechatKefu : function () { //切换微信客服
+      this.queryEnvWechatKefuQrList()
+    },
+    createQrCode : function (link){
+      this.qrCodeContent = link.short_code
+      this.showQrCodeTitle = link.staff_name
+      this.$nextTick(()=>{
+        this.$refs.qrCodeDiv.innerHTML = '';//二维码清除
+        new QRCode(this.$refs.qrCodeDiv, {
+          text: link.short_code,//二维码链接，参数是否添加看需求
+          width: 200,//二维码宽度
+          height: 200,//二维码高度
+          colorDark: "#333333", //二维码颜色
+          colorLight: "#ffffff", //二维码背景色
+          correctLevel: QRCode.CorrectLevel.L //容错率，L/M/H
+        });
+      })
+    },
+    showQrCode : function (link){
+      this.isShowCard = true
+      this.createQrCode(link)
+    },
     //执行
-    exec: function () {
+    exec: function (execType) {
       let _that = this
+      this.ExecType = execType
       //找到环境配置
       let env_config = this.$helperConfig.getCodeEnvConfigByCodeEnvName(this.codeEnvList , this.chooseEvnName)
       if (env_config === {}) {
@@ -114,11 +169,11 @@ export default {
         return
       }
       //按钮加载状态
-      _that.setBtnLoading(params)
+      _that.setLoading(params)
       Vue.axios.post(this.apiHost + '/api/shell/exec', params).then(function (response) {
         _that.$helperNotify.success('成功');
         _that.execResult = response.Data
-        _that.cancelBtnLoading(params)
+        _that.cancelLoading(params)
       });
     },
     queryEnvWechatKefuList : function (){
@@ -130,8 +185,6 @@ export default {
         _that.$helperNotify.error("不存在的配置");
         return
       }
-      this.$helperConfig.get
-      console.log(env_config)
       //根据类型判断
       let params = {
         Account : this.$helperConfig.getUserNameByEnvCode(this.userNameList , env_config.NameTitle),
@@ -139,37 +192,60 @@ export default {
         xkfDevDbConfig : this.xkfDevDbConfig,
       }
       //按钮加载状态
-      _that.setBtnLoading(params)
+      _that.setLoading(params)
       Vue.axios.post(this.apiHost + '/api/shell/exec', params).then(function (response) {
         _that.$helperNotify.success('成功');
         _that.execResult = response.Data
-        _that.cancelBtnLoading(params)
+        _that.cancelLoading(params)
         _that.wechatKefuList = JSON.parse(response.Data)
       });
     },
-    setBtnLoading : function (params){
-      if(params.ExecType === 'wechat_kefu_status'){
-        this.btnLoading.wechatKefuStatus = true
-      }else if(params.ExecType === 'wechat_kefu_change'){
-        this.btnLoading.wechatKefuChange = true
+    //二维码列表
+    queryEnvWechatKefuQrList : function () {
+      let _that = this
+      //找到环境配置
+      let env_config = this.$helperConfig.getCodeEnvConfigByCodeEnvName(this.codeEnvList, this.chooseEvnName)
+      if (env_config === {}) {
+        _that.$helperNotify.error("不存在的配置");
+        return
       }
-      let _this = this
-      let _set_params = params
-      setTimeout(function (){
-        _this.cancelBtnLoading(_set_params)
-      } , 15000)
+      if (_that.chooseWechatKefuAppid === '') {
+        _that.$helperNotify.error('请选择微信客服')
+        return
+      }
+      //根据类型判断
+      let params = {
+        WechatKefuAppid: _that.chooseWechatKefuAppid,
+        ExecType: 'WechatKefuChannelQrList',
+        xkfDevDbConfig: this.xkfDevDbConfig,
+      }
+      //按钮加载状态
+      _that.setLoading(params)
+      Vue.axios.post(this.apiHost + '/api/shell/exec', params).then(function (response) {
+        _that.$helperNotify.success('成功');
+        _that.cancelLoading(params)
+        _that.qrList = JSON.parse(response.Data)
+      })
     },
-    cancelBtnLoading : function (params){
-      if(params.ExecType === 'wechat_kefu_status'){
-        this.btnLoading.wechatKefuStatus = false
-      }else if(params.ExecType === 'wechat_kefu_change'){
-        this.btnLoading.wechatKefuChange = false
-      }
+    setLoading : function (params){
+      this.loadingStatus[params.ExecType] = true
+      let that = this
+      setTimeout(function (){
+        that.loadingStatus[params.ExecType] = false
+      } , 25000)
+    },
+    cancelLoading : function (params){
+      let that = this
+      setTimeout(function (){
+        that.loadingStatus[params.ExecType] = false
+      } , 1000)
     },
   },
 }
 </script>
 
-<style scoped>
-
+<style >
+  #qrCode img {
+    margin:auto !important;
+  }
 </style>

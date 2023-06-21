@@ -12,7 +12,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"time"
 )
 
 var ConfigViper *viper.Viper
@@ -24,9 +23,7 @@ var Logger *gstool.GsLogger
 var ProducerMap map[string]*gsnsq.NsqStruct
 var RootPath string
 var Env string
-var RunShellMap map[string]*gstool.GsShell
-var RunShellMapLock sync.RWMutex
-var RunShellTerminalMap map[string]*gstool.GsShell
+var DbInitLock sync.RWMutex
 
 func InitConfig() {
 	defer func() {
@@ -60,8 +57,11 @@ func InitConfig() {
 	ConfigViper.SetConfigType(`ini`)
 	RedisRunList = make(map[string]*gsdb.GsRedis)
 	ProducerMap = make(map[string]*gsnsq.NsqStruct)
-	RunShellMap = make(map[string]*gstool.GsShell)
-	RunShellTerminalMap = make(map[string]*gstool.GsShell)
+	RunShell3Map = make(map[string]*gstool.GsShell)
+	RunShell3TerminalMap = make(map[string]*gstool.GsShell)
+	RunShellCli4Map = gstool.HighMapCreate(100)
+	XkfDevMysql = nil
+	AppurlDevMysql = nil
 	if err := ConfigViper.ReadInConfig(); err != nil {
 		panic(`读取配置失败 config/config.ini`)
 	}
@@ -69,6 +69,8 @@ func InitConfig() {
 		Key: ConfigViper.GetString(`encrypt.key`),
 		Iv:  ConfigViper.GetString(`encrypt.iv`),
 	}
+	go InitXkfSocket()
+	go InitWkSocket()
 }
 
 //GetProducer 拿到生产者
@@ -90,44 +92,12 @@ func GetProducer(host, port, topic string) *gsnsq.NsqStruct {
 	return producer
 }
 
-//GetRunShellCliTer
-func GetRunShellCliTer(sshConfig *SshConfig) *gstool.GsShell {
-	RunShellMapLock.Lock()
-	defer RunShellMapLock.Unlock()
-	if sshConfig.Host == `` {
-		return nil
-	}
-
-	uniKey := fmt.Sprintf(`%s%s%s%s`, sshConfig.Host, sshConfig.Port, sshConfig.Username, sshConfig.Port)
-	if RunShellMap[uniKey] == nil {
-		gsShellTerConfig := gstool.GsShellConfig{
-			Host:          sshConfig.Host,
-			Port:          cast.ToInt64(sshConfig.Port),
-			Username:      sshConfig.Username,
-			Password:      sshConfig.Password,
-			TimeoutSecond: 100,
-		}
-		cliTerConf := gstool.GsShell{
-			Config:              &gsShellTerConfig,
-			IsOpenLog:           true,
-			Logger:              Logger,
-			TerminalRefreshTime: 100 * time.Millisecond,
-			TerminalMaxTime:     10 * time.Second,
-		}
-		cliTerConfErr := cliTerConf.CreateClient()
-		if cliTerConfErr != nil {
-			panic(`创建交互式链接失败 ` + cliTerConfErr.Error())
-		} else {
-			RunShellTerminalMap[uniKey] = &cliTerConf
-		}
-	}
-	return RunShellTerminalMap[uniKey]
-}
-
 //GetDevMysql x
 func GetDevMysql(reqBody *SshExec) {
-
-	if reqBody.XkfDevDbConfig.Host != `` && reqBody.XkfDevDbConfig.Host != nil && XkfDevMysql == nil {
+	DbInitLock.Lock()
+	defer DbInitLock.Unlock()
+	if cast.ToInt(reqBody.XkfDevDbConfig.Port) != 0 && XkfDevMysql == nil {
+		fmt.Println(fmt.Sprintf(`初始化开始`))
 		gsMysqlConfig := gsdb.MysqlConfig{
 			Host:              reqBody.XkfDevDbConfig.Host,
 			Port:              reqBody.XkfDevDbConfig.Port,
@@ -144,6 +114,7 @@ func GetDevMysql(reqBody *SshExec) {
 		err = gsMysql.CreateConn()
 		if err != nil {
 			Logger.Errorf(`初始化mysql错误 %#v`, err)
+			return
 		}
 		XkfDevMysql = &gsMysql
 
@@ -153,7 +124,13 @@ func GetDevMysql(reqBody *SshExec) {
 		err = gsAppMysql.CreateConn()
 		if err != nil {
 			Logger.Errorf(`初始化mysql错误 %#v`, err)
+			return
 		}
 		AppurlDevMysql = &gsAppMysql
 	}
+}
+
+//GetSshUnikey 拿到ssh 唯一值
+func GetSshUnikey(sshConfig *SshConfig) string {
+	return gstool.Md5(fmt.Sprintf(`%s%s%s%s`, sshConfig.Host, sshConfig.Port, sshConfig.Username, sshConfig.Port))
 }
