@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-var RunShell3Map map[string]*gstool.GsShell
 var RunShell3MapLock sync.RWMutex
 var RunShell3TerminalMap map[string]*gstool.GsShell
 
@@ -20,7 +19,7 @@ func GetRunShell3CliTer(sshConfig *SshConfig) *gstool.GsShell {
 	}
 
 	uniKey := GetSshUnikey(sshConfig)
-	if RunShell3Map[uniKey] == nil {
+	if RunShell3TerminalMap[uniKey] == nil {
 		gsShellTerConfig := gstool.GsShellConfig{
 			Host:          sshConfig.Host,
 			Port:          cast.ToInt64(sshConfig.Port),

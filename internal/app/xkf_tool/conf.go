@@ -57,7 +57,6 @@ func InitConfig() {
 	ConfigViper.SetConfigType(`ini`)
 	RedisRunList = make(map[string]*gsdb.GsRedis)
 	ProducerMap = make(map[string]*gsnsq.NsqStruct)
-	RunShell3Map = make(map[string]*gstool.GsShell)
 	RunShell3TerminalMap = make(map[string]*gstool.GsShell)
 	RunShellCli4Map = gstool.HighMapCreate(100)
 	XkfDevMysql = nil
@@ -97,7 +96,6 @@ func GetDevMysql(reqBody *SshExec) {
 	DbInitLock.Lock()
 	defer DbInitLock.Unlock()
 	if cast.ToInt(reqBody.XkfDevDbConfig.Port) != 0 && XkfDevMysql == nil {
-		fmt.Println(fmt.Sprintf(`初始化开始`))
 		gsMysqlConfig := gsdb.MysqlConfig{
 			Host:              reqBody.XkfDevDbConfig.Host,
 			Port:              reqBody.XkfDevDbConfig.Port,

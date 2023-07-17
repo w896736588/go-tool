@@ -30,7 +30,7 @@
         Docker
       </el-menu-item>
       <el-menu-item index="Model">
-        Model生成
+        Model/建表Sql
       </el-menu-item>
 <!--      <el-menu-item index="Tools">-->
 <!--        小工具-->

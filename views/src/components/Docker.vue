@@ -111,7 +111,6 @@ export default {
           }
           let cpu = parseFloat(temp[2])
           let memory = parseFloat(temp[6])
-          console.log(cpu , memory , temp)
           if(cpu > 95 || memory > 95){
             notifyList.push( { name: currentDateTime + ' ' + temp[1] + ' ：cpu：' + temp[2] + '，内存：' + temp[6], type: 'danger' })
           }else if(cpu > 90 || memory > 90){

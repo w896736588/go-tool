@@ -10,6 +10,19 @@ function getCurrentDateTime(){
     minutes.toString().padStart(2, '0') + ":" +
     seconds.toString().padStart(2, '0');
 }
+
+function filterEmptyString(arrList){
+  let returnList = []
+  for(let i in arrList){
+    if(arrList[i] === ''){
+      continue
+    }
+    console.log(arrList[i])
+    returnList.push(arrList[i])
+  }
+  return returnList
+}
 export default {
   getCurrentDateTime,
+  filterEmptyString,
 }
