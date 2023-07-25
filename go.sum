@@ -52,6 +52,8 @@ gitee.com/Sxiaobai/gs v0.0.0-20230630022447-c1cb42811670 h1:J2rGvGTJeP7cHwyCTOaI
 gitee.com/Sxiaobai/gs v0.0.0-20230630022447-c1cb42811670/go.mod h1:poauCCtsT8vZdro0hThctF840pEI68ZsdutLDITbq4Y=
 gitee.com/Sxiaobai/gs v0.0.0-20230717024641-15206dfc44a6 h1:CwUwnor+IXynCfdyXcdfRFz4F0aSmDXcUQvwwMXXkJc=
 gitee.com/Sxiaobai/gs v0.0.0-20230717024641-15206dfc44a6/go.mod h1:poauCCtsT8vZdro0hThctF840pEI68ZsdutLDITbq4Y=
+gitee.com/Sxiaobai/gs v0.0.0-20230724104456-021a5b7d60fd h1:RtFU2fP4x7uyOx9qnRop8o+J+/5+7jImhrBpxlSZ2X8=
+gitee.com/Sxiaobai/gs v0.0.0-20230724104456-021a5b7d60fd/go.mod h1:poauCCtsT8vZdro0hThctF840pEI68ZsdutLDITbq4Y=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym/WlBOVXweHU+Q+/VP0lqqI8lqeDx9IjBqo=
 github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAElWljhcU=

@@ -10,7 +10,7 @@ import (
 var RunShell3MapLock sync.RWMutex
 var RunShell3TerminalMap map[string]*gstool.GsShell
 
-//GetRunShell3CliTer 获取runShell3
+// GetRunShell3CliTer 获取runShell3
 func GetRunShell3CliTer(sshConfig *SshConfig) *gstool.GsShell {
 	RunShell3MapLock.Lock()
 	defer RunShell3MapLock.Unlock()
@@ -20,7 +20,7 @@ func GetRunShell3CliTer(sshConfig *SshConfig) *gstool.GsShell {
 
 	uniKey := GetSshUnikey(sshConfig)
 	if RunShell3TerminalMap[uniKey] == nil {
-		gsShellTerConfig := gstool.GsShellConfig{
+		gsShellTerConfig := gstool.ShellConfig{
 			Host:          sshConfig.Host,
 			Port:          cast.ToInt64(sshConfig.Port),
 			Username:      sshConfig.Username,

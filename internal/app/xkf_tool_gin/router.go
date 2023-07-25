@@ -4,6 +4,7 @@ import (
 	"gitee.com/Sxiaobai/gs/gsgin"
 	"gitee.com/Sxiaobai/gs/gstool"
 	"github.com/gin-gonic/gin"
+	"github.com/spf13/cast"
 	"xkf_tool/internal/app/xkf_tool"
 )
 
@@ -16,7 +17,7 @@ func InitRouter(host, port string) error {
 	}()
 	gsGin := gsgin.GSGin{
 		Host: host,
-		Port: port,
+		Port: cast.ToInt(port),
 	}
 	gsGin.CreateRouter()
 	gsGin.SetAllow()
@@ -56,10 +57,10 @@ func InitRouter(host, port string) error {
 	gsGin.GinH.POST(`/api/shell/exec`, ShellExec)
 
 	//前端页面
-	gsGin.GinH.Static(`/static`, `./views/dist/static`)
-	gsGin.GinH.LoadHTMLFiles(`views/dist/index.html`)
+	gsGin.GinH.Static(`/static`, xkf_tool.RootPath+`/views/dist/static`)
+	gsGin.GinH.LoadHTMLFiles(xkf_tool.RootPath + `/views/dist/index.html`)
 	gsGin.GinH.GET("/", func(context *gin.Context) {
 		context.HTML(200, "index.html", nil)
 	})
-	return gsGin.GinH.Run(gsGin.Host + `:` + gsGin.Port)
+	return gsGin.GinH.Run(gsGin.Host + `:` + cast.ToString(gsGin.Port))
 }

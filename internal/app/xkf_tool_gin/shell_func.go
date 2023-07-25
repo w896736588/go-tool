@@ -702,7 +702,7 @@ func (command *Command) SupervisorConfList(reqBody *xkf_tool.SshExec, cliConf *g
 	return retMsgList
 }
 
-//QueryWechatQrCdeList 微信客服二维码列表
+// QueryWechatQrCdeList 微信客服二维码列表
 func (command *Command) QueryWechatQrCdeList(reqBody *xkf_tool.SshExec) string {
 	appInfo := xkf_tool.QueryWechatAppid(reqBody.WechatKefuAppid)
 	channelList, err := xkf_tool.XkfDevMysql.GetAll(`select _id,channel_name from tbl_channel where wechatapp_id = ? `, appInfo.Id)

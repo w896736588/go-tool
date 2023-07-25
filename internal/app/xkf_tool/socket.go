@@ -11,7 +11,7 @@ type ServerConn struct {
 	wsConn *gsws.WsConn
 }
 
-//InitXkfSocket 初始化socket
+// InitXkfSocket 初始化socket
 func InitXkfSocket() {
 	wsConfig := gsws.Config{
 		Host:             `0.0.0.0`,
@@ -50,7 +50,7 @@ func InitXkfSocket() {
 	}
 }
 
-//InitWkSocket 初始化socket
+// InitWkSocket 初始化socket
 func InitWkSocket() {
 	wsConfig := gsws.Config{
 		Host:             `0.0.0.0`,

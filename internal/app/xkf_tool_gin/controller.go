@@ -16,7 +16,7 @@ import (
 	"xkf_tool/internal/app/xkf_tool"
 )
 
-var RedisHandleList []gsdb.GsRedisConfig
+var RedisHandleList []gsdb.RedisConfig
 
 func RedisList(c *gin.Context) {
 	reqBody := &xkf_tool.SshExec{}
@@ -25,9 +25,11 @@ func RedisList(c *gin.Context) {
 	for _, value := range reqBody.RedisConfigList {
 		if xkf_tool.RedisRunList[value.Name] == nil {
 			//初始化链接
-			gsRedisConfig := &gsdb.GsRedisConfig{
+			hostParams := strings.Split(value.Host, `:`)
+			gsRedisConfig := &gsdb.RedisConfig{
 				Name:     value.Name,
-				Host:     value.Host,
+				Host:     hostParams[0],
+				Port:     cast.ToInt64(hostParams[1]),
 				Password: value.Password,
 				PoolSize: value.PoolSize,
 				Default:  0,
@@ -42,7 +44,7 @@ func RedisList(c *gin.Context) {
 			xkf_tool.RedisRunList[value.Name] = &gsredis
 		}
 	}
-	RedisHandleList = make([]gsdb.GsRedisConfig, 0)
+	RedisHandleList = make([]gsdb.RedisConfig, 0)
 	for _, value := range reqBody.RedisConfigList {
 		if xkf_tool.RedisRunList[value.Name] != nil {
 			RedisHandleList = append(RedisHandleList, value)
