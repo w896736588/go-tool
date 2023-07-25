@@ -5,6 +5,10 @@
         <h3 style="display: inline-block;">
           Docker管理
         </h3>
+        <el-switch @change="switchCheck"
+          v-model="switchCheckCpuMemory"
+          inactive-text="开启监控CPU及内容">
+        </el-switch>
         <el-row :gutter="20">
           <el-col :span="2" v-for="(valueDocker,key) in dockerList" style="margin:5px;">
             <div>
@@ -56,6 +60,7 @@ export default {
       loadingStatus: {},
       chooseDocker: {"Name": "common3", "Id": "xkf_common3" , "SshName" : "wk"},
       chooseDocketId : 'common3',
+      switchCheckCpuMemory : false,
     }
   },
   mounted: function () {
@@ -69,13 +74,24 @@ export default {
     setInterval(function (){
       that.queryDockerPs()
     } , 60000);
-
+    this.switchCheckCpuMemory = this.$helperStore.getStore('checkCpuMemory') === '1'
   },
   methods: {
+    switchCheck : function (newValue){
+      if(newValue === true){
+        this.$helperStore.setStore('checkCpuMemory' , '1')
+        this.queryDockerPs()
+      }else{
+        this.$helperStore.setStore('checkCpuMemory' , '0')
+      }
+    },
     chooseDocketFunc : function (value){
       this.chooseDocker = value
     },
     queryDockerPs : function (){
+      if(!this.switchCheckCpuMemory){
+        return
+      }
       let currentDateTime = this.$helperCommon.getCurrentDateTime()
       let _that = this
       //根据类型判断
@@ -117,7 +133,7 @@ export default {
             notifyList.push( { name: currentDateTime + ' ' + temp[1] + ' ：cpu：' + temp[2] + '，内存：' + temp[6], type: 'warning' })
           }
         }
-        _that.$parent.showNotify(notifyList)
+        _that.$parent.$parent.showNotify(notifyList)
       });
     },
     getSshConfig: function (value) {

@@ -1,4 +1,4 @@
-package xkf_tool_gin
+package zhima
 
 import (
 	"encoding/json"
@@ -32,14 +32,14 @@ func RedisList(c *gin.Context) {
 				PoolSize: value.PoolSize,
 				Default:  0,
 			}
-			gsredis := gsdb.GsRedis{
+			gsRedis := gsdb.GsRedis{
 				RedisConfig: gsRedisConfig,
 			}
-			err := gsredis.CreateConn()
+			err := gsRedis.CreateConn()
 			if err != nil {
 				continue
 			}
-			xkf_tool.RedisRunList[value.Name] = &gsredis
+			xkf_tool.RedisRunList[value.Name] = &gsRedis
 		}
 	}
 	RedisHandleList = make([]gsdb.RedisConfig, 0)

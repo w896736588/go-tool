@@ -17,7 +17,7 @@ func GetRunShellCli4(sshConfig *SshConfig) *gstool.GsShell {
 	if GetRunShellCli4FromMap(uniKey) != nil {
 		return GetRunShellCli4FromMap(uniKey)
 	}
-	gsShellTerConfig := gstool.GsShellConfig{
+	gsShellTerConfig := gstool.ShellConfig{
 		Host:          sshConfig.Host,
 		Port:          cast.ToInt64(sshConfig.Port),
 		Username:      sshConfig.Username,

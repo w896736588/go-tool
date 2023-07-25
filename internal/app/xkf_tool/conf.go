@@ -8,9 +8,6 @@ import (
 	"gitee.com/Sxiaobai/gs/gstool"
 	"github.com/spf13/cast"
 	"github.com/spf13/viper"
-	"os"
-	"runtime"
-	"strings"
 	"sync"
 )
 
@@ -33,21 +30,10 @@ func InitConfig() {
 	}()
 	flag.StringVar(&Env, "env", "prod", "pro则为线上环境，dev则未开发环境，默认pro线上环境")
 	flag.Parse()
-	if Env == `dev` {
-		_, RootPath, _, _ = runtime.Caller(0)
-		RootPath = gstool.DirUpNum(RootPath, 4)
-	} else {
-		var err error
-		sysType := runtime.GOOS
-		RootPath, err = os.Getwd()
-		if sysType == `windows` {
-			RootPath = strings.ReplaceAll(RootPath, `\`, `/`)
-		}
-
-		gstool.FmtPrintlnLog(`当前的目录为 %s`, RootPath)
-		if err != nil {
-			gstool.FmtPrintlnLog(`getWd失败 %s`, err.Error())
-		}
+	var err error
+	RootPath, err = gstool.GetRootPath()
+	if err != nil {
+		panic(err.Error())
 	}
 	Logger = gstool.CreateLogger(RootPath+`/logs`, `xkf_tool`)
 	gstool.FmtPrintlnLog(`日志路径 %s`, RootPath+`/logs/xkf_tool`)
@@ -96,7 +82,7 @@ func GetDevMysql(reqBody *SshExec) {
 	DbInitLock.Lock()
 	defer DbInitLock.Unlock()
 	if cast.ToInt(reqBody.XkfDevDbConfig.Port) != 0 && XkfDevMysql == nil {
-		gsMysqlConfig := gsdb.MysqlConfig{
+		gsMysqlConfig := &gsdb.MysqlConfig{
 			Host:              reqBody.XkfDevDbConfig.Host,
 			Port:              reqBody.XkfDevDbConfig.Port,
 			Username:          reqBody.XkfDevDbConfig.Username,

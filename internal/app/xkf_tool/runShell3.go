@@ -20,7 +20,7 @@ func GetRunShell3CliTer(sshConfig *SshConfig) *gstool.GsShell {
 
 	uniKey := GetSshUnikey(sshConfig)
 	if RunShell3TerminalMap[uniKey] == nil {
-		gsShellTerConfig := gstool.GsShellConfig{
+		gsShellTerConfig := gstool.ShellConfig{
 			Host:          sshConfig.Host,
 			Port:          cast.ToInt64(sshConfig.Port),
 			Username:      sshConfig.Username,
