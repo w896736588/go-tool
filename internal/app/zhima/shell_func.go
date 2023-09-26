@@ -1,6 +1,7 @@
 package zhima
 
 import (
+	"context"
 	"fmt"
 	"gitee.com/Sxiaobai/gs/gsdefine"
 	"gitee.com/Sxiaobai/gs/gstool"
@@ -567,8 +568,8 @@ func (command *Command) ChangeVipType(reqBody *xkf_tool.SshExec) []string {
 	//移除缓存
 	for _, value := range reqBody.RedisConfigList {
 		if xkf_tool.RedisRunList[value.Name] != nil {
-			xkf_tool.RedisRunList[value.Name].Client.HDel(`wechatapp.vip.info.v20220308..`+cast.ToString(cast.ToInt(userInfo.Id)%10), userInfo.Id)
-			xkf_tool.RedisRunList[value.Name].Client.HDel(`wechatapp.kefu.vip.info.v20220308..`+cast.ToString(cast.ToInt(userInfo.Id)%10), userInfo.Id)
+			xkf_tool.RedisRunList[value.Name].Client.HDel(context.Background(), `wechatapp.vip.info.v20220308..`+cast.ToString(cast.ToInt(userInfo.Id)%10), userInfo.Id)
+			xkf_tool.RedisRunList[value.Name].Client.HDel(context.Background(), `wechatapp.kefu.vip.info.v20220308..`+cast.ToString(cast.ToInt(userInfo.Id)%10), userInfo.Id)
 		}
 	}
 	return command.QueryVipType(reqBody)

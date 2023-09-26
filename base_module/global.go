@@ -27,6 +27,10 @@ func GetGlobal(unikey string) *Global {
 	return cacheValue.Value().(*Global)
 }
 
+func (h *Global) GetEncrypt() *gstool.Encrypt {
+	return h.encrypt
+}
+
 type Global struct {
 	redisClientMap *gstool.GsConsMap //全局的redis客户端连接
 	redisConfigMap *gstool.GsConsMap //全局的redis配置
@@ -34,12 +38,20 @@ type Global struct {
 	mysqlClientMap *gstool.GsConsMap //全局的mysql客户端连接
 	shellClientMap *gstool.GsConsMap //全局的shell客户端连接
 	shellConfigMap *gstool.GsConsMap //全局的shell配置
+	encrypt        *gstool.Encrypt   //全局的加密配置
 	logger         *gstool.GsLogger  //如果设置了 那么将输出日志
 	gin            *gsgin.GSGin      //API接口
 }
 
 func (h *Global) SetLogger(logger *gstool.GsLogger) {
 	h.logger = logger
+}
+
+func (h *Global) SetEncrypt(encryptKey, encryptIv string) {
+	h.encrypt = &gstool.Encrypt{
+		Key: encryptKey,
+		Iv:  encryptIv,
+	}
 }
 
 func (h *Global) Init() {

@@ -10,6 +10,8 @@ type RegisterStruct struct {
 	MysqlConfigList []*gsdb.MysqlConfig   `json:"MysqlConfigList"`
 	RedisConfigList []*gsdb.RedisConfig   `json:"RedisConfigList"`
 	ShellConfigList []*gstool.ShellConfig `json:"ShellConfigList"`
+	EncryptKey      string                `json:"EncryptKey"`
+	EncryptIv       string                `json:"EncryptIv"`
 }
 
 type LoginStruct struct {

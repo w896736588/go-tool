@@ -1,6 +1,7 @@
 package xkf_tool_gin
 
 import (
+	"context"
 	"fmt"
 	"gitee.com/Sxiaobai/gs/gsdefine"
 	"gitee.com/Sxiaobai/gs/gstool"
@@ -240,7 +241,7 @@ func (command *Command) Filter() {
 	command.XkfSupervisorConfListCommand = `cd /var/www/dockerfiles/dev_test/docker_volumes/supervisor/etc/supervisor/conf.d/; ls | grep '\.conf$' | awk '{printf ""$1"---"; system("head -n 1 "$1)}'`
 	command.WkSupervisorConfListCommand = `cd /etc/supervisor/conf.d/; ls | grep '\.conf$' | awk '{printf ""$1"---"; system("head -n 1 "$1)}'`
 	command.QueryWechatKefuExistCommand = `sudo docker ps |awk '{print $NF}'|grep -v NAMES|xargs -I {} bash -c " echo {} && sudo docker exec {} ps -ef | grep -i %s "`
-	command.DockerPsCommand = `sudo docker stats --no-stream`
+	command.DockerPsCommand = `sudo docker stats --no-streamsudo docker stats --no-stream`
 }
 
 // WechatKefuChange 切换微信客服到当前环境
@@ -567,8 +568,8 @@ func (command *Command) ChangeVipType(reqBody *xkf_tool.SshExec) []string {
 	//移除缓存
 	for _, value := range reqBody.RedisConfigList {
 		if xkf_tool.RedisRunList[value.Name] != nil {
-			xkf_tool.RedisRunList[value.Name].Client.HDel(`wechatapp.vip.info.v20220308..`+cast.ToString(cast.ToInt(userInfo.Id)%10), userInfo.Id)
-			xkf_tool.RedisRunList[value.Name].Client.HDel(`wechatapp.kefu.vip.info.v20220308..`+cast.ToString(cast.ToInt(userInfo.Id)%10), userInfo.Id)
+			xkf_tool.RedisRunList[value.Name].Client.HDel(context.Background(), `wechatapp.vip.info.v20220308..`+cast.ToString(cast.ToInt(userInfo.Id)%10), userInfo.Id)
+			xkf_tool.RedisRunList[value.Name].Client.HDel(context.Background(), `wechatapp.kefu.vip.info.v20220308..`+cast.ToString(cast.ToInt(userInfo.Id)%10), userInfo.Id)
 		}
 	}
 	return command.QueryVipType(reqBody)

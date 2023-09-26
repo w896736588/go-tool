@@ -19,4 +19,7 @@ func Register(global *Global, register *RegisterStruct) {
 			global.ShellSetConfig(value)
 		}
 	}
+	if register.EncryptIv != `` && register.EncryptKey != `` {
+		global.SetEncrypt(register.EncryptKey, register.EncryptIv)
+	}
 }

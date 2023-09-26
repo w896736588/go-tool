@@ -65,7 +65,9 @@
       {{tag.name}}
     </el-tag>
     <el-main>
-      <router-view name="home"></router-view>
+      <keep-alive>
+        <router-view name="home"></router-view>
+      </keep-alive>
     </el-main>
   </div>
 
