@@ -84,8 +84,9 @@ func getGin() {
 
 //基础接口
 func baseRouter() {
-	GlobalGin.GinPost(`/api/Login`, controller.Login)                     //登录
-	GlobalGin.GinPost(`/api/RegisterService`, controller.RegisterService) //注册各类服务
+	GlobalGin.GinPost(`/api/BaseLogin`, controller.BaseLogin)                       //登录
+	GlobalGin.GinPost(`/api/BaseRegisterService`, controller.BaseRegisterService)   //注册各类服务 CheckUnikeyExist
+	GlobalGin.GinPost(`/api/BaseCheckUnikeyExist`, controller.BaseCheckUnikeyExist) //检查unikey是否已经登录注册
 }
 
 //redis相关

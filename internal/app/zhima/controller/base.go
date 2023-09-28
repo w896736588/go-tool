@@ -1,34 +1,61 @@
 package controller
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"gitee.com/Sxiaobai/gs/gsdb"
 	"gitee.com/Sxiaobai/gs/gsgin"
 	"gitee.com/Sxiaobai/gs/gstool"
 	"github.com/gin-gonic/gin"
-	"github.com/go-redis/redis"
+	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cast"
+	"time"
 	"xkf_tool/base_module"
 )
 
-//Login 登录
-func Login(c *gin.Context) {
+//BaseLogin 登录
+func BaseLogin(c *gin.Context) {
 	reqBody := &base_module.LoginStruct{}
 	err := gsgin.GinPostBody(c, reqBody)
 	if err != nil {
 		gsgin.GinResponse(c, gsgin.ResponseSuccess, err.Error(), nil)
 		return
 	}
-	unikey := gstool.Md5(reqBody.UserName + reqBody.Password)
+	unikey := gstool.Md5(reqBody.UserName + reqBody.Password + cast.ToString(time.Now().UnixMicro()))
 	base_module.CreateGlobal(unikey)
 	gsgin.GinResponse(c, gsgin.ResponseSuccess, `获取成功`, map[string]string{
 		`unikey`: unikey,
 	})
 }
 
-//RegisterService 注册各类服务
-func RegisterService(c *gin.Context) {
+//BaseCheckUnikeyExist 检查是否需要登录
+func BaseCheckUnikeyExist(c *gin.Context) {
+	reqMap := make(map[string]*gstool.GsCons)
+	err := gsgin.GinPostBody(c, &reqMap)
+	if err != nil {
+		gsgin.GinResponse(c, gsgin.ResponseSuccess, err.Error(), nil)
+		return
+	}
+	unikey := reqMap[`Unikey`]
+	if unikey.IsEmpty() {
+		gsgin.GinResponse(c, gsgin.ResponseSuccess, `Unikey不能为空`, nil)
+		return
+	}
+	global, err := GetGlobal(reqMap)
+	if global == nil {
+		gsgin.GinResponse(c, gsgin.ResponseSuccess, ``, gstool.JsonEncode(map[string]string{
+			`NeedLogin`: `1`,
+		}))
+		return
+	}
+	gsgin.GinResponse(c, gsgin.ResponseSuccess, `获取成功`, map[string]string{
+		`NeedLogin`: `0`,
+	})
+}
+
+//BaseRegisterService 注册各类服务
+func BaseRegisterService(c *gin.Context) {
 	reqBody := &base_module.RegisterStruct{}
 	err := gsgin.GinPostBody(c, reqBody)
 	if err != nil {
@@ -80,7 +107,7 @@ func BaseRedisGetReqDataRedis(c *gin.Context) (*base_module.Global, map[string]*
 //BaseRedisCheckKeyExist 基础方法
 func BaseRedisCheckKeyExist(redisCli *redis.Client, key string) error {
 	//判断是否存在
-	if existInt := redisCli.Exists(key).Val(); existInt <= 0 {
+	if existInt := redisCli.Exists(context.Background(), key).Val(); existInt <= 0 {
 		return errors.New(fmt.Sprintf(`%s 不存在`, key))
 	}
 	return nil

@@ -1,13 +1,14 @@
 package controller
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"gitee.com/Sxiaobai/gs/gsdb"
 	"gitee.com/Sxiaobai/gs/gsgin"
 	"gitee.com/Sxiaobai/gs/gstool"
 	"github.com/gin-gonic/gin"
-	"github.com/go-redis/redis"
+	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cast"
 	"time"
 	"xkf_tool/internal/app/xkf_tool"
@@ -44,7 +45,7 @@ func RedisKeys(c *gin.Context) {
 		return
 	}
 	var resultMap []string
-	resultMap, err = redisCli.Client.Keys(cast.ToString(search)).Result()
+	resultMap, err = redisCli.Client.Keys(context.Background(), cast.ToString(search)).Result()
 	if err == redis.Nil {
 		resultMap = make([]string, 0)
 	} else if err != nil {
@@ -76,7 +77,7 @@ func RedisSearch(c *gin.Context) {
 		return
 	}
 	//找到key是什么类型
-	keyType, err := redisCli.Client.Type(cacheKey.ToStr()).Result()
+	keyType, err := redisCli.Client.Type(context.Background(), cacheKey.ToStr()).Result()
 	if err != nil {
 		gsgin.GinResponse(c, gsgin.ResponseSuccess, err.Error(), ``)
 		return
@@ -89,23 +90,23 @@ func RedisSearch(c *gin.Context) {
 	var gsCons *gstool.GsCons
 	if keyType == gsdb.RedisKeyString {
 		var result string
-		result, err = redisCli.Client.Get(cacheKey.ToStr()).Result()
+		result, err = redisCli.Client.Get(context.Background(), cacheKey.ToStr()).Result()
 		gsCons = gstool.ConsNew(result)
 	} else if keyType == gsdb.RedisKeyHash {
 		var resultMap map[string]string
-		resultMap, err = redisCli.Client.HGetAll(cacheKey.ToStr()).Result()
+		resultMap, err = redisCli.Client.HGetAll(context.Background(), cacheKey.ToStr()).Result()
 		gsCons = gstool.ConsNew(resultMap)
 	} else if keyType == gsdb.RedisKeyList {
 		var resultArray []string
-		resultArray, err = redisCli.Client.LRange(cacheKey.ToStr(), 0, 100000).Result()
+		resultArray, err = redisCli.Client.LRange(context.Background(), cacheKey.ToStr(), 0, 100000).Result()
 		gsCons = gstool.ConsNew(resultArray)
 	} else if keyType == gsdb.RedisKeySet {
 		var resultArray []string
-		resultArray, err = redisCli.Client.SMembers(cacheKey.ToStr()).Result()
+		resultArray, err = redisCli.Client.SMembers(context.Background(), cacheKey.ToStr()).Result()
 		gsCons = gstool.ConsNew(resultArray)
 	} else if keyType == gsdb.RedisKeyZSet {
 		var resultArray []redis.Z
-		resultArray, err = redisCli.Client.ZRangeWithScores(cacheKey.ToStr(), 0, 100000).Result()
+		resultArray, err = redisCli.Client.ZRangeWithScores(context.Background(), cacheKey.ToStr(), 0, 100000).Result()
 		gsCons = gstool.ConsNew(resultArray)
 	} else {
 		gsgin.GinResponse(c, gsgin.ResponseError, `暂不支持的缓存类型 `+keyType, ``)
@@ -141,7 +142,7 @@ func RedisKeysType(c *gin.Context) {
 	//拿到key类型
 	returnList := make([]map[string]interface{}, 0)
 	for _, cacheKey := range *keyList {
-		keyType, err := redisCli.Client.Type(cacheKey.ToStr()).Result()
+		keyType, err := redisCli.Client.Type(context.Background(), cacheKey.ToStr()).Result()
 		if err == nil && keyType != `` {
 			returnList = append(returnList, map[string]interface{}{
 				`CacheKey`: cacheKey.ToStr(),
@@ -167,7 +168,7 @@ func RedisKeyType(c *gin.Context) {
 	}
 	cacheKey := cast.ToString(reqMap[`CacheKey`])
 	//找到key是什么类型
-	keyType, err := redisCli.Client.Type(cacheKey).Result()
+	keyType, err := redisCli.Client.Type(context.Background(), cacheKey).Result()
 	if err != nil {
 		gsgin.GinResponse(c, gsgin.ResponseError, err.Error(), nil)
 		return
@@ -177,7 +178,7 @@ func RedisKeyType(c *gin.Context) {
 	}
 	//找到过期时间
 	var ttl time.Duration
-	ttl, err = redisCli.Client.TTL(cacheKey).Result()
+	ttl, err = redisCli.Client.TTL(context.Background(), cacheKey).Result()
 	if err != nil {
 		gsgin.GinResponse(c, gsgin.ResponseError, err.Error(), ``)
 		return
@@ -203,9 +204,9 @@ func RedisSaveString(c *gin.Context) {
 		return
 	}
 
-	ttlTime, err := redisCli.Client.TTL(cacheKey).Result()
+	ttlTime, err := redisCli.Client.TTL(context.Background(), cacheKey).Result()
 	//永久
-	err = redisCli.Client.Set(cacheKey, reqMap[`Value`], ttlTime).Err()
+	err = redisCli.Client.Set(context.Background(), cacheKey, reqMap[`Value`], ttlTime).Err()
 	BaseResponseByError(c, err)
 }
 
@@ -225,7 +226,7 @@ func RedisDelKey(c *gin.Context) {
 	}
 
 	//永久
-	err = redisCli.Client.Del(cacheKey).Err()
+	err = redisCli.Client.Del(context.Background(), cacheKey).Err()
 	BaseResponseByError(c, err)
 }
 
@@ -258,13 +259,13 @@ func RedisDelSub(c *gin.Context) {
 		gsgin.GinResponse(c, gsgin.ResponseError, `不支持字符串`, ``)
 		return
 	} else if cacheType == xkf_tool.CacheHash {
-		err = redisCli.Client.HDel(cacheKey, subKey).Err()
+		err = redisCli.Client.HDel(context.Background(), cacheKey, subKey).Err()
 	} else if cacheType == xkf_tool.CacheList {
-		err = redisCli.Client.LRem(cacheKey, 0, subKey).Err()
+		err = redisCli.Client.LRem(context.Background(), cacheKey, 0, subKey).Err()
 	} else if cacheType == xkf_tool.CacheSet {
-		err = redisCli.Client.SRem(cacheKey, subKey).Err()
+		err = redisCli.Client.SRem(context.Background(), cacheKey, subKey).Err()
 	} else if cacheType == xkf_tool.CacheZSet {
-		err = redisCli.Client.ZRem(cacheKey, subKey).Err()
+		err = redisCli.Client.ZRem(context.Background(), cacheKey, subKey).Err()
 	}
 	BaseResponseByError(c, err)
 }
@@ -286,7 +287,7 @@ func RedisEditTtl(c *gin.Context) {
 
 	ttl := cast.ToInt(reqMap[`TTL`])
 	dru := time.Duration(ttl) * time.Second
-	err = redisCli.Client.Expire(cacheKey, dru).Err()
+	err = redisCli.Client.Expire(context.Background(), cacheKey, dru).Err()
 	BaseResponseByError(c, err)
 }
 
@@ -298,7 +299,7 @@ func RedisDelAllKey(c *gin.Context) {
 		return
 	}
 	cacheKeyList := reqMap[`CacheKeys`].Value().([]string)
-	err = redisCli.Client.Del(cacheKeyList...).Err()
+	err = redisCli.Client.Del(context.Background(), cacheKeyList...).Err()
 	BaseResponseByError(c, err)
 }
 
@@ -313,7 +314,7 @@ func RedisCreateCache(c *gin.Context) {
 	cacheKey := cast.ToString(reqMap[`CacheKey`])
 	//判断是否存在
 	if reqMap[`BoolCreate`].ToInt() == 1 {
-		if existInt := redisCli.Client.Exists(cacheKey).Val(); existInt > 0 {
+		if existInt := redisCli.Client.Exists(context.Background(), cacheKey).Val(); existInt > 0 {
 			gsgin.GinResponse(c, gsgin.ResponseError, fmt.Sprintf(`%s 已经存在`, cacheKey), ``)
 			return
 		}
@@ -327,21 +328,21 @@ func RedisCreateCache(c *gin.Context) {
 
 	cacheType := cast.ToString(reqMap[`CacheType`])
 	if cacheType == gsdb.RedisKeyString {
-		err = redisCli.Client.Set(cacheKey, reqMap[`CacheValue`], time.Duration(cast.ToInt64(reqMap[`TTL`]))*time.Second).Err()
+		err = redisCli.Client.Set(context.Background(), cacheKey, reqMap[`CacheValue`], time.Duration(cast.ToInt64(reqMap[`TTL`]))*time.Second).Err()
 	} else if cacheType == gsdb.RedisKeyHash {
-		err = redisCli.Client.HSet(cacheKey, reqMap[`CacheField`].ToStr(), reqMap[`CacheValue`].ToStr()).Err()
+		err = redisCli.Client.HSet(context.Background(), cacheKey, reqMap[`CacheField`].ToStr(), reqMap[`CacheValue`].ToStr()).Err()
 	} else if cacheType == gsdb.RedisKeyList {
 		if reqMap[`LPushValue`].ToStr() != `` {
-			err = redisCli.Client.LPush(cacheKey, reqMap[`LPushValue`].ToStr()).Err()
+			err = redisCli.Client.LPush(context.Background(), cacheKey, reqMap[`LPushValue`].ToStr()).Err()
 		} else if reqMap[`RPushValue`].ToStr() != `` {
-			err = redisCli.Client.RPush(cacheKey, reqMap[`RPushValue`].ToStr()).Err()
+			err = redisCli.Client.RPush(context.Background(), cacheKey, reqMap[`RPushValue`].ToStr()).Err()
 		} else {
-			err = redisCli.Client.RPush(cacheKey, reqMap[`CacheValue`].ToStr()).Err()
+			err = redisCli.Client.RPush(context.Background(), cacheKey, reqMap[`CacheValue`].ToStr()).Err()
 		}
 	} else if cacheType == gsdb.RedisKeySet {
-		err = redisCli.Client.SAdd(cacheKey, reqMap[`CacheMember`].ToStr()).Err()
+		err = redisCli.Client.SAdd(context.Background(), cacheKey, reqMap[`CacheMember`].ToStr()).Err()
 	} else if cacheType == gsdb.RedisKeyZSet {
-		err = redisCli.Client.ZAdd(cacheKey, redis.Z{
+		err = redisCli.Client.ZAdd(context.Background(), cacheKey, redis.Z{
 			Score:  reqMap[`CacheScore`].ToFloat64(),
 			Member: reqMap[`CacheMember`].ToStr(),
 		}).Err()
@@ -352,7 +353,7 @@ func RedisCreateCache(c *gin.Context) {
 	}
 	//处理过期时间
 	if reqMap[`BoolCreate`].ToInt() == 1 && reqMap[`TTL`].ToInt() != 0 {
-		err = redisCli.Client.Expire(cacheKey, time.Duration(reqMap[`TTL`].ToInt())*time.Second).Err()
+		err = redisCli.Client.Expire(context.Background(), cacheKey, time.Duration(reqMap[`TTL`].ToInt())*time.Second).Err()
 	}
 	BaseResponseByError(c, err)
 }
@@ -376,11 +377,11 @@ func RedisEditSub(c *gin.Context) {
 	cacheValue := reqMap[`CacheValue`].ToStr()
 	cacheIndex := reqMap[`CacheIndex`].ToInt64()
 	if cacheType == gsdb.RedisKeyHash {
-		err = redisCli.Client.HSet(cacheKey, cacheField, cacheValue).Err()
+		err = redisCli.Client.HSet(context.Background(), cacheKey, cacheField, cacheValue).Err()
 	} else if cacheType == gsdb.RedisKeyList {
-		err = redisCli.Client.LSet(cacheKey, cacheIndex, cacheValue).Err()
+		err = redisCli.Client.LSet(context.Background(), cacheKey, cacheIndex, cacheValue).Err()
 	} else if cacheType == gsdb.RedisKeyZSet {
-		err = redisCli.Client.ZAdd(cacheKey, redis.Z{
+		err = redisCli.Client.ZAdd(context.Background(), cacheKey, redis.Z{
 			Score:  reqMap[`CacheScore`].ToFloat64(),
 			Member: reqMap[`CacheMember`].ToStr(),
 		}).Err()
