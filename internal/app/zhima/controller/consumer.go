@@ -1,13 +1,13 @@
 package controller
 
 import (
+	"dev_tool/base_module"
 	"errors"
 	"gitee.com/Sxiaobai/gs/gsdefine"
 	"gitee.com/Sxiaobai/gs/gsgin"
 	"gitee.com/Sxiaobai/gs/gstool"
 	"github.com/gin-gonic/gin"
 	"strings"
-	"xkf_tool/base_module"
 )
 
 //ConsumerRestartAll 重启所有

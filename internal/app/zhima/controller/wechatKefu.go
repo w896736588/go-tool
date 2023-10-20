@@ -1,6 +1,9 @@
 package controller
 
 import (
+	"dev_tool/base_module"
+	"dev_tool/internal/app/xkf_tool"
+	"dev_tool/internal/app/zhima/service"
 	"errors"
 	"fmt"
 	"gitee.com/Sxiaobai/gs/gsdb"
@@ -10,9 +13,6 @@ import (
 	"github.com/spf13/cast"
 	"strings"
 	"time"
-	"xkf_tool/base_module"
-	"xkf_tool/internal/app/xkf_tool"
-	"xkf_tool/internal/app/zhima/service"
 )
 
 // WechatKefuStatus 查询微信客服应用的状态

@@ -2,6 +2,7 @@ package xkf_tool_gin
 
 import (
 	"context"
+	"dev_tool/internal/app/xkf_tool"
 	"encoding/json"
 	"fmt"
 	"gitee.com/Sxiaobai/gs/gsdb"
@@ -14,7 +15,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-	"xkf_tool/internal/app/xkf_tool"
 )
 
 var RedisHandleList []gsdb.RedisConfig

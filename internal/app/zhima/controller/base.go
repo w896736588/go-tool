@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"dev_tool/base_module"
 	"errors"
 	"fmt"
 	"gitee.com/Sxiaobai/gs/gsdb"
@@ -11,7 +12,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cast"
 	"time"
-	"xkf_tool/base_module"
 )
 
 //BaseLogin 登录
@@ -31,22 +31,24 @@ func BaseLogin(c *gin.Context) {
 
 //BaseCheckUnikeyExist 检查是否需要登录
 func BaseCheckUnikeyExist(c *gin.Context) {
-	reqMap := make(map[string]*gstool.GsCons)
+	reqMap := make(map[string]interface{})
 	err := gsgin.GinPostBody(c, &reqMap)
 	if err != nil {
 		gsgin.GinResponse(c, gsgin.ResponseSuccess, err.Error(), nil)
 		return
 	}
-	unikey := reqMap[`Unikey`]
+	reqConsMap := gstool.ConsNewMap(reqMap)
+	unikey := reqConsMap[`Unikey`]
 	if unikey.IsEmpty() {
 		gsgin.GinResponse(c, gsgin.ResponseSuccess, `Unikey不能为空`, nil)
 		return
 	}
-	global, err := GetGlobal(reqMap)
+
+	global, err := GetGlobal(reqConsMap)
 	if global == nil {
-		gsgin.GinResponse(c, gsgin.ResponseSuccess, ``, gstool.JsonEncode(map[string]string{
+		gsgin.GinResponse(c, gsgin.ResponseSuccess, ``, map[string]string{
 			`NeedLogin`: `1`,
-		}))
+		})
 		return
 	}
 	gsgin.GinResponse(c, gsgin.ResponseSuccess, `获取成功`, map[string]string{

@@ -74,6 +74,8 @@
 </template>
 
 <script>
+import base from "../utils/api/base";
+
 export default {
   data () {
     return {
@@ -82,6 +84,9 @@ export default {
     }
   },
   mounted : function (){
+    //先注册服务
+    base.BaseCheckService()
+    //处理默认打开的页卡
     this.menuName = this.$helperStore.getStore('lastMenuName')
     if(!this.$helperConfig.getXkfDevSshConfig() || !this.$helperConfig.getWkDevSshConfig() || !this.$helperConfig.getXkfDevDbConfig()){
       this.menuName = '/Ssh';

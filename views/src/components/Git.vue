@@ -38,9 +38,9 @@
 import Vue from "vue";
 import {Message} from "element-ui";
 
-let codeList = require("../config/codeList.json")
-let dockerList = require("../config/dockerList.json")
-let businessTypeList = require("../config/businessTypeList.json")
+let codeList = require("../config/zhima/codeList.json")
+let dockerList = require("../config/zhima/dockerList.json")
+let businessTypeList = require("../config/zhima/businessTypeList.json")
 export default {
   data() {
     return {

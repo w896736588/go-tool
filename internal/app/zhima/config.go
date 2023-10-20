@@ -1,11 +1,11 @@
 package zhima
 
 import (
+	"dev_tool/base_module"
+	"dev_tool/internal/app/zhima/controller"
 	"gitee.com/Sxiaobai/gs/gstool"
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
-	"xkf_tool/base_module"
-	"xkf_tool/internal/app/zhima/controller"
 )
 
 var AppName = `zhima`
@@ -60,7 +60,7 @@ func getEncrypt() {
 func getGin() {
 	host := ConfigViper.GetString(`run.host`)
 	port := ConfigViper.GetString(`run.port`)
-	GlobalGin := &base_module.Global{}
+	GlobalGin = &base_module.Global{}
 	GlobalGin.SetLogger(Logger)
 	GlobalGin.GinInit(host, port)
 	GlobalGin.GinSetAllowCrossDomain()
@@ -78,7 +78,6 @@ func getGin() {
 	vipRouter()
 	dockerRouter()
 	loginRouter()
-	GlobalGin.GinPost(`/api/shell/exec`, ShellExec)
 	GlobalGin.GinRun()
 }
 
@@ -95,7 +94,7 @@ func redisRouter() {
 	GlobalGin.GinPost(`/api/RedisSearch`, controller.RedisSearch)               //查询某个key
 	GlobalGin.GinPost(`/api/RedisKeys`, controller.RedisKeys)                   //模糊搜索key
 	GlobalGin.GinPost(`/api/RedisKeysType`, controller.RedisKeysType)           //批量获取key缓存类型
-	GlobalGin.GinPost(`/api/RedisKeysType`, controller.RedisKeyType)            //获取key类型
+	GlobalGin.GinPost(`/api/RedisKeyType`, controller.RedisKeyType)             //获取key类型
 	GlobalGin.GinPost(`/api/RedisSaveString`, controller.RedisSaveString)       //保存string
 	GlobalGin.GinPost(`/api/RedisDelKey`, controller.RedisDelKey)               //删除key
 	GlobalGin.GinPost(`/api/RedisDelSub`, controller.RedisDelSub)               //删除sub key

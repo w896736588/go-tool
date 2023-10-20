@@ -64,7 +64,6 @@
 <script>
 import Vue from "vue";
 import {Message} from "element-ui";
-import redisList from "../config/redisList.json";
 
 export default {
   data() {

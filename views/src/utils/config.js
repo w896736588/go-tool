@@ -1,8 +1,5 @@
 import store from "./store";
 import notify from "./notify";
-import wechatKefuList from "../config/wechatKefuList.json";
-import supervisorConfigList from "../config/supervisorConfig.json";
-import redisList from "../config/redisList.json";
 import {getDayCountOfMonth} from "element-ui";
 
 //拿到xkf dev ssh config
@@ -40,14 +37,14 @@ function getApiHost(){
   if (process.env.NODE_ENV === 'production') {
     return '';
   }
-  return 'http://localhost:7070';
+  return 'http://localhost:7073';
 }
 //拿到socket地址
 function getWsHost(){
   if (process.env.NODE_ENV === 'production') {
-    return 'wss://localhost:7071/conn';
+    return 'wss://localhost:7073/conn';
   }
-  return 'wss://localhost:7071/conn';
+  return 'wss://localhost:7073/conn';
 }
 
 /**
@@ -64,7 +61,7 @@ function getReduceMemoryConsumerName(){
 
 //拿到代码环境
 function getCodeEnvList(){
-  let codeList = require("../config/codeList.json")
+  let codeList = require("../config/zhima/codeList.json")
   for(let i in codeList){
     if(codeList[i].NameTitle){
       continue;
@@ -77,22 +74,22 @@ function getCodeEnvList(){
 
 //docker list
 function getDockerList(){
-  return require("../config/dockerList.json")
+  return require("../config/zhima/dockerList.json")
 }
 
 //拿到微信客服列表
 function getWechatKefuList(){
-  return require("../config/wechatKefuList.json")
+  return require("../config/zhima/wechatKefuList.json")
 }
 
 //拿到账号列表
 function getUsernameList(){
-  return require("../config/userName.json")
+  return require("../config/zhima/userName.json")
 }
 
 //链接地址
 function getLinkList(){
-  return require("../config/urlList.json")
+  return require("../config/zhima/urlList.json")
 }
 
 //消费者列表
@@ -143,7 +140,7 @@ function getUserNameByEnvCode(userNameList , envName){
 
 //拿到缓存列表
 function getRedisList(){
-  let redisList = require("../config/redisList.json")
+  let redisList = require("../config/zhima/redisList.json")
   for (let i in redisList) {
     redisList[i].UniKey = redisList[i].Name
   }

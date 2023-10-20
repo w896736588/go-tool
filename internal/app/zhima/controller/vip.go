@@ -2,14 +2,14 @@ package controller
 
 import (
 	"context"
+	"dev_tool/base_module"
+	"dev_tool/internal/app/zhima/service"
 	"errors"
 	"gitee.com/Sxiaobai/gs/gsdb"
 	"gitee.com/Sxiaobai/gs/gsgin"
 	"gitee.com/Sxiaobai/gs/gstool"
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/cast"
-	"xkf_tool/base_module"
-	"xkf_tool/internal/app/zhima/service"
 )
 
 var VipMap = map[string]string{

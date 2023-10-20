@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"dev_tool/internal/app/xkf_tool"
 	"errors"
 	"fmt"
 	"gitee.com/Sxiaobai/gs/gsdb"
@@ -11,7 +12,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cast"
 	"time"
-	"xkf_tool/internal/app/xkf_tool"
 )
 
 //RedisAvailableList 拿到注册的可用的redis列表

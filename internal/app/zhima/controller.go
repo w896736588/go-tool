@@ -1,19 +1,20 @@
 package zhima
 
 import (
+	"context"
+	"dev_tool/internal/app/xkf_tool"
 	"encoding/json"
 	"fmt"
 	"gitee.com/Sxiaobai/gs/gsdb"
 	"gitee.com/Sxiaobai/gs/gstool"
 	"github.com/gin-gonic/gin"
-	"github.com/go-redis/redis"
+	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cast"
 	"io/ioutil"
 	"net/http"
 	"strings"
 	"time"
-	"xkf_tool/internal/app/xkf_tool"
 )
 
 var RedisHandleList []gsdb.RedisConfig
@@ -63,7 +64,7 @@ func Keys(c *gin.Context) {
 	}
 
 	var resultMap []string
-	resultMap, err = redisCli.Keys(reqBody.Search).Result()
+	resultMap, err = redisCli.Keys(context.Background(), reqBody.Search).Result()
 	if err == redis.Nil {
 		resultMap = make([]string, 0)
 	}
@@ -91,7 +92,7 @@ func KeysType(c *gin.Context) {
 	//拿到key类型
 	returnList := make([]xkf_tool.KeysList, 0)
 	for _, cacheKey := range reqBody.KeysList {
-		keyType, err := redisCli.Type(cacheKey).Result()
+		keyType, err := redisCli.Type(context.Background(), cacheKey).Result()
 		if err == nil && keyType != `` {
 			returnList = append(returnList, xkf_tool.KeysList{
 				CacheKey: cacheKey,
@@ -117,14 +118,14 @@ func Search(c *gin.Context) {
 	}
 
 	//找到key是什么类型
-	keyType, err := redisCli.Type(reqBody.CacheKey).Result()
+	keyType, err := redisCli.Type(context.Background(), reqBody.CacheKey).Result()
 	if err != nil || keyType == `` {
 		response(c, xkf_tool.ErrorCodeRunError, `获取元素类型失败`, ``)
 		return
 	}
 	if keyType == xkf_tool.CacheString {
 		var result string
-		result, err = redisCli.Get(reqBody.CacheKey).Result()
+		result, err = redisCli.Get(context.Background(), reqBody.CacheKey).Result()
 		if err == redis.Nil {
 			response(c, xkf_tool.ErrorKeyNotExist, fmt.Sprintf(`%s 已经不存在`, reqBody.CacheKey), ``)
 			return
@@ -135,7 +136,7 @@ func Search(c *gin.Context) {
 		response(c, xkf_tool.ErrorCodeSuccess, `获取成功`, result)
 	} else if keyType == xkf_tool.CacheHash {
 		var resultMap map[string]string
-		resultMap, err = redisCli.HGetAll(reqBody.CacheKey).Result()
+		resultMap, err = redisCli.HGetAll(context.Background(), reqBody.CacheKey).Result()
 		if err == redis.Nil {
 			response(c, xkf_tool.ErrorKeyNotExist, fmt.Sprintf(`%s 已经不存在`, reqBody.CacheKey), ``)
 			return
@@ -146,7 +147,7 @@ func Search(c *gin.Context) {
 		response(c, xkf_tool.ErrorCodeSuccess, `获取成功`, resultMap)
 	} else if keyType == xkf_tool.CacheList {
 		var resultArray []string
-		resultArray, err = redisCli.LRange(reqBody.CacheKey, 0, 100000).Result()
+		resultArray, err = redisCli.LRange(context.Background(), reqBody.CacheKey, 0, 100000).Result()
 		if err == redis.Nil {
 			response(c, xkf_tool.ErrorKeyNotExist, fmt.Sprintf(`%s 已经不存在`, reqBody.CacheKey), ``)
 			return
@@ -157,7 +158,7 @@ func Search(c *gin.Context) {
 		response(c, xkf_tool.ErrorCodeSuccess, `获取成功`, resultArray)
 	} else if keyType == xkf_tool.CacheSet {
 		var resultArray []string
-		resultArray, err = redisCli.SMembers(reqBody.CacheKey).Result()
+		resultArray, err = redisCli.SMembers(context.Background(), reqBody.CacheKey).Result()
 		if err == redis.Nil {
 			response(c, xkf_tool.ErrorKeyNotExist, fmt.Sprintf(`%s 已经不存在`, reqBody.CacheKey), ``)
 			return
@@ -168,7 +169,7 @@ func Search(c *gin.Context) {
 		response(c, xkf_tool.ErrorCodeSuccess, `获取成功`, resultArray)
 	} else if keyType == xkf_tool.CacheZSet {
 		var resultArray []redis.Z
-		resultArray, err = redisCli.ZRangeWithScores(reqBody.CacheKey, 0, 100000).Result()
+		resultArray, err = redisCli.ZRangeWithScores(context.Background(), reqBody.CacheKey, 0, 100000).Result()
 		if err == redis.Nil {
 			response(c, xkf_tool.ErrorKeyNotExist, fmt.Sprintf(`%s 已经不存在`, reqBody.CacheKey), ``)
 			return
@@ -195,7 +196,7 @@ func GetKeyType(c *gin.Context) {
 	}
 
 	//找到key是什么类型
-	keyType, err := redisCli.Type(reqBody.CacheKey).Result()
+	keyType, err := redisCli.Type(context.Background(), reqBody.CacheKey).Result()
 	if err != nil {
 		response(c, xkf_tool.ErrorCodeRunError, err.Error(), ``)
 		return
@@ -205,7 +206,7 @@ func GetKeyType(c *gin.Context) {
 	}
 	//找到过期时间
 	var ttl time.Duration
-	ttl, err = redisCli.TTL(reqBody.CacheKey).Result()
+	ttl, err = redisCli.TTL(context.Background(), reqBody.CacheKey).Result()
 	if err != nil {
 		response(c, xkf_tool.ErrorCodeRunError, err.Error(), ``)
 		return
@@ -234,9 +235,9 @@ func SaveString(c *gin.Context) {
 		return
 	}
 
-	ttlTime, err := redisCli.TTL(reqBody.CacheKey).Result()
+	ttlTime, err := redisCli.TTL(context.Background(), reqBody.CacheKey).Result()
 	//永久
-	err = redisCli.Set(reqBody.CacheKey, reqBody.Value, ttlTime).Err()
+	err = redisCli.Set(context.Background(), reqBody.CacheKey, reqBody.Value, ttlTime).Err()
 	if err != nil {
 		response(c, xkf_tool.ErrorCodeRunError, err.Error(), ``)
 	} else {
@@ -272,7 +273,7 @@ func DelKey(c *gin.Context) {
 	}
 
 	//永久
-	err = redisCli.Del(reqBody.CacheKey).Err()
+	err = redisCli.Del(context.Background(), reqBody.CacheKey).Err()
 	if err != nil {
 		response(c, xkf_tool.ErrorCodeRunError, err.Error(), ``)
 	} else {
@@ -297,13 +298,13 @@ func DelSub(c *gin.Context) {
 	if reqBody.CacheType == xkf_tool.CacheString {
 		response(c, xkf_tool.ErrorCodeRunError, `不支持字符串`, ``)
 	} else if reqBody.CacheType == xkf_tool.CacheHash {
-		err = redisCli.HDel(reqBody.CacheKey, reqBody.Sub).Err()
+		err = redisCli.HDel(context.Background(), reqBody.CacheKey, reqBody.Sub).Err()
 	} else if reqBody.CacheType == xkf_tool.CacheList {
-		err = redisCli.LRem(reqBody.CacheKey, 0, reqBody.Sub).Err()
+		err = redisCli.LRem(context.Background(), reqBody.CacheKey, 0, reqBody.Sub).Err()
 	} else if reqBody.CacheType == xkf_tool.CacheSet {
-		err = redisCli.SRem(reqBody.CacheKey, reqBody.Sub).Err()
+		err = redisCli.SRem(context.Background(), reqBody.CacheKey, reqBody.Sub).Err()
 	} else if reqBody.CacheType == xkf_tool.CacheZSet {
-		err = redisCli.ZRem(reqBody.CacheKey, reqBody.Sub).Err()
+		err = redisCli.ZRem(context.Background(), reqBody.CacheKey, reqBody.Sub).Err()
 	}
 	if err != nil {
 		response(c, xkf_tool.ErrorCodeRunError, err.Error(), ``)
@@ -327,7 +328,7 @@ func EditTtl(c *gin.Context) {
 	}
 
 	dru := time.Duration(reqBody.TTL) * time.Second
-	err = redisCli.Expire(reqBody.CacheKey, dru).Err()
+	err = redisCli.Expire(context.Background(), reqBody.CacheKey, dru).Err()
 	if err != nil {
 		response(c, xkf_tool.ErrorCodeRunError, err.Error(), ``)
 	} else {
@@ -345,7 +346,7 @@ func DelAllKey(c *gin.Context) {
 		return
 	}
 
-	err = redisCli.Del(reqBody.CacheKeys...).Err()
+	err = redisCli.Del(context.Background(), reqBody.CacheKeys...).Err()
 	if err != nil {
 		response(c, xkf_tool.ErrorCodeRunError, err.Error(), ``)
 	} else {
@@ -365,7 +366,7 @@ func CreateCache(c *gin.Context) {
 
 	//判断是否存在
 	if reqBody.BoolCreate == 1 {
-		if existInt := redisCli.Exists(reqBody.CacheKey).Val(); existInt > 0 {
+		if existInt := redisCli.Exists(context.Background(), reqBody.CacheKey).Val(); existInt > 0 {
 			response(c, xkf_tool.ErrorKeyNotExist, fmt.Sprintf(`%s 已经存在`, reqBody.CacheKey), ``)
 			return
 		}
@@ -376,21 +377,21 @@ func CreateCache(c *gin.Context) {
 	}
 
 	if reqBody.CacheType == xkf_tool.CacheString {
-		err = redisCli.Set(reqBody.CacheKey, reqBody.CacheValue, time.Duration(reqBody.TTL)*time.Second).Err()
+		err = redisCli.Set(context.Background(), reqBody.CacheKey, reqBody.CacheValue, time.Duration(reqBody.TTL)*time.Second).Err()
 	} else if reqBody.CacheType == xkf_tool.CacheHash {
-		err = redisCli.HSet(reqBody.CacheKey, reqBody.CacheField, reqBody.CacheValue).Err()
+		err = redisCli.HSet(context.Background(), reqBody.CacheKey, reqBody.CacheField, reqBody.CacheValue).Err()
 	} else if reqBody.CacheType == xkf_tool.CacheList {
 		if reqBody.LPushValue != `` {
-			err = redisCli.LPush(reqBody.CacheKey, reqBody.LPushValue).Err()
+			err = redisCli.LPush(context.Background(), reqBody.CacheKey, reqBody.LPushValue).Err()
 		} else if reqBody.RPushValue != `` {
-			err = redisCli.RPush(reqBody.CacheKey, reqBody.RPushValue).Err()
+			err = redisCli.RPush(context.Background(), reqBody.CacheKey, reqBody.RPushValue).Err()
 		} else {
-			err = redisCli.RPush(reqBody.CacheKey, reqBody.CacheValue).Err()
+			err = redisCli.RPush(context.Background(), reqBody.CacheKey, reqBody.CacheValue).Err()
 		}
 	} else if reqBody.CacheType == xkf_tool.CacheSet {
-		err = redisCli.SAdd(reqBody.CacheKey, reqBody.CacheMember).Err()
+		err = redisCli.SAdd(context.Background(), reqBody.CacheKey, reqBody.CacheMember).Err()
 	} else if reqBody.CacheType == xkf_tool.CacheZSet {
-		err = redisCli.ZAdd(reqBody.CacheKey, redis.Z{
+		err = redisCli.ZAdd(context.Background(), reqBody.CacheKey, redis.Z{
 			Score:  reqBody.CacheScore,
 			Member: reqBody.CacheMember,
 		}).Err()
@@ -400,7 +401,7 @@ func CreateCache(c *gin.Context) {
 	}
 	//处理过期时间
 	if reqBody.BoolCreate == 1 && reqBody.TTL != 0 {
-		err = redisCli.Expire(reqBody.CacheKey, time.Duration(reqBody.TTL)*time.Second).Err()
+		err = redisCli.Expire(context.Background(), reqBody.CacheKey, time.Duration(reqBody.TTL)*time.Second).Err()
 	}
 
 	if err != nil {
@@ -426,11 +427,11 @@ func EditSub(c *gin.Context) {
 		return
 	}
 	if reqBody.CacheType == xkf_tool.CacheHash {
-		err = redisCli.HSet(reqBody.CacheKey, reqBody.CacheField, reqBody.CacheValue).Err()
+		err = redisCli.HSet(context.Background(), reqBody.CacheKey, reqBody.CacheField, reqBody.CacheValue).Err()
 	} else if reqBody.CacheType == xkf_tool.CacheList {
-		err = redisCli.LSet(reqBody.CacheKey, reqBody.CacheIndex, reqBody.CacheValue).Err()
+		err = redisCli.LSet(context.Background(), reqBody.CacheKey, reqBody.CacheIndex, reqBody.CacheValue).Err()
 	} else if reqBody.CacheType == xkf_tool.CacheZSet {
-		err = redisCli.ZAdd(reqBody.CacheKey, redis.Z{
+		err = redisCli.ZAdd(context.Background(), reqBody.CacheKey, redis.Z{
 			Score:  reqBody.CacheScore,
 			Member: reqBody.CacheMember,
 		}).Err()
@@ -586,7 +587,7 @@ func getRedisClient(c *gin.Context, UniKey string) *gsdb.GsRedis {
 
 func checkKeyExist(c *gin.Context, redisCli *redis.Client, key string) bool {
 	//判断是否存在
-	if existInt := redisCli.Exists(key).Val(); existInt <= 0 {
+	if existInt := redisCli.Exists(context.Background(), key).Val(); existInt <= 0 {
 		response(c, xkf_tool.ErrorKeyNotExist, fmt.Sprintf(`%s 不存在`, key), ``)
 		return false
 	}

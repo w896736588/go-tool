@@ -108,6 +108,7 @@ import Model from "./Model"
 import Link from "./Link"
 import Docker from "./Docker"
 import Tools from "./Tools"
+import base from "../utils/api/base.js"
 export default {
   data () {
     return {
@@ -118,6 +119,7 @@ export default {
     }
   },
   mounted : function (){
+    //处理默认选中的页卡
     this.menuName = this.$helperStore.getStore('lastMenuName')
     if(!this.$helperConfig.getXkfDevSshConfig() || !this.$helperConfig.getWkDevSshConfig() || !this.$helperConfig.getXkfDevDbConfig()){
       this.menuName = 'Ssh';

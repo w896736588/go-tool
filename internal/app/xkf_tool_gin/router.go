@@ -1,11 +1,11 @@
 package xkf_tool_gin
 
 import (
+	"dev_tool/internal/app/xkf_tool"
 	"gitee.com/Sxiaobai/gs/gsgin"
 	"gitee.com/Sxiaobai/gs/gstool"
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/cast"
-	"xkf_tool/internal/app/xkf_tool"
 )
 
 func InitRouter(host, port string) error {

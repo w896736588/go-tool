@@ -1,12 +1,12 @@
 package main
 
 import (
+	"dev_tool/internal/app/xkf_tool"
+	"dev_tool/internal/app/xkf_tool_gin"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
-	"xkf_tool/internal/app/xkf_tool"
-	"xkf_tool/internal/app/xkf_tool_gin"
 )
 
 var sw sync.RWMutex

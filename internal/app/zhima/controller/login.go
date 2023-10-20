@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"dev_tool/base_module"
+	"dev_tool/internal/app/zhima/service"
 	"gitee.com/Sxiaobai/gs/gsdb"
 	"gitee.com/Sxiaobai/gs/gsgin"
 	"gitee.com/Sxiaobai/gs/gstool"
@@ -9,8 +11,6 @@ import (
 	"net/url"
 	"strings"
 	"time"
-	"xkf_tool/base_module"
-	"xkf_tool/internal/app/zhima/service"
 )
 
 //LoginLink 登录地址

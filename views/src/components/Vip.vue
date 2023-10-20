@@ -62,11 +62,10 @@
 <script>
 import Vue from "vue";
 import {Message} from "element-ui";
-import redisList from "../config/redisList.json";
 
-let vipList = require("../config/vipList.json")
-let systemTypeList = require("../config/systemTypeList.json")
-let userNameList = require("../config/userName.json")
+let vipList = require("../config/zhima/vipList.json")
+let systemTypeList = require("../config/zhima/systemTypeList.json")
+let userNameList = require("../config/zhima/userName.json")
 export default {
   data() {
     return {

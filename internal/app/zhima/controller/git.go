@@ -1,12 +1,12 @@
 package controller
 
 import (
+	"dev_tool/base_module"
 	"errors"
 	"gitee.com/Sxiaobai/gs/gsgin"
 	"gitee.com/Sxiaobai/gs/gstool"
 	"github.com/gin-gonic/gin"
 	"strings"
-	"xkf_tool/base_module"
 )
 
 var (

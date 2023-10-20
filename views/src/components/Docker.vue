@@ -35,7 +35,7 @@
 import Vue from "vue";
 import {Message} from "element-ui";
 
-let dockerList = require("../config/dockerList.json")
+let dockerList = require("../config/zhima/dockerList.json")
 export default {
   data() {
     return {
