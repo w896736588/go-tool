@@ -95,6 +95,16 @@ func (h *Command) WechatKefuProcess(dockerName, appid string) *Command {
 	return h
 }
 
+func (h *Command) Kill9(processName string) *Command {
+	h.SetCommand(fmt.Sprintf(`%s kill -9 $(ps aux | grep "%s" | grep -v grep | awk '{print $2}')`, h.Sudo(), processName))
+	return h
+}
+
+func (h *Command) DockerKill9(dockerName, processName string) *Command {
+	h.SetCommand(fmt.Sprintf(`%s docker exec %s sh -c "ps aux | grep %s | grep -v grep  | awk '{print \$2}' | xargs kill"`, h.sudo, dockerName, processName))
+	return h
+}
+
 func (h *Command) DockerNameList() *Command {
 	h.SetCommand(fmt.Sprintf(`%sdocker ps |awk '{print $NF}'`, h.sudo))
 	return h
@@ -106,12 +116,12 @@ func (h *Command) DockerExecKill(dockerName, pid string) *Command {
 }
 
 func (h *Command) DockerExecPhpWechatKefu(dockerName, codePath, commandName string) *Command {
-	h.SetCommand(fmt.Sprintf(`docker exec %s php /var/www/%s/scan/protected/yiic OpenPushWechatKefuOpen %s &`, dockerName, codePath, commandName))
+	h.SetCommand(fmt.Sprintf(`%s docker exec %s php /var/www/%s/scan/protected/yiic OpenPushWechatKefuOpen %s &`, h.sudo, dockerName, codePath, commandName))
 	return h
 }
 
 func (h *Command) DockerExecConsumerRestartAll(dockerName string) *Command {
-	h.SetCommand(fmt.Sprintf(`docker exec %s supervisorctl restart all`, dockerName))
+	h.SetCommand(fmt.Sprintf(`%s docker exec %s supervisorctl restart all`, h.sudo, dockerName))
 	return h
 }
 
@@ -121,7 +131,7 @@ func (h *Command) ConsumerRestartAll() *Command {
 }
 
 func (h *Command) DockerExecConsumerStopAll(dockerName string) *Command {
-	h.SetCommand(fmt.Sprintf(`docker exec %s supervisorctl stop all`, dockerName))
+	h.SetCommand(fmt.Sprintf(`%s docker exec %s supervisorctl stop all`, h.sudo, dockerName))
 	return h
 }
 
@@ -141,9 +151,9 @@ func (h *Command) ConsumerRestart(dockerName, consumerName string) *Command {
 
 func (h *Command) ConsumerStop(dockerName, consumerName string) *Command {
 	if dockerName == `` {
-		h.SetCommand(fmt.Sprintf(`%ssupervisorctl stop %s:`, h.sudo, consumerName))
+		h.SetCommand(fmt.Sprintf(`%s supervisorctl stop %s:`, h.sudo, consumerName))
 	} else {
-		h.SetCommand(fmt.Sprintf(`docker exec %s supervisorctl stop %s:`, dockerName, consumerName))
+		h.SetCommand(fmt.Sprintf(`%s docker exec %s supervisorctl stop %s:`, h.sudo, dockerName, consumerName))
 	}
 
 	return h

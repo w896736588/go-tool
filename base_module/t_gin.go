@@ -35,6 +35,10 @@ func (h *Global) GinStatic(route, root string) {
 	h.gin.GinH.Static(route, root)
 }
 
+func (h *Global) GinStaticFile(relativePath, filepath string) {
+	h.gin.GinH.StaticFile(relativePath, filepath)
+}
+
 func (h *Global) GinLoadHTMLFiles(file ...string) {
 	h.gin.GinH.LoadHTMLFiles(file...)
 }

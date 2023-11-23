@@ -1,7 +1,5 @@
 package base_module
 
-import "gitee.com/Sxiaobai/gs/gstool"
-
 func Register(global *Global, register *RegisterStruct) {
 	if len(register.RedisConfigList) > 0 {
 		for _, value := range register.RedisConfigList {
@@ -17,7 +15,6 @@ func Register(global *Global, register *RegisterStruct) {
 		for _, value := range register.ShellConfigList {
 			global.ShellSetConfig(value)
 			//初始化client
-			gstool.FmtPrintlnLog(`注册服务时获取client %s`, value.Name)
 			_, err := global.ShellPushGetClient(value.Name)
 			if err != nil {
 				return

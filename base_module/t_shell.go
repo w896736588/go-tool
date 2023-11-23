@@ -13,7 +13,6 @@ func (h *Global) ShellGetClient(name string) (*gstool.GsShell, error) {
 		return clientValue.Value().(*gstool.GsShell), nil
 	}
 	config, err := h.ShellGetConfig(name)
-	gstool.FmtPrintlnLog(`获取shell %s 配置 %#v`, name, config)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +62,6 @@ func (h *Global) ShellPushGetClient(name string) (*gstool.GsShellPush, error) {
 		Logger: h.logger,
 	}
 	err = gsShell.CreateClient()
-	gstool.FmtPrintlnLog(`创建shell完成 %s`, name)
 	if err != nil {
 		return nil, err
 	}

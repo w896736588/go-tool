@@ -109,7 +109,6 @@ func BaseRedisGetReqDataRedis(c *gin.Context) (*base_module.Global, map[string]*
 		return nil, nil, nil, err
 	}
 	redisName := reqMap[`RedisName`].ToStr()
-	gstool.FmtPrintlnLog(`初始化 %#v`, reqMap)
 	if redisName == `` {
 		gsgin.GinResponse(c, gsgin.ResponseError, `缺少RedisName参数`, nil)
 		return nil, nil, nil, errors.New(`缺少RedisName参数`)
@@ -129,7 +128,6 @@ func BaseRedisGetReqDataRedisM(c *gin.Context) (*base_module.Global, map[string]
 		return nil, nil, nil, err
 	}
 	redisName := cast.ToString(reqMap[`RedisName`])
-	gstool.FmtPrintlnLog(`初始化 %#v`, reqMap)
 	if redisName == `` {
 		gsgin.GinResponse(c, gsgin.ResponseError, `缺少RedisName参数`, nil)
 		return nil, nil, nil, errors.New(`缺少RedisName参数`)

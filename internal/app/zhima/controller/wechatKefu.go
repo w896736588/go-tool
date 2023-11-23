@@ -2,27 +2,29 @@ package controller
 
 import (
 	"dev_tool/base_module"
-	"dev_tool/internal/app/xkf_tool"
 	"dev_tool/internal/app/zhima/service"
 	"errors"
 	"fmt"
 	"gitee.com/Sxiaobai/gs/gsdb"
+	"gitee.com/Sxiaobai/gs/gsdefine"
 	"gitee.com/Sxiaobai/gs/gsgin"
+	"gitee.com/Sxiaobai/gs/gsnsq"
 	"gitee.com/Sxiaobai/gs/gstool"
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/cast"
 	"strings"
+	"time"
 )
 
 // WechatKefuStatus 查询微信客服应用的状态
 func WechatKefuStatus(c *gin.Context) {
-	_, reqMap, shell, _, mysqlCli, err := getWechatKefuReqData(c)
+	_, reqMap, shell, _, _, xkfMysqlCli, err := getWechatKefuReqData(c)
 	if err != nil {
 		gsgin.GinResponse(c, gsgin.ResponseError, err.Error(), nil)
 		return
 	}
 
-	appInfo := service.QueryWechatAppid(mysqlCli, reqMap[`WechatKefuAppid`].ToStr())
+	appInfo := service.QueryWechatAppid(xkfMysqlCli, reqMap[`WechatKefuAppid`].ToStr())
 	appIdStr := cast.ToString(appInfo[`app_id`])
 	userIdStr := cast.ToString(appInfo[`user_id`])
 	appTypeStr := cast.ToString(appInfo[`app_type`])
@@ -32,24 +34,20 @@ func WechatKefuStatus(c *gin.Context) {
 	}
 	command := base_module.NewCommand().Sudo().WechatKefuStatus(appIdStr)
 
-	RunResultMsg, err := shell.RunShell3(command.GetCommand().ToByte())
-	if err != nil {
-		BaseResponseByError(c, err)
-		return
-	}
-	appMsg := fmt.Sprintf(`所属管理员ID %s %s %s`, userIdStr, appIdStr, xkf_tool.ENTER)
-	gsgin.GinResponse(c, gsgin.ResponseSuccess, appMsg+RunResultMsg, ``)
+	RunResultMsg := shell.RunShell(command.GetCommand().ToByte())
+	appMsg := fmt.Sprintf(`所属管理员ID %s %s %s`, userIdStr, appIdStr, gsdefine.Enter)
+	gsgin.GinResponse(c, gsgin.ResponseSuccess, ``, appMsg+RunResultMsg)
 }
 
 //WechatKefuChange 切换微信客服环境
 func WechatKefuChange(c *gin.Context) {
-	_, reqMap, shell, _, mysqlCli, err := getWechatKefuReqData(c)
+	_, reqMap, shell, _, _, xkfMysqlCli, err := getWechatKefuReqData(c)
 	if err != nil {
 		gsgin.GinResponse(c, gsgin.ResponseError, err.Error(), nil)
 		return
 	}
 
-	appInfo := service.QueryWechatAppid(mysqlCli, reqMap[`WechatKefuAppid`].ToStr())
+	appInfo := service.QueryWechatAppid(xkfMysqlCli, reqMap[`WechatKefuAppid`].ToStr())
 	appIdStr := cast.ToString(appInfo[`app_id`])
 	appTypeStr := cast.ToString(appInfo[`app_type`])
 	if appIdStr == `` || appTypeStr != `wechat_kefu` {
@@ -57,49 +55,42 @@ func WechatKefuChange(c *gin.Context) {
 		return
 	}
 
-	cDockerList := base_module.NewCommand().DockerNameList()
-	dockerLists, err := shell.RunShell3(cDockerList.GetCommand().ToByte())
-	if err != nil {
-		gsgin.GinResponse(c, gsgin.ResponseError, err.Error(), nil)
-		return
-	}
-	dockerList := strings.Split(dockerLists, `\n`)
-	retMsgList := make([]string, 0)
+	cDockerList := base_module.NewCommand().Sudo().DockerNameList()
+	dockerLists := shell.RunShell(cDockerList.GetCommand().ToByte())
+	gstool.FmtPrintlnLog(`获取所有的docker %#v`, dockerLists)
+	dockerList := strings.Split(dockerLists, "\n")
+	gstool.FmtPrintlnLog(`dockerList %#v`, dockerList)
 	for _, dockerName := range dockerList {
-		cProcess := base_module.NewCommand().WechatKefuProcess(dockerName, appIdStr)
-		runResultMsg, err := shell.RunShell3(cProcess.GetCommand().ToByte())
-		if err != nil {
-			gsgin.GinResponse(c, gsgin.ResponseError, err.Error(), nil)
-			return
+		if dockerName == `NAMES` || dockerName == `` || !strings.Contains(dockerName, `xkf`) {
+			continue
 		}
-		if strings.Contains(runResultMsg, `Process exited with status 1`) {
-			runResultMsg = `not find
-`
-			retMsgList = append(retMsgList, dockerName+` `+runResultMsg)
-		} else {
-			retMsgList = append(retMsgList, dockerName+` `+runResultMsg)
-			//找到了进程 那么找到pid kill掉进程
-			pid := getPsPid(runResultMsg)
-			if cast.ToInt(pid) > 0 {
-				cKill := base_module.NewCommand().DockerExecKill(dockerName, pid)
-				_, err := shell.RunShell3(cKill.GetCommand().ToByte())
-				if err != nil {
-					gsgin.GinResponse(c, gsgin.ResponseError, err.Error(), nil)
-					return
-				}
-			}
-		}
+		dockerKillProcess := base_module.NewCommand().Sudo().DockerKill9(dockerName, appIdStr)
+		shell.RunShell(dockerKillProcess.GetCommand().ToByte())
 	}
 	//丢一个topic
-	//time.Sleep(time.Second)
-	//producer := xkf_tool.GetProducer(`172.16.0.185`, `4150`, `wechat_kefu_open_`+appIdStr)
-	//if producer != nil {
-	//	err := producer.PublishMsg(`0`)
-	//	if err != nil {
-	//		gsgin.GinResponse(c, gsgin.ResponseError, err.Error(), nil)
-	//		return
-	//	}
-	//}
+	time.Sleep(time.Second)
+	nsqProducer := gsnsq.NsqStruct{
+		Topic:   `wechat_kefu_open_` + appIdStr,
+		Channel: `wechat_kefu_open_` + appIdStr + `_channel`,
+		PConfig: gsnsq.NsqConfig{
+			Host: shell.Config.Host,
+			Port: cast.ToString(4150),
+		},
+		CConfig:      gsnsq.NsqConfig{},
+		ConsumerList: nil,
+		Producer:     nil,
+		ProducerChan: gstool.ChanStruct{},
+	}
+	nsqProErr := nsqProducer.CreateProducer(nsqProducer.PConfig)
+	if nsqProErr != nil {
+		gsgin.GinResponse(c, gsgin.ResponseError, nsqProErr.Error(), nil)
+		return
+	}
+	errProducer := nsqProducer.PublishMsg(`0`)
+	if errProducer != nil {
+		gsgin.GinResponse(c, gsgin.ResponseError, errProducer.Error(), nil)
+		return
+	}
 	dockerName := reqMap[`DockerName`].ToStr()
 	if dockerName == `` {
 		gsgin.GinResponse(c, gsgin.ResponseError, `DockerName不能为空`, nil)
@@ -107,52 +98,44 @@ func WechatKefuChange(c *gin.Context) {
 	}
 	//执行脚本
 	cPhpCommand := base_module.NewCommand().Init().Sudo().DockerExecPhpWechatKefu(dockerName, reqMap[`DockerCodePath`].ToStr(), appIdStr)
-	_, err = shell.RunShell3(cPhpCommand.GetCommand().ToByte())
-	if err != nil {
-		gsgin.GinResponse(c, gsgin.ResponseError, err.Error(), nil)
-		return
-	}
+	_ = shell.RunShell(cPhpCommand.GetCommand().ToByte())
 	//查询是否成功
 	cProcess := base_module.NewCommand().WechatKefuProcess(dockerName, appIdStr)
-	result, err := shell.RunShell3(cProcess.GetCommand().ToByte())
-	if err != nil {
-		gsgin.GinResponse(c, gsgin.ResponseError, err.Error(), nil)
-		return
-	}
-	gsgin.GinResponse(c, gsgin.ResponseSuccess, result, ``)
+	result := shell.RunShell(cProcess.GetCommand().ToByte())
+	gsgin.GinResponse(c, gsgin.ResponseSuccess, ``, result)
 }
 
 //WechatKefuQueryAppList 查询微信客服列表
 func WechatKefuQueryAppList(c *gin.Context) {
-	_, reqMap, _, _, mysqlCli, err := getWechatKefuReqData(c)
+	_, reqMap, _, _, appUrlMysqlCli, xkfMysqlCli, err := getWechatKefuReqData(c)
 	if err != nil {
 		gsgin.GinResponse(c, gsgin.ResponseError, err.Error(), nil)
 		return
 	}
 
-	userInfo := service.GetAdminUserId(mysqlCli, reqMap[`Account`].ToStr())
+	userInfo := service.GetAdminUserId(appUrlMysqlCli, reqMap[`Account`].ToStr())
 	if userInfo[`_id`] == `` {
 		gsgin.GinResponse(c, gsgin.ResponseError, ``, nil)
 		return
 	}
-	dataList := service.QueryEnvWechatKefuList(mysqlCli, cast.ToString(userInfo[`id`]))
-	gsgin.GinResponse(c, gsgin.ResponseError, gstool.JsonEncode(dataList), nil)
+	dataList := service.QueryEnvWechatKefuList(xkfMysqlCli, cast.ToString(userInfo[`_id`]))
+	gsgin.GinResponse(c, gsgin.ResponseSuccess, ``, dataList)
 }
 
 //WechatKefuQueryQrCdeList 微信客服二维码列表
 func WechatKefuQueryQrCdeList(c *gin.Context) {
-	_, reqMap, _, _, mysqlCli, err := getWechatKefuReqData(c)
+	_, reqMap, _, _, _, xkfMysqlCli, err := getWechatKefuReqData(c)
 	if err != nil {
 		gsgin.GinResponse(c, gsgin.ResponseError, err.Error(), nil)
 		return
 	}
-	appInfo := service.QueryWechatAppid(mysqlCli, reqMap[`WechatKefuAppid`].ToStr())
-	channelList, err := mysqlCli.GetAll(`select _id,channel_name from tbl_channel where wechatapp_id = ? `, cast.ToString(appInfo[`_id`]))
+	appInfo := service.QueryWechatAppid(xkfMysqlCli, reqMap[`WechatKefuAppid`].ToStr())
+	channelList, err := xkfMysqlCli.GetAll(`select _id,channel_name from tbl_channel where wechatapp_id = ? `, cast.ToString(appInfo[`_id`]))
 	if err != nil {
 		gsgin.GinResponse(c, gsgin.ResponseError, err.Error(), nil)
 		return
 	}
-	staffList, err := mysqlCli.GetAll(`select name,user_id from tbl_staff where parent_user_id = ? `, cast.ToString(appInfo[`user_id`]))
+	staffList, err := xkfMysqlCli.GetAll(`select name,user_id from tbl_staff where parent_user_id = ? `, cast.ToString(appInfo[`user_id`]))
 	if err != nil {
 		gsgin.GinResponse(c, gsgin.ResponseError, err.Error(), nil)
 		return
@@ -161,7 +144,7 @@ func WechatKefuQueryQrCdeList(c *gin.Context) {
 
 	for _, channelInfo := range channelList {
 		tempMap := make(map[string]interface{})
-		channelRelList, err := mysqlCli.GetAll(`select user_id,short_code from tbl_channel_user_rel where wechatapp_id = ? and channel_id = ? and status = 1`, cast.ToString(appInfo[`_id`]), cast.ToInt(channelInfo[`_id`]))
+		channelRelList, err := xkfMysqlCli.GetAll(`select user_id,short_code from tbl_channel_user_rel where wechatapp_id = ? and channel_id = ? and status = 1`, cast.ToString(appInfo[`_id`]), cast.ToInt(channelInfo[`_id`]))
 		if err != nil {
 			continue
 		}
@@ -184,33 +167,35 @@ func WechatKefuQueryQrCdeList(c *gin.Context) {
 		tempMap[`link_list`] = linkList
 		returnMap = append(returnMap, tempMap)
 	}
-	gsgin.GinResponse(c, gsgin.ResponseError, gstool.JsonEncode(returnMap), nil)
+	gsgin.GinResponse(c, gsgin.ResponseSuccess, ``, returnMap)
 }
 
-func getWechatKefuReqData(c *gin.Context) (*base_module.Global, map[string]*gstool.GsCons, *gstool.GsShell, *gsdb.GsRedis, *gsdb.GsMysql, error) {
+func getWechatKefuReqData(c *gin.Context) (*base_module.Global, map[string]*gstool.GsCons, *gstool.GsShellPush, *gsdb.GsRedis, *gsdb.GsMysql, *gsdb.GsMysql, error) {
 	global, reqMap, err := GetGlobalReqParams(c)
 	if err != nil {
-		return nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, err
 	}
 	shellName := reqMap[`ShellName`]
 	if shellName == nil {
-		return nil, nil, nil, nil, nil, errors.New(`缺少ShellName参数`)
+		return nil, nil, nil, nil, nil, nil, errors.New(`缺少ShellName参数`)
 	}
-	client, err := global.ShellGetClient(shellName.ToStr())
+	client, err := global.ShellPushGetClient(shellName.ToStr())
 	if err != nil {
-		return nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, err
 	}
-	redisName := reqMap[`redisName`]
+	redisName := reqMap[`RedisName`]
 	redisCli, err := global.RedisGetClient(redisName.ToStr())
 	if err != nil {
-		return nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, err
 	}
-	mysqlName := reqMap[`mysqlName`]
-	mysqlCli, err := global.MysqlGetClient(mysqlName.ToStr())
+	xkfMysqlName := reqMap[`XkfMysqlName`]
+	xkfMysqlCli, err := global.MysqlGetClient(xkfMysqlName.ToStr())
+	appUrlMysqlName := reqMap[`AppUrlMysqlName`]
+	appUrlMysqlCli, err := global.MysqlGetClient(appUrlMysqlName.ToStr())
 	if err != nil {
-		return nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, err
 	}
-	return global, reqMap, client, redisCli, mysqlCli, nil
+	return global, reqMap, client, redisCli, appUrlMysqlCli, xkfMysqlCli, nil
 }
 
 func getPsPid(runResultMsg string) string {

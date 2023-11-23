@@ -2,10 +2,11 @@ package zhima
 
 import (
 	"context"
-	"dev_tool/internal/app/xkf_tool"
+	"dev_tool/internal/app/zhima/define"
 	"encoding/json"
 	"fmt"
 	"gitee.com/Sxiaobai/gs/gsdb"
+	"gitee.com/Sxiaobai/gs/gsdefine"
 	"gitee.com/Sxiaobai/gs/gstool"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -13,18 +14,17 @@ import (
 	"github.com/spf13/cast"
 	"io/ioutil"
 	"net/http"
-	"strings"
 	"time"
 )
 
 var RedisHandleList []gsdb.RedisConfig
 
 func RedisList(c *gin.Context) {
-	reqBody := &xkf_tool.SshExec{}
+	reqBody := &define.SshExec{}
 	requestData(c, &reqBody)
 
 	for _, value := range reqBody.RedisConfigList {
-		if xkf_tool.RedisRunList[value.Name] == nil {
+		if RedisRunList[value.Name] == nil {
 			//初始化链接
 			gsRedisConfig := &gsdb.RedisConfig{
 				Name:     value.Name,
@@ -40,22 +40,22 @@ func RedisList(c *gin.Context) {
 			if err != nil {
 				continue
 			}
-			xkf_tool.RedisRunList[value.Name] = &gsRedis
+			RedisRunList[value.Name] = &gsRedis
 		}
 	}
 	RedisHandleList = make([]gsdb.RedisConfig, 0)
 	for _, value := range reqBody.RedisConfigList {
-		if xkf_tool.RedisRunList[value.Name] != nil {
+		if RedisRunList[value.Name] != nil {
 			RedisHandleList = append(RedisHandleList, value)
 		}
 
 	}
-	response(c, xkf_tool.ErrorCodeSuccess, `获取成功`, RedisHandleList)
+	response(c, gsdefine.Success, `获取成功`, RedisHandleList)
 }
 
 func Keys(c *gin.Context) {
 	var err error
-	reqBody := &xkf_tool.SearchBody{}
+	reqBody := &define.SearchBody{}
 	requestData(c, &reqBody)
 
 	var redisCli *redis.Client
@@ -69,19 +69,19 @@ func Keys(c *gin.Context) {
 		resultMap = make([]string, 0)
 	}
 	//拿到key类型
-	returnList := make([]xkf_tool.KeysList, 0)
+	returnList := make([]define.KeysList, 0)
 	for _, cacheKey := range resultMap {
-		returnList = append(returnList, xkf_tool.KeysList{
+		returnList = append(returnList, define.KeysList{
 			CacheKey: cacheKey,
 			Type:     ` `,
 			Loading:  true,
 		})
 	}
-	response(c, xkf_tool.ErrorCodeSuccess, `获取成功`, returnList)
+	response(c, gsdefine.Success, `获取成功`, returnList)
 }
 
 func KeysType(c *gin.Context) {
-	reqBody := &xkf_tool.SearchKeysTypeBody{}
+	reqBody := &define.SearchKeysTypeBody{}
 	requestData(c, &reqBody)
 
 	var redisCli *redis.Client
@@ -90,22 +90,22 @@ func KeysType(c *gin.Context) {
 	}
 
 	//拿到key类型
-	returnList := make([]xkf_tool.KeysList, 0)
+	returnList := make([]define.KeysList, 0)
 	for _, cacheKey := range reqBody.KeysList {
 		keyType, err := redisCli.Type(context.Background(), cacheKey).Result()
 		if err == nil && keyType != `` {
-			returnList = append(returnList, xkf_tool.KeysList{
+			returnList = append(returnList, define.KeysList{
 				CacheKey: cacheKey,
 				Type:     keyType,
 			})
 		}
 	}
-	response(c, xkf_tool.ErrorCodeSuccess, `获取成功`, returnList)
+	response(c, gsdefine.Success, `获取成功`, returnList)
 }
 
 func Search(c *gin.Context) {
 	var err error
-	reqBody := &xkf_tool.RequestBody{}
+	reqBody := &define.RequestBody{}
 	requestData(c, &reqBody)
 
 	var redisCli *redis.Client
@@ -120,70 +120,70 @@ func Search(c *gin.Context) {
 	//找到key是什么类型
 	keyType, err := redisCli.Type(context.Background(), reqBody.CacheKey).Result()
 	if err != nil || keyType == `` {
-		response(c, xkf_tool.ErrorCodeRunError, `获取元素类型失败`, ``)
+		response(c, gsdefine.Error, `获取元素类型失败`, ``)
 		return
 	}
-	if keyType == xkf_tool.CacheString {
+	if keyType == define.CacheString {
 		var result string
 		result, err = redisCli.Get(context.Background(), reqBody.CacheKey).Result()
 		if err == redis.Nil {
-			response(c, xkf_tool.ErrorKeyNotExist, fmt.Sprintf(`%s 已经不存在`, reqBody.CacheKey), ``)
+			response(c, define.ErrorKeyNotExist, fmt.Sprintf(`%s 已经不存在`, reqBody.CacheKey), ``)
 			return
 		} else if err != nil {
-			response(c, xkf_tool.ErrorCodeRunError, err.Error(), ``)
+			response(c, gsdefine.Error, err.Error(), ``)
 			return
 		}
-		response(c, xkf_tool.ErrorCodeSuccess, `获取成功`, result)
-	} else if keyType == xkf_tool.CacheHash {
+		response(c, gsdefine.Success, `获取成功`, result)
+	} else if keyType == define.CacheHash {
 		var resultMap map[string]string
 		resultMap, err = redisCli.HGetAll(context.Background(), reqBody.CacheKey).Result()
 		if err == redis.Nil {
-			response(c, xkf_tool.ErrorKeyNotExist, fmt.Sprintf(`%s 已经不存在`, reqBody.CacheKey), ``)
+			response(c, define.ErrorKeyNotExist, fmt.Sprintf(`%s 已经不存在`, reqBody.CacheKey), ``)
 			return
 		} else if err != nil {
-			response(c, xkf_tool.ErrorCodeRunError, err.Error(), ``)
+			response(c, gsdefine.Error, err.Error(), ``)
 			return
 		}
-		response(c, xkf_tool.ErrorCodeSuccess, `获取成功`, resultMap)
-	} else if keyType == xkf_tool.CacheList {
+		response(c, gsdefine.Success, `获取成功`, resultMap)
+	} else if keyType == define.CacheList {
 		var resultArray []string
 		resultArray, err = redisCli.LRange(context.Background(), reqBody.CacheKey, 0, 100000).Result()
 		if err == redis.Nil {
-			response(c, xkf_tool.ErrorKeyNotExist, fmt.Sprintf(`%s 已经不存在`, reqBody.CacheKey), ``)
+			response(c, define.ErrorKeyNotExist, fmt.Sprintf(`%s 已经不存在`, reqBody.CacheKey), ``)
 			return
 		} else if err != nil {
-			response(c, xkf_tool.ErrorCodeRunError, err.Error(), ``)
+			response(c, gsdefine.Error, err.Error(), ``)
 			return
 		}
-		response(c, xkf_tool.ErrorCodeSuccess, `获取成功`, resultArray)
-	} else if keyType == xkf_tool.CacheSet {
+		response(c, gsdefine.Success, `获取成功`, resultArray)
+	} else if keyType == define.CacheSet {
 		var resultArray []string
 		resultArray, err = redisCli.SMembers(context.Background(), reqBody.CacheKey).Result()
 		if err == redis.Nil {
-			response(c, xkf_tool.ErrorKeyNotExist, fmt.Sprintf(`%s 已经不存在`, reqBody.CacheKey), ``)
+			response(c, define.ErrorKeyNotExist, fmt.Sprintf(`%s 已经不存在`, reqBody.CacheKey), ``)
 			return
 		} else if err != nil {
-			response(c, xkf_tool.ErrorCodeRunError, err.Error(), ``)
+			response(c, gsdefine.Error, err.Error(), ``)
 			return
 		}
-		response(c, xkf_tool.ErrorCodeSuccess, `获取成功`, resultArray)
-	} else if keyType == xkf_tool.CacheZSet {
+		response(c, gsdefine.Success, `获取成功`, resultArray)
+	} else if keyType == define.CacheZSet {
 		var resultArray []redis.Z
 		resultArray, err = redisCli.ZRangeWithScores(context.Background(), reqBody.CacheKey, 0, 100000).Result()
 		if err == redis.Nil {
-			response(c, xkf_tool.ErrorKeyNotExist, fmt.Sprintf(`%s 已经不存在`, reqBody.CacheKey), ``)
+			response(c, define.ErrorKeyNotExist, fmt.Sprintf(`%s 已经不存在`, reqBody.CacheKey), ``)
 			return
 		} else if err != nil {
-			response(c, xkf_tool.ErrorCodeRunError, err.Error(), ``)
+			response(c, gsdefine.Error, err.Error(), ``)
 			return
 		}
-		response(c, xkf_tool.ErrorCodeSuccess, `获取成功`, resultArray)
+		response(c, gsdefine.Success, `获取成功`, resultArray)
 	}
 }
 
 func GetKeyType(c *gin.Context) {
 	var err error
-	reqBody := &xkf_tool.RequestBody{}
+	reqBody := &define.RequestBody{}
 	requestData(c, &reqBody)
 
 	var redisCli *redis.Client
@@ -198,20 +198,20 @@ func GetKeyType(c *gin.Context) {
 	//找到key是什么类型
 	keyType, err := redisCli.Type(context.Background(), reqBody.CacheKey).Result()
 	if err != nil {
-		response(c, xkf_tool.ErrorCodeRunError, err.Error(), ``)
+		response(c, gsdefine.Error, err.Error(), ``)
 		return
 	} else if keyType == `` {
-		response(c, xkf_tool.ErrorCodeRunError, `获取元素类型失败`, ``)
+		response(c, gsdefine.Error, `获取元素类型失败`, ``)
 		return
 	}
 	//找到过期时间
 	var ttl time.Duration
 	ttl, err = redisCli.TTL(context.Background(), reqBody.CacheKey).Result()
 	if err != nil {
-		response(c, xkf_tool.ErrorCodeRunError, err.Error(), ``)
+		response(c, gsdefine.Error, err.Error(), ``)
 		return
 	}
-	response(c, xkf_tool.ErrorCodeSuccess, `获取类型和过期时间成功`, &xkf_tool.TypeResponse{
+	response(c, gsdefine.Success, `获取类型和过期时间成功`, &define.TypeResponse{
 		Type: keyType,
 		TTL:  cast.ToInt(ttl.Seconds()),
 	})
@@ -223,7 +223,7 @@ func PhpSerialize(c *gin.Context) {
 
 func SaveString(c *gin.Context) {
 	var err error
-	reqBody := &xkf_tool.SaveString{}
+	reqBody := &define.SaveString{}
 	requestData(c, &reqBody)
 
 	var redisCli *redis.Client
@@ -239,28 +239,28 @@ func SaveString(c *gin.Context) {
 	//永久
 	err = redisCli.Set(context.Background(), reqBody.CacheKey, reqBody.Value, ttlTime).Err()
 	if err != nil {
-		response(c, xkf_tool.ErrorCodeRunError, err.Error(), ``)
+		response(c, gsdefine.Error, err.Error(), ``)
 	} else {
-		response(c, xkf_tool.ErrorCodeSuccess, `保存成功`, ``)
+		response(c, gsdefine.Success, `保存成功`, ``)
 	}
 }
 
 func PhpUnSerialize(c *gin.Context) {
 	var err error
-	reqBody := &xkf_tool.SerializeBody{}
+	reqBody := &define.SerializeBody{}
 	requestData(c, &reqBody)
-	var out string
+	var out interface{}
 	out, err = gstool.PhpUnSerialize(reqBody.SerializeStr)
 	if err != nil {
-		response(c, xkf_tool.ErrorCodeRunError, err.Error(), reqBody.SerializeStr)
+		response(c, gsdefine.Error, err.Error(), reqBody.SerializeStr)
 		return
 	}
-	response(c, xkf_tool.ErrorCodeSuccess, `成功`, out)
+	response(c, gsdefine.Success, `成功`, out)
 }
 
 func DelKey(c *gin.Context) {
 	var err error
-	reqBody := &xkf_tool.DelKey{}
+	reqBody := &define.DelKey{}
 	requestData(c, &reqBody)
 
 	var redisCli *redis.Client
@@ -275,15 +275,15 @@ func DelKey(c *gin.Context) {
 	//永久
 	err = redisCli.Del(context.Background(), reqBody.CacheKey).Err()
 	if err != nil {
-		response(c, xkf_tool.ErrorCodeRunError, err.Error(), ``)
+		response(c, gsdefine.Error, err.Error(), ``)
 	} else {
-		response(c, xkf_tool.ErrorCodeSuccess, `删除成功`, ``)
+		response(c, gsdefine.Success, `删除成功`, ``)
 	}
 }
 
 func DelSub(c *gin.Context) {
 	var err error
-	reqBody := &xkf_tool.DelSub{}
+	reqBody := &define.DelSub{}
 	requestData(c, &reqBody)
 
 	var redisCli *redis.Client
@@ -295,27 +295,27 @@ func DelSub(c *gin.Context) {
 		return
 	}
 
-	if reqBody.CacheType == xkf_tool.CacheString {
-		response(c, xkf_tool.ErrorCodeRunError, `不支持字符串`, ``)
-	} else if reqBody.CacheType == xkf_tool.CacheHash {
+	if reqBody.CacheType == define.CacheString {
+		response(c, gsdefine.Error, `不支持字符串`, ``)
+	} else if reqBody.CacheType == define.CacheHash {
 		err = redisCli.HDel(context.Background(), reqBody.CacheKey, reqBody.Sub).Err()
-	} else if reqBody.CacheType == xkf_tool.CacheList {
+	} else if reqBody.CacheType == define.CacheList {
 		err = redisCli.LRem(context.Background(), reqBody.CacheKey, 0, reqBody.Sub).Err()
-	} else if reqBody.CacheType == xkf_tool.CacheSet {
+	} else if reqBody.CacheType == define.CacheSet {
 		err = redisCli.SRem(context.Background(), reqBody.CacheKey, reqBody.Sub).Err()
-	} else if reqBody.CacheType == xkf_tool.CacheZSet {
+	} else if reqBody.CacheType == define.CacheZSet {
 		err = redisCli.ZRem(context.Background(), reqBody.CacheKey, reqBody.Sub).Err()
 	}
 	if err != nil {
-		response(c, xkf_tool.ErrorCodeRunError, err.Error(), ``)
+		response(c, gsdefine.Error, err.Error(), ``)
 	} else {
-		response(c, xkf_tool.ErrorCodeSuccess, `删除成功`, ``)
+		response(c, gsdefine.Success, `删除成功`, ``)
 	}
 }
 
 func EditTtl(c *gin.Context) {
 	var err error
-	reqBody := &xkf_tool.EditTTL{}
+	reqBody := &define.EditTTL{}
 	requestData(c, &reqBody)
 
 	var redisCli *redis.Client
@@ -330,15 +330,15 @@ func EditTtl(c *gin.Context) {
 	dru := time.Duration(reqBody.TTL) * time.Second
 	err = redisCli.Expire(context.Background(), reqBody.CacheKey, dru).Err()
 	if err != nil {
-		response(c, xkf_tool.ErrorCodeRunError, err.Error(), ``)
+		response(c, gsdefine.Error, err.Error(), ``)
 	} else {
-		response(c, xkf_tool.ErrorCodeSuccess, `设置成功`, ``)
+		response(c, gsdefine.Success, `设置成功`, ``)
 	}
 }
 
 func DelAllKey(c *gin.Context) {
 	var err error
-	reqBody := &xkf_tool.DelAllKey{}
+	reqBody := &define.DelAllKey{}
 	requestData(c, &reqBody)
 
 	var redisCli *redis.Client
@@ -348,15 +348,15 @@ func DelAllKey(c *gin.Context) {
 
 	err = redisCli.Del(context.Background(), reqBody.CacheKeys...).Err()
 	if err != nil {
-		response(c, xkf_tool.ErrorCodeRunError, err.Error(), ``)
+		response(c, gsdefine.Error, err.Error(), ``)
 	} else {
-		response(c, xkf_tool.ErrorCodeSuccess, `删除成功`, ``)
+		response(c, gsdefine.Success, `删除成功`, ``)
 	}
 }
 
 func CreateCache(c *gin.Context) {
 	var err error
-	reqBody := &xkf_tool.CreateCache{}
+	reqBody := &define.CreateCache{}
 	requestData(c, &reqBody)
 
 	var redisCli *redis.Client
@@ -367,7 +367,7 @@ func CreateCache(c *gin.Context) {
 	//判断是否存在
 	if reqBody.BoolCreate == 1 {
 		if existInt := redisCli.Exists(context.Background(), reqBody.CacheKey).Val(); existInt > 0 {
-			response(c, xkf_tool.ErrorKeyNotExist, fmt.Sprintf(`%s 已经存在`, reqBody.CacheKey), ``)
+			response(c, define.ErrorKeyNotExist, fmt.Sprintf(`%s 已经存在`, reqBody.CacheKey), ``)
 			return
 		}
 	} else {
@@ -376,11 +376,11 @@ func CreateCache(c *gin.Context) {
 		}
 	}
 
-	if reqBody.CacheType == xkf_tool.CacheString {
+	if reqBody.CacheType == define.CacheString {
 		err = redisCli.Set(context.Background(), reqBody.CacheKey, reqBody.CacheValue, time.Duration(reqBody.TTL)*time.Second).Err()
-	} else if reqBody.CacheType == xkf_tool.CacheHash {
+	} else if reqBody.CacheType == define.CacheHash {
 		err = redisCli.HSet(context.Background(), reqBody.CacheKey, reqBody.CacheField, reqBody.CacheValue).Err()
-	} else if reqBody.CacheType == xkf_tool.CacheList {
+	} else if reqBody.CacheType == define.CacheList {
 		if reqBody.LPushValue != `` {
 			err = redisCli.LPush(context.Background(), reqBody.CacheKey, reqBody.LPushValue).Err()
 		} else if reqBody.RPushValue != `` {
@@ -388,16 +388,16 @@ func CreateCache(c *gin.Context) {
 		} else {
 			err = redisCli.RPush(context.Background(), reqBody.CacheKey, reqBody.CacheValue).Err()
 		}
-	} else if reqBody.CacheType == xkf_tool.CacheSet {
+	} else if reqBody.CacheType == define.CacheSet {
 		err = redisCli.SAdd(context.Background(), reqBody.CacheKey, reqBody.CacheMember).Err()
-	} else if reqBody.CacheType == xkf_tool.CacheZSet {
+	} else if reqBody.CacheType == define.CacheZSet {
 		err = redisCli.ZAdd(context.Background(), reqBody.CacheKey, redis.Z{
 			Score:  reqBody.CacheScore,
 			Member: reqBody.CacheMember,
 		}).Err()
 	}
 	if err != nil {
-		response(c, xkf_tool.ErrorCodeRunError, err.Error(), ``)
+		response(c, gsdefine.Error, err.Error(), ``)
 	}
 	//处理过期时间
 	if reqBody.BoolCreate == 1 && reqBody.TTL != 0 {
@@ -405,15 +405,15 @@ func CreateCache(c *gin.Context) {
 	}
 
 	if err != nil {
-		response(c, xkf_tool.ErrorCodeRunError, err.Error(), ``)
+		response(c, gsdefine.Error, err.Error(), ``)
 	} else {
-		response(c, xkf_tool.ErrorCodeSuccess, `创建成功`, ``)
+		response(c, gsdefine.Success, `创建成功`, ``)
 	}
 }
 
 func EditSub(c *gin.Context) {
 	var err error
-	reqBody := &xkf_tool.EditSub{}
+	reqBody := &define.EditSub{}
 	requestData(c, &reqBody)
 	log.Errorf(`editSub %#v`, reqBody)
 
@@ -426,11 +426,11 @@ func EditSub(c *gin.Context) {
 		log.Errorf(`exist %v`, exist)
 		return
 	}
-	if reqBody.CacheType == xkf_tool.CacheHash {
+	if reqBody.CacheType == define.CacheHash {
 		err = redisCli.HSet(context.Background(), reqBody.CacheKey, reqBody.CacheField, reqBody.CacheValue).Err()
-	} else if reqBody.CacheType == xkf_tool.CacheList {
+	} else if reqBody.CacheType == define.CacheList {
 		err = redisCli.LSet(context.Background(), reqBody.CacheKey, reqBody.CacheIndex, reqBody.CacheValue).Err()
-	} else if reqBody.CacheType == xkf_tool.CacheZSet {
+	} else if reqBody.CacheType == define.CacheZSet {
 		err = redisCli.ZAdd(context.Background(), reqBody.CacheKey, redis.Z{
 			Score:  reqBody.CacheScore,
 			Member: reqBody.CacheMember,
@@ -438,124 +438,10 @@ func EditSub(c *gin.Context) {
 	}
 
 	if err != nil {
-		response(c, xkf_tool.ErrorCodeRunError, err.Error(), ``)
+		response(c, gsdefine.Error, err.Error(), ``)
 	} else {
-		response(c, xkf_tool.ErrorCodeSuccess, `编辑成功`, ``)
+		response(c, gsdefine.Success, `编辑成功`, ``)
 	}
-}
-
-// SupervisorStatus supervisor 状态
-// @author frog
-// @date 2022-04-11 15:22:27
-//func SupervisorStatus(c *gin.Context) {
-//	reqBody := &define.SshDo{}
-//	requestData(c, &reqBody)
-//	ret := base.Exec(reqBody, `supervisorctl status`)
-//	//解析ret
-//	supervisorNameList := strings.Split(strings.Replace(ret, "\n", " #ENTER# ", -1), `#ENTER#`)
-//	response(c, define.ErrorCodeSuccess, `成功`, supervisorNameList)
-//}
-
-// ShellExec 执行shell命令
-// @auth frog
-// @date 2022-12-02 15:00:23
-// @param c
-func ShellExec(c *gin.Context) {
-	defer func() {
-		err := recover()
-		if err != nil {
-			response(c, xkf_tool.ErrorCodeSuccess, `成功`, fmt.Sprintf(`%#v`, err))
-		}
-	}()
-
-	reqBody := &xkf_tool.SshExec{}
-	requestData(c, &reqBody)
-
-	//初始化shell3
-	cliTerConf, wkCliTerConf := xkf_tool.InitRunShell3(reqBody)
-	//初始化shell4
-	xkf_tool.InitRunShell4(reqBody)
-
-	handle := &Command{}
-	handle.Filter()
-	//初始化mysql
-	xkf_tool.GetDevMysql(reqBody)
-
-	switch reqBody.ExecType {
-	case `query_current_branch`: //查询当前代码环境分支
-		response(c, xkf_tool.ErrorCodeSuccess, `成功`, strings.Join(handle.QueryCurrentBranch(reqBody, cliTerConf), ``))
-		return
-	case `change_branch`: //切换分支
-		response(c, xkf_tool.ErrorCodeSuccess, `成功`, strings.Join(handle.ChangeBranch(reqBody, cliTerConf), ``))
-		return
-	case `pull_branch_origin`: //拉取当前环境最新代码
-		response(c, xkf_tool.ErrorCodeSuccess, `成功`, strings.Join(handle.PullBranchOrigin(reqBody, cliTerConf), ``))
-		return
-	case `wechat_kefu_status`: //查询微信客服所在的环境
-		response(c, xkf_tool.ErrorCodeSuccess, `成功`, handle.WechatKefuStatus(reqBody, cliTerConf, wkCliTerConf))
-		return
-	case `wechat_kefu_change`: //切换微信客服到当前代码环境
-		response(c, xkf_tool.ErrorCodeSuccess, `成功`, strings.Join(handle.WechatKefuChange(reqBody, cliTerConf, wkCliTerConf), ``))
-		return
-	case `query_env_wechatkefu_list`: //微信客服
-		response(c, xkf_tool.ErrorCodeSuccess, `成功`, handle.QueryEnvWechatKefuList(reqBody))
-		return
-	case `supervisor_restart_all`: //消费者管理
-		response(c, xkf_tool.ErrorCodeSuccess, `成功`, strings.Join(handle.SupervisorRestartAll(reqBody, cliTerConf), ``))
-		return
-	case `supervisor_status_list`: //消费者列表
-		response(c, xkf_tool.ErrorCodeSuccess, `成功`, strings.Join(handle.SupervisorStatusList(reqBody, cliTerConf), ``))
-		return
-	case `supervisor_config_show`: //查看supervisor配置
-		response(c, xkf_tool.ErrorCodeSuccess, `成功`, strings.Join(handle.SupervisorConfigShow(reqBody, cliTerConf), ``))
-		return
-	case `supervisor_restart`: //重启消费者
-		response(c, xkf_tool.ErrorCodeSuccess, `成功`, strings.Join(handle.SupervisorRestart(reqBody, cliTerConf), ``))
-		return
-	case `supervisor_stop`: //停止消费者
-		response(c, xkf_tool.ErrorCodeSuccess, `成功`, strings.Join(handle.SupervisorStop(reqBody, cliTerConf), ``))
-		return
-	case `supervisor_stop_all`: //停止所有消费者
-		response(c, xkf_tool.ErrorCodeSuccess, `成功`, strings.Join(handle.SupervisorStopAll(reqBody, cliTerConf), ``))
-		return
-	case `git_status`: //git status
-		response(c, xkf_tool.ErrorCodeSuccess, `成功`, strings.Join(handle.QueryStatus(reqBody, cliTerConf), ``))
-		return
-	case `show_log`:
-		response(c, xkf_tool.ErrorCodeSuccess, `成功`, strings.Join(handle.ShowLog(reqBody, cliTerConf), ``))
-		return
-	case `docker_exec`:
-		response(c, xkf_tool.ErrorCodeSuccess, `成功`, strings.Join(handle.DockerExec(reqBody, cliTerConf), ``))
-		return
-	case `docker_ps`:
-		response(c, xkf_tool.ErrorCodeSuccess, `成功`, strings.Join(handle.DockerPs(reqBody, cliTerConf, wkCliTerConf), ``))
-		return
-	case `change_vip_type`:
-		response(c, xkf_tool.ErrorCodeSuccess, `成功`, strings.Join(handle.ChangeVipType(reqBody), ``))
-		return
-	case `query_vip_info`: //查询VIP信息
-		response(c, xkf_tool.ErrorCodeSuccess, `成功`, strings.Join(handle.QueryVipType(reqBody), ``))
-		return
-	case `login_xkf`: //登录地址获取
-		response(c, xkf_tool.ErrorCodeSuccess, `成功`, strings.Join(handle.GetLoginUrl(reqBody), ``))
-		return
-	case `check_all_docker_status`: //检查所有docker状态
-		response(c, xkf_tool.ErrorCodeSuccess, `成功`, strings.Join(handle.CheckAllDockerStatus(reqBody, cliTerConf), ``))
-		return
-	case `restart_docker`: //重启docker
-		response(c, xkf_tool.ErrorCodeSuccess, `成功`, strings.Join(handle.RestartDocker(reqBody, cliTerConf), ``))
-		return
-	case `show_compose`: //查看docker compose内容
-		response(c, xkf_tool.ErrorCodeSuccess, `成功`, strings.Join(handle.ShowCompose(reqBody, cliTerConf), ``))
-		return
-	case `SupervisorConfList`:
-		response(c, xkf_tool.ErrorCodeSuccess, `成功`, strings.Join(handle.SupervisorConfList(reqBody, cliTerConf), ``))
-		return
-	case `WechatKefuChannelQrList`:
-		response(c, xkf_tool.ErrorCodeSuccess, `成功`, handle.QueryWechatQrCdeList(reqBody))
-		return
-	}
-	response(c, xkf_tool.ErrorCodeSuccess, `成功`, nil)
 }
 
 func requestData(c *gin.Context, requestBody interface{}) {
@@ -568,7 +454,7 @@ func requestData(c *gin.Context, requestBody interface{}) {
 }
 
 func response(c *gin.Context, errcode int, errmsg string, body interface{}) {
-	returnJson := gstool.JsonEncode(&xkf_tool.Response{
+	returnJson := gstool.JsonEncode(&define.Response{
 		Errcode: errcode,
 		Errmsg:  errmsg,
 		Data:    body,
@@ -577,18 +463,18 @@ func response(c *gin.Context, errcode int, errmsg string, body interface{}) {
 }
 
 func getRedisClient(c *gin.Context, UniKey string) *gsdb.GsRedis {
-	if ok := xkf_tool.RedisRunList[UniKey]; ok == nil {
-		response(c, xkf_tool.ErrorCodeErrorUniKey, `不存在的UniKey`, ``)
+	if ok := RedisRunList[UniKey]; ok == nil {
+		response(c, define.ErrorCodeErrorUniKey, `不存在的UniKey`, ``)
 		return nil
 	}
 
-	return xkf_tool.RedisRunList[UniKey]
+	return RedisRunList[UniKey]
 }
 
 func checkKeyExist(c *gin.Context, redisCli *redis.Client, key string) bool {
 	//判断是否存在
 	if existInt := redisCli.Exists(context.Background(), key).Val(); existInt <= 0 {
-		response(c, xkf_tool.ErrorKeyNotExist, fmt.Sprintf(`%s 不存在`, key), ``)
+		response(c, define.ErrorKeyNotExist, fmt.Sprintf(`%s 不存在`, key), ``)
 		return false
 	}
 	return true

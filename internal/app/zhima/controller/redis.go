@@ -2,7 +2,7 @@ package controller
 
 import (
 	"context"
-	"dev_tool/internal/app/xkf_tool"
+	"dev_tool/internal/app/zhima/define"
 	"errors"
 	"fmt"
 	"gitee.com/Sxiaobai/gs/gsdb"
@@ -72,14 +72,13 @@ func RedisSearch(c *gin.Context) {
 		return
 	}
 	cacheKey := cast.ToString(reqMap[`CacheKey`])
-	gstool.FmtPrintlnLog(`reqMap %#v`, reqMap)
 	if cacheKey == `` {
 		gsgin.GinResponse(c, gsgin.ResponseError, `缺少搜索的key`, nil)
 		return
 	}
 	//找到key是什么类型
-	gstool.FmtPrintlnLog(`搜索key为%s`, cacheKey)
 	keyType, err := redisCli.Client.Type(context.Background(), cacheKey).Result()
+	keyTtl, _ := redisCli.Client.TTL(context.Background(), cacheKey).Result()
 	if err != nil {
 		gsgin.GinResponse(c, gsgin.ResponseSuccess, err.Error(), ``)
 		return
@@ -124,7 +123,11 @@ func RedisSearch(c *gin.Context) {
 	if gsCons == nil {
 		gsgin.GinResponse(c, gsgin.ResponseError, fmt.Sprintf(`不支持的类型 %s`, keyType), ``)
 	} else {
-		gsgin.GinResponse(c, gsgin.ResponseSuccess, `获取成功`, gsCons.Value())
+		gsgin.GinResponse(c, gsgin.ResponseSuccess, `获取成功`, map[string]interface{}{
+			`keyType`: keyType,
+			`KeyTtl`:  keyTtl,
+			`Result`:  gsCons.Value(),
+		})
 	}
 
 }
@@ -257,16 +260,16 @@ func RedisDelSub(c *gin.Context) {
 		BaseResponseByError(c, errors.New(`Sub 类型不能为空`))
 		return
 	}
-	if cacheType == xkf_tool.CacheString {
+	if cacheType == define.CacheString {
 		gsgin.GinResponse(c, gsgin.ResponseError, `不支持字符串`, ``)
 		return
-	} else if cacheType == xkf_tool.CacheHash {
+	} else if cacheType == define.CacheHash {
 		err = redisCli.Client.HDel(context.Background(), cacheKey, subKey).Err()
-	} else if cacheType == xkf_tool.CacheList {
+	} else if cacheType == define.CacheList {
 		err = redisCli.Client.LRem(context.Background(), cacheKey, 0, subKey).Err()
-	} else if cacheType == xkf_tool.CacheSet {
+	} else if cacheType == define.CacheSet {
 		err = redisCli.Client.SRem(context.Background(), cacheKey, subKey).Err()
-	} else if cacheType == xkf_tool.CacheZSet {
+	} else if cacheType == define.CacheZSet {
 		err = redisCli.Client.ZRem(context.Background(), cacheKey, subKey).Err()
 	}
 	BaseResponseByError(c, err)

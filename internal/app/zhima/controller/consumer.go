@@ -155,7 +155,6 @@ func ConsumerConfigList(c *gin.Context) {
 	configListCommand := base_module.NewCommand()
 	configListCommand.ConsumerConfigList(dockerName)
 	ret := shell.RunShell(configListCommand.GetCommand().ToByte())
-	gstool.FmtPrintlnLog(`结果 %s`, ret)
 	retMsgList = append(retMsgList, ret)
 	gsgin.GinResponse(c, gsgin.ResponseSuccess, ``, strings.Join(retMsgList, gsdefine.Enter))
 	return

@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"gitee.com/Sxiaobai/gs/gsdb"
+	"gitee.com/Sxiaobai/gs/gstool"
 	"github.com/spf13/cast"
 	"time"
 )
@@ -20,6 +21,7 @@ func QueryWechatAppid(mysqlCli *gsdb.GsMysql, wechatAppId string) map[string]int
 func GetAdminUserId(mysqlCli *gsdb.GsMysql, account string) map[string]interface{} {
 	data, err := mysqlCli.GetOne(`select _id,user_name from tbl_user where (user_name = ? or _id = ?)`, account, cast.ToInt(account))
 	if err != nil {
+		gstool.FmtPrintlnLog(`查询出错 %s`, err.Error())
 		return make(map[string]interface{})
 	}
 	return data

@@ -15,7 +15,7 @@ import (
 
 //LoginLink 登录地址
 func LoginLink(c *gin.Context) {
-	_, reqMap, encrypt, mysqlCli, err := getLoginReqData(c)
+	_, reqMap, encrypt, mysqlCliAppUrl, mysqlCliXkf, err := getLoginReqData(c)
 	if err != nil {
 		gsgin.GinResponse(c, gsgin.ResponseError, err.Error(), nil)
 		return
@@ -25,7 +25,7 @@ func LoginLink(c *gin.Context) {
 		gsgin.GinResponse(c, gsgin.ResponseError, `账号不能为空`, nil)
 		return
 	}
-	userInfo := service.GetAdminUserId(mysqlCli, cast.ToString(account))
+	userInfo := service.GetAdminUserId(mysqlCliAppUrl, cast.ToString(account))
 	if userInfo[`_id`] == nil {
 		gsgin.GinResponse(c, gsgin.ResponseError, `找不到该账号`, nil)
 		return
@@ -33,7 +33,7 @@ func LoginLink(c *gin.Context) {
 	loginHost := cast.ToString(reqMap[`LoginHost`])
 
 	//拿到一个应用ID和一个渠道ID
-	wechatAppId, channelId, errQuery := service.QueryOneWechatAppIdChannelId(mysqlCli, cast.ToInt(userInfo[`_id`]))
+	wechatAppId, channelId, errQuery := service.QueryOneWechatAppIdChannelId(mysqlCliXkf, cast.ToInt(userInfo[`_id`]))
 	if errQuery != nil {
 		gsgin.GinResponse(c, gsgin.ResponseError, errQuery.Error(), nil)
 		return
@@ -55,23 +55,28 @@ func LoginLink(c *gin.Context) {
 		return
 	}
 	token = url.QueryEscape(data)
-	gsgin.GinResponse(c, gsgin.ResponseSuccess, loginHost+`index/LoginRedirect?token=`+token, nil)
+	gsgin.GinResponse(c, gsgin.ResponseSuccess, ``, loginHost+`index/LoginRedirect?token=`+token)
 	return
 }
 
-func getLoginReqData(c *gin.Context) (*base_module.Global, map[string]interface{}, *gstool.Encrypt, *gsdb.GsMysql, error) {
+func getLoginReqData(c *gin.Context) (*base_module.Global, map[string]interface{}, *gstool.Encrypt, *gsdb.GsMysql, *gsdb.GsMysql, error) {
 	global, reqMap, err := GetGlobalReqParamsM(c)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 	encrypt := global.GetEncrypt()
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
-	mysqlName := cast.ToString(reqMap[`mysqlName`])
-	mysqlCli, err := global.MysqlGetClient(mysqlName)
+	mysqlNameAppUrl := cast.ToString(reqMap[`AppUrlMysqlName`])
+	mysqlCliAppUrl, err := global.MysqlGetClient(mysqlNameAppUrl)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
-	return global, reqMap, encrypt, mysqlCli, nil
+	mysqlNameXkf := cast.ToString(reqMap[`XkfMysqlName`])
+	mysqlCliXkf, err := global.MysqlGetClient(mysqlNameXkf)
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+	return global, reqMap, encrypt, mysqlCliAppUrl, mysqlCliXkf, nil
 }

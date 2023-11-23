@@ -6,7 +6,7 @@ import (
 )
 
 var globalMap *gstool.GsConsMap
-var Logger *gstool.GsLogger
+var Logger *gstool.GsSlog
 
 func init() {
 	globalMap = gstool.GsConsMapNew(10)
@@ -40,11 +40,11 @@ type Global struct {
 	shellClientMap *gstool.GsConsMap //全局的shell客户端连接
 	shellConfigMap *gstool.GsConsMap //全局的shell配置
 	encrypt        *gstool.Encrypt   //全局的加密配置
-	logger         *gstool.GsLogger  //如果设置了 那么将输出日志
+	logger         *gstool.GsSlog    //如果设置了 那么将输出日志
 	gin            *gsgin.GSGin      //API接口
 }
 
-func (h *Global) SetLogger(logger *gstool.GsLogger) {
+func (h *Global) SetLogger(logger *gstool.GsSlog) {
 	h.logger = logger
 }
 
@@ -73,12 +73,12 @@ func (h *Global) Debug(msg string, args ...interface{}) {
 
 func (h *Global) Warn(msg string, args ...interface{}) {
 	if h.logger != nil {
-		h.logger.Warningf(msg, args...)
+		h.logger.Warnf(msg, args...)
 	}
 }
 
 func (h *Global) Error(msg string, args ...interface{}) {
 	if h.logger != nil {
-		h.logger.Errorf(msg, args...)
+		h.logger.Errof(msg, args...)
 	}
 }

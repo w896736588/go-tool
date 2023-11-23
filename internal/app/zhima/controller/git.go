@@ -15,13 +15,11 @@ var (
 
 // GitCurrentBranch 查询目录的git分支
 func GitCurrentBranch(c *gin.Context) {
-	gstool.FmtPrintlnLog(`请求获取分支`)
 	_, reqMap, shell, command, err := getGitReqData(c)
 	if err != nil {
 		gsgin.GinResponse(c, gsgin.ResponseError, err.Error(), nil)
 		return
 	}
-	gstool.FmtPrintlnLog(`执行`)
 	codePath := reqMap[`CodePath`].ToStr()
 	command.Sudo()
 	command.Cd(cdCommand + codePath)
@@ -67,6 +65,7 @@ func GitPullBranchOrigin(c *gin.Context) {
 		gsgin.GinResponse(c, gsgin.ResponseError, err.Error(), nil)
 		return
 	}
+	pullCheck := reqMap[`PullCheck`].ToInt()
 	command1 := base_module.Command{}
 	command1.Init()
 	command1.Sudo()
@@ -77,11 +76,16 @@ func GitPullBranchOrigin(c *gin.Context) {
 	currentBranch = strings.Replace(currentBranch, "\n", "", -1)
 	command.Sudo()
 	command.Cd(cdCommand + reqMap[`CodePath`].ToStr())
-	command.GitIgnoreAll()
-	command.GitCleanAll()
-	command.GitFetch()
-	command.GitPull()
-	command.GitPullOrigin(strings.Replace(currentBranch, "\n", "", -1))
+	if pullCheck == 1 {
+		command.GitIgnoreAll()
+		command.GitCleanAll()
+		command.GitFetch()
+		command.GitPull()
+		command.GitPullOrigin(strings.Replace(currentBranch, "\n", "", -1))
+	} else {
+		command.GitPull()
+	}
+
 	command.GitShowBranch()
 
 	result := shell.RunShell(command.GetCommand().ToByte())
