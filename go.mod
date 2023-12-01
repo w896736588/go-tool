@@ -3,7 +3,7 @@ module dev_tool
 go 1.18
 
 require (
-	gitee.com/Sxiaobai/gs v0.0.0-20231123063516-88972fbf3fa1
+	gitee.com/Sxiaobai/gs v0.0.0-20231125082303-5794561bb04f
 	github.com/gin-gonic/gin v1.9.0
 	github.com/gorilla/websocket v1.5.0
 	github.com/redis/go-redis/v9 v9.2.0
