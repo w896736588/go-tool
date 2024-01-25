@@ -32,10 +32,11 @@ func WechatKefuStatus(c *gin.Context) {
 		BaseResponseByError(c, errors.New(`找不到微信客服应用`))
 		return
 	}
-	command := base_module.NewCommand().Sudo().WechatKefuStatus(appIdStr)
-
+	//按app_id查找
+	command := base_module.NewCommand().Sudo().WechatKefuStatus(reqMap[`WechatKefuAppid`].ToStr())
 	RunResultMsg := shell.RunShell(command.GetCommand().ToByte())
 	appMsg := fmt.Sprintf(`所属管理员ID %s %s %s`, userIdStr, appIdStr, gsdefine.Enter)
+
 	gsgin.GinResponse(c, gsgin.ResponseSuccess, ``, appMsg+RunResultMsg)
 }
 
@@ -64,8 +65,12 @@ func WechatKefuChange(c *gin.Context) {
 		if dockerName == `NAMES` || dockerName == `` || !strings.Contains(dockerName, `xkf`) {
 			continue
 		}
+		//按照app_id
 		dockerKillProcess := base_module.NewCommand().Sudo().DockerKill9(dockerName, appIdStr)
 		shell.RunShell(dockerKillProcess.GetCommand().ToByte())
+		//按wechatapp_id
+		dockerIdKillProcess := base_module.NewCommand().Sudo().DockerKill9(dockerName, reqMap[`WechatKefuAppid`].ToStr())
+		shell.RunShell(dockerIdKillProcess.GetCommand().ToByte())
 	}
 	//丢一个topic
 	time.Sleep(time.Second)
