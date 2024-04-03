@@ -196,6 +196,7 @@ func gitRouter() {
 	GlobalGin.GinPost(`/api/GitChangeBranch`, controller.GitChangeBranch)         //切换分支
 	GlobalGin.GinPost(`/api/GitPullBranchOrigin`, controller.GitPullBranchOrigin) //拉取最新分支
 	GlobalGin.GinPost(`/api/GitQueryStatus`, controller.QueryStatus)              //查询分支本地状态
+	GlobalGin.GinPost(`/api/GitCommitLog`, controller.GitCommitLog)               //查询提交日志
 }
 
 //微信客服相关

@@ -85,6 +85,11 @@ func (h *Command) GitStatus() *Command {
 	return h
 }
 
+func (h *Command) GitCommitLog() *Command {
+	h.SetCommand(fmt.Sprintf(`%sgit log --oneline -n 5 `, h.sudo))
+	return h
+}
+
 func (h *Command) WechatKefuStatus(appid string) *Command {
 	h.SetCommand(fmt.Sprintf(`%sdocker ps |awk '{print $NF}'|grep -v NAMES|xargs -I {} bash -c " echo {} && sudo docker exec {} ps -ef | grep -i %s " `, h.sudo, appid))
 	return h

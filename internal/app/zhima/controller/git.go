@@ -107,6 +107,21 @@ func QueryStatus(c *gin.Context) {
 	gsgin.GinResponse(c, gsgin.ResponseSuccess, ``, result)
 }
 
+// GitCommitLog 查询提交日志
+func GitCommitLog(c *gin.Context) {
+	_, reqMap, shell, command, err := getGitReqData(c)
+	if err != nil {
+		gsgin.GinResponse(c, gsgin.ResponseError, err.Error(), nil)
+		return
+	}
+	command.Sudo()
+	command.Cd(cdCommand + reqMap[`CodePath`].ToStr())
+	command.GitCommitLog()
+
+	result := shell.RunShell(command.GetCommand().ToByte())
+	gsgin.GinResponse(c, gsgin.ResponseSuccess, ``, result)
+}
+
 //getGitReqData 基础方法
 func getGitReqData(c *gin.Context) (*base_module.Global, map[string]*gstool.GsCons, *gstool.GsShellPush, *base_module.Command, error) {
 	global, reqMap, err := GetGlobalReqParams(c)
