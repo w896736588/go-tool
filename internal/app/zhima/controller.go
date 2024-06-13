@@ -27,11 +27,14 @@ func RedisList(c *gin.Context) {
 		if RedisRunList[value.Name] == nil {
 			//初始化链接
 			gsRedisConfig := &gsdb.RedisConfig{
-				Name:     value.Name,
-				Host:     value.Host,
-				Password: value.Password,
-				PoolSize: value.PoolSize,
-				Default:  0,
+				Name:        value.Name,
+				Host:        value.Host,
+				Password:    value.Password,
+				PoolSize:    value.PoolSize,
+				Default:     0,
+				DialTimeout: 2,
+				MaxLifetime: 3600,
+				IdleTimeout: 300,
 			}
 			gsRedis := gsdb.GsRedis{
 				RedisConfig: gsRedisConfig,

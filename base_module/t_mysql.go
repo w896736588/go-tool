@@ -19,6 +19,7 @@ func (h *Global) MysqlGetClient(name string) (*gsdb.GsMysql, error) {
 	}
 	gsDb := &gsdb.GsMysql{
 		MysqlConfig: config,
+		GsLog:       h.logger,
 	}
 	err = gsDb.CreateConn()
 	if err != nil {
@@ -32,7 +33,7 @@ func (h *Global) MysqlGetConfig(name string) (*gsdb.MysqlConfig, error) {
 	returnConfig := &gsdb.MysqlConfig{}
 	valueConfig := h.mysqlConfigMap.G(name)
 	if valueConfig == nil {
-		return nil, errors.New(`未注册的服务`)
+		return nil, errors.New(`未注册的mysql服务`)
 	}
 	err := gstool.JsonDecode(valueConfig.ToStr(), returnConfig)
 	if err != nil {

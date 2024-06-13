@@ -156,3 +156,46 @@ func BaseResponseByError(c *gin.Context, err error) {
 		gsgin.GinResponse(c, gsgin.ResponseSuccess, ``, ``)
 	}
 }
+
+//GetGlobalComponent 根据提交的参数获取各个组件 傻瓜化
+func GetGlobalComponent(c *gin.Context) (base_module.Component, error) {
+	component := base_module.Component{}
+	global, reqMap, globalErr := GetGlobalReqParamsM(c)
+	if globalErr != nil {
+		gstool.FmtPrintlnLog(`获取参数失败 %s`, globalErr.Error())
+		return component, globalErr
+	}
+	component.Global = global
+	component.ReqMap = reqMap
+	component.Encrypt = global.GetEncrypt()
+	for requestParamKey, componentKey := range reqMap {
+		switch requestParamKey {
+		case `ShellName`:
+			client, shellErr := global.ShellPushGetClient(cast.ToString(componentKey))
+			if shellErr != nil {
+				return component, shellErr
+			}
+			component.ShellClient = client
+		case `RedisName`:
+			redisCli, redisCliErr := global.RedisGetClient(cast.ToString(componentKey))
+			if redisCliErr != nil {
+				return component, redisCliErr
+			}
+			component.RedisClient = redisCli
+		case `XkfMysqlName`, `mysqlName`:
+			xkfMysqlCli, xkfMysqlCliErr := global.MysqlGetClient(cast.ToString(componentKey))
+			if xkfMysqlCliErr != nil {
+				return component, xkfMysqlCliErr
+			}
+			component.XkfMysqlClient = xkfMysqlCli
+		case `AppUrlMysql`:
+			appUrlMysqlCli, appUrlMysqlCliErr := global.MysqlGetClient(cast.ToString(componentKey))
+			if appUrlMysqlCliErr != nil {
+				return component, appUrlMysqlCliErr
+			}
+			component.AppUrlMysqlClient = appUrlMysqlCli
+		}
+	}
+	component.Logger = global.GetLogger()
+	return component, nil
+}

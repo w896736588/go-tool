@@ -31,7 +31,7 @@ func (h *Global) RedisGetConfig(name string) (*gsdb.RedisConfig, error) {
 	returnConfig := &gsdb.RedisConfig{}
 	valueConfig := h.redisConfigMap.G(name)
 	if valueConfig == nil {
-		return nil, errors.New(`未注册的服务`)
+		return nil, errors.New(`未注册的redis服务`)
 	}
 	err := gstool.JsonDecode(valueConfig.ToStr(), returnConfig)
 	if err != nil {

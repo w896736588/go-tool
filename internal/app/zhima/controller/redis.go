@@ -125,7 +125,7 @@ func RedisSearch(c *gin.Context) {
 	} else {
 		gsgin.GinResponse(c, gsgin.ResponseSuccess, `获取成功`, map[string]interface{}{
 			`keyType`: keyType,
-			`KeyTtl`:  keyTtl,
+			`KeyTtl`:  keyTtl.Seconds(),
 			`Result`:  gsCons.Value(),
 		})
 	}
@@ -329,7 +329,7 @@ func RedisCreateCache(c *gin.Context) {
 		}
 	} else {
 		err = BaseRedisCheckKeyExist(redisCli.Client, cacheKey)
-		if err == nil {
+		if err != nil {
 			gsgin.GinResponse(c, gsgin.ResponseError, fmt.Sprintf(`%s key不存在`, cacheKey), ``)
 			return
 		}

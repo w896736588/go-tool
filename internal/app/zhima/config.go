@@ -45,6 +45,7 @@ func InitBase() {
 	if err != nil {
 		panic(err.Error())
 	}
+	base_module.RootPath = RootPath
 	getConfigViper()
 	getEncrypt()
 	getLogger()
@@ -89,15 +90,17 @@ func getGin() {
 	GlobalGin.GinInit(host, port)
 	GlobalGin.GinSetAllowCrossDomain()
 	viewPath := filepath.Dir(RootPath)
+	gstool.FmtPrintlnLog(`isProd %t`, *IsProd)
 	if *IsProd {
 		GlobalGin.GinStatic(`/js`, viewPath+`/devtool/dist/js`)
 		GlobalGin.GinStaticFile(`/favicon.ico`, viewPath+`/devtool/dist/favicon.ico`)
 		GlobalGin.GinStatic(`/css`, viewPath+`/devtool/dist/css`)
 		GlobalGin.GinLoadHTMLFiles(viewPath + `/devtool/dist/index.html`)
 	} else {
-		GlobalGin.GinStatic(`/js`, viewPath+`/dist/js`)
-		GlobalGin.GinStatic(`/css`, viewPath+`/dist/css`)
-		GlobalGin.GinLoadHTMLFiles(viewPath + `/dist/index.html`)
+		GlobalGin.GinStatic(`/js`, RootPath+`/`+AppName+`/devtool/dist/js`)
+		GlobalGin.GinStaticFile(`/favicon.ico`, RootPath+`/`+AppName+`/devtool/dist/favicon.ico`)
+		GlobalGin.GinStatic(`/css`, RootPath+`/`+AppName+`/devtool/dist/css`)
+		GlobalGin.GinLoadHTMLFiles(RootPath + `/` + AppName + `/devtool/dist/index.html`)
 	}
 
 	GlobalGin.GinGet(`/`, func(context *gin.Context) {
@@ -112,6 +115,7 @@ func getGin() {
 	vipRouter()
 	dockerRouter()
 	loginRouter()
+	codeRouter()
 	initSocket()
 	GlobalGin.GinRun()
 }
@@ -224,4 +228,9 @@ func dockerRouter() {
 	GlobalGin.GinPost(`/api/DockerShowCompose`, controller.DockerShowCompose) //查看配置文件
 	GlobalGin.GinPost(`/api/DockerExec`, controller.DockerExec)               //执行命令
 	GlobalGin.GinPost(`/api/DockerPs`, controller.DockerPs)                   //ps
+}
+
+//代码生成相关
+func codeRouter() {
+	//GlobalGin.GinAll(`/api/CodeGenerate`, controller.GenerateCode) //生成代码
 }

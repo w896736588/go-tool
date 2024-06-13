@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"dev_tool/base_module"
 	"dev_tool/internal/app/zhima/service"
 	"errors"
 	"gitee.com/Sxiaobai/gs/gsdb"
@@ -21,7 +20,7 @@ var VipMap = map[string]string{
 
 //VipChange vip版本切换
 func VipChange(c *gin.Context) {
-	_, reqMap, redisCli, mysqlCli, err := getVipReqData(c)
+	reqMap, redisCli, mysqlCli, err := getVipReqData(c)
 	if err != nil {
 		gsgin.GinResponse(c, gsgin.ResponseError, err.Error(), nil)
 		return
@@ -58,7 +57,7 @@ func VipChange(c *gin.Context) {
 
 //VipQuery vip版本查询
 func VipQuery(c *gin.Context) {
-	_, reqMap, _, mysqlCli, err := getVipReqData(c)
+	reqMap, _, mysqlCli, err := getVipReqData(c)
 	if err != nil {
 		gsgin.GinResponse(c, gsgin.ResponseError, err.Error(), nil)
 		return
@@ -98,20 +97,16 @@ func queryVipType(reqMap map[string]interface{}, mysqlCli *gsdb.GsMysql) (string
 }
 
 //拿到各类句柄
-func getVipReqData(c *gin.Context) (*base_module.Global, map[string]interface{}, *gsdb.GsRedis, *gsdb.GsMysql, error) {
-	global, reqMap, err := GetGlobalReqParamsM(c)
-	if err != nil {
-		return nil, nil, nil, nil, err
+func getVipReqData(c *gin.Context) (map[string]interface{}, *gsdb.GsRedis, *gsdb.GsMysql, error) {
+	component, componentErr := GetGlobalComponent(c)
+	if componentErr != nil {
+		return nil, nil, nil, componentErr
 	}
-	redisName := cast.ToString(reqMap[`redisName`])
-	redisCli, err := global.RedisGetClient(redisName)
-	if err != nil {
-		return nil, nil, nil, nil, err
+	if component.RedisClient == nil {
+		return nil, nil, nil, errors.New(`redis客户端为空`)
 	}
-	mysqlName := cast.ToString(reqMap[`mysqlName`])
-	mysqlCli, err := global.MysqlGetClient(mysqlName)
-	if err != nil {
-		return nil, nil, nil, nil, err
+	if component.XkfMysqlClient == nil {
+		return nil, nil, nil, errors.New(`mysql客户端为空`)
 	}
-	return global, reqMap, redisCli, mysqlCli, nil
+	return component.ReqMap, component.RedisClient, component.XkfMysqlClient, nil
 }

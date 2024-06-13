@@ -31,6 +31,11 @@ func (h *Global) GinGet(route string, call ...gin.HandlerFunc) {
 	h.gin.GinH.GET(route, call...)
 }
 
+func (h *Global) GinAll(route string, call ...gin.HandlerFunc) {
+	h.gin.GinH.GET(route, call...)
+	h.gin.GinH.POST(route, call...)
+}
+
 func (h *Global) GinStatic(route, root string) {
 	h.gin.GinH.Static(route, root)
 }

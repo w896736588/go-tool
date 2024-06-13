@@ -7,6 +7,7 @@ import (
 
 var globalMap *gstool.GsConsMap
 var Logger *gstool.GsSlog
+var RootPath string //根目录
 
 func init() {
 	globalMap = gstool.GsConsMapNew(10)
@@ -46,6 +47,10 @@ type Global struct {
 
 func (h *Global) SetLogger(logger *gstool.GsSlog) {
 	h.logger = logger
+}
+
+func (h *Global) GetLogger() *gstool.GsSlog {
+	return h.logger
 }
 
 func (h *Global) SetEncrypt(encryptKey, encryptIv string) {

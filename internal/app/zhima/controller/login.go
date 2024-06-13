@@ -1,8 +1,8 @@
 package controller
 
 import (
-	"dev_tool/base_module"
 	"dev_tool/internal/app/zhima/service"
+	"errors"
 	"gitee.com/Sxiaobai/gs/gsdb"
 	"gitee.com/Sxiaobai/gs/gsgin"
 	"gitee.com/Sxiaobai/gs/gstool"
@@ -15,7 +15,7 @@ import (
 
 //LoginLink 登录地址
 func LoginLink(c *gin.Context) {
-	_, reqMap, encrypt, mysqlCliAppUrl, mysqlCliXkf, err := getLoginReqData(c)
+	reqMap, encrypt, mysqlCliXkf, err := getLoginReqData(c)
 	if err != nil {
 		gsgin.GinResponse(c, gsgin.ResponseError, err.Error(), nil)
 		return
@@ -25,7 +25,7 @@ func LoginLink(c *gin.Context) {
 		gsgin.GinResponse(c, gsgin.ResponseError, `账号不能为空`, nil)
 		return
 	}
-	userInfo := service.GetAdminUserId(mysqlCliAppUrl, cast.ToString(account))
+	userInfo := service.GetAdminUserId(mysqlCliXkf, cast.ToString(account))
 	if userInfo[`_id`] == nil {
 		gsgin.GinResponse(c, gsgin.ResponseError, `找不到该账号`, nil)
 		return
@@ -59,24 +59,13 @@ func LoginLink(c *gin.Context) {
 	return
 }
 
-func getLoginReqData(c *gin.Context) (*base_module.Global, map[string]interface{}, *gstool.Encrypt, *gsdb.GsMysql, *gsdb.GsMysql, error) {
-	global, reqMap, err := GetGlobalReqParamsM(c)
-	if err != nil {
-		return nil, nil, nil, nil, nil, err
+func getLoginReqData(c *gin.Context) (map[string]interface{}, *gstool.Encrypt, *gsdb.GsMysql, error) {
+	component, componentErr := GetGlobalComponent(c)
+	if componentErr != nil {
+		return nil, nil, nil, componentErr
 	}
-	encrypt := global.GetEncrypt()
-	if err != nil {
-		return nil, nil, nil, nil, nil, err
+	if component.XkfMysqlClient == nil {
+		return nil, nil, nil, errors.New(`mysql client is null`)
 	}
-	mysqlNameAppUrl := cast.ToString(reqMap[`AppUrlMysqlName`])
-	mysqlCliAppUrl, err := global.MysqlGetClient(mysqlNameAppUrl)
-	if err != nil {
-		return nil, nil, nil, nil, nil, err
-	}
-	mysqlNameXkf := cast.ToString(reqMap[`XkfMysqlName`])
-	mysqlCliXkf, err := global.MysqlGetClient(mysqlNameXkf)
-	if err != nil {
-		return nil, nil, nil, nil, nil, err
-	}
-	return global, reqMap, encrypt, mysqlCliAppUrl, mysqlCliXkf, nil
+	return component.ReqMap, component.Encrypt, component.XkfMysqlClient, nil
 }
