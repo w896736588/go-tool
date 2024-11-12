@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/playwright-community/playwright-go"
 	"github.com/spf13/cast"
+	"log"
 	"time"
 )
 
@@ -164,7 +165,7 @@ func SmartLinkRun(c *gin.Context) {
 	openNum := cast.ToInt(dataMap[`open_num`])
 	openType := cast.ToInt(dataMap[`open_type`])
 	process := cast.ToString(dataMap[`process`])
-	processList := make([]map[string]string, 0)
+	processList := make([]map[string]any, 0)
 	_ = gstool.JsonDecode(process, &processList)
 	gstool.FmtPrintlnLogTime(`processList %#v`, processList)
 	//初始化
@@ -177,47 +178,96 @@ func SmartLinkRun(c *gin.Context) {
 	var errLaunch error
 	if openType == define.OpenTypeWebkitSilence {
 		browser, errLaunch = pw.Chromium.Launch()
-		gstool.FmtPrintlnLogTime(`静默`)
 	} else {
 		browser, errLaunch = pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
 			Headless: playwright.Bool(false), // 设置为非 Headless 模式
 		})
-		gstool.FmtPrintlnLogTime(`静默`)
 	}
 	if errLaunch != nil {
 		gsgin.GinResponseError(c, fmt.Sprintf("could not launch browser: %v", errLaunch.Error()), nil)
 		return
 	}
-
+	windowsScreen := gstool.WindowsWorkScreen()
+	gstool.FmtPrintlnLogTime(`屏幕长宽 %#v`, windowsScreen)
 	for i := 0; i < openNum; i++ {
-		page, pageErr := browser.NewPage()
+
+		page, pageErr := browser.NewPage(playwright.BrowserNewPageOptions{Viewport: &playwright.Size{
+			Width:  windowsScreen.WorkWidth,
+			Height: windowsScreen.WorkHeight,
+		}, Screen: &playwright.Size{
+			Width:  windowsScreen.WorkWidth,
+			Height: windowsScreen.WorkHeight,
+		}})
 		if pageErr != nil {
 			gsgin.GinResponseError(c, fmt.Sprintf("could not create page:  %v", pageErr.Error()), nil)
 			return
 		}
+
 		if _, err = page.Goto(link); err != nil {
 			gsgin.GinResponseError(c, fmt.Sprintf("could not goto:  %v", err.Error()), nil)
 			return
 		}
 		for _, processVal := range processList {
+			time.Sleep(time.Millisecond * 100)
 			processType := cast.ToString(processVal[`type`])
-			//selector := cast.ToString(processVal[`selector`])
-			existSelector := cast.ToString(processVal[`exist_selector`])
+			selector := cast.ToString(processVal[`selector`])
+			waitNavigation := cast.ToInt(processVal[`waitNavigation`])
+			existSelectorClick := cast.ToString(processVal[`exist_selector_click`])
 			gstool.FmtPrintlnLogTime(`操作 %#v`, processVal)
+
+			// 等待导航完成
+			waitErr := page.WaitForLoadState(playwright.PageWaitForLoadStateOptions{
+				State: playwright.LoadStateLoad, //三种LoadStateNetworkidle 网络加载最低程度 LoadStateDomcontentloaded DOM加载完成
+			})
+			if waitErr != nil {
+				gstool.FmtPrintlnLogTime("等待页面 DOM 内容加载完成失败: %s", waitErr.Error())
+			}
 			switch processType {
 			case `click`:
-				if existSelector != `` {
-					gstool.FmtPrintlnLogTime(`开始查找 %s`, existSelector)
-					exist := page.GetByRole(*playwright.AriaRoleLink, playwright.PageGetByRoleOptions{
-						Name: `确定`,
+				if existSelectorClick != `` { //点击
+					gstool.FmtPrintlnLogTime(`开始查找 %s`, existSelectorClick)
+					exist, existErr := page.QuerySelector(existSelectorClick)
+					if existErr != nil {
+						gstool.FmtPrintlnLogTime(`exist判断 %s`, existErr.Error())
+					} else if exist != nil {
+						exist.Click()
+					}
+				}
+				gstool.FmtPrintlnLogTime(`查找元素 %s`, selector)
+				selecter, selecterErr := page.QuerySelector(selector)
+				if selecterErr != nil {
+					gstool.FmtPrintlnLogTime(`exist判断 %s`, selecterErr.Error())
+				} else if selecter != nil {
+					selecter.Click()
+				} else {
+					gstool.FmtPrintlnLogTime(`查找元素 %s 未查找到`, selector)
+				}
+				//等待导航完成
+				if waitNavigation == 1 {
+					// 等待导航完成
+					gstool.FmtPrintlnLogTime(`等待导航完成`)
+					_, waitNavigationErr := page.ExpectNavigation(func() error {
+						return nil
 					})
-					exist.Click()
-					gstool.FmtPrintlnLogTime(`%v`, exist)
-					//if existElementErr != nil {
-					//	continue
-					//} else {
-					//	_ = page.Click(selector)
-					//}
+					if waitNavigationErr != nil {
+						gstool.FmtPrintlnLogTime("navigation failed: %v", waitNavigationErr)
+					}
+				}
+				break
+			case `input`:
+				inputValue := cast.ToString(processVal[`value`])
+				inputValue = gstool.StringReplaces(inputValue, map[string]string{
+					`{user_name}`: cast.ToString(dataMap[`user_name`]),
+					`{password}`:  cast.ToString(dataMap[`password`]),
+				})
+				selecter, selecterErr := page.QuerySelector(selector)
+				if selecterErr != nil {
+					gstool.FmtPrintlnLogTime(`selecter判断 %s`, selecterErr.Error())
+				} else if selecter != nil {
+					inputErr := selecter.Fill(inputValue)
+					if inputErr != nil {
+						log.Fatalf("无法将元素转换为输入框: %v", inputErr.Error())
+					}
 				}
 				break
 			}

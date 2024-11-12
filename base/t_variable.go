@@ -115,7 +115,7 @@ func (h *VariableRun) RunDone(variableId any, replaceList []map[string]string, v
 	//拿到值
 	redisId := ``
 	for _, variableForm := range variableFormList {
-		if cast.ToInt(variableForm.VariableType) == define.VariableTypeRedisChoose {
+		if cast.ToInt(variableForm.VariableType) == define.VariableCmdRedisChoose {
 			redisId = variableForm.Select.Value
 		}
 	}
@@ -128,13 +128,13 @@ func (h *VariableRun) RunDone(variableId any, replaceList []map[string]string, v
 		var result string
 		var resultErr error
 		switch cast.ToInt(cmd[`type`]) {
-		case define.VariableTypeMysql:
+		case define.VariableCmdMysql:
 			result, resultErr = h.runMysqlSql(cmd)
 			break
-		case define.VariableTypeBash:
+		case define.VariableCmdBash:
 			result, resultErr = h.runBash(cmd)
 			break
-		case define.VariableTypeRedisDelete:
+		case define.VariableCmdRedisDelete:
 			result, resultErr = h.runRedisDelete(cmd, cast.ToInt(redisId), cast.ToString(variableId))
 			break
 		default:
@@ -302,5 +302,6 @@ func (h *VariableRun) end() {
 func (h *VariableRun) getVariableCmdList(variableId any) ([]map[string]any, error) {
 	return Component.TSqlite.Client.QuickQuery(`tbl_variable_cmd`, `*`, map[string]any{
 		`variable_id`: variableId,
+		`status`:      1,
 	}).Order(`weight asc`).All()
 }

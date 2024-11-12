@@ -72,7 +72,7 @@ func VariableAdd(c *gin.Context) {
 		return
 	}
 	var id any
-	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `variable_group_id`, `remark`})
+	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `variable_group_id`, `remark`, `type`})
 	if cast.ToInt(dataMap[`id`]) == 0 {
 		updateData[`create_time`] = time.Now().Unix()
 		updateData[`update_time`] = time.Now().Unix()
@@ -123,12 +123,12 @@ func VariableCmdAdd(c *gin.Context) {
 		return
 	}
 	switch _type {
-	case define.VariableTypeMysql:
+	case define.VariableCmdMysql:
 		if cast.ToString(dataMap[`sql`]) == `` || cast.ToInt(dataMap[`mysql_id`]) == 0 {
 			gsgin.GinResponseError(c, `mysql类型格式错误`, nil)
 			return
 		}
-	case define.VariableTypeCmd:
+	case define.VariableCmdCmd:
 		if cast.ToString(dataMap[`cmd`]) == `` {
 			gsgin.GinResponseError(c, `cmd格式错误`, nil)
 			return

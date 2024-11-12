@@ -18,8 +18,8 @@ func (h *VariableRun) RunPre(variableId any) ([]_struct.VariableForm, []map[stri
 	replaceList := make([]map[string]string, 0)
 	variableFormList := make([]_struct.VariableForm, 0)
 	for _, cmd := range cmdList {
-		if cast.ToInt(cmd[`is_pre`]) == 0 {
-			if cast.ToInt(cmd[`type`]) == define.VariableTypeBash { //预先连接ssh
+		if cast.ToInt(cmd[`is_pre`]) == 0 && cast.ToInt(cmd[`type`]) != define.VariableCmdLink {
+			if cast.ToInt(cmd[`type`]) == define.VariableCmdBash { //预先连接ssh
 				h.sendSocketMsg(variableId, `开始检查：`+cast.ToString(cmd[`name`])+`,预先连接ssh`)
 				preConnErr := h.preConnSsh(cmd)
 				if preConnErr != nil {
@@ -38,13 +38,13 @@ func (h *VariableRun) RunPre(variableId any) ([]_struct.VariableForm, []map[stri
 			IsRunOk:      0,                          //1已经准备好执行 全部为1的时候就可以执行了
 		}
 		switch cast.ToInt(cmd[`type`]) {
-		case define.VariableTypeInput: //输入框肯定需要进行输入
+		case define.VariableCmdInput: //输入框肯定需要进行输入
 			variableForm.Input = _struct.VariableFormInput{
 				Label: cast.ToString(cmd[`name`]),
 			}
 			h.PreShowSet(cast.ToString(variableId), cast.ToString(cmd[`name`]), &variableForm)
 			break
-		case define.VariableTypeRadio: //单项选择 初始的时候不存在替换值 只有选了以后才有
+		case define.VariableCmdRadio: //单项选择 初始的时候不存在替换值 只有选了以后才有
 			variableForm.Select = _struct.VariableFormSelect{
 				Label:      cast.ToString(cmd[`name`]),
 				Value:      ``,
@@ -60,7 +60,7 @@ func (h *VariableRun) RunPre(variableId any) ([]_struct.VariableForm, []map[stri
 			}
 			h.PreShowSet(cast.ToString(variableId), cast.ToString(cmd[`name`]), &variableForm)
 			break
-		case define.VariableTypeRedisChoose: //redis选择 所有配置的redis
+		case define.VariableCmdRedisChoose: //redis选择 所有配置的redis
 			variableForm.Select = _struct.VariableFormSelect{
 				Label:      cast.ToString(cmd[`name`]),
 				Value:      ``,
@@ -81,7 +81,7 @@ func (h *VariableRun) RunPre(variableId any) ([]_struct.VariableForm, []map[stri
 			}
 			h.PreShowSet(cast.ToString(variableId), cast.ToString(cmd[`name`]), &variableForm)
 			break
-		case define.VariableTypeMysql: //执行sql 初始化
+		case define.VariableCmdMysql: //执行sql 初始化
 			variableForm.Sql = _struct.VariableFormSql{
 				Sql:     cast.ToString(cmd[`sql`]),
 				MysqlId: cast.ToString(cmd[`mysql_id`]),
@@ -93,6 +93,12 @@ func (h *VariableRun) RunPre(variableId any) ([]_struct.VariableForm, []map[stri
 				}
 			}
 			h.PreShowSet(cast.ToString(variableId), cast.ToString(cmd[`name`]), &variableForm)
+			break
+		case define.VariableCmdLink:
+			variableForm.Link = _struct.VariableFormLink{
+				Link: cast.ToString(cmd[`remark`]),
+				Desc: cast.ToString(cmd[`options`]),
+			}
 			break
 		default:
 			//这里不管预执行
@@ -172,14 +178,14 @@ func (h *VariableRun) preConnSsh(cmd map[string]any) error {
 func (h *VariableRun) PreShowSet(variableId, variableCmdName string, variableForm *_struct.VariableForm) {
 	variableForm.IsShowOk = 1 //默认显示是
 	switch cast.ToInt(variableForm.VariableType) {
-	case define.VariableTypeRadio: //单选
+	case define.VariableCmdRadio: //单选
 		if !h.isPreShowForm(variableForm.Select.Options) {
 			variableForm.IsShowOk = 0 //不显示
 			h.sendSocketMsg(variableId, `开始检查：`+variableCmdName+`,等待补充选项后展示`)
 			return
 		}
 		h.sendSocketMsg(variableId, `开始检查：`+variableCmdName+`,可以展示`)
-	case define.VariableTypeMysql: //执行sql
+	case define.VariableCmdMysql: //执行sql
 		h.sendSocketMsg(variableId, `开始检查：`+variableCmdName+`,初始化完成`)
 		variableForm.IsShowOk = 0
 		return
