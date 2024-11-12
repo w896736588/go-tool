@@ -19,6 +19,7 @@ type VariableForm struct {
 	Input        VariableFormInput  `json:"Input,omitempty"`
 	Select       VariableFormSelect `json:"Select,omitempty"`
 	Sql          VariableFormSql    `json:"Sql,omitempty"`
+	Link         VariableFormLink   `json:"Link,omitempty"`
 	ResultKey    string
 	IsShowOk     int //1准备好 0未准备好  准备好了以后就会在页面上显示选项等
 	IsRunOk      int //1准备好执行（需要选择） 全部准备好以后就是可以执行了
@@ -33,6 +34,11 @@ type VariableFormInput struct {
 type VariableFormSql struct {
 	Sql     string
 	MysqlId string
+}
+
+type VariableFormLink struct {
+	Link string
+	Desc string
 }
 
 type VariableFormSelect struct {

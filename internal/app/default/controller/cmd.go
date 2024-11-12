@@ -33,14 +33,14 @@ func CmdAdd(c *gin.Context) {
 	}
 	configStr := cast.ToString(dataMap[`config`])
 	switch _type {
-	case define.VariableTypeMysql:
+	case define.VariableCmdMysql:
 		config := _struct.VariableMysql{}
 		_ = gstool.JsonDecode(configStr, &config)
 		if cast.ToString(config.Sql) == `` || cast.ToInt(config.MysqlId) == 0 {
 			gsgin.GinResponseError(c, `mysql类型格式错误`, nil)
 			return
 		}
-	case define.VariableTypeCmd:
+	case define.VariableCmdCmd:
 		config := _struct.VariableCmd{}
 		_ = gstool.JsonDecode(configStr, &config)
 		if cast.ToInt(config.CmdId) == 0 {
