@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/spf13/viper"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -32,18 +33,18 @@ func stdLog(IsBuild string) {
 	if IsBuild != `1` {
 		return
 	}
-	outFile, outFileErr := os.OpenFile(base.Component.Env.RootPath+`/out.log`, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if outFileErr != nil {
-		gstool.FmtPrintlnLogTime("error opening file: %v", outFileErr)
-	}
-	gstool.FmtPrintlnLogTime(`标准输出文件 %s`, base.Component.Env.RootPath+`/out.log`)
-	gstool.FmtPrintlnLogTime(`错误输出文件 %s`, base.Component.Env.RootPath+`/err.log`)
-	errFile, errErr := os.OpenFile(base.Component.Env.RootPath+`/err.log`, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if errErr != nil {
-		gstool.FmtPrintlnLogTime("error opening file: %v", errErr)
-	}
-	os.Stdout = outFile
-	os.Stderr = errFile
+	//outFile, outFileErr := os.OpenFile(base.Component.Env.RootPath+`/out.log`, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	//if outFileErr != nil {
+	//	gstool.FmtPrintlnLogTime("error opening file: %v", outFileErr)
+	//}
+	//gstool.FmtPrintlnLogTime(`标准输出文件 %s`, base.Component.Env.RootPath+`/out.log`)
+	//gstool.FmtPrintlnLogTime(`错误输出文件 %s`, base.Component.Env.RootPath+`/err.log`)
+	//errFile, errErr := os.OpenFile(base.Component.Env.RootPath+`/err.log`, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	//if errErr != nil {
+	//	gstool.FmtPrintlnLogTime("error opening file: %v", errErr)
+	//}
+	//os.Stdout = outFile
+	//os.Stderr = errFile
 }
 
 func initComponent(IsBuild string) {
@@ -126,9 +127,10 @@ func Stop() {
 func initGin() {
 	host := base.Component.ConfigViper.GetString(`run.host`)
 	port := base.Component.ConfigViper.GetString(`run.port`)
+	base.Component.TGin.SetMode(gin.TestMode)
 	base.Component.TGin.GinInit(host, port)
 	base.Component.TGin.GinSetAllowCrossDomain()
-	base.Component.TGin.SetMode(gin.ReleaseMode)
+	gin.DefaultWriter = io.Discard
 	viewPath := filepath.Dir(base.Component.Env.RootPath)
 	if base.Component.Env.IsBuild {
 		base.Component.TGin.GinStatic(`/js`, viewPath+`/devtool/dist/js`)
