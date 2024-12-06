@@ -142,4 +142,5 @@ func smartLink() {
 	base.Component.TGin.GinPost(`/api/SmartLinkRunList`, controller.SmartLinkRunPlaywrightList)
 	base.Component.TGin.GinPost(`/api/SmartLinkForward`, controller.SmartLinkPlaywrightForward)
 	base.Component.TGin.GinPost(`/api/SmartLinkChromeVersion`, controller.SmartLinkPlaywrightVersion)
+	base.Component.TGin.GinPost(`/api/SmartLinkChromeDownload`, controller.SmartLinkUpWebkit)
 }

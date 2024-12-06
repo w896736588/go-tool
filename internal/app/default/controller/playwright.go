@@ -200,7 +200,7 @@ func SmartLinkRunPlaywrightList(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, ``, runList)
 }
 
-// SmartLinkPlaywrightForward 唤醒
+// SmartLinkPlaywrightForward 唤醒 注意，如果点击了最小化，那么弹不出来
 func SmartLinkPlaywrightForward(c *gin.Context) {
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
@@ -244,7 +244,8 @@ func openBrowserPlaywright(openType int, link string, processList []map[string]a
 		//类型
 		processType := cast.ToString(processVal[`type`])
 		//元素选择
-		selector := cast.ToString(processVal[`selector`])
+		Locator := cast.ToString(processVal[`Locator`])
+		gstool.FmtPrintlnLogTime(`查找元素 %s`, Locator)
 		//链接
 		redirectUri := cast.ToString(processVal[`uri`])
 		//操作描述
@@ -263,7 +264,7 @@ func openBrowserPlaywright(openType int, link string, processList []map[string]a
 			gstool.FmtPrintlnLogTime("等待页面 DOM 内容加载完成失败: %s", waitErr.Error())
 		}
 
-		addTipMsg(*page.Page, tip)
+		base.Component.TSmartLink.AddTipMsg(*page.Page, tip)
 		switch processType {
 		case `window_max`: //窗口最大化
 			base.Component.TSmartLink.SetWindowMax(page.BrowserPid)
@@ -272,15 +273,22 @@ func openBrowserPlaywright(openType int, link string, processList []map[string]a
 			if waitUrlErr != nil {
 				return waitUrlErr
 			}
+			//nodePid := base.Component.TSmartLink.FindNewPidByName(`node.exe`)
+			//browserPid := base.Component.TSmartLink.FindPidChildLastPid(nodePid)
+			//打开新页卡时，进程ID不变，但是活跃的标签变了，也不会变为活跃，这可能跟浏览器内部处理有关
+			//但是手动打开一个新页卡，好像又可以变为活跃 先不研究了
+			//gstool.FmtPrintlnLogTime(`node pid %d 新打开的页卡进程 %d`, nodePid, browserPid)
+			//base.Component.TSmartLink.PageList[page.CreateTimeDesc].BrowserPid = cast.ToInt(browserPid)
 			//监听控制台
 			//go listenDevTool(*page.Context, *page.Page, *page.Browser)
 		case `click`: //点击
-			selectorLoader := (*page.Page).Locator(selector)
+			selectorLoader := (*page.Page).Locator(Locator)
 			selectorLoaderWaitErr := selectorLoader.WaitFor(playwright.LocatorWaitForOptions{
 				Timeout: &waitSecond,
 				State:   playwright.WaitForSelectorStateVisible,
 			})
 			if selectorLoaderWaitErr == nil {
+				gstool.FmtPrintlnLogTime(`找到元素%s，点击`, Locator)
 				clickErr := selectorLoader.Click()
 				if clickErr != nil {
 					gstool.FmtPrintlnLogTime(`等待元素后 点击失败 %s`, clickErr.Error())
@@ -293,7 +301,7 @@ func openBrowserPlaywright(openType int, link string, processList []map[string]a
 				`{user_name}`: cast.ToString(dataMap[`user_name`]),
 				`{password}`:  cast.ToString(dataMap[`password`]),
 			})
-			inputSelecter := (*page.Page).Locator(selector)
+			inputSelecter := (*page.Page).Locator(Locator)
 			selectorLoaderWaitErr := inputSelecter.WaitFor(playwright.LocatorWaitForOptions{
 				Timeout: &waitSecond,
 			})
@@ -337,39 +345,6 @@ func registerJs(page playwright.Page) {
 	}); err != nil {
 		gstool.FmtPrintlnLogTime(`err %s`, err.Error())
 	}
-}
-
-// 向页面上输出提示
-func addTipMsg(page playwright.Page, tip string) {
-	_, _ = page.Evaluate(`(function() {
-			setTimeout(function() {
-				var existTip = document.getElementById('playwrightTipId');
-				if (existTip) {
-					existTip.remove();
-				}
-				var messageBox = document.createElement('div');
-				messageBox.id = 'playwrightTipId';
-				messageBox.textContent = '` + tip + `';
-				messageBox.style.position = 'fixed';
-				messageBox.style.top = '50%';
-				messageBox.style.left = '50%';
-				messageBox.style.transform = 'translate(-50%, -50%)';
-				messageBox.style.color = 'white';
-				messageBox.style.backgroundColor = 'black';
-				messageBox.style.padding = '20px';
-				messageBox.style.borderRadius = '10px';
-				messageBox.style.boxShadow = '0 0 10px rgba(0, 0, 0, 0.5)';
-				messageBox.style.zIndex = 2000;
-				messageBox.style.display = 'block'; // 初始状态隐藏
-				document.body.appendChild(messageBox);
-				setTimeout(function() {
-					var existTip = document.getElementById('playwrightTipId');
-					if (existTip) {
-						existTip.remove();
-					}
-				}, 2000); 
-			}, 100); 
-		})();`)
 }
 
 // SetTitle 设置title
