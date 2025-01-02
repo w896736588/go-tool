@@ -20,9 +20,8 @@ type TPlayWright struct {
 }
 
 type TSmartLink struct {
-	PageList  map[string]*TPlayWright
-	lock      sync.Mutex
-	IsInstall bool
+	PageList map[string]*TPlayWright
+	lock     sync.Mutex
 }
 
 // GetPage 拿到Page
@@ -162,4 +161,34 @@ func (h *TSmartLink) AddTipMsg(page playwright.Page, tip string) {
 				}, 2000); 
 			}, 100); 
 		})();`)
+}
+
+func (h *TSmartLink) SmartCheckAndUpdate() {
+	pw, _ := playwright.NewDriver()
+	lockFileName := `playwright.lock`
+	lockFileFullPath := Component.Env.RootPath + `/` + lockFileName
+	if !gstool.FileIsExisted(lockFileFullPath) {
+		go h.install(pw.Version, lockFileFullPath)
+	} else {
+		content, contentErr := gstool.FileGetContent(lockFileFullPath)
+		if contentErr != nil {
+			gstool.FmtPrintlnLogTime(`获取文件内容失败 %s`, contentErr.Error())
+		} else if content != pw.Version {
+			go h.install(pw.Version, lockFileFullPath)
+		} else {
+			gstool.FmtPrintlnLogTime(`浏览器核心最新版本为：%s ，当前安装版本为：%s,不需要进行更新`, pw.Version, content)
+		}
+	}
+}
+
+func (h *TSmartLink) install(version, lockFileFullPath string) {
+	_ = gstool.FilePutContentCover(lockFileFullPath, version)
+	gstool.FmtPrintlnLogTime(`开始安装浏览器核心(只安装chrome),大约几分钟时间`)
+	err := playwright.Install(&playwright.RunOptions{Browsers: []string{`chromium`}})
+	if err != nil {
+		gstool.FmtPrintlnLogTime(`安装浏览器核心失败 %s`, err.Error())
+		_ = gstool.FileDelete(lockFileFullPath)
+	} else {
+		gstool.FmtPrintlnLogTime(`安装完成`)
+	}
 }
