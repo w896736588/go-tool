@@ -227,42 +227,8 @@ func SmartLinkPlaywrightForward(c *gin.Context) {
 // SmartLinkPlaywrightVersion 获取浏览器核心版本
 func SmartLinkPlaywrightVersion(c *gin.Context) {
 	pw, _ := playwright.NewDriver()
-	lockFileName := `playwright.lock`
-	lockFileFullPath := base.Component.Env.RootPath + `/` + lockFileName
-	if !gstool.FileIsExisted(lockFileFullPath) {
-		go install(pw.Version, lockFileFullPath)
-	} else {
-		content, contentErr := gstool.FileGetContent(lockFileFullPath)
-		if contentErr != nil {
-			gstool.FmtPrintlnLogTime(`获取文件内容失败 %s`, contentErr.Error())
-		} else if content != pw.Version {
-			go install(pw.Version, lockFileFullPath)
-		} else {
-			gstool.FmtPrintlnLogTime(`浏览器核心最新版本为：%s ，当前安装版本为：%s,不需要进行更新`, pw.Version, content)
-		}
-	}
 	gsgin.GinResponseSuccess(c, pw.Version, nil)
 	return
-}
-
-func install(version, lockFileFullPath string) {
-	if base.Component.TSmartLink.IsInstall {
-		gstool.FmtPrintlnLogTime(`正在安装中..`)
-		return
-	}
-	defer func() {
-		base.Component.TSmartLink.IsInstall = false
-	}()
-	base.Component.TSmartLink.IsInstall = true
-	_ = gstool.FilePutContentCover(lockFileFullPath, version)
-	gstool.FmtPrintlnLogTime(`开始安装浏览器核心(只安装chrome),大约几分钟时间`)
-	err := playwright.Install(&playwright.RunOptions{Browsers: []string{`chromium`}})
-	if err != nil {
-		gstool.FmtPrintlnLogTime(`安装浏览器核心失败 %s`, err.Error())
-		_ = gstool.FileDelete(lockFileFullPath)
-	} else {
-		gstool.FmtPrintlnLogTime(`安装完成`)
-	}
 }
 
 // 打开浏览器

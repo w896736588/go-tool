@@ -61,6 +61,7 @@ func initComponent(IsBuild string) {
 	base.Component.TSmartLink = &base.TSmartLink{
 		PageList: make(map[string]*base.TPlayWright),
 	}
+	base.Component.TSmartLink.SmartCheckAndUpdate()
 	base.Component.TSocket = &base.TSocket{
 		SocketList: make(map[string]*websocket.Conn),
 	}
