@@ -233,10 +233,12 @@ func SmartLinkPlaywrightVersion(c *gin.Context) {
 
 // 打开浏览器
 func openBrowserPlaywright(openType int, link string, processList []map[string]any, dataMap map[string]any) error {
+	//浏览器自带验证
 	browserAuthUsername := cast.ToString(dataMap[`browser_auth_username`])
 	browserAuthPassword := cast.ToString(dataMap[`browser_auth_password`])
 	value := cast.ToString(dataMap[`value`])
-	page, pageErr := base.Component.TSmartLink.GetPage(openType, link, value, browserAuthUsername, browserAuthPassword)
+	isCombine := cast.ToInt(dataMap[`isCombine`])
+	page, pageErr := base.Component.TSmartLink.GetPageSingle(openType, link, value, browserAuthUsername, browserAuthPassword, isCombine)
 	if pageErr != nil {
 		return pageErr
 	}
@@ -248,7 +250,6 @@ func openBrowserPlaywright(openType int, link string, processList []map[string]a
 		notExistLocator := cast.ToString(processVal[`not_exist_Locator`])
 		//元素选择
 		Locator := cast.ToString(processVal[`Locator`])
-		gstool.FmtPrintlnLogTime(`查找元素 %s`, Locator)
 		//链接
 		redirectUri := cast.ToString(processVal[`uri`])
 		//操作描述
@@ -334,7 +335,6 @@ func openBrowserPlaywright(openType int, link string, processList []map[string]a
 
 // 点击
 func click(Locator, notExistLocator string, waitSecond float64, page playwright.Page) {
-	gstool.FmtPrintlnLogTime(`click %s`, notExistLocator)
 	if notExistLocator == `` { //等待点击
 		selectorLoader := page.Locator(Locator)
 		selectorLoaderWaitErr := selectorLoader.WaitFor(playwright.LocatorWaitForOptions{
@@ -342,7 +342,6 @@ func click(Locator, notExistLocator string, waitSecond float64, page playwright.
 			State:   playwright.WaitForSelectorStateVisible,
 		})
 		if selectorLoaderWaitErr == nil {
-			gstool.FmtPrintlnLogTime(`找到元素%s，点击`, Locator)
 			clickErr := selectorLoader.Click()
 			if clickErr != nil {
 				gstool.FmtPrintlnLogTime(`等待元素后 点击失败 %s`, clickErr.Error())
@@ -371,7 +370,6 @@ func click(Locator, notExistLocator string, waitSecond float64, page playwright.
 				State:   playwright.WaitForSelectorStateVisible,
 			})
 			if selectorLoaderWaitErr == nil {
-				gstool.FmtPrintlnLogTime(`找到元素%s，点击`, Locator)
 				clickErr := selectorLoader.Click()
 				if clickErr != nil {
 					gstool.FmtPrintlnLogTime(`等待元素后 点击失败 %s`, clickErr.Error())
@@ -385,7 +383,6 @@ func click(Locator, notExistLocator string, waitSecond float64, page playwright.
 
 func registerJs(page playwright.Page) {
 	keyEventPath := base.Component.Env.RootPath + `/internal/pkg/js_script/key_event.js`
-	gstool.FmtPrintlnLogTime(`加载初始化js %s`, keyEventPath)
 	if err := page.AddInitScript(playwright.Script{
 		Path: &keyEventPath,
 	}); err != nil {

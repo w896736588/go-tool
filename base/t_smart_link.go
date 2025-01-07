@@ -24,66 +24,36 @@ type TPlayWright struct {
 }
 
 type TSmartLink struct {
-	PageList        map[string]*TPlayWright
-	lock            sync.Mutex
+	PageList map[string]*TPlayWright
+	RunLock  sync.Mutex
+	//处理下载后自动打开
 	DownloadPath    string
-	DownloadMap     map[string]string
 	DownloadMapLock sync.Mutex
+	//全局
+	BrowserWebkitChrome  playwright.Browser
+	BrowserWebkitSilence playwright.Browser
+	//domain context
+	DomainContextMap map[string]playwright.BrowserContext
 }
 
-// GetPage 拿到Page
-func (h *TSmartLink) GetPage(openType int, link, value, browserAuthUsername, browserAuthPassword string) (*TPlayWright, error) {
-	h.lock.Lock()
-	defer h.lock.Unlock()
-	noViewPort := true
-	javascript := true
-	pw, pwErr := playwright.Run()
-	if pwErr != nil {
-		return nil, pwErr
-	}
-	//startFindTime := time.Now().UnixMilli()
-	var browser playwright.Browser
-	var browserErr error
-	if openType == define.OpenTypeWebkitSilence {
-		browser, browserErr = pw.Chromium.Launch()
-	} else {
-		browser, browserErr = pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-			DownloadsPath: &h.DownloadPath,
-			Headless:      playwright.Bool(false), //有界面模式
-		})
-	}
+// GetPageSingle 拿到Page runUniqueKey 格式为0_common3 这种 单浏览器模式，每次打开都会打开一个新的浏览器
+// isCombine 是否自动合并不同域名到同一个浏览器
+func (h *TSmartLink) GetPageSingle(openType int, link, runUniqueKey, browserAuthUsername, browserAuthPassword string, isCombine int) (*TPlayWright, error) {
+	h.RunLock.Lock()
+	defer h.RunLock.Unlock()
+	//browser
+	browser, browserErr := h.GetBrowser(openType)
 	if browserErr != nil {
 		return nil, browserErr
 	}
-	// 创建带有认证信息的浏览器上下文
+	//context
+	context, contextErr := h.GetContext(link, browserAuthUsername, browserAuthPassword, browser, isCombine)
+	if contextErr != nil {
+		return nil, contextErr
+	}
+	//page
 	var page playwright.Page
 	var pageErr error
-	var context playwright.BrowserContext
-	var contextErr error
-	if browserAuthUsername != `` && browserAuthPassword != `` {
-		context, contextErr = browser.NewContext(playwright.BrowserNewContextOptions{
-			HttpCredentials: &playwright.HttpCredentials{
-				Username: browserAuthUsername,
-				Password: browserAuthPassword,
-			},
-			NoViewport:        &noViewPort,
-			JavaScriptEnabled: &javascript,
-			AcceptDownloads:   playwright.Bool(true),
-		})
-		if contextErr != nil {
-			gstool.FmtPrintlnLogTime("Failed to create context: %v", contextErr)
-		}
-	} else {
-		context, contextErr = browser.NewContext(playwright.BrowserNewContextOptions{
-			NoViewport:        &noViewPort,
-			JavaScriptEnabled: &javascript,
-			AcceptDownloads:   playwright.Bool(true),
-		})
-		if contextErr != nil {
-			gstool.FmtPrintlnLogTime("Failed to create context: %v", contextErr)
-		}
-	}
-	//创建页面
 	page, pageErr = context.NewPage()
 	if pageErr != nil {
 		return nil, pageErr
@@ -110,17 +80,89 @@ func (h *TSmartLink) GetPage(openType int, link, value, browserAuthUsername, bro
 		Browser:        &browser,
 		OpenType:       openType,
 		Context:        &context,
-		Value:          value,
+		Value:          runUniqueKey,
 		CreateTimeDesc: createTimeDesc,
 	}
+
 	go func(createTimeDesc string) {
 		page.OnClose(func(page playwright.Page) {
-			h.lock.Lock()
-			defer h.lock.Unlock()
+			h.RunLock.Lock()
+			defer h.RunLock.Unlock()
 			delete(h.PageList, createTimeDesc)
 		})
 	}(createTimeDesc)
 	return h.PageList[createTimeDesc], nil
+}
+
+func (h *TSmartLink) GetContext(url, browserAuthUsername, browserAuthPassword string, browser playwright.Browser, isCombine int) (playwright.BrowserContext, error) {
+	host := gstool.UrlGetHost(url)
+	domainKey := host + `:` + browserAuthUsername + `:` + browserAuthPassword
+	for k, v := range h.DomainContextMap {
+		if v.Browser().IsConnected() && k != domainKey && isCombine == 1 {
+			return v, nil
+		}
+	}
+	var context playwright.BrowserContext
+	var contextErr error
+	if browserAuthUsername != `` && browserAuthPassword != `` {
+		context, contextErr = browser.NewContext(playwright.BrowserNewContextOptions{
+			HttpCredentials: &playwright.HttpCredentials{
+				Username: browserAuthUsername,
+				Password: browserAuthPassword,
+			},
+			NoViewport:        playwright.Bool(true),
+			JavaScriptEnabled: playwright.Bool(true),
+			AcceptDownloads:   playwright.Bool(true),
+		})
+		if contextErr != nil {
+			return nil, contextErr
+		}
+	} else {
+		context, contextErr = browser.NewContext(playwright.BrowserNewContextOptions{
+			NoViewport:        playwright.Bool(true),
+			JavaScriptEnabled: playwright.Bool(true),
+			AcceptDownloads:   playwright.Bool(true),
+		})
+		if contextErr != nil {
+			return nil, contextErr
+		}
+	}
+	h.DomainContextMap[domainKey] = context
+	return context, nil
+}
+
+func (h *TSmartLink) GetBrowser(openType int) (playwright.Browser, error) {
+	if openType == define.OpenTypeWebkitSilence && h.BrowserWebkitSilence != nil {
+		return h.BrowserWebkitSilence, nil
+	} else if openType == define.OpenTypeWebkitChrome && h.BrowserWebkitChrome != nil {
+		return h.BrowserWebkitChrome, nil
+	}
+	pw, pwErr := playwright.Run()
+	if pwErr != nil {
+		return nil, pwErr
+	}
+	var browserErr error
+	if openType == define.OpenTypeWebkitSilence {
+		h.BrowserWebkitSilence, browserErr = pw.Chromium.Launch()
+		if browserErr != nil {
+			h.BrowserWebkitSilence = nil
+			return nil, browserErr
+		} else {
+			return h.BrowserWebkitSilence, nil
+		}
+	} else {
+		h.BrowserWebkitChrome, browserErr = pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
+			DownloadsPath: &h.DownloadPath,
+			Headless:      playwright.Bool(false), //有界面模式
+		})
+		if browserErr != nil {
+			h.BrowserWebkitChrome = nil
+			return nil, browserErr
+		} else {
+			return h.BrowserWebkitChrome, nil
+		}
+	}
+
 }
 
 func (h *TSmartLink) OnDownload(page playwright.Page) {
@@ -260,7 +302,7 @@ func (h *TSmartLink) AddTipMsg(page playwright.Page, tip string) {
 
 func (h *TSmartLink) SmartCheckAndUpdate() {
 	pw, _ := playwright.NewDriver()
-	lockFileName := `playwright.lock`
+	lockFileName := `playwright.RunLock`
 	lockFileFullPath := Component.Env.RootPath + `/` + lockFileName
 	if !gstool.FileIsExisted(lockFileFullPath) {
 		go h.install(pw.Version, lockFileFullPath)
