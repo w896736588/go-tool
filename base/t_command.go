@@ -233,11 +233,6 @@ func (h *Command) DockerExec(dockerName, dockerCommand string) *Command {
 	return h
 }
 
-func (h *Command) DockerPs() *Command {
-	h.SetCommand(fmt.Sprintf(`%sdocker stats --no-stream`, h.sudo))
-	return h
-}
-
 func (h *Command) FindGitDir(dirPath string, depth int) *Command {
 	h.SetCommand(fmt.Sprintf(`%s find %s -maxdepth %d -type d -exec sh -c '  
     for dir; do  
@@ -246,5 +241,30 @@ func (h *Command) FindGitDir(dirPath string, depth int) *Command {
         fi  
     done  
 ' sh {} +`, h.sudo, dirPath, depth))
+	return h
+}
+
+func (h *Command) DockerComposePs() *Command {
+	h.SetCommand(fmt.Sprintf(`%s docker-compose ps `, h.sudo))
+	return h
+}
+
+func (h *Command) DockerComposeStop() *Command {
+	h.SetCommand(fmt.Sprintf(`%s docker-compose down `, h.sudo))
+	return h
+}
+
+func (h *Command) DockerComposeRestart() *Command {
+	h.SetCommand(fmt.Sprintf(`%s docker-compose restart`, h.sudo))
+	return h
+}
+
+func (h *Command) DockerComposeStart() *Command {
+	h.SetCommand(fmt.Sprintf(`%s docker-compose up -d`, h.sudo))
+	return h
+}
+
+func (h *Command) DockerComposeConfig() *Command {
+	h.SetCommand(fmt.Sprintf(`%s docker-compose config`, h.sudo))
 	return h
 }
