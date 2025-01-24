@@ -18,6 +18,7 @@ func InitRouter() {
 	setStar()
 	variable()
 	smartLink()
+	docker()
 }
 
 // 基础接口
@@ -111,6 +112,9 @@ func setRouter() {
 	base.Component.TGin.GinPost(`/api/Set/SmartLinkGroupList`, controller.SetSmartLinkGroupList)
 	base.Component.TGin.GinPost(`/api/Set/SmartLinkGroupAdd`, controller.SetSmartLinkGroupAdd)
 	base.Component.TGin.GinPost(`/api/Set/SmartLinkGroupDelete`, controller.SetSmartLinkGroupDelete)
+	base.Component.TGin.GinPost(`/api/Set/DockerComposeList`, controller.SetDockerComposeList)
+	base.Component.TGin.GinPost(`/api/Set/DockerComposeAdd`, controller.SetDockerComposeAdd)
+	base.Component.TGin.GinPost(`/api/Set/DockerComposeDelete`, controller.SetDockerComposeDelete)
 }
 
 func setStar() {
@@ -141,4 +145,12 @@ func smartLink() {
 	//base.Component.TGin.GinPost(`/api/SmartLinkForward`, controller.SmartLinkPlaywrightForward)
 	base.Component.TGin.GinPost(`/api/SmartLinkChromeVersion`, controller.SmartLinkPlaywrightVersion)
 	base.Component.TGin.GinPost(`/api/SmartLinkChromeDownload`, controller.SmartLinkUpWebkit)
+}
+
+func docker() {
+	base.Component.TGin.GinPost(`/api/DockerComposeList`, controller.DockerComposeList)
+	base.Component.TGin.GinPost(`/api/DockerComposeRestart`, controller.DockerComposeRestart)
+	base.Component.TGin.GinPost(`/api/DockerComposeStop`, controller.DockerComposeStop)
+	base.Component.TGin.GinPost(`/api/DockerComposeConfigShow`, controller.DockerComposeConfigShow)
+	base.Component.TGin.GinPost(`/api/DockerComposeStart`, controller.DockerComposeStart)
 }
