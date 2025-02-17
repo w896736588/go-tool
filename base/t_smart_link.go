@@ -8,9 +8,12 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/playwright-community/playwright-go"
 	"github.com/spf13/cast"
+	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -325,8 +328,9 @@ func (h *TSmartLink) GetContextSaveUserData(domain, pageUniqueKey, browserAuthUs
 			},
 		})
 	} else {
+		gstool.FmtPrintlnLogTime(`设置下载目录为%s`, h.DownloadPath)
 		context, contextErr = h.Pw.Chromium.LaunchPersistentContext(dataPath, playwright.BrowserTypeLaunchPersistentContextOptions{
-			DownloadsPath:     &h.DownloadPath,
+			//DownloadsPath:     &h.DownloadPath,
 			Headless:          playwright.Bool(false), //有界面模式
 			NoViewport:        playwright.Bool(true),
 			JavaScriptEnabled: playwright.Bool(true),
@@ -401,22 +405,90 @@ func (h *TSmartLink) OnDownload(page playwright.Page) {
 	page.On(`download`, func(download playwright.Download) {
 		h.DownloadMapLock.Lock()
 		defer h.DownloadMapLock.Unlock()
-		//content, _ := gstool.FileGetContent(download.URL())
-		//其实没用 应为内容都不一样。。
-		//h.DownloadMap[gstool.Md5(content)] = filepath.Base(download.String())
-		//gstool.FmtPrintlnLogTime(`下载 %s => %s`, gstool.Md5(content), filepath.Base(download.String()))
-		//gstool.FmtPrintlnLogTime(`下载文件 %s %s`, download.URL(), download.String())
-		//downloadErr := download.SaveAs(h.DownloadPath + `\` + download.String())
-		//if downloadErr != nil {
-		//	gstool.FmtPrintlnLogTime(`下载`)
-		//	return
-		//} else {
-		//	gstool.FmtPrintlnLogTime(`另存下载文件%s`, h.DownloadPath+`\`+download.String())
-		//}
+		gstool.FmtPrintlnLogTime(`下载 %s %s`, download.SuggestedFilename(), download.URL())
+		time.Sleep(time.Second)
+		localPath := h.DownloadPath + `/` + Component.TBase.GetUnique(`download`) + `_` + download.SuggestedFilename()
+		ret := download.SaveAs(localPath)
+		gstool.FmtPrintlnLogTime(`下载结果 %#v`, ret)
 	})
 	page.On("response", func(response playwright.Response) {
 		//gstool.FmtPrintlnLogTime(`下载%s`, response.Request().URL())
+		//判断是否为文件或者图片 并下载到下载目录
+		//h.downloadFileWithSuffixCheck(response.Request().URL())
 	})
+}
+
+// 下载文件并检查后缀
+func (h *TSmartLink) downloadFileWithSuffixCheck(rawURL string) error {
+	// 解析 URL 并移除查询参数
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("failed to parse URL: %v", err)
+	}
+	parsedURL.RawQuery = "" // 移除查询参数
+
+	// 获取清理后的 URL
+	cleanURL := parsedURL.String()
+
+	// 检查文件后缀
+	if !h.isValidFileSuffix(cleanURL) {
+		return fmt.Errorf("invalid file suffix for URL: %s", cleanURL)
+	}
+
+	// 发送 HTTP 请求
+	resp, err := http.Get(cleanURL)
+	if err != nil {
+		return fmt.Errorf("failed to fetch URL: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// 检查 HTTP 响应状态码
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	// 确定文件名和保存路径
+	filename := path.Base(parsedURL.Path)
+	savePath := path.Join(h.DownloadPath, Component.TBase.GetUnique(`download`)+filename)
+
+	// 保存文件
+	file, err := os.Create(savePath)
+	if err != nil {
+		return fmt.Errorf("failed to create file: %v", err)
+	}
+	defer file.Close()
+
+	_, err = io.Copy(file, resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to write file: %v", err)
+	}
+
+	fmt.Printf("File downloaded successfully: %s\n", savePath)
+	return nil
+}
+
+// 检查是否为常见文件后缀
+func (h *TSmartLink) isValidFileSuffix(url string) bool {
+	commonSuffixes := map[string]bool{
+		".png":  true,
+		".jpg":  true,
+		".jpeg": true,
+		".gif":  true,
+		".bmp":  true,
+		".webp": true,
+		".pdf":  true,
+		".doc":  true,
+		".docx": true,
+		".xls":  true,
+		".xlsx": true,
+		".txt":  true,
+		".zip":  true,
+		".mp4":  true,
+		".avi":  true,
+	}
+
+	ext := strings.ToLower(path.Ext(url))
+	return commonSuffixes[ext]
 }
 
 // WitchDownload 监听目录新文件下载 自动识别文件类型 并打开
@@ -425,26 +497,11 @@ func (h *TSmartLink) WitchDownload() {
 	gstool.FmtPrintlnLogTime(`开始监听%s`, h.DownloadPath)
 	watch := gstool.NewFileWatch(h.DownloadPath, func(event fsnotify.Event) {
 		if event.Op == fsnotify.Create {
-			if strings.HasSuffix(event.Name, `.crdownload`) || strings.Contains(event.Name, `~$`) {
-				return
-			}
-			targetName := event.Name
-			gstool.FmtPrintlnLogTime(`targetName %s => %s`, event.Name, targetName)
-			isXlsx := gstool.FileIsXlsx(event.Name)
-			if isXlsx {
-				h.OpenFile(event.Name, targetName, `xlsx`)
-			} else if gstool.FileIsTxt(event.Name) {
-				content, _ := gstool.FileGetContent(event.Name)
-				gstool.FmtPrintlnLogTime(`文件内容 %s`, content)
-				h.OpenFile(event.Name, targetName, `txt`)
-			} else {
-				ext, extErr := gstool.FileExtType(event.Name)
-				gstool.FmtPrintlnLogTime(`文件后缀 %s %v`, ext, extErr)
-				if extErr == nil {
-					h.OpenFile(event.Name, targetName, ext.Extension)
-				}
-			}
-
+			gstool.FmtPrintlnLogTime(`监听到文件下载了 %#v`, event)
+			ext, extErr := gstool.FileExtType(event.Name)
+			gstool.FmtPrintlnLogTime(`文件后缀 %s %v`, ext, extErr)
+			cmd := exec.Command("cmd", "/C", "start", event.Name)
+			_ = cmd.Start()
 		}
 	})
 	go func() {

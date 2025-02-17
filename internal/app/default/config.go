@@ -21,7 +21,7 @@ var AppName = ``
 
 func InitBase(IsBuild, appName, DbPath, ViewPath, WebData string) {
 	AppName = appName
-	initComponent(IsBuild)
+	initComponent(IsBuild, WebData)
 	initSqlite(DbPath)
 	initGin(ViewPath)
 	stdLog(IsBuild)
@@ -46,7 +46,7 @@ func stdLog(IsBuild string) {
 	//os.Stderr = errFile
 }
 
-func initComponent(IsBuild string) {
+func initComponent(IsBuild, WebData string) {
 	gstool.FmtPrintlnLogTime(`IsBuild %#v`, IsBuild)
 	base.Component = base.TComponent{}
 	base.Component.Env = &base.Env{}
@@ -81,8 +81,14 @@ func initComponent(IsBuild string) {
 	}
 	base.Component.Env.ConfigPath = base.Component.Env.RootPath + `/config/` + base.Component.Env.AppName
 	base.Component.Env.LogPath = base.Component.Env.RootPath + `/logs`
-	base.Component.Env.PlaywrightDownload = base.Component.Env.RootPath + `/internal/app/` + base.Component.Env.AppName + `/playwright_download`
-	base.Component.Env.PlaywrightUserData = base.Component.Env.RootPath + `/internal/app/` + base.Component.Env.AppName + `/playwright_userdata`
+	if WebData != `` {
+		base.Component.Env.PlaywrightUserData = WebData + `/playwright_userdata`
+		base.Component.Env.PlaywrightDownload = WebData + `/playwright_download`
+	} else {
+		base.Component.Env.PlaywrightUserData = base.Component.Env.RootPath + `/playwright_userdata`
+		base.Component.Env.PlaywrightDownload = base.Component.Env.RootPath + `/playwright_download`
+
+	}
 	gstool.FmtPrintlnLogTime(`根目录 %s`, base.Component.Env.RootPath)
 	gstool.FmtPrintlnLogTime(`加载配置文件 %s`, base.Component.Env.ConfigPath)
 	//初始化playwright
@@ -154,10 +160,10 @@ func initGin(ViewPath string) {
 		base.Component.TGin.GinStatic(`/css`, ViewPath+`/css`)
 		base.Component.TGin.GinLoadHTMLFiles(ViewPath + `/index.html`)
 	} else {
-		base.Component.TGin.GinStatic(`/js`, base.Component.Env.RootPath+`/release/`+AppName+`/devtool/dist/js`)
-		base.Component.TGin.GinStaticFile(`/favicon.ico`, base.Component.Env.RootPath+`/release/`+AppName+`/devtool/dist/favicon.ico`)
-		base.Component.TGin.GinStatic(`/css`, base.Component.Env.RootPath+`/release/`+AppName+`/devtool/dist/css`)
-		base.Component.TGin.GinLoadHTMLFiles(base.Component.Env.RootPath + `/release/` + AppName + `/devtool/dist/index.html`)
+		base.Component.TGin.GinStatic(`/js`, base.Component.Env.RootPath+`/devtool/dist/js`)
+		base.Component.TGin.GinStaticFile(`/favicon.ico`, base.Component.Env.RootPath+`/devtool/dist/favicon.ico`)
+		base.Component.TGin.GinStatic(`/css`, base.Component.Env.RootPath+`/devtool/dist/css`)
+		base.Component.TGin.GinLoadHTMLFiles(base.Component.Env.RootPath + `/devtool/dist/index.html`)
 	}
 	base.Component.TGin.GinGet(`/`, func(context *gin.Context) {
 		context.HTML(200, `index.html`, nil)
