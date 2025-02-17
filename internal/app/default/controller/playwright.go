@@ -313,7 +313,6 @@ func openBrowserPlaywright(openType, isCombine int, link string, processList []m
 		if waitUrlErr != nil {
 			return waitUrlErr
 		}
-
 		base.Component.TSmartLink.AddTipMsg(*page.Page, tip)
 		switch processType {
 		case `click`: //点击
@@ -339,7 +338,6 @@ func openBrowserPlaywright(openType, isCombine int, link string, processList []m
 					gstool.FmtPrintlnLogTime("无法将元素转换为输入框: %v", inputErr.Error())
 				}
 			} else {
-				gstool.FmtPrintlnLogTime("无法找到元素:%s %v", Locator, selectorLoaderWaitErr.Error())
 				base.Component.TSmartLink.AddTipMsg(*page.Page, `无法找到元素`+Locator+`,结束`)
 				return errors.New(`无法找到元素` + Locator)
 			}
@@ -426,7 +424,6 @@ func click(Locator, notExistLocator string, waitSecond float64, page playwright.
 		})
 	}
 	result := task.RunOne()
-	gstool.FmtPrintlnLogTime(`result %s %s %#v`, Locator, notExistLocator, result)
 	if result.Err != nil {
 		return result.Err
 	}
