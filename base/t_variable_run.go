@@ -27,7 +27,7 @@ func (h *VariableRun) RunProcess(variableFormList []_struct.VariableForm, replac
 			if radioErr != nil {
 				return nil, nil, 0, radioErr
 			}
-			if !h.isPreShowForm(variableForm.Select.Options) {
+			if !h.isExistReplaceParam(variableForm.Select.Options) {
 				variableForm.IsRunOk = 0
 				break
 			}
@@ -66,7 +66,7 @@ func (h *VariableRun) RunProcess(variableFormList []_struct.VariableForm, replac
 			break
 		case define.VariableCmdMysql: //执行sql
 			variableForm.Sql.Sql = h.replace(variableForm.Sql.Sql, replaceList)
-			if !h.isPreShowForm(variableForm.Sql.Sql) {
+			if !h.isExistReplaceParam(variableForm.Sql.Sql) {
 				variableForm.IsRunOk = 0
 				break
 			}
@@ -96,7 +96,7 @@ func (h *VariableRun) ProcessSet(variableId, variableCmdName string, variableFor
 	variableForm.IsShowOk = 1 //默认显示是
 	switch cast.ToInt(variableForm.VariableType) {
 	case define.VariableCmdRadio: //单选
-		if !h.isPreShowForm(variableForm.Select.Options) {
+		if !h.isExistReplaceParam(variableForm.Select.Options) {
 			variableForm.IsShowOk = 0 //不显示
 			h.sendSocketMsg(variableId, `开始检查：`+variableCmdName+`,等待补充选项后展示`)
 			return

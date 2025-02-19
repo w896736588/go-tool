@@ -34,7 +34,7 @@ go build -ldflags "-X main.IsBuild=1 -X main.DbPath=D:/go/cache_manager_api/conf
 #git add ./build/zhima.exe
 #git update-index --chmod=+x ./build/zhima.exe
 git ls-files --stage ./build/zhima.exe
-go build -ldflags "-X main.IsBuild=1 -X main.DbPath= -X main.WebData=" -o ./build/zhimaPub.exe ./cmd/zhima/main.go
+go build -ldflags "-X main.IsBuild=1 -X main.DbPath= -X main.ViewPath= -X main.WebData=" -o ./build/zhimaPub.exe ./cmd/zhima/main.go
 git ls-files --stage ./build/zhimaPub.exe
 ```
 

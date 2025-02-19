@@ -12,7 +12,7 @@ const (
 	VariableCmdBash                    //bash脚本
 	VariableCmdRadio                   //单项选择
 	VariableCmdLink                    //地址跳转
-	VariableCmdRedisDelete             //删除redis缓存
+	VariableCmdRedis                   //redis缓存操作
 	VariableCmdRedisChoose             //选择redis
 	VariableCmdMysqlChoose             //选择mysql
 	VariableCmdSshChoose               //选择ssh
