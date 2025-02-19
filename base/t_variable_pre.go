@@ -6,6 +6,7 @@ import (
 	"errors"
 	"gitee.com/Sxiaobai/gs/gstool"
 	"github.com/spf13/cast"
+	"strings"
 )
 
 // RunPre 执行前收集一些选择或者输入项
@@ -16,10 +17,15 @@ func (h *VariableRun) RunPre(variableId any) ([]_struct.VariableForm, []map[stri
 		return nil, nil, 0, cmdListErr
 	}
 	replaceList := make([]map[string]string, 0)
-	variableFormList := make([]_struct.VariableForm, 0)
+	variableFormList := make([]_struct.VariableForm, 0) //需要展示在页面上的和form表单有关联的 只限于is_pre=1的
 	for _, cmd := range cmdList {
-		if cast.ToInt(cmd[`is_pre`]) == 0 && cast.ToInt(cmd[`type`]) != define.VariableCmdLink {
-			if cast.ToInt(cmd[`type`]) == define.VariableCmdBash && cast.ToInt(cmd[`ssh_id`]) != 0 { //预先连接ssh
+		if cast.ToInt(cmd[`is_pre`]) == 0 { //不需要提前执行
+			if cast.ToInt(cmd[`type`]) == define.VariableCmdBash { //预先连接ssh
+				id, _ := h.ParseIdContent(cast.ToString(cmd[`bash`]))
+				if id == `` {
+					return nil, nil, 0, errors.New(`bash脚本中id格式错误`)
+				}
+				cmd[`ssh_id`] = id
 				h.sendSocketMsg(variableId, `开始检查：`+cast.ToString(cmd[`name`])+`,预先连接ssh`)
 				preConnErr := h.preConnSsh(cmd)
 				if preConnErr != nil {
@@ -51,7 +57,7 @@ func (h *VariableRun) RunPre(variableId any) ([]_struct.VariableForm, []map[stri
 				OptionList: make([]_struct.VariableFormOption, 0),
 				Options:    cast.ToString(cmd[`options`]), //原本的字符串选项集
 			}
-			if !h.isPreShowForm(variableForm.Select.Options) {
+			if !h.isExistReplaceParam(variableForm.Select.Options) {
 				break
 			}
 			radioErr := h.PreRadioOptionList(&variableForm)
@@ -82,11 +88,13 @@ func (h *VariableRun) RunPre(variableId any) ([]_struct.VariableForm, []map[stri
 			h.PreShowSet(cast.ToString(variableId), cast.ToString(cmd[`name`]), &variableForm)
 			break
 		case define.VariableCmdMysql: //执行sql 初始化
+
+			id, sql := h.ParseIdContent(cast.ToString(cmd[`sql`]))
 			variableForm.Sql = _struct.VariableFormSql{
-				Sql:     cast.ToString(cmd[`sql`]),
-				MysqlId: cast.ToString(cmd[`mysql_id`]),
+				Sql:     sql,
+				MysqlId: id,
 			}
-			if h.isPreShowForm(variableForm.Sql.Sql) {
+			if h.isExistReplaceParam(variableForm.Sql.Sql) {
 				sqlRet := h.sqlProcessRun(&variableForm, &replaceList)
 				if sqlRet != nil {
 					return nil, nil, 0, sqlRet
@@ -94,10 +102,11 @@ func (h *VariableRun) RunPre(variableId any) ([]_struct.VariableForm, []map[stri
 			}
 			h.PreShowSet(cast.ToString(variableId), cast.ToString(cmd[`name`]), &variableForm)
 			break
-		case define.VariableCmdLink:
-			variableForm.Link = _struct.VariableFormLink{
-				Link: cast.ToString(cmd[`remark`]),
-				Desc: cast.ToString(cmd[`options`]),
+		case define.VariableCmdBash: //执行bash 初始化 bash类型暂时不支持提前执行
+			id, bash := h.ParseIdContent(cast.ToString(cmd[`bash`]))
+			variableForm.Bash = _struct.VariableFormBash{
+				Bash:  bash,
+				SshId: id,
 			}
 			break
 		case define.VariableCmdSshChoose: //选择ssh
@@ -129,13 +138,26 @@ func (h *VariableRun) RunPre(variableId any) ([]_struct.VariableForm, []map[stri
 	return variableFormList, replaceList, 0, nil
 }
 
+// ParseIdContent 解析sql或者bash脚本第一行定义的id，格式：[id=1]
+func (h *VariableRun) ParseIdContent(str string) (string, string) {
+	sqlParamList := strings.Split(str, "\n")
+	gstool.FmtPrintlnLogTime(`str %s %#v`, str, sqlParamList)
+	id := gstool.StringReplaces(sqlParamList[0], map[string]string{
+		`[id=`: ``,
+		`]`:    ``,
+	})
+	return id, gstool.StringReplaces(str, map[string]string{
+		sqlParamList[0] + "\n": ``,
+	})
+}
+
 // PreRadioOptionList 组装单选
 func (h *VariableRun) PreRadioOptionList(variableForm *_struct.VariableForm) error {
 	if len(variableForm.Select.OptionList) > 0 {
 		return nil
 	}
 	h.sendSocketMsg(variableForm.VariableId, variableForm.Select.Label+`,准备处理单选`)
-	if !h.isPreShowForm(variableForm.Select.Options) {
+	if !h.isExistReplaceParam(variableForm.Select.Options) {
 		h.sendSocketMsg(variableForm.VariableId, variableForm.Select.Label+`,内容尚未替换，等待选择其他选项`)
 		return nil
 	}
@@ -199,7 +221,7 @@ func (h *VariableRun) PreShowSet(variableId, variableCmdName string, variableFor
 	variableForm.IsShowOk = 1 //默认显示是
 	switch cast.ToInt(variableForm.VariableType) {
 	case define.VariableCmdRadio: //单选
-		if !h.isPreShowForm(variableForm.Select.Options) {
+		if !h.isExistReplaceParam(variableForm.Select.Options) {
 			variableForm.IsShowOk = 0 //不显示
 			h.sendSocketMsg(variableId, `开始检查：`+variableCmdName+`,等待补充选项后展示`)
 			return

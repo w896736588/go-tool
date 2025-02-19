@@ -406,7 +406,6 @@ func click(Locator, notExistLocator string, waitSecond float64, page playwright.
 					State:   playwright.WaitForSelectorStateVisible,
 				})
 				if existLoaderErr != nil {
-					gstool.FmtPrintlnLogTime(`not exist 返回了 %#v %s`, existLoader, existLoaderErr.Error())
 					return gstask.Result{
 						Result: nil,
 						State:  2,
@@ -431,7 +430,6 @@ func click(Locator, notExistLocator string, waitSecond float64, page playwright.
 		element := result.Result.(playwright.Locator)
 		_ = element.Click()
 	}
-	gstool.FmtPrintlnLogTime(`处理完 返回`)
 	return nil
 }
 

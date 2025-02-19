@@ -14,10 +14,10 @@
       <excludeFolder url="file://$MODULE_DIR$/internal/app/zhima/playwright_userdata/1" />
       <excludeFolder url="file://$MODULE_DIR$/internal/app/zhima/playwright_userdata/2" />
       <excludeFolder url="file://$MODULE_DIR$/internal/app/zhima/playwright_userdata/3" />
-      <excludeFolder url="file://$MODULE_DIR$/release/zhima" />
-      <excludeFolder url="file://$MODULE_DIR$/release/zhimaPub" />
-      <excludeFolder url="file://$MODULE_DIR$/release/zhimaPub/devtool" />
-      <excludeFolder url="file://$MODULE_DIR$/release/zhimaPub/goservice" />
+      <excludeFolder url="file://$MODULE_DIR$/script/zhima" />
+      <excludeFolder url="file://$MODULE_DIR$/script/zhimaPub" />
+      <excludeFolder url="file://$MODULE_DIR$/script/zhimaPub/devtool" />
+      <excludeFolder url="file://$MODULE_DIR$/script/zhimaPub/goservice" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />

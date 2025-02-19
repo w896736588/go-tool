@@ -19,6 +19,7 @@ type VariableForm struct {
 	Input        VariableFormInput  `json:"Input,omitempty"`
 	Select       VariableFormSelect `json:"Select,omitempty"`
 	Sql          VariableFormSql    `json:"Sql,omitempty"`
+	Bash         VariableFormBash   `json:"Bash,omitempty"`
 	Link         VariableFormLink   `json:"Link,omitempty"`
 	ResultKey    string
 	IsShowOk     int //1准备好 0未准备好  准备好了以后就会在页面上显示选项等
@@ -34,6 +35,11 @@ type VariableFormInput struct {
 type VariableFormSql struct {
 	Sql     string
 	MysqlId string
+}
+
+type VariableFormBash struct {
+	Bash  string
+	SshId string
 }
 
 type VariableFormLink struct {

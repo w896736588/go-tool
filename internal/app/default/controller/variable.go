@@ -72,6 +72,7 @@ func VariableAdd(c *gin.Context) {
 		return
 	}
 	var id any
+	dataMap[`type`] = 1 //固定为脚本
 	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `variable_group_id`, `remark`, `type`})
 	if cast.ToInt(dataMap[`id`]) == 0 {
 		updateData[`create_time`] = time.Now().Unix()

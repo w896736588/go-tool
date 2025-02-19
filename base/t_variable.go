@@ -6,10 +6,12 @@ import (
 	_struct "dev_tool/base/struct"
 	"errors"
 	"fmt"
+	"gitee.com/Sxiaobai/gs/gsdefine"
 	"gitee.com/Sxiaobai/gs/gsssh"
 	"gitee.com/Sxiaobai/gs/gstool"
 	"github.com/gorilla/websocket"
 	"github.com/spf13/cast"
+	"strings"
 )
 
 type VariableRun struct {
@@ -59,8 +61,8 @@ func (h *VariableRun) addReplace(replaceList *[]map[string]string, key, value st
 	}
 }
 
-// 是否已经可以显示在页面上
-func (h *VariableRun) isPreShowForm(data string) bool {
+// 是否存在待替换的变量
+func (h *VariableRun) isExistReplaceParam(data string) bool {
 	return !gstool.RegexMatchString(data, `{[a-zA-Z0-9_]+}`)
 }
 
@@ -112,20 +114,11 @@ func (h *VariableRun) RunDone(variableId any, replaceList []map[string]string, v
 	if cmdListErr != nil {
 		return cmdListErr
 	}
-	//拿到选择值
-	redisId := 0
-	sshId := 0
-	for _, variableForm := range variableFormList {
-		if cast.ToInt(variableForm.VariableType) == define.VariableCmdRedisChoose {
-			redisId = cast.ToInt(variableForm.Select.Value)
-		} else if cast.ToInt(variableForm.VariableType) == define.VariableCmdSshChoose {
-			sshId = cast.ToInt(variableForm.Select.Value)
-		}
-	}
+	Component.GsLog.Debugf(`cmdList %s %s %s`, gstool.JsonEncode(cmdList), gsdefine.Enter, gstool.JsonEncode(replaceList))
 	for _, cmd := range cmdList {
 		resultKey := cast.ToString(cmd[`result_key`])
 		isPre := cast.ToInt(cmd[`is_pre`])
-		if isPre == 1 {
+		if isPre == 1 { //提前运行的不管
 			continue
 		}
 		var result string
@@ -135,10 +128,10 @@ func (h *VariableRun) RunDone(variableId any, replaceList []map[string]string, v
 			result, resultErr = h.runMysqlSql(cmd)
 			break
 		case define.VariableCmdBash:
-			result, resultErr = h.runBash(cmd, sshId)
+			result, resultErr = h.runBash(cmd)
 			break
-		case define.VariableCmdRedisDelete:
-			result, resultErr = h.runRedisDelete(cmd, redisId, cast.ToString(variableId))
+		case define.VariableCmdRedis:
+			result, resultErr = h.runRedis(cmd)
 			break
 		default:
 			continue
@@ -179,9 +172,16 @@ func (h *VariableRun) sendSocketMsg(variableId any, msg string) {
 }
 
 func (h *VariableRun) runMysqlSql(cmd map[string]any) (string, error) {
-	sql := cast.ToString(cmd[`sql`])
-	mysqlId := cast.ToInt(cmd[`mysql_id`])
-	if mysqlId == 0 {
+	mysqlId := ``
+	sql := ``
+	cmd[`sql`] = h.replace(cast.ToString(cmd[`sql`]), h.ReplaceList)
+	if cast.ToInt(cmd[`mysql_id`]) == 0 { //当没有传递mysql_id时，那么从sql里面找
+		mysqlId, sql = h.ParseIdContent(cast.ToString(cmd[`sql`]))
+	} else {
+		mysqlId = cast.ToString(cmd[`mysql_id`])
+		sql = cast.ToString(cmd[`sql`])
+	}
+	if cast.ToInt(mysqlId) == 0 {
 		return ``, errors.New(`mysql_id不能为空`)
 	}
 	mysqlConfig, mysqlConfigErr := Component.TSqlite.GetMysqlConfig(mysqlId)
@@ -192,7 +192,6 @@ func (h *VariableRun) runMysqlSql(cmd map[string]any) (string, error) {
 	if mysqlClientErr != nil {
 		return ``, mysqlClientErr
 	}
-	sql = h.replace(sql, h.ReplaceList)
 	if len(gstool.RegexSearchString(sql, "(?i)select")) > 0 {
 		h.sendSocketMsg(h.VariableId, `执行查询：`+sql)
 		all, allErr := mysqlClient.QueryBySql(sql).All()
@@ -212,20 +211,21 @@ func (h *VariableRun) runMysqlSql(cmd map[string]any) (string, error) {
 	return ``, nil
 }
 
-func (h *VariableRun) runBash(cmd map[string]any, chooseSshId int) (string, error) {
-	sshId := cast.ToInt(cmd[`ssh_id`])
-	if sshId == 0 {
-		sshId = chooseSshId
+func (h *VariableRun) runBash(cmd map[string]any) (string, error) {
+	sshId := ``
+	bash := ``
+	cmd[`bash`] = h.replace(cast.ToString(cmd[`bash`]), h.ReplaceList)
+	if cast.ToInt(cmd[`ssh_id`]) == 0 {
+		sshId, bash = h.ParseIdContent(cast.ToString(cmd[`bash`]))
+	} else {
+		sshId = cast.ToString(cmd[`ssh_id`])
+		bash = cast.ToString(cmd[`bash`])
 	}
-	bash := cast.ToString(cmd[`bash`])
 	cmdId := cast.ToString(cmd[`id`])
 	if bash == `` {
 		return ``, errors.New(`脚本不能为空`)
 	}
-	gstool.FmtPrintlnLogTime(`替换前的脚本 %s %#v`, bash, h.ReplaceList)
-	bash = h.replace(bash, h.ReplaceList)
-	gstool.FmtPrintlnLogTime(`替换后的脚本 %s`, bash)
-	if sshId == 0 {
+	if cast.ToInt(sshId) == 0 {
 		return ``, errors.New(`ssh不能为空`)
 	}
 	sshUniqueKey := Component.TBase.GetCombineKey(`variable`, sshId, `run`)
@@ -279,14 +279,21 @@ func (h *VariableRun) runBash(cmd map[string]any, chooseSshId int) (string, erro
 	return result, nil
 }
 
-func (h *VariableRun) runRedisDelete(cmd map[string]any, redisId int, variableId string) (string, error) {
-	config := cast.ToString(cmd[`bash`])
-	if config == `` {
-		return ``, errors.New(`redis需要删除的key不能为空`)
+func (h *VariableRun) runRedis(cmd map[string]any) (string, error) {
+	redisId := ``
+	redisBash := ``
+	cmd[`bash`] = h.replace(cast.ToString(cmd[`bash`]), h.ReplaceList)
+	if cast.ToInt(cmd[`redis_id`]) == 0 {
+		redisId, redisBash = h.ParseIdContent(cast.ToString(cmd[`bash`]))
+	} else {
+		redisId = cast.ToString(cmd[`redis_id`])
+		redisBash = cast.ToString(cmd[`bash`])
 	}
-	config = h.replace(config, h.ReplaceList)
-	if redisId == 0 {
+	if cast.ToInt(redisId) == 0 {
 		return ``, errors.New(`redis不能为空`)
+	}
+	if redisBash == `` {
+		return ``, errors.New(`redis需要删除的key不能为空`)
 	}
 	redisConfig, redisConfigErr := Component.TSqlite.GetRedisConfig(redisId)
 	if redisConfigErr != nil {
@@ -296,9 +303,34 @@ func (h *VariableRun) runRedisDelete(cmd map[string]any, redisId int, variableId
 	if clientErr != nil {
 		return "", clientErr
 	}
-	h.sendSocketMsg(variableId, `清除redis，key：`+config)
-	client.Client.Del(context.Background(), config)
-	return `删除缓存成功`, nil
+	//解析命令格式：
+	//字符串删除string,delete,key
+	redisBashParamList := strings.Split(redisBash, `,`)
+	if len(redisBashParamList) >= 3 {
+		switch redisBashParamList[0] {
+		case `string`:
+			switch redisBashParamList[1] {
+			case `delete`:
+				h.sendSocketMsg(h.VariableId, `清除redis，string key：`+redisBashParamList[2])
+				client.Client.Del(context.Background(), redisBashParamList[2])
+			default:
+				h.sendSocketMsg(h.VariableId, `暂不支持的操作`+redisBash)
+			}
+		case `hash`:
+			switch redisBashParamList[1] {
+			case `delete`:
+				h.sendSocketMsg(h.VariableId, `清除redis，hash key：`+redisBashParamList[2]+` field：`+redisBashParamList[3])
+				client.Client.HDel(context.Background(), redisBashParamList[2], redisBashParamList[3])
+			default:
+				h.sendSocketMsg(h.VariableId, `暂不支持的操作`+redisBash)
+			}
+		default:
+			h.sendSocketMsg(h.VariableId, `暂不支持的操作`+redisBash)
+		}
+	} else {
+		h.sendSocketMsg(h.VariableId, `格式错误`+redisBash)
+	}
+	return `操作`, nil
 }
 
 func (h *VariableRun) end() {
