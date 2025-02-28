@@ -8,10 +8,10 @@ import (
 	"testing"
 )
 
-// BailianTest 百炼 qwen2.5-coder-3b-instruct 模型
-func BailianTest(t *testing.T) {
-	ai := ai_bailian.NewBailian(`qwen2.5-coder-3b-instruct`, `sk-938dc32c6e394fe089e64aac7ee6443f`, true)
-	gslog := gstool.NewSlogDefault(`./`, `ai_test`)
+// TestBailian 百炼 qwen2.5-coder-3b-instruct 模型
+func TestBailian(t *testing.T) {
+	ai := ai_bailian.NewBailian(`qwen2.5-coder-3b-instruct`, `sk-938dc32c6e394fe089e64aac7ee6443f`, true, nil)
+	gslog := gstool.NewSlogDefault(`../logs/`, `ai_test`)
 	table := "CREATE TABLE `tbl_kf_response_stat_detail_2022` (\n  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,\n  `wechatapp_id` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '应用ID',\n  `response_type` int(10) unsigned NOT NULL DEFAULT '1' COMMENT '1 未回复（老数据都是未回复）  2 未应答',\n  PRIMARY KEY (`id`),\n  KEY `create_date_time` (`create_date_time`),\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='客服应答统计 未回复明细以及未应答明细';"
 	class := "<?php \n/**\n * 客服应答统计 未回复明细以及未应答明细\n * @User: frog\n * @Date: 2025/02/21 15:16\n */\nclass KfResponseStatDetailModel extends BaseModel {\n\n    public function __construct($db = null) {\n        parent::__construct($db);\n        $this->table = 'tbl_kf_response_stat_detail';\n        $this->cols  = [\n           'id',                                  //id\n           'wechatapp_id',                        //应用ID\n           'response_type',                       //1 未回复（老数据都是未回复）  2 未应答\n        ];\n    }\n\n    /**\n     * 按年分表\n     */\n    public function setTableName($year): string {\n        $this->table = 'tbl_kf_response_stat_detail_' . $year;\n        return $this->table;\n    }\n}"
 	descList := []string{

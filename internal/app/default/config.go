@@ -94,10 +94,7 @@ func initComponent(IsBuild, WebData string) {
 	gstool.FmtPrintlnLogTime(`加载配置文件 %s`, base.Component.Env.ConfigPath)
 	//初始化playwright
 	base.Component.TSmartLink = &base.TSmartLink{
-		PageList:           make(map[string]*base.TPlayWright),
-		DomainContextList:  make([]*base.ContextS, 0),
-		DomainContextListU: make([]*base.ContextS, 0),
-		DownloadPath:       base.Component.Env.PlaywrightDownload,
+		DownloadPath: base.Component.Env.PlaywrightDownload,
 	}
 	base.Component.TSmartLink.WitchDownload()
 	base.Component.TSmartLink.SmartCheckAndUpdate()

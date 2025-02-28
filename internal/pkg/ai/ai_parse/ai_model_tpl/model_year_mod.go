@@ -1,4 +1,4 @@
-package ai_model
+package ai_model_tpl
 
 import (
 	"dev_tool/internal/pkg/ai/ai_define"
@@ -9,7 +9,33 @@ import (
 func ModelYearMod(sql string, mod string) ([]ai_define.Message, []ai_define.Tool, error) {
 	modelUse := `按年取模模分表`
 	table := "CREATE TABLE `clock_in_detail_record_2025_20` (\n  `id` int(11) unsigned NOT NULL AUTO_INCREMENT,\n  `admin_user_id` int(11) unsigned NOT NULL DEFAULT '0',\n  `wechatapp_id` int(11) unsigned NOT NULL DEFAULT '0',\n  `clock_in_id` int(11) unsigned NOT NULL DEFAULT '0' COMMENT '打卡签到活动ID',\n  PRIMARY KEY (`id`) USING BTREE\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='打卡签到明细表';"
-	class := "<?php \n/**\n * 打卡签到明细表\n * @User: frog\n * @Date: 2025/02/21 18:05\n */\nclass ClockInDetailRecordModel extends BaseModel {\n\n    public function __construct($db = null) {\n        parent::__construct($db);\n        $this->table = 'clock_in_detail_record';\n        $this->cols  = [\n           'id',                                  //id\n           'admin_user_id',                       //admin_user_id\n           'wechatapp_id',                        //wechatapp_id\n           'clock_in_id',                         //打卡签到活动ID\n        ];\n    }\n    /**\n     * 按年按管理员分表\n     */\n    public function setTableName($year , $admin_user_id): string {\n        $this->table = 'clock_in_detail_record_' . $year . '_' . ($admin_user_id%10);\n        return $this->table;\n    }\n}"
+	class := `<?php 
+/**
+ * 打卡签到明细表
+ * @User: frog
+ * @Date: 2025/02/21 18:05
+ */
+class ClockInDetailRecordModel extends BaseModel {
+
+    public function __construct($db = null) {
+        parent::__construct($db);
+        $this->table = 'clock_in_detail_record';
+        $this->cols  = [
+           'id',                                  //id
+           'admin_user_id',                       //admin_user_id
+           'wechatapp_id',                        //wechatapp_id
+           'clock_in_id',                         //打卡签到活动ID
+        ];
+    }
+
+    /**
+     * 按年按管理员分表
+     */
+    public function setTableName($year , $admin_user_id): string {
+        $this->table = 'clock_in_detail_record_' . $year . '_' . ($admin_user_id%10);
+        return $this->table;
+    }
+}`
 	descList := []string{
 		`你是一个php开发者，会生成class model，下面是示例`,
 		`假如有一个table：` + table,

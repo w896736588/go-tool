@@ -1,4 +1,4 @@
-package ai_model
+package ai_model_tpl
 
 import (
 	"dev_tool/internal/pkg/ai/ai_define"
@@ -9,7 +9,25 @@ import (
 func ModelNo(sql string) ([]ai_define.Message, []ai_define.Tool, error) {
 	modelUse := `不分表`
 	table := "CREATE TABLE `tbl_customer` (\n  `_id` int(11) unsigned NOT NULL AUTO_INCREMENT,\n  `kefu_user_id` int(11) DEFAULT NULL COMMENT '客服用户id',\n  `create_time` int(11) DEFAULT NULL,\n  `update_time` int(11) DEFAULT NULL,\n  PRIMARY KEY (`_id`),\n  UNIQUE KEY `openid_wechatid_kefu_id` (`openid`,`wechatapp_id`,`kefu_user_id`)\n) ENGINE=InnoDB AUTO_INCREMENT=46337208 DEFAULT CHARSET=utf8 COMMENT='客户表_20210705';"
-	class := "<?php \n/**\n * 客户表_20210705\n * @User: frog\n * @Date: 2025/02/21 17:51\n */\nclass CustomerModel extends BaseModel {\n\n    public function __construct($db = null) {\n        parent::__construct($db);\n        $this->table = 'tbl_customer';\n        $this->cols  = [\n           '_id',                                 //_id\n           'kefu_user_id',                        //客服用户id\n           'create_time',                         //create_time\n           'update_time',                         //update_time\n        ];\n    }\n}"
+	class := `<?php 
+/**
+ * 客户表_20210705
+ * @User: frog
+ * @Date: 2025/02/21 17:51
+ */
+class CustomerModel extends BaseModel {
+
+    public function __construct($db = null) {
+        parent::__construct($db);
+        $this->table = 'tbl_customer';
+        $this->cols  = [
+           '_id',                                 //_id
+           'kefu_user_id',                        //客服用户id
+           'create_time',                         //create_time
+           'update_time',                         //update_time
+        ];
+    }
+}`
 	descList := []string{
 		`你是一个php开发者，会生成class model，下面是示例`,
 		`假如有一个table：` + table,

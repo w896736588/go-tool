@@ -1,4 +1,4 @@
-package ai_model
+package ai_model_tpl
 
 import (
 	"dev_tool/internal/pkg/ai/ai_define"
@@ -9,7 +9,31 @@ import (
 func ModelMod(sql string, mod string) ([]ai_define.Message, []ai_define.Tool, error) {
 	modelUse := `按模分表`
 	table := "CREATE TABLE `tbl_chat_label_customer_6` (\n  `id` int(11) unsigned NOT NULL AUTO_INCREMENT COMMENT 'ID',\n  `admin_user_id` int(11) unsigned NOT NULL DEFAULT '0' COMMENT '管理员用户ID',\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uni_wechatapp_openid_label` (`wechatapp_id`,`openid`,`label_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='客户打上的聊天标签6';"
-	class := "<?php \n/**\n * 客户打上的聊天标签6\n * @User: frog\n * @Date: 2025/02/21 17:52\n */\nclass ChatLabelCustomerModel extends BaseModel {\n\n    public function __construct($db = null) {\n        parent::__construct($db);\n        $this->table = 'tbl_chat_label_customer';\n        $this->cols  = [\n           'id',                                  //ID\n           'admin_user_id',                       //管理员用户ID\n        ];\n    }\n    /**\n     * 按管理员分表\n     */\n    public function setTableName($admin_user_id): string {\n        $this->table = 'tbl_chat_label_customer_' . ($admin_user_id%10);\n        return $this->table;\n    }\n}"
+	class := `<?php 
+/**
+ * 客户打上的聊天标签6
+ * @User: frog
+ * @Date: 2025/02/21 17:52
+ */
+class ChatLabelCustomerModel extends BaseModel {
+
+    public function __construct($db = null) {
+        parent::__construct($db);
+        $this->table = 'tbl_chat_label_customer';
+        $this->cols  = [
+           'id',                                  //ID
+           'admin_user_id',                       //管理员用户ID
+        ];
+    }
+
+    /**
+     * 按管理员分表
+     */
+    public function setTableName($admin_user_id): string {
+        $this->table = 'tbl_chat_label_customer_' . ($admin_user_id%10);
+        return $this->table;
+    }
+}`
 	descList := []string{
 		`你是一个php开发者，会生成class model，下面是示例`,
 		`假如有一个table：` + table,
