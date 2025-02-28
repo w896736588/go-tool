@@ -1,4 +1,4 @@
-package ai_model
+package ai_model_tpl
 
 import (
 	"dev_tool/internal/pkg/ai/ai_define"
@@ -9,7 +9,32 @@ import (
 func ModelYear(sql string) ([]ai_define.Message, []ai_define.Tool, error) {
 	modelUse := `按年分表`
 	table := "CREATE TABLE `tbl_kf_response_stat_detail_2022` (\n  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,\n  `wechatapp_id` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '应用ID',\n  `response_type` int(10) unsigned NOT NULL DEFAULT '1' COMMENT '1 未回复（老数据都是未回复）  2 未应答',\n  PRIMARY KEY (`id`),\n  KEY `create_date_time` (`create_date_time`),\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='客服应答统计 未回复明细以及未应答明细';"
-	class := "<?php \n/**\n * 客服应答统计 未回复明细以及未应答明细\n * @User: frog\n * @Date: 2025/02/21 15:16\n */\nclass KfResponseStatDetailModel extends BaseModel {\n\n    public function __construct($db = null) {\n        parent::__construct($db);\n        $this->table = 'tbl_kf_response_stat_detail';\n        $this->cols  = [\n           'id',                                  //id\n           'wechatapp_id',                        //应用ID\n           'response_type',                       //1 未回复（老数据都是未回复）  2 未应答\n        ];\n    }\n\n    /**\n     * 按年分表\n     */\n    public function setTableName($year): string {\n        $this->table = 'tbl_kf_response_stat_detail_' . $year;\n        return $this->table;\n    }\n}"
+	class := `<?php 
+/**
+ * 客服应答统计 未回复明细以及未应答明细
+ * @User: frog
+ * @Date: 2025/02/21 15:16
+ */
+class KfResponseStatDetailModel extends BaseModel {
+
+    public function __construct($db = null) {
+        parent::__construct($db);
+        $this->table = 'tbl_kf_response_stat_detail';
+        $this->cols  = [
+           'id',                                  //id
+           'wechatapp_id',                        //应用ID
+           'response_type',                       //1 未回复（老数据都是未回复）  2 未应答
+        ];
+    }
+
+    /**
+     * 按年分表
+     */
+    public function setTableName($year): string {
+        $this->table = 'tbl_kf_response_stat_detail_' . $year;
+        return $this->table;
+    }
+}`
 	descList := []string{
 		`你是一个php开发者，会生成class model，下面是示例`,
 		`假如有一个table：` + table,

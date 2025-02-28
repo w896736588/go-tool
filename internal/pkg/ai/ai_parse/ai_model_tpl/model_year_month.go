@@ -1,4 +1,4 @@
-package ai_model
+package ai_model_tpl
 
 import (
 	"dev_tool/internal/pkg/ai/ai_define"
@@ -9,7 +9,33 @@ import (
 func ModelYearMonth(sql string) ([]ai_define.Message, []ai_define.Tool, error) {
 	modelUse := `按年月分表`
 	table := "CREATE TABLE `tbl_mp_unionid_record_2025_12` (\n  `id` int(11) unsigned NOT NULL AUTO_INCREMENT,\n  `admin_user_id` int(11) NOT NULL DEFAULT '0' COMMENT '管理员id',\n  `create_time` int(11) NOT NULL DEFAULT '0',\n  `update_time` int(11) NOT NULL DEFAULT '0',\n  PRIMARY KEY (`id`) USING BTREE,\n  KEY `union_idx` (`wechatapp_id`,`rule_id`,`unionid`) USING BTREE\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='unionid预打标签存储表';"
-	class := "<?php \n/**\n * unionid预打标签存储表\n * @User: frog\n * @Date: 2025/02/21 18:01\n */\nclass MpUnionidRecordModel extends BaseModel {\n\n    public function __construct($db = null) {\n        parent::__construct($db);\n        $this->table = 'tbl_mp_unionid_record';\n        $this->cols  = [\n           'id',                                  //id\n           'admin_user_id',                       //管理员id\n           'create_time',                         //create_time\n           'update_time',                         //update_time\n        ];\n    }\n    /**\n     * 按年按月分表\n     */\n    public function setTableName($year , $month): string {\n        $this->table = 'tbl_mp_unionid_record_' . $year . '_' . $month;\n        return $this->table;\n    }\n}"
+	class := `<?php 
+/**
+ * unionid预打标签存储表
+ * @User: frog
+ * @Date: 2025/02/21 18:01
+ */
+class MpUnionidRecordModel extends BaseModel {
+
+    public function __construct($db = null) {
+        parent::__construct($db);
+        $this->table = 'tbl_mp_unionid_record';
+        $this->cols  = [
+           'id',                                  //id
+           'admin_user_id',                       //管理员id
+           'create_time',                         //create_time
+           'update_time',                         //update_time
+        ];
+    }
+
+    /**
+     * 按年按月分表
+     */
+    public function setTableName($year , $month): string {
+        $this->table = 'tbl_mp_unionid_record_' . $year . '_' . $month;
+        return $this->table;
+    }
+}`
 	descList := []string{
 		`你是一个php开发者，会生成class model，下面是示例`,
 		`假如有一个table：` + table,

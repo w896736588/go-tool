@@ -230,14 +230,7 @@ func SmartLinkRunPlaywright(c *gin.Context) {
 func SmartLinkRunPlaywrightList(c *gin.Context) {
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
-
-	runList := make([]map[string]any, 0)
-	for uniKey, runInfo := range base.Component.TSmartLink.PageList {
-		runList = append(runList, map[string]any{
-			`name`:   runInfo.SmartLinkUniqueKey,
-			`unikey`: uniKey,
-		})
-	}
+	runList := base.Component.TSmartLink.GetPlaywrightRunList()
 	gsgin.GinResponseSuccess(c, ``, runList)
 }
 
@@ -286,13 +279,15 @@ func openBrowserPlaywright(openType, isCombine int, link string, processList []m
 	}
 	gstool.FmtPrintlnLogTime(`get page`)
 	pageUniqueKey := base.Component.TBase.GetUnique(`playwright_context_`)
-	page, pageErr := base.Component.TSmartLink.GetPage(openType, isSaveUserData, link, pageUniqueKey, smartLinkUniqueKey, browserAuthUsername, browserAuthPassword, isCombine)
-	gstool.FmtPrintlnLogTime(`获取page完成`)
+	page, pageErr := base.Component.TSmartLink.GetPage(openType, isSaveUserData, link, pageUniqueKey,
+		smartLinkUniqueKey, browserAuthUsername, browserAuthPassword, isCombine)
+
 	if pageErr != nil {
+		gstool.FmtPrintlnLogTime(`获取page报错 %s`, pageErr.Error())
 		return pageErr
 	}
+	gstool.FmtPrintlnLogTime(`获取page完成`)
 	for _, processVal := range processList {
-		gstool.FmtPrintlnLogTime(`start process %s`, processVal[`tip`])
 		//类型
 		processType := cast.ToString(processVal[`type`])
 		//如果不存在
@@ -310,16 +305,15 @@ func openBrowserPlaywright(openType, isCombine int, link string, processList []m
 		//}
 		var waitSecond float64 = 3000
 		// 等待页面加载完成
-		gstool.FmtPrintlnLogTime(`wait page loading`)
-		base.Component.TSmartLink.WaitForLoadState(*page.Page, waitSecond)
-		waitUrlErr := (*page.Page).WaitForURL((*page.Page).URL())
+		base.Component.TSmartLink.WaitForLoadState(page, waitSecond)
+		waitUrlErr := page.WaitForURL(page.URL())
 		if waitUrlErr != nil {
 			return waitUrlErr
 		}
-		base.Component.TSmartLink.AddTipMsg(*page.Page, tip)
+		base.Component.TSmartLink.AddTipMsg(page, tip)
 		switch processType {
 		case `click`: //点击
-			clickErr := click(Locator, notExistLocator, waitSecond, *page.Page)
+			clickErr := click(Locator, notExistLocator, waitSecond, page)
 			if clickErr != nil {
 				return clickErr
 			}
@@ -331,7 +325,7 @@ func openBrowserPlaywright(openType, isCombine int, link string, processList []m
 				`{password}`:  cast.ToString(dataMap[`password`]),
 				`{rand}`:      base.Component.TBase.GetUnique(`input_rand_`),
 			})
-			inputSelecter := (*page.Page).Locator(Locator)
+			inputSelecter := page.Locator(Locator)
 			selectorLoaderWaitErr := inputSelecter.WaitFor(playwright.LocatorWaitForOptions{
 				Timeout: &waitSecond,
 			})
@@ -341,21 +335,21 @@ func openBrowserPlaywright(openType, isCombine int, link string, processList []m
 					gstool.FmtPrintlnLogTime("无法将元素转换为输入框: %v", inputErr.Error())
 				}
 			} else {
-				base.Component.TSmartLink.AddTipMsg(*page.Page, `无法找到元素`+Locator+`,结束`)
+				base.Component.TSmartLink.AddTipMsg(page, `无法找到元素`+Locator+`,结束`)
 				return errors.New(`无法找到元素` + Locator)
 			}
 			break
 		case `redirect_uri`: //跳转 保持当前域名
-			currentURL := (*page.Page).URL()
+			currentURL := page.URL()
 			parsedURL, err := url.Parse(currentURL)
 			if err != nil {
 				gstool.FmtPrintlnLogTime("could not parse URL: %v", err)
 			}
 			domain := parsedURL.Scheme + `://` + parsedURL.Host
 			targetUrl := domain + redirectUri
-			base.Component.TSmartLink.AddTipMsg(*page.Page, `准备跳转`)
+			base.Component.TSmartLink.AddTipMsg(page, `准备跳转`)
 			time.Sleep(time.Second)
-			if _, goErr := (*page.Page).Goto(targetUrl); goErr != nil {
+			if _, goErr := page.Goto(targetUrl); goErr != nil {
 				gstool.FmtPrintlnLogTime(`跳转地址出错 %s %s`, targetUrl, goErr.Error())
 				return goErr
 			}
@@ -365,7 +359,7 @@ func openBrowserPlaywright(openType, isCombine int, link string, processList []m
 	if openType == define.OpenTypeWebkitSilence {
 		go func() {
 			time.Sleep(time.Second * 5)
-			closeErr := (*page.Page).Close()
+			closeErr := page.Close()
 			if closeErr != nil {
 				gstool.FmtPrintlnLogTime(`page close error：%s`, closeErr.Error())
 			}
