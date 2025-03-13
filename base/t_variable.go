@@ -47,10 +47,13 @@ func (h *VariableRun) addReplace(replaceList *[]map[string]string, key, value st
 		return
 	}
 	boolFind := false
-	for _, replace := range *replaceList {
+	for index, replace := range *replaceList {
 		for mapKey, _ := range replace {
 			if mapKey == key {
 				boolFind = true
+				(*replaceList)[index] = map[string]string{
+					key: value,
+				}
 			}
 		}
 	}
@@ -126,13 +129,14 @@ func (h *VariableRun) RunDone(variableId any, replaceList []map[string]string, v
 		switch cast.ToInt(cmd[`type`]) {
 		case define.VariableCmdMysql:
 			result, resultErr = h.runMysqlSql(cmd)
-			break
 		case define.VariableCmdBash:
 			result, resultErr = h.runBash(cmd)
-			break
 		case define.VariableCmdRedis:
 			result, resultErr = h.runRedis(cmd)
-			break
+		case define.VariableCmdPlaywright:
+			result, resultErr = h.runPlaywright(cmd)
+		case define.VariableCmdCombine:
+			result, resultErr = h.runCombine(cmd)
 		default:
 			continue
 		}
@@ -140,9 +144,13 @@ func (h *VariableRun) RunDone(variableId any, replaceList []map[string]string, v
 			return resultErr
 		}
 		if resultKey != `` {
-			//TODO 需要增加替换json或者数组
-			//h.addReplace(&h.ReplaceList, resultKey, result)
+			switch cast.ToInt(cmd[`type`]) {
+			case define.VariableCmdBash, define.VariableCmdCombine:
+				h.addReplace(&h.ReplaceList, resultKey, result)
+			default:
+			}
 		}
+		gstool.FmtPrintlnLogTime(`replace list %s`, gstool.JsonEncode(h.ReplaceList))
 		//暂时没啥用
 		Component.GsLog.Debugf(`执行结果 %s`, result)
 	}
@@ -277,6 +285,71 @@ func (h *VariableRun) runBash(cmd map[string]any) (string, error) {
 		return ``, err
 	}
 	return result, nil
+}
+
+func (h *VariableRun) runPlaywright(cmd map[string]any) (string, error) {
+	id := cast.ToInt(cmd[`smart_link_id`])
+	label := cast.ToString(cmd[`smart_link_label`])
+	if id == 0 {
+		return ``, errors.New(`链接ID不能为空`)
+	}
+	if label == `` {
+		return ``, errors.New(`链接label不能为空`)
+	}
+	dataMap := make(map[string]any)
+	dataMap[`id`] = id
+	smartLink, smartLinkErr := Component.TSqlite.Client.QueryBySql(`select * from tbl_smart_link where id = ? `, id).One()
+	if smartLinkErr != nil {
+		return ``, errors.New(smartLinkErr.Error())
+	}
+	if len(smartLink) == 0 {
+		return ``, errors.New(`不存在的链接`)
+	}
+	linkList := make([]map[string]any, 0)
+	decodeErr := gstool.JsonDecode(cast.ToString(smartLink[`links`]), &linkList)
+	if decodeErr != nil {
+		return ``, errors.New(decodeErr.Error())
+	}
+	for index, link := range linkList {
+		if cast.ToString(link[`label`]) == label {
+			dataMap[`link`] = cast.ToString(link[`link`])
+			dataMap[`value`] = cast.ToString(index) + `_` + label
+			dataMap[`open_num`] = 0
+			break
+		}
+	}
+	//赋值
+	dataMap[`is_save_user_data`] = smartLink[`is_save_user_data`]
+	link := cast.ToString(dataMap[`link`])
+	openNum := cast.ToInt(dataMap[`open_num`])
+	isCombine := cast.ToInt(smartLink[`is_combine`])
+	if openNum == 0 {
+		openNum = 1
+	}
+	openType := cast.ToInt(smartLink[`open_type`])
+	process := cast.ToString(smartLink[`process`])
+	if link == `` {
+		return ``, errors.New(`链接不存在，检查是否json格式错误`)
+	}
+	processList := make([]map[string]any, 0)
+	if process != `` {
+		decodeErr = gstool.JsonDecode(process, &processList)
+		if decodeErr != nil {
+			return ``, errors.New(`配置失败` + decodeErr.Error())
+		}
+	}
+	for i := 0; i < openNum; i++ {
+		gstool.FmtPrintlnLogTime(`第 %d 次`, i)
+		openErr := Component.TSmartLink.OpenBrowserPlaywright(openType, isCombine, link, processList, dataMap, h.ReplaceList)
+		if openErr != nil {
+			gstool.FmtPrintlnLogTime(`错误 %s`, openErr.Error())
+		}
+	}
+	return ``, nil
+}
+
+func (h *VariableRun) runCombine(cmd map[string]any) (string, error) {
+	return h.replace(cast.ToString(cmd[`options`]), h.ReplaceList), nil
 }
 
 func (h *VariableRun) runRedis(cmd map[string]any) (string, error) {

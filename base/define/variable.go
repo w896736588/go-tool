@@ -13,9 +13,11 @@ const (
 	VariableCmdRadio                   //单项选择
 	VariableCmdLink                    //地址跳转
 	VariableCmdRedis                   //redis缓存操作
-	VariableCmdRedisChoose             //选择redis
-	VariableCmdMysqlChoose             //选择mysql
-	VariableCmdSshChoose               //选择ssh
+	VariableCmdRedisChoose             //选择redis 【废弃】
+	VariableCmdMysqlChoose             //选择mysql 【废弃】
+	VariableCmdSshChoose               //选择ssh 【废弃】
+	VariableCmdPlaywright              //选择playwright
+	VariableCmdCombine                 //内容收集
 )
 
 const (

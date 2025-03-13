@@ -125,13 +125,13 @@ func VariableCmdAdd(c *gin.Context) {
 	}
 	switch _type {
 	case define.VariableCmdMysql:
-		if cast.ToString(dataMap[`sql`]) == `` || cast.ToInt(dataMap[`mysql_id`]) == 0 {
-			gsgin.GinResponseError(c, `mysql类型格式错误`, nil)
+		if cast.ToString(dataMap[`sql`]) == `` {
+			gsgin.GinResponseError(c, `mysql缺少语句`, nil)
 			return
 		}
 	case define.VariableCmdCmd:
 		if cast.ToString(dataMap[`cmd`]) == `` {
-			gsgin.GinResponseError(c, `cmd格式错误`, nil)
+			gsgin.GinResponseError(c, `cmd缺少内容`, nil)
 			return
 		}
 	default:
@@ -142,7 +142,7 @@ func VariableCmdAdd(c *gin.Context) {
 		gsgin.GinResponseError(c, `输出的key必须以'{'开头，以'}'结尾`, nil)
 		return
 	}
-	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `type`, `variable_id`, `is_pre`, `result_key`, `options`, `remark`, `sql`, `sql_id`, `cmd`, `mysql_id`, `ssh_id`, `bash`, `weight`})
+	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `type`, `variable_id`, `is_pre`, `result_key`, `options`, `remark`, `sql`, `cmd`, `bash`, `weight`, `default`, `smart_link_id`, `smart_link_label`})
 	if cast.ToInt(dataMap[`id`]) == 0 {
 		updateData[`key`] = gstool.TimeNowMilliInt64()
 		updateData[`create_time`] = time.Now().Unix()
