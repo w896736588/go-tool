@@ -18,6 +18,7 @@ func (h *VariableRun) RunPre(variableId any) ([]_struct.VariableForm, []map[stri
 	}
 	replaceList := make([]map[string]string, 0)
 	variableFormList := make([]_struct.VariableForm, 0) //需要展示在页面上的和form表单有关联的 只限于is_pre=1的
+	isCanRun := 1
 	for _, cmd := range cmdList {
 		if cast.ToInt(cmd[`is_pre`]) == 0 { //不需要提前执行
 			if cast.ToInt(cmd[`type`]) == define.VariableCmdBash { //预先连接ssh
@@ -30,10 +31,13 @@ func (h *VariableRun) RunPre(variableId any) ([]_struct.VariableForm, []map[stri
 				preConnErr := h.preConnSsh(cmd)
 				if preConnErr != nil {
 					return nil, nil, 0, preConnErr
+				} else {
+					h.sendSocketMsg(variableId, `ssh连接成功`)
 				}
 			}
 			continue
 		}
+
 		//初始化
 		resultKey := cast.ToString(cmd[`result_key`])
 		variableForm := _struct.VariableForm{
@@ -47,8 +51,15 @@ func (h *VariableRun) RunPre(variableId any) ([]_struct.VariableForm, []map[stri
 		case define.VariableCmdInput: //输入框肯定需要进行输入
 			variableForm.Input = _struct.VariableFormInput{
 				Label: cast.ToString(cmd[`name`]),
+				Value: cast.ToString(cmd[`default`]),
 			}
 			h.PreShowSet(cast.ToString(variableId), cast.ToString(cmd[`name`]), &variableForm)
+			if cast.ToString(cmd[`default`]) == `` {
+				isCanRun = 0
+			} else {
+				isCanRun = 1
+				h.addReplace(&replaceList, variableForm.ResultKey, variableForm.Input.Value)
+			}
 			break
 		case define.VariableCmdRadio: //单项选择 初始的时候不存在替换值 只有选了以后才有
 			variableForm.Select = _struct.VariableFormSelect{
@@ -65,30 +76,9 @@ func (h *VariableRun) RunPre(variableId any) ([]_struct.VariableForm, []map[stri
 				return nil, nil, 0, radioErr
 			}
 			h.PreShowSet(cast.ToString(variableId), cast.ToString(cmd[`name`]), &variableForm)
-			break
-		case define.VariableCmdRedisChoose: //redis选择 所有配置的redis
-			variableForm.Select = _struct.VariableFormSelect{
-				Label:      cast.ToString(cmd[`name`]),
-				Value:      ``,
-				OptionList: make([]_struct.VariableFormOption, 0),
-				Options:    cast.ToString(cmd[`options`]), //原本的字符串选项集
-			}
-			configList, configListErr := Component.TSqlite.GetAllRedisConfig()
-			if configListErr != nil {
-				return nil, nil, 0, configListErr
-			}
-			variableForm.Select.OptionList = make([]_struct.VariableFormOption, 0)
-			for _, redisConfig := range configList {
-				variableForm.Select.OptionList = append(variableForm.Select.OptionList, _struct.VariableFormOption{
-					Label:  cast.ToString(redisConfig[`name`]),
-					Value:  cast.ToString(redisConfig[`id`]),
-					Source: gstool.JsonEncode(redisConfig),
-				})
-			}
-			h.PreShowSet(cast.ToString(variableId), cast.ToString(cmd[`name`]), &variableForm)
+			isCanRun = 0
 			break
 		case define.VariableCmdMysql: //执行sql 初始化
-
 			id, sql := h.ParseIdContent(cast.ToString(cmd[`sql`]))
 			variableForm.Sql = _struct.VariableFormSql{
 				Sql:     sql,
@@ -101,6 +91,7 @@ func (h *VariableRun) RunPre(variableId any) ([]_struct.VariableForm, []map[stri
 				}
 			}
 			h.PreShowSet(cast.ToString(variableId), cast.ToString(cmd[`name`]), &variableForm)
+			isCanRun = 0
 			break
 		case define.VariableCmdBash: //执行bash 初始化 bash类型暂时不支持提前执行
 			id, bash := h.ParseIdContent(cast.ToString(cmd[`bash`]))
@@ -108,34 +99,15 @@ func (h *VariableRun) RunPre(variableId any) ([]_struct.VariableForm, []map[stri
 				Bash:  bash,
 				SshId: id,
 			}
+			isCanRun = 0
 			break
-		case define.VariableCmdSshChoose: //选择ssh
-			variableForm.Select = _struct.VariableFormSelect{
-				Label:      cast.ToString(cmd[`name`]),
-				Value:      ``,
-				OptionList: make([]_struct.VariableFormOption, 0),
-				Options:    cast.ToString(cmd[`options`]), //原本的字符串选项集
-			}
-			configList, configListErr := Component.TSqlite.GetAllSshConfig()
-			if configListErr != nil {
-				return nil, nil, 0, configListErr
-			}
-			variableForm.Select.OptionList = make([]_struct.VariableFormOption, 0)
-			for _, redisConfig := range configList {
-				variableForm.Select.OptionList = append(variableForm.Select.OptionList, _struct.VariableFormOption{
-					Label:  cast.ToString(redisConfig[`name`]),
-					Value:  cast.ToString(redisConfig[`id`]),
-					Source: gstool.JsonEncode(redisConfig),
-				})
-			}
-			h.PreShowSet(cast.ToString(variableId), cast.ToString(cmd[`name`]), &variableForm)
 		default:
 			//这里不管预执行
 			break
 		}
 		variableFormList = append(variableFormList, variableForm)
 	}
-	return variableFormList, replaceList, 0, nil
+	return variableFormList, replaceList, isCanRun, nil
 }
 
 // ParseIdContent 解析sql或者bash脚本第一行定义的id，格式：[id=1]
