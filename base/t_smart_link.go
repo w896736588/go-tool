@@ -634,8 +634,6 @@ func (h *TSmartLink) GetRunParams(id int, label, userName, password string, open
 		}
 	}
 	runParams.Domain = gstool.UrlGetHost(runParams.Link)
-	runParams.BrowserAuthUsername = browserAuthUsername
-	runParams.BrowserAuthPassword = browserAuthPassword
 	runParams.UserName = userName
 	runParams.Password = password
 	runParams.ProcessList = processList
