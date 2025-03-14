@@ -582,7 +582,7 @@ func (h *TSmartLink) install(version, lockFileFullPath string) {
 	}
 }
 
-func (h *TSmartLink) GetRunParams(id int, label, browserAuthUsername, browserAuthPassword, userName, password string, openNum int, replaceList []map[string]string) (_struct.SmartLinkRunParams, error) {
+func (h *TSmartLink) GetRunParams(id int, label, userName, password string, openNum int, replaceList []map[string]string) (_struct.SmartLinkRunParams, error) {
 	runParams := _struct.SmartLinkRunParams{}
 	if id == 0 {
 		return runParams, errors.New(`链接ID不能为空`)
@@ -609,6 +609,8 @@ func (h *TSmartLink) GetRunParams(id int, label, browserAuthUsername, browserAut
 			runParams.SmartLinkUniqueKey = cast.ToString(runParams.Id) + `_` + label
 			runParams.OpenNum = 0
 			runParams.Cookie = cast.ToString(link[`cookie`])
+			runParams.BrowserAuthUsername = cast.ToString(link[`browser_auth_username`])
+			runParams.BrowserAuthPassword = cast.ToString(link[`browser_auth_password`])
 			break
 		}
 	}
