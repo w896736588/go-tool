@@ -296,7 +296,7 @@ func (h *VariableRun) runPlaywright(cmd map[string]any) (string, error) {
 	if label == `` {
 		return ``, errors.New(`链接label不能为空`)
 	}
-	runParams, runParamsErr := Component.TSmartLink.GetRunParams(id, label, ``, ``, ``, ``, 0, h.ReplaceList)
+	runParams, runParamsErr := Component.TSmartLink.GetRunParams(id, label, ``, ``, 0, h.ReplaceList)
 	if runParamsErr != nil {
 		return ``, errors.New(runParamsErr.Error())
 	}

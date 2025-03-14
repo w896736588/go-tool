@@ -198,12 +198,10 @@ func SmartLinkRunPlaywright(c *gin.Context) {
 		gsgin.GinResponseError(c, `id和label不能为空`, nil)
 		return
 	}
-	browserAuthUsername := cast.ToString(dataMap[`browser_auth_username`])
-	browserAuthPassword := cast.ToString(dataMap[`browser_auth_password`])
 	userName := cast.ToString(dataMap[`user_name`])
 	password := cast.ToString(dataMap[`password`])
 	openNum := cast.ToInt(dataMap[`open_num`])
-	runParams, runParamsErr := base.Component.TSmartLink.GetRunParams(id, label, browserAuthUsername, browserAuthPassword, userName, password, openNum, make([]map[string]string, 0))
+	runParams, runParamsErr := base.Component.TSmartLink.GetRunParams(id, label, userName, password, openNum, make([]map[string]string, 0))
 	if runParamsErr != nil {
 		gsgin.GinResponseError(c, runParamsErr.Error(), nil)
 		return
