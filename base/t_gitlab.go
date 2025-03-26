@@ -97,15 +97,19 @@ func (h *TGitlab) checkMerges(projectId, projectName, author string, perPage int
 				return err
 			}
 			status := ``
-			if authorJoin {
-				if otherJoin {
-					if selfTest {
-						status = `对接自测`
+			if authorJoin { //作者参与
+				if otherJoin { //其他人参与
+					if selfTest { //自测完
+						status = `对接自测完`
 					} else {
 						status = `对接`
 					}
-				} else {
-					status = `开发`
+				} else { //其他人不参与
+					if selfTest { //自测完
+						status = `自测完`
+					} else {
+						status = `开发`
+					}
 				}
 			} else {
 
