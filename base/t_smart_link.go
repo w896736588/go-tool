@@ -642,7 +642,7 @@ func (h *TSmartLink) OpenBrowserPlaywright(runParams *_struct.SmartLinkRunParams
 		//如果不存在
 		notExistLocator := cast.ToString(processVal[`not_exist_Locator`])
 		//元素选择
-		Locator := cast.ToString(processVal[`Locator`])
+		locator := h.parseLocator(cast.ToString(processVal[`Locator`]))
 		//链接
 		redirectUri := cast.ToString(processVal[`uri`])
 		redirectUri = gstool.SReplaces(redirectUri, map[string]string{
@@ -673,11 +673,11 @@ func (h *TSmartLink) OpenBrowserPlaywright(runParams *_struct.SmartLinkRunParams
 		cmdType := define.CmdType(processType)
 		switch cmdType {
 		case define.TextContent: //提取内容
-			content, err := page.TextContent(Locator, playwright.PageTextContentOptions{
+			content, err := page.Locator(locator.Locator).TextContent(playwright.LocatorTextContentOptions{
 				Timeout: playwright.Float(runParams.LocatorTimeout),
 			})
 			if err != nil {
-				h.callRun(runParams, cmdType, err.Error(), tip, Locator)
+				h.callRun(runParams, cmdType, err.Error(), tip, locator.Locator)
 			} else {
 				takeContentMap[outKey] = strings.TrimSpace(cast.ToString(content))
 				h.callRun(runParams, cmdType, ``, tip, content)
@@ -706,12 +706,13 @@ func (h *TSmartLink) OpenBrowserPlaywright(runParams *_struct.SmartLinkRunParams
 			if !h.allowCheckKey(checkKey, boolResultMap) {
 				continue
 			}
-			clickErr := h.click(Locator, notExistLocator, runParams.LocatorTimeout, page)
+			gstool.FmtPrintlnLogTime(`点击 %s`, tip)
+			clickErr := h.click(locator.Locator, notExistLocator, runParams.LocatorTimeout, page)
 			if clickErr != nil {
-				h.callRun(runParams, cmdType, clickErr.Error(), tip, Locator)
+				h.callRun(runParams, cmdType, clickErr.Error(), tip, locator.Locator)
 				return clickErr
 			} else {
-				h.callRun(runParams, cmdType, ``, tip, Locator)
+				h.callRun(runParams, cmdType, ``, tip, locator.Locator)
 			}
 		case define.Input: //输入
 			if !h.allowCheckKey(checkKey, boolResultMap) {
@@ -727,20 +728,23 @@ func (h *TSmartLink) OpenBrowserPlaywright(runParams *_struct.SmartLinkRunParams
 			for _, replaceVal := range runParams.ReplaceList {
 				inputValue = gstool.SReplaces(inputValue, replaceVal)
 			}
-			inputSelecter := page.Locator(Locator)
+			inputSelecter := page.Locator(locator.Locator)
+			if locator.First {
+				inputSelecter.First()
+			}
 			selectorLoaderWaitErr := inputSelecter.WaitFor(playwright.LocatorWaitForOptions{
 				Timeout: &runParams.LocatorTimeout,
 			})
 			if selectorLoaderWaitErr == nil {
 				inputErr := inputSelecter.Fill(inputValue)
 				if inputErr != nil {
-					h.callRun(runParams, cmdType, inputErr.Error(), tip, Locator)
+					h.callRun(runParams, cmdType, inputErr.Error(), tip, locator.Locator)
 				} else {
 					h.callRun(runParams, cmdType, ``, tip, inputValue)
 				}
 			} else {
-				h.callRun(runParams, cmdType, selectorLoaderWaitErr.Error(), tip, Locator)
-				return errors.New(`无法找到元素` + Locator)
+				h.callRun(runParams, cmdType, selectorLoaderWaitErr.Error(), tip, locator.Locator)
+				return errors.New(`无法找到元素` + locator.Locator)
 			}
 		case define.RedirectUri: //跳转 保持当前域名
 			if !h.allowCheckKey(checkKey, boolResultMap) {
@@ -774,6 +778,18 @@ func (h *TSmartLink) OpenBrowserPlaywright(runParams *_struct.SmartLinkRunParams
 		}()
 	}
 	return nil
+}
+
+func (h *TSmartLink) parseLocator(Locator string) *_struct.Locator {
+	sList := strings.Split(Locator, `|`)
+	locator := _struct.Locator{
+		Locator: sList[0],
+		First:   false,
+	}
+	if gstool.ArrayExistValue(&sList, `first`) {
+		locator.First = true
+	}
+	return &locator
 }
 
 func (h *TSmartLink) callRun(runParams *_struct.SmartLinkRunParams, cmdType define.CmdType, errmsg, tip, content string) {

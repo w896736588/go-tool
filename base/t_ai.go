@@ -24,6 +24,8 @@ func (h *TAi) ParseStream(url, msg string) []byte {
 			h.ParseBot(msgVal, &resBytes)
 		} else if gstool.SContains(url, []string{`/api/v0/chat/completion`, `/api/GitLab`, `basic`}) { //git日志
 			h.ParseDeepseek(msgVal, &resBytes)
+		} else if gstool.SContains(url, []string{`/completion/stream`}) { //kimi
+			h.ParseKimi(msgVal, &resBytes)
 		}
 	}
 	return resBytes
@@ -41,6 +43,25 @@ func (h *TAi) ParseBot(msg string, resBytes *[]byte) {
 			*resBytes = append(*resBytes, []byte("\n")...)
 		} else {
 			*resBytes = append(*resBytes, []byte(msg)...)
+		}
+	}
+}
+
+// ParseKimi kimi格式
+func (h *TAi) ParseKimi(msg string, resBytes *[]byte) {
+	msg = gstool.SReplaces(msg, map[string]string{
+		`data: `: ``,
+	})
+	data := _struct.Kimi{}
+	err := gstool.JsonDecode(msg, &data)
+	if err != nil {
+		Component.GsLog.Errof(`解析kimi内容失败 --%s--`, msg)
+	} else {
+		if data.Event == `all_done` {
+			*resBytes = append(*resBytes, []byte("\n")...)
+			return
+		} else if data.Event == `cmpl` { //回复的文字 其实还有其他乱七八糟的事件 这里不管
+			*resBytes = append(*resBytes, []byte(data.Text)...)
 		}
 	}
 }

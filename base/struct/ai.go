@@ -45,3 +45,11 @@ type StreamData struct {
 		} `json:"delta"`
 	} `json:"choices"`
 }
+
+type Kimi struct {
+	Event string `json:"event"`
+	IdxS  int    `json:"idx_s"`
+	IdxZ  int    `json:"idx_z"`
+	Text  string `json:"text"`
+	View  string `json:"view"`
+}
