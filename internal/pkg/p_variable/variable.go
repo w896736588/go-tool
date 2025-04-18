@@ -331,7 +331,6 @@ func (h *VariableRun) runCommand(cmd map[string]any) (string, error) {
 		if command == "" {
 			continue
 		}
-		h.StreamMsg(base.Component.TMarkDown.Code(command, `bash`), true)
 		sshUniqueKey := base.Component.TBase.GetCombineKey(`variable`, sshId, `run`)
 		if !base.Component.TShell.Exist(sshUniqueKey) {
 			return ``, errors.New(`ssh连接未初始化`)
@@ -348,7 +347,6 @@ func (h *VariableRun) runCommand(cmd map[string]any) (string, error) {
 			return ``, sshClientErr
 		}
 		var err error
-		//创建目录
 		runCmd := base.Command{}
 		runCmd.SetCommand(command)
 		runCmd.Sudo()
@@ -518,5 +516,5 @@ func (h *VariableRun) runRedis(cmd map[string]any) (string, error) {
 }
 
 func (h *VariableRun) end() {
-	h.StreamMsg(`执行结束`, true)
+	//h.StreamMsg(`执行结束`, true)
 }

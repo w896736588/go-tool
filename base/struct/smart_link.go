@@ -45,3 +45,8 @@ type ShowCookie struct {
 	Label        string   `json:"label"`
 	DomainList   []string `json:"Domain_list"`
 }
+
+type Locator struct {
+	Locator string //寻找
+	First   bool   //是否只寻找第一个
+}
