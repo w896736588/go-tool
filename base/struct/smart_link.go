@@ -33,7 +33,7 @@ type PlaywrightRunParams struct {
 type ListenUrl struct {
 	IsSse         bool
 	Callback      func(string, error)
-	StartCallBack func()
+	StartCallBack func(string)
 	EndCallBack   func(msg string)
 }
 

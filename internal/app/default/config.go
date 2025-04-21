@@ -179,7 +179,7 @@ func initGin(ViewPath string) {
 		JsData: map[string]string{},
 	}
 	base.Component.TJas.Load()
-	base.Component.TVariable = &base.TVariable{TaskList: map[string]string{}}
+	base.Component.TVariable = base.NewVariable()
 	base.Component.TGin.IsRun = true
 }
 

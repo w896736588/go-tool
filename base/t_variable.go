@@ -1,6 +1,7 @@
 package base
 
 import (
+	"gitee.com/Sxiaobai/gs/gstool"
 	"sync"
 	"time"
 )
@@ -8,6 +9,14 @@ import (
 type TVariable struct {
 	TaskList map[string]string
 	lock     sync.RWMutex
+	Log      *gstool.GsSlog
+}
+
+func NewVariable() *TVariable {
+	return &TVariable{
+		TaskList: make(map[string]string),
+		Log:      gstool.NewSlogDefault(Component.Env.LogPath, `variable`),
+	}
 }
 
 func (h *TVariable) StopAll() {

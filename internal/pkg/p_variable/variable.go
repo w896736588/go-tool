@@ -77,9 +77,14 @@ func (h *VariableRun) isExistReplaceParam(data string) bool {
 	return gstool.RegexMatchString(data, `{[a-zA-Z0-9_]+}`)
 }
 
-// 是否存在待获取配置的变量
-func (h *VariableRun) isExistConfigParam(data string) bool {
-	return gstool.RegexMatchString(data, `{[a-zA-Z0-9_:]+}`)
+// 是否存在待替换的变量Full
+func (h *VariableRun) isExistReplaceParamFull(data string) bool {
+	return gstool.RegexMatchString(data, `^{[a-zA-Z0-9_]+}$`)
+}
+
+// 是否存在待获取配置的变量Full
+func (h *VariableRun) isExistConfigParamFull(data string) bool {
+	return gstool.RegexMatchString(data, `^{[a-zA-Z0-9_:]+}$`)
 }
 
 func (h *VariableRun) isExistReplaceList(resultKey string, replaceList []map[string]string) bool {
@@ -432,10 +437,12 @@ func (h *VariableRun) runPlaywright(cmd map[string]any) (string, error) {
 			base.Component.TPlaywright.ListenUrlList[uri] = &_struct.ListenUrl{
 				IsSse: true,
 				Callback: func(msg string, err error) {
+					base.Component.TVariable.Log.Debugf(`收到消息---%s---`, msg)
 					sendMsg := base.Component.TAi.ParseStream(uri, msg)
 					h.StreamMsg(cast.ToString(sendMsg), false)
 				},
-				StartCallBack: func() {
+				StartCallBack: func(url string) {
+					base.Component.TVariable.Log.Debugf(`监听到%s`, url)
 					h.StreamMsg(base.Component.TMarkDown.BlockQuote(`开始回答...`), true)
 					h.PlaywrightLock.Lock()
 				},
