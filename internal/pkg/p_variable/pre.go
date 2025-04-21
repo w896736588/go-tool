@@ -65,11 +65,11 @@ func (h *VariableRun) RunPre(variableId any) ([]_struct.VariableForm, []map[stri
 				OptionList: make([]_struct.VariableFormOption, 0),
 				Options:    cast.ToString(cmd[`options`]), //原本的字符串选项集
 			}
-			if h.isExistReplaceParam(variableForm.Select.Options) {
+			if h.isExistReplaceParamFull(variableForm.Select.Options) {
 				isCanRun = 0
 				break
 			}
-			if h.isExistConfigParam(variableForm.Select.Options) {
+			if h.isExistConfigParamFull(variableForm.Select.Options) {
 				variableForm.Select.Options = h.ParseConfig(variableForm.Select.Options)
 			}
 			radioErr := h.PreRadioOptionList(&variableForm)
@@ -141,7 +141,7 @@ func (h *VariableRun) PreRadioOptionList(variableForm *_struct.VariableForm) err
 	if len(variableForm.Select.OptionList) > 0 {
 		return nil
 	}
-	if h.isExistReplaceParam(variableForm.Select.Options) {
+	if h.isExistReplaceParamFull(variableForm.Select.Options) {
 		return nil
 	}
 
@@ -150,6 +150,7 @@ func (h *VariableRun) PreRadioOptionList(variableForm *_struct.VariableForm) err
 	//原本的选项值
 	decodeErr := gstool.JsonDecode(variableForm.Select.Options, &optionSourceList)
 	if decodeErr != nil {
+		gstool.FmtPrintlnLogTime(`解析失败 %s %s`, variableForm.Select.Options, decodeErr.Error())
 		return decodeErr
 	}
 	optionList := make([]_struct.VariableFormOption, 0)

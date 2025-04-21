@@ -342,6 +342,7 @@ func (h *TPlaywright) GetContextSaveUserData(runParams *_struct.PlaywrightRunPar
 	}
 	var context playwright.BrowserContext
 	var contextErr error
+	//浏览器自带验证
 	if runParams.BrowserAuthUsername != `` && runParams.BrowserAuthPassword != `` {
 		context, contextErr = h.Pw.Chromium.LaunchPersistentContext(contextPage.UserDataPath, playwright.BrowserTypeLaunchPersistentContextOptions{
 			//DownloadsPath:     &h.downloadPath,
@@ -366,6 +367,12 @@ func (h *TPlaywright) GetContextSaveUserData(runParams *_struct.PlaywrightRunPar
 				`--disable-blink-features=AutomationControlled`, //禁止传递浏览器自动化标识
 			},
 		})
+		if contextErr != nil {
+			h.log.Errof(`启动context报错 %s`, contextErr.Error())
+			return ContextPage{}, false, contextErr
+		}
+		contextPage.Context = context
+		contextPage.ContextUnique = Component.TBase.GetUnique(`context_unique_`) //这里是动态生成的唯一ID 其实没啥意义
 	} else {
 		h.log.Debugf(`启动context 超时时间：%f`, runParams.GetPageTimeout)
 		context, contextErr = h.Pw.Chromium.LaunchPersistentContext(contextPage.UserDataPath, playwright.BrowserTypeLaunchPersistentContextOptions{
@@ -387,17 +394,22 @@ func (h *TPlaywright) GetContextSaveUserData(runParams *_struct.PlaywrightRunPar
 				`--disable-blink-features=AutomationControlled`, //禁止传递浏览器自动化标识
 			},
 		})
+		if contextErr != nil {
+			h.log.Errof(`启动context报错 %s`, contextErr.Error())
+			return ContextPage{}, false, contextErr
+		}
 		h.log.Debugf(`启动 over`)
+		contextPage.Context = context
+		if runParams.FixDataId != 0 { //如果是固定打开数据索引 那么给予一个固定的
+			contextPage.ContextUnique = fmt.Sprintf(`context_unique_%d`, runParams.Id)
+		} else {
+			contextPage.ContextUnique = Component.TBase.GetUnique(`context_unique_`)
+		}
 	}
-	if contextErr != nil {
-		h.log.Errof(`启动context报错 %s`, contextErr.Error())
-		return ContextPage{}, false, contextErr
-	}
+
 	context.OnPage(func(page playwright.Page) {
 		go h.PageEvents(runParams, page)
 	})
-	contextPage.Context = context
-	contextPage.ContextUnique = Component.TBase.GetUnique(`context_unique_`)
 	h.ContextList = append(h.ContextList, contextPage)
 	//监听关闭
 	go func() {
@@ -439,6 +451,13 @@ func (h *TPlaywright) GetUserDataContext(runParams *_struct.PlaywrightRunParams)
 		userIndex = userIndexMax + 1
 	} else {
 		userIndex = runParams.Id
+		//fmt.Sprintf(`context_unique_%d`, runParams.FixDataId)
+		for _, v := range h.ContextList {
+			if v.ContextUnique == fmt.Sprintf(`context_unique_%d`, runParams.Id) {
+				h.log.Debugf(`找到了已经存在的context`)
+				return v
+			}
+		}
 	}
 
 	dataPath := fmt.Sprintf(Component.Env.PlaywrightUserData+`\%d`, userIndex)
@@ -941,7 +960,7 @@ func (h *TPlaywright) ListenUrl(route playwright.Route, listen *_struct.ListenUr
 		Headers(headers)
 	var res []byte
 	var resErr error
-	listen.StartCallBack()
+	listen.StartCallBack(requestUrl)
 	if listen.IsSse {
 		res, resErr = cli.OpenStreamBytesEnd([]byte("\n\n"), func(s string, err error) {
 			listen.Callback(s, err)

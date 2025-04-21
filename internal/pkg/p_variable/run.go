@@ -36,7 +36,7 @@ func (h *VariableRun) RunProcess(variableFormList []_struct.VariableForm, replac
 			if radioErr != nil {
 				return nil, nil, 0, radioErr
 			}
-			if h.isExistReplaceParam(variableForm.Select.Options) {
+			if h.isExistReplaceParamFull(variableForm.Select.Options) {
 				variableForm.IsRunOk = 0
 				break
 			}
