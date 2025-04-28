@@ -592,7 +592,7 @@ func (h *TPlaywright) install(version, lockFileFullPath string) {
 	}
 }
 
-func (h *TPlaywright) GetRunParams(id int, label, userName, password string, openNum int, replaceList []map[string]string) (*_struct.PlaywrightRunParams, error) {
+func (h *TPlaywright) GetRunParams(id int, label, userName, password string, openNum int, replaceList *[]map[string]string) (*_struct.PlaywrightRunParams, error) {
 	runParams := &_struct.PlaywrightRunParams{}
 	if id == 0 {
 		return runParams, errors.New(`链接ID不能为空`)
@@ -658,7 +658,7 @@ func (h *TPlaywright) GetRunParams(id int, label, userName, password string, ope
 	runParams.UserName = userName
 	runParams.Password = password
 	runParams.ProcessList = processList
-	runParams.ReplaceList = replaceList
+	runParams.ReplaceList = *replaceList
 	runParams.LocatorTimeout = 1000
 	runParams.GetPageTimeout = 3000
 	return runParams, nil

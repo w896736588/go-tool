@@ -228,7 +228,8 @@ func SmartLinkRunPlaywright(c *gin.Context) {
 	userName := cast.ToString(dataMap[`user_name`])
 	password := cast.ToString(dataMap[`password`])
 	openNum := cast.ToInt(dataMap[`open_num`])
-	runParams, runParamsErr := base.Component.TPlaywright.GetRunParams(id, label, userName, password, openNum, make([]map[string]string, 0))
+	replaceList := make([]map[string]string, 0)
+	runParams, runParamsErr := base.Component.TPlaywright.GetRunParams(id, label, userName, password, openNum, &replaceList)
 	if runParamsErr != nil {
 		gsgin.GinResponseError(c, runParamsErr.Error(), nil)
 		return

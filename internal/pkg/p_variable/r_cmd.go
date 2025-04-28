@@ -1,0 +1,345 @@
+package p_variable
+
+import (
+	"context"
+	"dev_tool/base"
+	"dev_tool/base/define"
+	_struct "dev_tool/base/struct"
+	"errors"
+	"fmt"
+	"gitee.com/Sxiaobai/gs/gshttp"
+	"gitee.com/Sxiaobai/gs/gsssh"
+	"gitee.com/Sxiaobai/gs/gstool"
+	"github.com/spf13/cast"
+	"strings"
+	"sync"
+	"time"
+)
+
+type RCmd struct {
+	cmd            map[string]any
+	replaceList    *[]map[string]string
+	StreamMsg      func(string, bool)
+	PlaywrightLock sync.RWMutex
+}
+
+func NewRCmd(cmd map[string]any, replace *[]map[string]string, streamMsg func(string, bool)) *RCmd {
+	return &RCmd{
+		cmd:         cmd,
+		replaceList: replace,
+		StreamMsg:   streamMsg,
+	}
+}
+
+func (h *RCmd) RunMysql() error {
+	cmdSql := cast.ToString(h.cmd[`sql`])
+	resultKey := cast.ToString(h.cmd[`result_key`])
+	//替换
+	cmdSql = base.Component.TVariable.Replace(cmdSql, h.replaceList)
+	//解析Id
+	mysqlId, sql, err := base.Component.TVariable.ParseIdContent(cmdSql)
+	if err != nil {
+		return err
+	}
+	//检查是否还有未替换的
+	if base.Component.TVariable.ExistReplaceParam(sql) {
+		return errors.New(`还存在未替换的参数：` + sql)
+	}
+	//执行
+	mysqlConfig, mysqlConfigErr := base.Component.TSqlite.GetMysqlConfig(mysqlId)
+	if mysqlConfigErr != nil {
+		return errors.New(`找不到mysql配置 ` + mysqlConfigErr.Error())
+	}
+	mysqlClient, mysqlClientErr := base.Component.TMysql.GetClient(mysqlConfig)
+	if mysqlClientErr != nil {
+		return errors.New(`获取mysql client 失败 ` + mysqlClientErr.Error())
+	}
+	result := ``
+	if len(gstool.RegexSearchString(sql, "(?i)select")) > 0 {
+		result = base.Component.TMarkDown.Code(sql, `sql`)
+		h.StreamMsg(result, true)
+		all, allErr := mysqlClient.QueryBySql(sql).All()
+		if allErr != nil {
+			return allErr
+		}
+		//增加替换变量
+		if resultKey != `` && len(all) > 0 {
+			base.Component.TVariable.AddReplace(h.replaceList, resultKey, gstool.JsonEncode(all))
+		}
+		return nil
+	} else if len(gstool.RegexSearchString(sql, "(?i)update")) > 0 {
+		result = base.Component.TMarkDown.Code(sql, `sql`)
+		affectRows, execErr := mysqlClient.ExecBySql(sql).Exec()
+		result += "\n--更新数：" + cast.ToString(affectRows)
+		h.StreamMsg(result, true)
+		if execErr != nil {
+			return execErr
+		}
+	}
+	return nil
+}
+
+func (h *RCmd) RunBash() (string, error) {
+	cmdBash := cast.ToString(h.cmd[`bash`])
+	cmdId := cast.ToString(h.cmd[`id`])
+	cmdBash = base.Component.TVariable.Replace(cmdBash, h.replaceList)
+	sshId, bash, parseIdErr := base.Component.TVariable.ParseIdContent(cmdBash)
+	if parseIdErr != nil {
+		return ``, parseIdErr
+	}
+	preConnErr := base.Component.TVariable.PreConnSsh(sshId)
+	if preConnErr != nil {
+		return ``, gstool.Error(`链接失败 %s`, preConnErr.Error())
+	}
+	sshUniqueKey := base.Component.TBase.GetCombineKey(`variable`, sshId, `run`)
+	sftpUniqueKey := base.Component.TBase.GetCombineKey(`variable`, sshId, `sftp`)
+	if !base.Component.TShell.Exist(sshUniqueKey) || !base.Component.TShell.Exist(sftpUniqueKey) {
+		return ``, errors.New(`ssh连接未初始化`)
+	}
+	sshConfig, sshConfigErr := base.Component.TSqlite.GetSshConfig(sshId)
+	if sshConfigErr != nil {
+		return ``, sshConfigErr
+	}
+	var sshClientErr error
+	var sshClient *gsssh.SshConfig
+	//ssh
+	sshClient, sshClientErr = base.Component.TShell.GetClientMarkdown(sshConfig, sshUniqueKey, define.SseVariable)
+	if sshClientErr != nil {
+		return ``, sshClientErr
+	}
+	//sftp
+	sftpClient, sftpClientErr := base.Component.TShell.GetClientMarkdown(sshConfig, sftpUniqueKey, define.SseVariable)
+	if sftpClientErr != nil {
+		return ``, sftpClientErr
+	}
+	var err error
+	//创建目录
+	_, err = sshClient.RunCommandWait(`sudo mkdir -p /var/www/variable`)
+	if err != nil {
+		return ``, err
+	}
+	//写入脚本 用replace后不知道为什么打印日志没有问题，一执行echo就会重复写入几次 但是不执行h.replace又没有问题
+	//_, err = sshClient.RunCommandWait(fmt.Sprintf(`sudo echo '%s' > /var/www/variable/variable_%s.sh`, bash, cmdId))
+	//if err != nil {
+	//	return ``, err
+	//}
+	err = sftpClient.UploadFile(fmt.Sprintf(`/var/www/variable/variable_%s.sh`, cmdId), bash)
+	if err != nil {
+		return "", err
+	}
+	_, err = sshClient.RunCommandWait(fmt.Sprintf(`sudo chmod +x /var/www/variable/variable_%s.sh`, cmdId))
+	if err != nil {
+		return ``, err
+	}
+	//var result string
+	var result string
+	result, err = sshClient.RunCommandWait(fmt.Sprintf(`sudo /var/www/variable/variable_%s.sh`, cmdId))
+	if err != nil {
+		return ``, err
+	}
+	return result, nil
+}
+
+func (h *RCmd) RunCommand() (string, error) {
+	cmdBash := cast.ToString(h.cmd[`bash`])
+	cmdBash = base.Component.TVariable.Replace(cmdBash, h.replaceList)
+	sshId, bash, parseIdErr := base.Component.TVariable.ParseIdContent(cmdBash)
+	if parseIdErr != nil {
+		return ``, parseIdErr
+	}
+	preConnErr := base.Component.TVariable.PreConnSsh(sshId)
+	if preConnErr != nil {
+		return ``, gstool.Error(`链接失败 %s`, preConnErr.Error())
+	}
+	//分离出来多行命令
+	commandList := strings.Split(bash, "\n")
+	for _, command := range commandList {
+		if command == "" {
+			continue
+		}
+		sshUniqueKey := base.Component.TBase.GetCombineKey(`variable`, sshId, `run`)
+		if !base.Component.TShell.Exist(sshUniqueKey) {
+			return ``, errors.New(`ssh连接未初始化`)
+		}
+		sshConfig, sshConfigErr := base.Component.TSqlite.GetSshConfig(sshId)
+		if sshConfigErr != nil {
+			return ``, sshConfigErr
+		}
+		var sshClientErr error
+		var sshClient *gsssh.SshConfig
+		//ssh
+		sshClient, sshClientErr = base.Component.TShell.GetClientMarkdown(sshConfig, sshUniqueKey, define.SseVariable)
+		if sshClientErr != nil {
+			return ``, sshClientErr
+		}
+		var err error
+		runCmd := base.Command{}
+		runCmd.SetCommand(command)
+		runCmd.Sudo()
+		h.StreamMsg(base.Component.TMarkDown.Code(runCmd.GetCommand().ToStr(), `bash`), true)
+		_, err = sshClient.RunCommandWait(runCmd.GetCommand().ToStr())
+		if err != nil {
+			return ``, err
+		}
+	}
+	return ``, nil
+}
+
+func (h *RCmd) RunCurl() (string, error) {
+	url := base.Component.TVariable.Replace(cast.ToString(h.cmd[`bash`]), h.replaceList)
+	if url == `` {
+		return ``, errors.New(`url不能为空`)
+	}
+	h.StreamMsg(base.Component.TMarkDown.BlockQuote(`请求url,`+url), true)
+	isStream := cast.ToInt(gstool.UrlGetParam(url, `is_stream`))
+	var result []byte
+	var err error
+	if isStream == 1 {
+		result, err = gshttp.Get(url).OpenStreamBytesEnd([]byte("\n\n"), func(msg string, err error) {
+			if err != nil {
+				return
+			}
+			sendMsg := base.Component.TAi.ParseStream(url, msg)
+			h.StreamMsg(base.Component.TMarkDown.BlockQuote(cast.ToString(sendMsg)), false)
+		}, func(bytes []byte) []byte {
+			sendMsg := base.Component.TAi.ParseStream(url, cast.ToString(bytes))
+			if gstool.SContains(cast.ToString(sendMsg), []string{`commit 共：`, `获取完项目列表 共：`}) { //这种内容不要汇集到最终结果中
+				return []byte{}
+			} else {
+				return bytes
+			}
+		}).Request(200).Result()
+	} else {
+		result, err = gshttp.Get(url).Request(200).Result()
+	}
+	return cast.ToString(result), err
+}
+
+func (h *RCmd) RunPlaywright() (string, error) {
+	id := cast.ToInt(h.cmd[`smart_link_id`])
+	label := cast.ToString(h.cmd[`smart_link_label`])
+	if id == 0 {
+		return ``, errors.New(`链接ID不能为空`)
+	}
+	if label == `` {
+		return ``, errors.New(`链接label不能为空`)
+	}
+	gstool.FmtPrintlnLogTime(`执行playwright %s`, gstool.JsonEncode(h.replaceList))
+	runParams, runParamsErr := base.Component.TPlaywright.GetRunParams(id, label, ``, ``, 0, h.replaceList)
+	if runParamsErr != nil {
+		return ``, errors.New(runParamsErr.Error())
+	}
+	for {
+		if base.Component.TPlaywright.IsRun {
+			h.StreamMsg(base.Component.TMarkDown.BlockQuote(`等待其他自动化链接任务完成..`), true)
+			time.Sleep(time.Second * 1)
+			continue
+		} else {
+			break
+		}
+	}
+	//注册链接执行时需要输出的文本类型
+	runParams.RunCallFunc = func(cmdType define.CmdType, errmsg, tip, content string) {
+		switch cmdType {
+		case define.Input:
+			h.StreamMsg(base.Component.TMarkDown.BlockQuote(tip+`,`+content+` `+errmsg), true)
+		}
+	}
+	//注册需要监听的接口
+	//需要注册的uri
+	listenUriList := cast.ToString(h.cmd[`options`])
+	if listenUriList != `` {
+		listenM := make([]map[string]string, 0)
+		_ = gstool.JsonDecode(listenUriList, &listenM)
+		for _, v := range listenM {
+			uri := cast.ToString(v[`uri`])
+			if uri == `` {
+				continue
+			}
+			base.Component.TPlaywright.ListenUrlList[uri] = &_struct.ListenUrl{
+				IsSse: true,
+				Callback: func(msg string, err error) {
+					base.Component.TVariable.Log.Debugf(`收到消息---%s---`, msg)
+					sendMsg := base.Component.TAi.ParseStream(uri, msg)
+					h.StreamMsg(cast.ToString(sendMsg), false)
+				},
+				StartCallBack: func(url string) {
+					base.Component.TVariable.Log.Debugf(`监听到%s`, url)
+					h.StreamMsg(base.Component.TMarkDown.BlockQuote(`开始回答...`), true)
+					h.PlaywrightLock.Lock()
+				},
+				EndCallBack: func(msg string) {
+					h.PlaywrightLock.Unlock()
+				},
+			}
+		}
+	}
+
+	base.Component.TPlaywright.IsRun = true
+	for i := 0; i < runParams.OpenNum; i++ {
+		h.StreamMsg("\n"+base.Component.TMarkDown.BlockQuote(cast.ToString(h.cmd[`name`])+`,启动`), true)
+		openErr := base.Component.TPlaywright.OpenBrowserPlaywright(runParams)
+		if openErr != nil {
+			h.StreamMsg(base.Component.TMarkDown.BlockQuote(cast.ToString(h.cmd[`name`])+`,启动失败，`+openErr.Error()), true)
+		}
+	}
+	base.Component.TPlaywright.IsRun = false
+	return ``, nil
+}
+
+func (h *RCmd) RunCombine() (string, error) {
+	resultKey := cast.ToString(h.cmd[`result_key`])
+	combine := base.Component.TVariable.Replace(cast.ToString(h.cmd[`options`]), h.replaceList)
+	//增加替换变量
+	if resultKey != `` {
+		base.Component.TVariable.AddReplace(h.replaceList, resultKey, combine)
+	}
+	return ``, nil
+}
+
+func (h *RCmd) RunRedis() (string, error) {
+	name := cast.ToString(h.cmd[`name`])
+	cmdBash := base.Component.TVariable.Replace(cast.ToString(h.cmd[`bash`]), h.replaceList)
+	redisId, redisBash, parseErr := base.Component.TVariable.ParseIdContent(cmdBash)
+	if parseErr != nil {
+		return ``, errors.New(`redis解析失败` + parseErr.Error())
+	}
+	if redisBash == `` {
+		return ``, errors.New(`redis需要删除的key不能为空`)
+	}
+	redisConfig, redisConfigErr := base.Component.TSqlite.GetRedisConfig(redisId)
+	if redisConfigErr != nil {
+		return ``, redisConfigErr
+	}
+	client, clientErr := base.Component.TRedis.GetClient(redisConfig)
+	if clientErr != nil {
+		return "", clientErr
+	}
+	h.StreamMsg(name+`,`+redisBash, true)
+	//解析命令格式：
+	//字符串删除string,delete,key
+	redisBashParamList := strings.Split(redisBash, `,`)
+	if len(redisBashParamList) >= 3 {
+		switch redisBashParamList[0] {
+		case `string`:
+			switch redisBashParamList[1] {
+			case `delete`:
+				client.Client.Del(context.Background(), redisBashParamList[2])
+			default:
+				return ``, errors.New(`暂不支持的操作，` + redisBash)
+			}
+		case `hash`:
+			switch redisBashParamList[1] {
+			case `delete`:
+				client.Client.HDel(context.Background(), redisBashParamList[2], redisBashParamList[3])
+			default:
+				return ``, errors.New(`暂不支持的操作，` + redisBash)
+			}
+		default:
+			return ``, errors.New(`暂不支持的操作，` + redisBash)
+		}
+	} else {
+		return ``, errors.New(`格式错误，` + redisBash)
+	}
+	return `操作`, nil
+}

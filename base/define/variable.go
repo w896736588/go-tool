@@ -31,3 +31,18 @@ const (
 	VariableTypeBash = iota + 1 //脚本
 	VariableTypeLink            //链接
 )
+
+type RunResult string
+
+const RunStatus RunResult = "to_next"           //继续下一个
+const RunResultShowForm RunResult = "show_form" //让前端新增加一个form
+const RunResultWaitRun RunResult = "wait_run"   //可以执行了，前端点击执行按钮
+const RunResultBroken RunResult = "broken"      //报错中断
+
+const RunStatusWaitRun = 0 //不可以执行
+const RunStatusCanRun = 1  //不可以执行
+const RunStatusFinish = 2
+
+const RunTypeForm = `form`     //输出表单给前端
+const RunTypeMiddle = `middle` //输出中间结果
+const RunTypeRun = `run`       //最终执行，等待用户确认（一旦确认最终执行，那么往下的所有cmd都会直接执行，不会再考虑runType）
