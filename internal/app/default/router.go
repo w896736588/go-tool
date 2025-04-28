@@ -136,9 +136,8 @@ func variable() {
 	base.Component.TGin.GinPost(`/api/VariableInfo`, controller.VariableInfo)
 	base.Component.TGin.GinPost(`/api/VariableCmdAdd`, controller.VariableCmdAdd)
 	base.Component.TGin.GinPost(`/api/VariableCmdDel`, controller.VariableCmdDelete)
-	base.Component.TGin.GinPost(`/api/VariableRunPre`, controller.VariableCmdRunPre)         //执行第一步
-	base.Component.TGin.GinPost(`/api/VariableRunProcess`, controller.VariableCmdRunProcess) //执行中收集信息
-	base.Component.TGin.GinPost(`/api/VariableRunDone`, controller.VariableCmdRunDone)       //执行
+	base.Component.TGin.GinPost(`/api/VariableRun`, controller.VariableCmdRun) //执行
+	base.Component.TGin.GinPost(`/api/VariableSet`, controller.VariableCmdSet) //设置项
 }
 
 func smartLink() {

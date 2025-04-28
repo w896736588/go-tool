@@ -14,18 +14,19 @@ type VariableCurl struct {
 }
 
 type VariableForm struct {
-	Name         string
-	VariableType string
-	VariableId   string
-	Id           string
-	Input        VariableFormInput  `json:"Input,omitempty"`
-	Select       VariableFormSelect `json:"Select,omitempty"`
-	Sql          VariableFormSql    `json:"Sql,omitempty"`
-	Bash         VariableFormBash   `json:"Bash,omitempty"`
-	Link         VariableFormLink   `json:"Link,omitempty"`
-	ResultKey    string
-	IsShowOk     int //1准备好 0未准备好  准备好了以后就会在页面上显示选项等
-	IsRunOk      int //1准备好执行（需要选择） 全部准备好以后就是可以执行了
+	Name       string
+	VariableId string
+	Id         string
+	CmdType    string
+	Input      VariableFormInput  `json:"Input,omitempty"`
+	Select     VariableFormSelect `json:"Select,omitempty"`
+	Sql        VariableFormSql    `json:"Sql,omitempty"`
+	Bash       VariableFormBash   `json:"Bash,omitempty"`
+	Link       VariableFormLink   `json:"Link,omitempty"`
+	ResultKey  string
+	IsShowOk   int  //1准备好 0未准备好  准备好了以后就会在页面上显示选项等
+	IsRunOk    int  //1准备好执行（需要选择） 全部准备好以后就是可以执行了
+	IsFinish   bool //是否已经结束
 }
 
 type VariableFormInput struct {
@@ -61,4 +62,10 @@ type VariableFormOption struct {
 	Label  string
 	Value  string
 	Source string //原本的值
+}
+
+type VariableCmdResult struct {
+	Form        VariableForm        //显示的表单
+	RunStatus   int                 //0不可以执行 1可以执行 2执行结束
+	ReplaceList []map[string]string //替换数据
 }

@@ -5,6 +5,7 @@ import (
 	"dev_tool/base/define"
 	_struct "dev_tool/base/struct"
 	"dev_tool/internal/pkg/p_variable"
+	"fmt"
 	"gitee.com/Sxiaobai/gs/gs"
 	"gitee.com/Sxiaobai/gs/gsgin"
 	"gitee.com/Sxiaobai/gs/gstool"
@@ -139,7 +140,11 @@ func VariableCmdAdd(c *gin.Context) {
 		gsgin.GinResponseError(c, `输出的key必须以'{'开头，以'}'结尾`, nil)
 		return
 	}
-	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `type`, `variable_id`, `is_pre`, `result_key`, `options`, `remark`, `sql`, `cmd`, `bash`, `weight`, `default`, `smart_link_id`, `smart_link_label`})
+	if cast.ToInt(dataMap[`weight`]) == 0 {
+		gsgin.GinResponseError(c, `weight不能为0`, nil)
+		return
+	}
+	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `type`, `variable_id`, `is_pre`, `result_key`, `options`, `remark`, `sql`, `cmd`, `bash`, `weight`, `default`, `smart_link_id`, `smart_link_label`, `checks`, `run_type`})
 	if cast.ToInt(dataMap[`id`]) == 0 {
 		updateData[`key`] = gstool.TimeNowMilliInt64()
 		updateData[`create_time`] = time.Now().Unix()
@@ -176,95 +181,93 @@ func VariableCmdDelete(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, ``, nil)
 }
 
-// VariableCmdRunPre 执行前第一步
-func VariableCmdRunPre(c *gin.Context) {
+func VariableCmdSet(c *gin.Context) {
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
 	variableId := cast.ToInt(dataMap[`variable_id`])
-	if variableId == 0 {
-		gsgin.GinResponseError(c, `变量id不能为空`, nil)
-		return
-	}
-	variable := p_variable.NewVariableRun()
-	variable.VariableId = cast.ToString(variableId)
-	formList, replaceList, isCanRun, err := variable.RunPre(variableId)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	gsgin.GinResponseSuccess(c, ``, map[string]any{
-		`form_list`:     formList,
-		`replace_list`:  replaceList,
-		`is_can_run`:    isCanRun,
-		`run_unique_id`: variable.RunUniqueId,
-	})
-}
-
-// VariableCmdRunProcess 执行第二步
-func VariableCmdRunProcess(c *gin.Context) {
-	dataMap := make(map[string]any)
-	_ = gsgin.GinPostBody(c, &dataMap)
-	variableFormListStr := cast.ToString(dataMap[`variable_form_list`])
-	variableFormList := make([]_struct.VariableForm, 0)
-	decodeErr := gstool.JsonDecode(variableFormListStr, &variableFormList)
-	if decodeErr != nil {
-		gsgin.GinResponseError(c, decodeErr.Error(), nil)
-		return
-	}
-	replaceListStr := cast.ToString(dataMap[`replace_list`])
-	replaceList := make([]map[string]string, 0)
-	decodeErr = gstool.JsonDecode(replaceListStr, &replaceList)
-	if decodeErr != nil {
-		gsgin.GinResponseError(c, decodeErr.Error(), nil)
-		return
-	}
-	variable := p_variable.NewVariableRun()
-	variable.VariableId = cast.ToString(dataMap[`variable_id`])
-	variable.CmdId = cast.ToString(dataMap[`cmd_id`])
-	formList, replaceList, isCanRun, err := variable.RunProcess(variableFormList, replaceList)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	gsgin.GinResponseSuccess(c, ``, map[string]any{
-		`form_list`:     formList,
-		`replace_list`:  replaceList,
-		`is_can_run`:    isCanRun,
-		`run_unique_id`: variable.RunUniqueId,
-	})
-}
-
-// VariableCmdRunDone 最终执行
-func VariableCmdRunDone(c *gin.Context) {
-	dataMap := make(map[string]any)
-	_ = gsgin.GinPostBody(c, &dataMap)
-	variableId := cast.ToInt(dataMap[`variable_id`])
+	runCmdId := cast.ToInt(dataMap[`run_cmd_id`])
+	editValue := cast.ToString(dataMap[`edit_value`])
 	replaceLists := cast.ToString(dataMap[`replace_list`])
-	variableFormListStr := cast.ToString(dataMap[`variable_form_list`])
-	variableFormList := make([]_struct.VariableForm, 0)
-	decodeErr := gstool.JsonDecode(variableFormListStr, &variableFormList)
-	if decodeErr != nil {
-		gsgin.GinResponseError(c, decodeErr.Error(), nil)
-		return
-	}
 	replaceList := make([]map[string]string, 0)
 	err := gstool.JsonDecode(replaceLists, &replaceList)
 	if err != nil {
 		gsgin.GinResponseError(c, `解析replace_list失败`, nil)
 		return
 	}
-	if variableId == 0 {
-		gsgin.GinResponseError(c, `变量id不能为空`, nil)
+	cmd, _ := base.Component.TVariable.CmdInfo(runCmdId)
+	form := _struct.VariableForm{
+		VariableId: cast.ToString(variableId),        //脚本ID
+		Name:       cast.ToString(cmd[`name`]),       //名称
+		Id:         cast.ToString(cmd[`id`]),         //执行的cmd ID
+		ResultKey:  cast.ToString(cmd[`result_key`]), //输出的替换key
+		CmdType:    cast.ToString(cmd[`type`]),       //cmd 类型
+
+	}
+	cmdResult := _struct.VariableCmdResult{}
+	runUniqueId := base.Component.TBase.GetUnique(`variable`)
+	vCmd := p_variable.NewPCmd(cmd, &replaceList, StreamMsg(runUniqueId))
+	switch cast.ToInt(form.CmdType) {
+	case define.VariableCmdRadio:
+		vCmd.StreamMsg(fmt.Sprintf(`选择%s（%s）`, editValue, form.Name), true)
+		form.Select, _ = vCmd.ParseSelect()
+		base.Component.TVariable.SelectChooseReplace(&form, &replaceList, editValue)
+	case define.VariableCmdInput, define.VariableCmdTextarea:
+		if gstool.SContains(strings.ToLower(form.Name), []string{`php`}) {
+			vCmd.StreamMsg(base.Component.TMarkDown.Code(editValue, `php`), true)
+		} else if gstool.SContains(strings.ToLower(form.Name), []string{`sql`}) {
+			vCmd.StreamMsg(base.Component.TMarkDown.Code(editValue, `sql`), true)
+		} else {
+			vCmd.StreamMsg(fmt.Sprintf(`输入:%s`, editValue), true)
+		}
+		form.Input, _ = vCmd.ParseInput()
+		base.Component.TVariable.AddReplace(&replaceList, form.ResultKey, editValue)
+	default:
+		vCmd.StreamMsg(`不支持的操作`+form.CmdType, true)
+		cmdResult.RunStatus = define.RunStatusFinish
 		return
 	}
-	variable := p_variable.NewVariableRun()
-	variable.VariableId = cast.ToString(dataMap[`variable_id`])
-	err = variable.RunDone(variableId, replaceList, variableFormList)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
+	cmdResult.ReplaceList = replaceList
+	cmdResult.Form = form
+	gsgin.GinResponseSuccess(c, ``, cmdResult)
+}
+
+// VariableCmdRun 执行
+func VariableCmdRun(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	variableId := cast.ToInt(dataMap[`variable_id`])
+	runCmdId := cast.ToInt(dataMap[`run_cmd_id`])
+	isRun := cast.ToInt(dataMap[`is_run`])
+	replaceLists := cast.ToString(dataMap[`replace_list`])
+	replaceList := make([]map[string]string, 0)
+	if replaceLists != `` {
+		err := gstool.JsonDecode(replaceLists, &replaceList)
+		if err != nil {
+			gsgin.GinResponseError(c, `解析replace_list失败`, nil)
+			return
+		}
 	}
-	gsgin.GinResponseSuccess(c, ``, map[string]string{
-		`run_unique_id`: variable.RunUniqueId,
-	})
+
+	variable := p_variable.NewVariable(variableId, runCmdId, isRun, replaceList, nil)
+	variable.StreamMsg = StreamMsg(variable.RunUniqueId)
+	result, resultErr := variable.Run()
+	if resultErr != nil {
+		result.RunStatus = 2
+		variable.StreamMsg(fmt.Sprintf(`执行失败%s`, resultErr.Error()), true)
+	}
+	gsgin.GinResponseSuccess(c, ``, result)
+}
+
+func StreamMsg(runUniqueId string) func(msg string, enter bool) {
+	return func(msg string, enter bool) {
+		//如果本次任务已经停止 那么不再输出
+		if base.Component.TVariable.Get(runUniqueId) == `stop` {
+			base.Component.TSse.Sse.CleanMsg(define.SseVariable)
+			return
+		}
+		if enter {
+			msg += "\n"
+		}
+		_ = base.Component.TSse.SendMsg(define.SseVariable, msg, 0)
+	}
 }
