@@ -12,3 +12,5 @@
 /release/zhimaPub.zip
 /internal/app/zhima/playwright_userdata/
 /internal/app/zhima/playwright_download/
+/internal/pkg/p_webkit/
+/internal/pkg/p_webkit/.links/
