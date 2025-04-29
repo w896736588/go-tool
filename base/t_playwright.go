@@ -68,6 +68,13 @@ func NewTSmartLink() *TPlaywright {
 	}
 }
 
+func (h *TPlaywright) SetWebkitPath() {
+	// 设置自定义浏览器安装路径
+	gstool.FmtPrintlnLogTime(`核心位置 %s`, Component.Env.PkgPath+"/p_webkit")
+	_ = os.Setenv("PLAYWRIGHT_BROWSERS_PATH", Component.Env.PkgPath+"/p_webkit")
+	_ = os.Setenv("GOPROXY", "https://goproxy.cn,direct")
+}
+
 // GetPage 拿到Page runUniqueKey 格式为0_common3 这种 单浏览器模式，每次打开都会打开一个新的浏览器
 // openType 2 playwright静默打开 3 playwright有界面打开
 // isSaveUserData 是否保存用户数据 1保存 0不保存
@@ -550,13 +557,13 @@ func (h *TPlaywright) ShowCookieTip(page playwright.Page) {
 func (h *TPlaywright) SmartCheckAndUpdate() {
 	pw, _ := playwright.NewDriver()
 	if !gstool.FileIsExisted(h.LockFileFullPath) {
-		go h.install(pw.Version)
+		go h.Install(pw.Version)
 	} else {
 		content, contentErr := gstool.FileGetContent(h.LockFileFullPath)
 		if contentErr != nil {
 			h.log.Errof(`获取文件内容失败 %s`, contentErr.Error())
 		} else if content != pw.Version {
-			go h.install(pw.Version)
+			go h.Install(pw.Version)
 		} else {
 			h.log.Debugf(`浏览器核心最新版本为：%s ，当前安装版本为：%s,不需要进行更新`, pw.Version, content)
 			go h.InitPlaywright()
@@ -579,14 +586,16 @@ func (h *TPlaywright) InitPlaywright() {
 	})
 }
 
-func (h *TPlaywright) install(version string) {
-	_ = gstool.FilePutContentCover(h.LockFileFullPath, version)
+func (h *TPlaywright) Install(version string) {
 	gstool.FmtPrintlnLogTime(`开始安装浏览器核心(只安装chrome),大约几分钟时间`)
-	err := playwright.Install(&playwright.RunOptions{Browsers: []string{`chromium`}})
+	err := playwright.Install(&playwright.RunOptions{
+		Browsers: []string{`chromium`},
+	})
 	if err != nil {
 		gstool.FmtPrintlnLogTime(`安装浏览器核心失败 %s`, err.Error())
 		_ = gstool.FileDelete(h.LockFileFullPath)
 	} else {
+		_ = gstool.FilePutContentCover(h.LockFileFullPath, version)
 		gstool.FmtPrintlnLogTime(`安装完成`)
 		h.InitPlaywright()
 	}

@@ -17,12 +17,9 @@ import (
 
 // SmartLinkUpWebkit 更新核心
 func SmartLinkUpWebkit(c *gin.Context) {
-	installErr := playwright.Install()
-	if installErr != nil {
-		gsgin.GinResponseError(c, `安装浏览器核心失败 %s`, installErr.Error())
-		return
-	}
-	gsgin.GinResponseSuccess(c, `更新浏览器核心成功`, ``)
+	pw, _ := playwright.NewDriver()
+	go base.Component.TPlaywright.Install(pw.Version)
+	gsgin.GinResponseSuccess(c, `更新浏览器核心中`, ``)
 	return
 }
 
