@@ -57,6 +57,9 @@ func (h *RCmd) RunMysql() error {
 		return errors.New(`获取mysql client 失败 ` + mysqlClientErr.Error())
 	}
 	result := ``
+	h.StreamMsg(fmt.Sprintf(`%s %s 执行sql:`,
+		base.Component.TMarkDown.Bold(`run`),
+		cast.ToString(h.cmd[`name`])), true)
 	if len(gstool.RegexSearchString(sql, "(?i)select")) > 0 {
 		result = base.Component.TMarkDown.Code(sql, `sql`)
 		h.StreamMsg(result, true)

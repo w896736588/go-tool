@@ -87,7 +87,7 @@ func (h *Variable) Run() (_struct.VariableCmdResult, error) {
 		runType := cast.ToString(cmd[`run_type`])
 		//非最终执行并且等待客户点击运行
 		if h.IsRun != 1 && runType == define.RunTypeRun {
-			h.StreamMsg(fmt.Sprintf(`可以执行（%s）`, name), true)
+			h.StreamMsg(fmt.Sprintf(`%s %s`, base.Component.TMarkDown.BlockQuote(`wait run `), name), true)
 			cmdResult.ReplaceList = h.ReplaceList
 			cmdResult.Form = _struct.VariableForm{Id: cmdId}
 			cmdResult.RunStatus = define.RunStatusCanRun
@@ -119,7 +119,7 @@ func (h *Variable) Run() (_struct.VariableCmdResult, error) {
 		//输出表单
 		if runType == define.RunTypeForm {
 			cmdResult.RunStatus = define.RunStatusWaitRun
-			h.StreamMsg(fmt.Sprintf(`输出表单（%s）`, name), true)
+			h.StreamMsg(base.Component.TMarkDown.Bold(`form`)+" "+name, true)
 			return cmdResult, nil
 		}
 		//中间层

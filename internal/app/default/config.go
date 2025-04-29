@@ -97,6 +97,7 @@ func initComponent(IsBuild, WebData string) {
 	base.Component.TShell = base.NewTShell()
 	//初始化playwright
 	base.Component.TPlaywright = base.NewTSmartLink()
+	base.Component.TPlaywright.LockFileFullPath = base.Component.Env.RootPath + `/playwright.RunLock`
 	go base.Component.TPlaywright.WitchDownload()
 	go base.Component.TPlaywright.SmartCheckAndUpdate()
 	go base.Component.TPlaywright.TimerCheckClosePage()
