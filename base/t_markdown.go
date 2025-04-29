@@ -9,13 +9,7 @@ type TMarkDown struct {
 }
 
 func (h *TMarkDown) Code(str, lang string) string {
-	tip := `#`
-	if lang == `sql` {
-		tip = `-`
-	} else if lang == `json` {
-		tip = `//`
-	}
-	return fmt.Sprintf("```%s\n%s%s\n%s\n```", lang, tip, lang, str)
+	return fmt.Sprintf("```%s\n\n%s\n```", lang, str)
 }
 
 func (h *TMarkDown) Json(data any) string {
@@ -29,4 +23,8 @@ func (h *TMarkDown) BlockQuote(str string) string {
 
 func (h *TMarkDown) Enter(str string) string {
 	return fmt.Sprintf("%s  \n", str)
+}
+
+func (h *TMarkDown) Bold(str string) string {
+	return fmt.Sprintf("**%s**", str)
 }

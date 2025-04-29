@@ -3,7 +3,6 @@ package controller
 import (
 	"dev_tool/base"
 	"dev_tool/base/define"
-	_struct "dev_tool/base/struct"
 	"dev_tool/internal/pkg/p_variable"
 	"fmt"
 	"gitee.com/Sxiaobai/gs/gs"
@@ -204,41 +203,13 @@ func VariableCmdSet(c *gin.Context) {
 		gsgin.GinResponseError(c, `解析replace_list失败`, nil)
 		return
 	}
-	cmd, _ := base.Component.TVariable.CmdInfo(runCmdId)
-	form := _struct.VariableForm{
-		VariableId: cast.ToString(variableId),        //脚本ID
-		Name:       cast.ToString(cmd[`name`]),       //名称
-		Id:         cast.ToString(cmd[`id`]),         //执行的cmd ID
-		ResultKey:  cast.ToString(cmd[`result_key`]), //输出的替换key
-		CmdType:    cast.ToString(cmd[`type`]),       //cmd 类型
-
+	set := p_variable.NewVariableSet(variableId, runCmdId, editValue, runUniqueId, &replaceList)
+	result, setErr := set.Set()
+	if setErr != nil {
+		result.RunStatus = 2
+		set.StreamMsg(fmt.Sprintf(`error：%s`, setErr.Error()), true)
 	}
-	cmdResult := _struct.VariableCmdResult{}
-	cmdResult.RunUniqueId = runUniqueId
-	vCmd := p_variable.NewPCmd(cmd, &replaceList, runUniqueId)
-	switch cast.ToInt(form.CmdType) {
-	case define.VariableCmdRadio:
-		form.Select, _ = vCmd.ParseSelect()
-		vCmd.StreamMsg(fmt.Sprintf(`选择%s（%s）`, form.Select.GetSelectOption(editValue).Label, form.Name), true)
-		base.Component.TVariable.SelectChooseReplace(&form, &replaceList, editValue)
-	case define.VariableCmdInput, define.VariableCmdTextarea:
-		if gstool.SContains(strings.ToLower(form.Name), []string{`php`}) {
-			vCmd.StreamMsg(base.Component.TMarkDown.Code(editValue, `php`), true)
-		} else if gstool.SContains(strings.ToLower(form.Name), []string{`sql`}) {
-			vCmd.StreamMsg(base.Component.TMarkDown.Code(editValue, `sql`), true)
-		} else {
-			vCmd.StreamMsg(fmt.Sprintf(`输入:%s`, editValue), true)
-		}
-		form.Input, _ = vCmd.ParseInput()
-		base.Component.TVariable.AddReplace(&replaceList, form.ResultKey, editValue)
-	default:
-		vCmd.StreamMsg(`不支持的操作`+form.CmdType, true)
-		cmdResult.RunStatus = define.RunStatusFinish
-		return
-	}
-	cmdResult.ReplaceList = replaceList
-	cmdResult.Form = form
-	gsgin.GinResponseSuccess(c, ``, cmdResult)
+	gsgin.GinResponseSuccess(c, ``, result)
 }
 
 // VariableCmdRun 执行

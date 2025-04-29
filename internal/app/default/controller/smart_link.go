@@ -170,47 +170,6 @@ func SmartLinkDelete(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, ``, nil)
 }
 
-// SmartLinkProcessAdd 新增子操作
-func SmartLinkProcessAdd(c *gin.Context) {
-	dataMap := make(map[string]any)
-	_ = gsgin.GinPostBody(c, &dataMap)
-	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `process_type`, `smart_link_id`, `selecter`, `weight`})
-	if cast.ToInt(dataMap[`id`]) == 0 {
-		updateData[`create_time`] = time.Now().Unix()
-		updateData[`update_time`] = time.Now().Unix()
-		_, createErr := base.Component.TSqlite.Client.QuickCreate(`tbl_smart_link_process`, updateData).Exec()
-		if createErr != nil {
-			gsgin.GinResponseError(c, `创建失败 `+createErr.Error(), nil)
-			return
-		}
-	} else {
-		updateData[`update_time`] = time.Now().Unix()
-		_, _ = base.Component.TSqlite.Client.QuickUpdate(`tbl_smart_link_process`,
-			map[string]any{
-				`id`: dataMap[`id`],
-			}, updateData).Exec()
-	}
-	gsgin.GinResponseSuccess(c, ``, nil)
-}
-
-// SmartLinkProcessDel 删除子操作
-func SmartLinkProcessDel(c *gin.Context) {
-	dataMap := make(map[string]any)
-	_ = gsgin.GinPostBody(c, &dataMap)
-	dataGMap := gs.NewTransMap(&dataMap)
-	if dataGMap.G(`id`).IsZero() {
-		gsgin.GinResponseError(c, `id不能为空`, nil)
-		return
-	} else {
-		_, _ = base.Component.TSqlite.Client.QuickUpdate(`tbl_smart_link_process`, map[string]any{
-			`id`: dataGMap.G(`id`).ToStr(),
-		}, map[string]interface{}{
-			`status`: define.SmartLinkStatusDelete,
-		}).Exec()
-	}
-	gsgin.GinResponseSuccess(c, ``, nil)
-}
-
 // SmartLinkRunPlaywright 执行 playwright
 func SmartLinkRunPlaywright(c *gin.Context) {
 	dataMap := make(map[string]any)
@@ -267,5 +226,18 @@ func SmartLinkPlaywrightVersion(c *gin.Context) {
 		gsgin.GinResponseError(c, `查询失败`+pwErr.Error(), nil)
 		return
 	}
-	gsgin.GinResponseSuccess(c, pw.Version, nil)
+	//是否在安装中
+	isInstall := 0
+	if !gstool.FileIsExisted(base.Component.TPlaywright.LockFileFullPath) {
+		isInstall = 1
+	} else {
+		content, _ := gstool.FileGetContent(base.Component.TPlaywright.LockFileFullPath)
+		if content == `` {
+			isInstall = 1
+		}
+	}
+	gsgin.GinResponseSuccess(c, pw.Version, map[string]any{
+		`is_install`: isInstall,
+		`version`:    pw.Version,
+	})
 }

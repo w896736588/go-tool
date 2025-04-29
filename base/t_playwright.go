@@ -38,6 +38,8 @@ type TPlaywright struct {
 	//监听链接
 	ListenUrlList map[string]*_struct.ListenUrl
 	log           *gstool.GsSlog
+	//文件
+	LockFileFullPath string
 }
 
 type PageActiveTime struct {
@@ -547,16 +549,14 @@ func (h *TPlaywright) ShowCookieTip(page playwright.Page) {
 
 func (h *TPlaywright) SmartCheckAndUpdate() {
 	pw, _ := playwright.NewDriver()
-	lockFileName := `playwright.RunLock`
-	lockFileFullPath := Component.Env.RootPath + `/` + lockFileName
-	if !gstool.FileIsExisted(lockFileFullPath) {
-		go h.install(pw.Version, lockFileFullPath)
+	if !gstool.FileIsExisted(h.LockFileFullPath) {
+		go h.install(pw.Version)
 	} else {
-		content, contentErr := gstool.FileGetContent(lockFileFullPath)
+		content, contentErr := gstool.FileGetContent(h.LockFileFullPath)
 		if contentErr != nil {
 			h.log.Errof(`获取文件内容失败 %s`, contentErr.Error())
 		} else if content != pw.Version {
-			go h.install(pw.Version, lockFileFullPath)
+			go h.install(pw.Version)
 		} else {
 			h.log.Debugf(`浏览器核心最新版本为：%s ，当前安装版本为：%s,不需要进行更新`, pw.Version, content)
 			go h.InitPlaywright()
@@ -579,13 +579,13 @@ func (h *TPlaywright) InitPlaywright() {
 	})
 }
 
-func (h *TPlaywright) install(version, lockFileFullPath string) {
-	_ = gstool.FilePutContentCover(lockFileFullPath, version)
+func (h *TPlaywright) install(version string) {
+	_ = gstool.FilePutContentCover(h.LockFileFullPath, version)
 	gstool.FmtPrintlnLogTime(`开始安装浏览器核心(只安装chrome),大约几分钟时间`)
 	err := playwright.Install(&playwright.RunOptions{Browsers: []string{`chromium`}})
 	if err != nil {
 		gstool.FmtPrintlnLogTime(`安装浏览器核心失败 %s`, err.Error())
-		_ = gstool.FileDelete(lockFileFullPath)
+		_ = gstool.FileDelete(h.LockFileFullPath)
 	} else {
 		gstool.FmtPrintlnLogTime(`安装完成`)
 		h.InitPlaywright()
@@ -833,16 +833,6 @@ func (h *TPlaywright) OpenBrowserPlaywright(runParams *_struct.PlaywrightRunPara
 				h.callRun(runParams, cmdType, ``, tip, targetUrl)
 			}
 		}
-	}
-	//无界面的5秒钟后自动关闭
-	if runParams.OpenType == define.OpenTypeWebkitSilence {
-		go func() {
-			time.Sleep(time.Second * 5)
-			closeErr := page.Close()
-			if closeErr != nil {
-				h.log.Errof(`page close error：%s`, closeErr.Error())
-			}
-		}()
 	}
 	return nil
 }
