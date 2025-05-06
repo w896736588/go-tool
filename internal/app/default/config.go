@@ -14,17 +14,13 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"runtime"
 )
 
-var AppName = ``
-
-func InitBase(IsBuild, appName, DbPath, ViewPath, WebData string) {
-	AppName = appName
-	initComponent(IsBuild, WebData)
-	initSqlite(DbPath)
-	initGin(ViewPath)
+func InitBase(IsBuild, appName, dbPath, ViewPath string) {
+	initComponent(IsBuild, appName, dbPath, ViewPath)
+	initSqlite()
+	initGin()
 	stdLog(IsBuild)
 }
 
@@ -47,7 +43,7 @@ func stdLog(IsBuild string) {
 	//os.Stderr = errFile
 }
 
-func initComponent(IsBuild, WebData string) {
+func initComponent(IsBuild, appName, dbPath, ViewPath string) {
 	gstool.FmtPrintlnLogTime(`IsBuild %#v`, IsBuild)
 	base.Component = base.TComponent{}
 	base.Component.Env = &base.Env{}
@@ -63,9 +59,8 @@ func initComponent(IsBuild, WebData string) {
 		SocketList: make(map[string]*websocket.Conn),
 	}
 	base.Component.Env.IsBuild = IsBuild == `1`
-	base.Component.Env.AppName = AppName
-	gcm := gsencrypt.NewAesGcm(AppName)
-	base.Component.AesGcm = gcm
+	base.Component.ConfigViper = viper.New()
+
 	wd := ``
 	gstool.FmtPrintlnLogTime(`运行模式 %v`, base.Component.Env.IsBuild)
 	if base.Component.Env.IsBuild {
@@ -79,22 +74,13 @@ func initComponent(IsBuild, WebData string) {
 	if err != nil {
 		panic(err.Error())
 	}
-	base.Component.Env.ConfigPath = base.Component.Env.RootPath + `/config/` + base.Component.Env.AppName
-	base.Component.Env.PkgPath = base.Component.Env.RootPath + `/internal/pkg`
-	base.Component.Env.LogPath = base.Component.Env.RootPath + `/logs`
-	base.Component.Env.WebkitPath = base.Component.Env.PkgPath + `/p_webkit`
-	if WebData != `` {
-		base.Component.Env.PlaywrightUserData = WebData + `/playwright_userdata`
-		base.Component.Env.PlaywrightDownload = WebData + `/playwright_download`
-	} else {
-		base.Component.Env.PlaywrightUserData = base.Component.Env.RootPath + `/playwright_userdata`
-		base.Component.Env.PlaywrightDownload = base.Component.Env.RootPath + `/playwright_download`
-	}
-	gstool.FmtPrintlnLogTime(`根目录 %s`, base.Component.Env.RootPath)
-	gstool.FmtPrintlnLogTime(`加载配置文件 %s`, base.Component.Env.ConfigPath)
-	gstool.FmtPrintlnLogTime(`下载目录 %s`, base.Component.Env.PlaywrightDownload)
+	//初始化配置
+	base.Component.Env.Init(appName, dbPath, ViewPath)
 	//初始化shell
 	base.Component.TShell = base.NewTShell()
+	//aesGcm
+	gcm := gsencrypt.NewAesGcm(base.Component.Env.AppName)
+	base.Component.AesGcm = gcm
 	//初始化playwright
 	base.Component.TPlaywright = base.NewTSmartLink()
 	base.Component.TPlaywright.SetWebkitPath()
@@ -102,29 +88,13 @@ func initComponent(IsBuild, WebData string) {
 	go base.Component.TPlaywright.WitchDownload()
 	go base.Component.TPlaywright.SmartCheckAndUpdate()
 	go base.Component.TPlaywright.TimerCheckClosePage()
-	//配置初始化
-	base.Component.ConfigViper = viper.New()
-	base.Component.ConfigViper.AddConfigPath(base.Component.Env.ConfigPath)
-	base.Component.ConfigViper.SetConfigName(`config`)
-	base.Component.ConfigViper.SetConfigType(`ini`)
-	if readErr := base.Component.ConfigViper.ReadInConfig(); readErr != nil {
-		panic(readErr.Error())
-	}
-	base.Component.GsLog = gstool.SlogCreateDefault(base.Component.Env.LogPath, AppName)
+
+	base.Component.GsLog = gstool.SlogCreateDefault(base.Component.Env.LogPath, base.Component.Env.AppName)
 	base.Component.GsLog.DeleteLogs(``)
 }
 
-func initSqlite(DbPath string) {
-	dbDir := DbPath
-	var dbPath string
-	if dbDir != `` {
-		dbPath = fmt.Sprintf(dbDir+`%s`, AppName+`.db`)
-	} else {
-		dbPath = base.Component.Env.RootPath + `/config/` + AppName + `/` + AppName + `.db`
-	}
-	gstool.FmtPrintlnLogTime(`打开db %s`, dbPath)
-	_ = gstool.DirCreatePath(dbDir)
-	sqlite, err := gsdb.NewSqlite(dbPath, true)
+func initSqlite() {
+	sqlite, err := gsdb.NewSqlite(base.Component.Env.DbPath, true)
 	if err != nil {
 		panic(fmt.Sprintf(`连接sqlite失败 %s`, err.Error()))
 	}
@@ -145,7 +115,7 @@ func Stop() {
 	}
 }
 
-func initGin(ViewPath string) {
+func initGin() {
 	host := base.Component.ConfigViper.GetString(`run.host`)
 	port := base.Component.ConfigViper.GetString(`run.port`)
 	if !gstool.NetIsPortAvailable(host + `:` + port) {
@@ -156,14 +126,10 @@ func initGin(ViewPath string) {
 	base.Component.TGin.GinInit(host, port)
 	base.Component.TGin.GinSetAllowCrossDomain()
 	gin.DefaultWriter = io.Discard
-	if ViewPath == `` {
-		ViewPath = filepath.Dir(base.Component.Env.RootPath) + `/devtool/dist`
-	}
-	gstool.FmtPrintlnLogTime(`前端目录 %s`, ViewPath)
-	base.Component.TGin.GinStatic(`/js`, ViewPath+`/js`)
-	base.Component.TGin.GinStaticFile(`/favicon.ico`, ViewPath+`/favicon.ico`)
-	base.Component.TGin.GinStatic(`/css`, ViewPath+`/css`)
-	base.Component.TGin.GinLoadHTMLFiles(ViewPath + `/index.html`)
+	base.Component.TGin.GinStatic(`/js`, base.Component.Env.ViewPath+`/js`)
+	base.Component.TGin.GinStaticFile(`/favicon.ico`, base.Component.Env.ViewPath+`/favicon.ico`)
+	base.Component.TGin.GinStatic(`/css`, base.Component.Env.ViewPath+`/css`)
+	base.Component.TGin.GinLoadHTMLFiles(base.Component.Env.ViewPath + `/index.html`)
 	base.Component.TGin.GinGet(`/`, func(context *gin.Context) {
 		context.HTML(200, `index.html`, nil)
 	})

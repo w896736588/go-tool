@@ -62,7 +62,7 @@ func NewTSmartLink() *TPlaywright {
 	gsLog.DeleteLogs(``)
 	return &TPlaywright{
 		log:            gsLog,
-		downloadPath:   Component.Env.PlaywrightDownload,
+		downloadPath:   Component.Env.WebkitDownloadPath,
 		pageActiveTime: make(map[string]PageActiveTime),
 		ListenUrlList:  make(map[string]*_struct.ListenUrl),
 	}
@@ -70,10 +70,8 @@ func NewTSmartLink() *TPlaywright {
 
 func (h *TPlaywright) SetWebkitPath() {
 	// 设置自定义浏览器安装路径
-	gstool.FmtPrintlnLogTime(`核心位置 %s`, Component.Env.WebkitPath)
-	_ = gstool.DirCreatePath(Component.Env.WebkitPath)
-	_ = os.Setenv("PLAYWRIGHT_BROWSERS_PATH", Component.Env.WebkitPath)
-	_ = os.Setenv("PLAYWRIGHT_DRIVER_PATH", Component.Env.WebkitPath)
+	_ = os.Setenv("PLAYWRIGHT_BROWSERS_PATH", Component.Env.WebkitDriverPath)
+	_ = os.Setenv("PLAYWRIGHT_DRIVER_PATH", Component.Env.NodePath)
 	_ = os.Setenv("GOPROXY", "https://goproxy.cn,direct")
 }
 
@@ -484,7 +482,7 @@ func (h *TPlaywright) GetUserDataContext(runParams *_struct.PlaywrightRunParams)
 		}
 	}
 
-	dataPath := fmt.Sprintf(Component.Env.PlaywrightUserData+`\%d`, userIndex)
+	dataPath := fmt.Sprintf(Component.Env.WebkitDataPath+`\%d`, userIndex)
 	h.log.Debugf(`context使用的数据目录 %s`, dataPath)
 	return ContextPage{
 		Context:            nil,                          //初始化空
@@ -495,7 +493,6 @@ func (h *TPlaywright) GetUserDataContext(runParams *_struct.PlaywrightRunParams)
 }
 
 func (h *TPlaywright) WitchDownload() {
-	_ = gstool.DirCreatePath(h.downloadPath)
 	if err := os.MkdirAll(h.downloadPath, 0755); err != nil {
 		log.Fatalf("创建目录失败: %v", err)
 	}
