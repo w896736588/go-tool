@@ -86,10 +86,15 @@ func (h *RCmd) RunMysql() error {
 func (h *RCmd) RunBash() (string, error) {
 	cmdBash := cast.ToString(h.cmd[`bash`])
 	cmdId := cast.ToString(h.cmd[`id`])
+	base.Component.TVariable.Log.Debugf(`run bash \n 替换列表 %s`, gstool.JsonEncode(h.replaceList))
 	cmdBash = base.Component.TVariable.Replace(cmdBash, h.replaceList)
 	sshId, bash, parseIdErr := base.Component.TVariable.ParseIdContent(cmdBash)
 	if parseIdErr != nil {
 		return ``, parseIdErr
+	}
+	//如果脚本还有未替换的
+	if base.Component.TVariable.ExistReplaceParam(bash) {
+		return ``, gstool.Error("执行的脚本还存在需要替换的内容")
 	}
 	//注册ssh
 	sshUniqueKey := base.Component.TBase.GetCombineKey(`variable`, sshId, `run`)
@@ -133,6 +138,7 @@ func (h *RCmd) RunBash() (string, error) {
 	//if err != nil {
 	//	return ``, err
 	//}
+	base.Component.TVariable.Log.Debugf(`%s \n %s `, fmt.Sprintf(`/var/www/variable/variable_%s.sh`, cmdId), bash)
 	err = sftpClient.UploadFile(fmt.Sprintf(`/var/www/variable/variable_%s.sh`, cmdId), bash)
 	if err != nil {
 		return "", err

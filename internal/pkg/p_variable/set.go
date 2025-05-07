@@ -31,9 +31,9 @@ func NewVariableSet(variableId, runCmdId int, editValue, runUniqueId string, rep
 	}
 }
 
-func (h *VariableSet) Set() (_struct.VariableCmdResult, error) {
+func (h *VariableSet) Set() (_struct.VCmdResult, error) {
 	cmd, _ := base.Component.TVariable.CmdInfo(h.RunCmdId)
-	form := _struct.VariableForm{
+	form := _struct.VForm{
 		VariableId: cast.ToString(h.VariableId),      //脚本ID
 		Name:       cast.ToString(cmd[`name`]),       //名称
 		Id:         cast.ToString(cmd[`id`]),         //执行的cmd ID
@@ -41,12 +41,15 @@ func (h *VariableSet) Set() (_struct.VariableCmdResult, error) {
 		CmdType:    cast.ToString(cmd[`type`]),       //cmd 类型
 
 	}
-	cmdResult := _struct.VariableCmdResult{}
+	cmdResult := _struct.VCmdResult{}
 	cmdResult.RunUniqueId = h.RunUniqueId
 	vCmd := NewPCmd(cmd, h.ReplaceList, h.RunUniqueId)
 	switch cast.ToInt(form.CmdType) {
 	case define.VariableCmdRadio:
-		form.Select, _ = vCmd.ParseSelect()
+		err := vCmd.ParseSelect(&form)
+		if err != nil {
+			return cmdResult, errors.New(`解析select失败 ` + err.Error())
+		}
 		vCmd.StreamMsg(fmt.Sprintf(`%s %s %s %s`,
 			base.Component.TMarkDown.Bold(`set`),
 			form.Name,
@@ -71,7 +74,10 @@ func (h *VariableSet) Set() (_struct.VariableCmdResult, error) {
 				form.Name, base.Component.TMarkDown.Bold(`input：`),
 				h.EditValue), true)
 		}
-		form.Input, _ = vCmd.ParseInput()
+		err := vCmd.ParseInput(&form)
+		if err != nil {
+			return cmdResult, errors.New(`解析input失败 ` + err.Error())
+		}
 		base.Component.TVariable.AddReplace(h.ReplaceList, form.ResultKey, h.EditValue)
 	default:
 		cmdResult.RunStatus = define.RunStatusFinish

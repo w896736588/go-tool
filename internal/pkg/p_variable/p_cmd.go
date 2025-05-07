@@ -19,52 +19,53 @@ func NewPCmd(cmd map[string]any, replace *[]map[string]string, runUniqueId strin
 	return &PCmd{cmd: cmd, replaceList: replace, RunUniqueId: runUniqueId, StreamMsg: base.Component.TVariable.StreamMsgFunc(runUniqueId)}
 }
 
-func (h *PCmd) ParseInput() (_struct.VariableFormInput, error) {
-	return _struct.VariableFormInput{
+func (h *PCmd) ParseInput(form *_struct.VForm) error {
+	form.Input = _struct.VFormInput{
 		Label: cast.ToString(h.cmd[`name`]),
 		Value: cast.ToString(h.cmd[`default`]),
-	}, nil
+	}
+	return nil
 }
 
-func (h *PCmd) ParseSelect() (_struct.VariableFormSelect, error) {
-	form := _struct.VariableFormSelect{
+func (h *PCmd) ParseSelect(form *_struct.VForm) error {
+	form.Select = _struct.VFormSelect{
 		Label:      cast.ToString(h.cmd[`name`]),
 		Value:      ``,
-		OptionList: make([]_struct.VariableFormOption, 0),
+		OptionList: make([]_struct.VFormOption, 0),
 		Options:    cast.ToString(h.cmd[`options`]), //原本的字符串选项集 json字符串
 	}
+	//整体替换选项
+	form.Select.Options = base.Component.TVariable.Replace(form.Select.Options, h.replaceList)
 	//解析配置
-	if base.Component.TVariable.ExistConfigParamFull(form.Options) {
+	if base.Component.TVariable.ExistConfigParamFull(form.Select.Options) {
 		var parseErr error
-		form.Options, parseErr = base.Component.TVariable.ParseConfig(form.Options)
+		form.Select.Options, parseErr = base.Component.TVariable.ParseConfig(form.Select.Options)
 		if parseErr != nil {
-			return form, parseErr
+			return parseErr
 		}
 	}
-	//整体替换选项
-	form.Options = base.Component.TVariable.Replace(form.Options, h.replaceList)
 	//开始判断
-	if base.Component.TVariable.ExistReplaceParamFull(form.Options) {
-		return form, errors.New(`存在未进行替换的内容：` + form.Options)
+	if base.Component.TVariable.ExistReplaceParamFull(form.Select.Options) {
+		return errors.New(`存在未进行替换的内容：` + form.Select.Options)
 	}
 	//组装选项
 	optionSourceList := make([]map[string]any, 0)
-	decodeErr := gstool.JsonDecode(form.Options, &optionSourceList)
+	decodeErr := gstool.JsonDecode(form.Select.Options, &optionSourceList)
 	if decodeErr != nil {
-		return form, errors.New(`解析` + form.Options + ` 失败：` + decodeErr.Error())
+		return errors.New(`解析` + form.Select.Options + ` 失败：` + decodeErr.Error())
 	}
 	for _, optionMap := range optionSourceList {
-		form.OptionList = append(form.OptionList, _struct.VariableFormOption{
+		form.Select.OptionList = append(form.Select.OptionList, _struct.VFormOption{
 			Label:  cast.ToString(optionMap[`label`]),
 			Value:  cast.ToString(optionMap[`value`]),
 			Source: gstool.JsonEncode(optionMap),
 		})
 	}
-	return form, nil
+	return nil
 }
 
 // SelectChooseReplace 单选选中后替换
-func (h *PCmd) SelectChooseReplace(variableForm *_struct.VariableForm, replaceList *[]map[string]string, chooseValue string) error {
+func (h *PCmd) SelectChooseReplace(variableForm *_struct.VForm, replaceList *[]map[string]string, chooseValue string) error {
 	for _, option := range variableForm.Select.OptionList {
 		if variableForm.ResultKey != `` && chooseValue != `` && chooseValue == option.Value {
 			sourceOptionList := make(map[string]any, 0)

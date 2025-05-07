@@ -50,9 +50,9 @@ func (h *Variable) InitRunUniqueId() {
 	h.StreamMsg(define.SseEventClean, false)
 }
 
-func (h *Variable) Run() (_struct.VariableCmdResult, error) {
+func (h *Variable) Run() (_struct.VCmdResult, error) {
 	//初始化结果
-	cmdResult := _struct.VariableCmdResult{}
+	cmdResult := _struct.VCmdResult{}
 	cmdResult.RunUniqueId = h.RunUniqueId
 	cmdList, cmdErr := base.Component.TVariable.CmdList(h.VariableId)
 	if cmdErr != nil {
@@ -89,7 +89,7 @@ func (h *Variable) Run() (_struct.VariableCmdResult, error) {
 		if h.IsRun != 1 && runType == define.RunTypeRun {
 			h.StreamMsg(fmt.Sprintf(`%s %s`, base.Component.TMarkDown.Bold(`wait run`), name), true)
 			cmdResult.ReplaceList = h.ReplaceList
-			cmdResult.Form = _struct.VariableForm{Id: cmdId}
+			cmdResult.Form = _struct.VForm{Id: cmdId}
 			cmdResult.RunStatus = define.RunStatusCanRun
 			return cmdResult, nil
 		}
@@ -159,8 +159,8 @@ func (h *Variable) RunCmd(cmd map[string]any) error {
 }
 
 // BuildCmd 构建cmd表单
-func (h *Variable) BuildCmd(cmd map[string]any) (_struct.VariableForm, error) {
-	variableForm := _struct.VariableForm{
+func (h *Variable) BuildCmd(cmd map[string]any) (_struct.VForm, error) {
+	form := _struct.VForm{
 		VariableId: cast.ToString(h.VariableId),      //脚本ID
 		Name:       cast.ToString(cmd[`name`]),       //名称
 		Id:         cast.ToString(cmd[`id`]),         //执行的cmd ID
@@ -172,16 +172,16 @@ func (h *Variable) BuildCmd(cmd map[string]any) (_struct.VariableForm, error) {
 	var err error
 	switch cast.ToInt(cmd[`type`]) {
 	case define.VariableCmdInput, define.VariableCmdTextarea:
-		variableForm.Input, err = vCmd.ParseInput()
+		err = vCmd.ParseInput(&form)
 	case define.VariableCmdRadio:
-		variableForm.Select, err = vCmd.ParseSelect()
+		err = vCmd.ParseSelect(&form)
 	default:
 		err = errors.New(`没有处理的类型`)
 	}
 	if err != nil {
-		return variableForm, err
+		return form, err
 	}
-	return variableForm, nil
+	return form, nil
 }
 
 func (h *Variable) Replace(cmd map[string]any) {
@@ -189,8 +189,8 @@ func (h *Variable) Replace(cmd map[string]any) {
 	cmd[`checks`] = base.Component.TVariable.Replace(cast.ToString(cmd[`checks`]), &h.ReplaceList)
 }
 
-func (h *Variable) input(cmd map[string]any, variableForm *_struct.VariableForm) {
-	variableForm.Input = _struct.VariableFormInput{
+func (h *Variable) input(cmd map[string]any, variableForm *_struct.VForm) {
+	variableForm.Input = _struct.VFormInput{
 		Label: cast.ToString(cmd[`name`]),
 		Value: cast.ToString(cmd[`default`]),
 	}
