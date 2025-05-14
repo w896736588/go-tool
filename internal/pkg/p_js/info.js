@@ -52,21 +52,23 @@
         }
         // 遍历配置项获取Cookie值
         config.forEach(item => {
-            showContent += '<div>'+item.label+': <strong>'+getShowValue(item , cookieList)+'</strong></div>'
+            showContent += '<span>'+item.label+': <strong>'+getShowValue(item , cookieList)+'</strong></span>&nbsp;'
 
         });
         // 创建浮动块
         const floater = document.createElement('div');
         floater.id = 'cookie-floater';
         floater.style.position = 'fixed';
-        floater.style.bottom = '20px';
-        floater.style.padding = '10px';
-        floater.style.backgroundColor = '#f0f0f0';
+        floater.style.bottom = '0px';
+        floater.style.padding = '3px';
+        floater.style.backgroundColor = '#66CDAA';
         floater.style.border = '1px solid #ccc';
         floater.style.borderRadius = '4px';
         floater.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)';
         floater.style.zIndex = '9999';
-        floater.style.transition = 'all 0.3s ease'; // 添加过渡效果
+        floater.style.fontSize = '13px';
+        floater.style.opacity  = "0.9"
+        // floater.style.transition = "all 0.5s ease-in-out";
 
         // 从 localStorage 读取位置状态（默认右侧）
         const savedPosition = localStorage.getItem('cookieFloaterPosition') || 'right';
@@ -83,7 +85,7 @@
         html += '<div>' + showContent + '</div>';
         html += '<div style="display: flex; flex-direction: column; gap: 5px;">';
         html += '<button id="move-floater" style="background: none; border: none; cursor: pointer; font-size: 12px; color: #666; padding: 2px 5px;">滚开</button>';
-        html += '<button id="close-floater" style="background: none; border: none; cursor: pointer; font-size: 12px; color: #666; padding: 2px 5px;">关闭</button>';
+        //html += '<button id="close-floater" style="background: none; border: none; cursor: pointer; font-size: 12px; color: #666; padding: 2px 5px;">关闭</button>';
         html += '</div>';
         html += '</div>';
         floater.innerHTML = html;
@@ -106,10 +108,10 @@
             localStorage.setItem('cookieFloaterPosition', newPosition);
         });
 
-        // 添加关闭按钮事件
-        floater.querySelector('#close-floater').addEventListener('click', () => {
-            floater.remove();
-        });
+        // // 添加关闭按钮事件
+        // floater.querySelector('#close-floater').addEventListener('click', () => {
+        //     floater.remove();
+        // });
 
         // 插入到页面
         document.body.appendChild(floater);
