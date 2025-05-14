@@ -65,6 +65,7 @@ func (h *Process) Do() (define.ProcessCode, string, error) {
 	if err != nil || code == define.ProcessBreak || code == define.ProcessContinue {
 		return code, reason, err
 	}
+	h.log.Debugf(`tip %s checks %s 允许执行`, h.Tip, h.Checks)
 	switch h.ProcessType {
 	case define.TextContent: //提取内容
 		return h.PTextContent()
@@ -82,15 +83,91 @@ func (h *Process) Do() (define.ProcessCode, string, error) {
 		return h.PInput()
 	case define.RedirectUri: //跳转 保持当前域名
 		return h.PRedirect()
+	case define.CanvasImage:
+		return h.CanvasImage()
+	case define.ExistWait:
+		return h.ExistWait()
+	case define.NoExistWait:
+		return h.NoExistWait()
 	default:
 		return define.ProcessBreak, `不支持的类型`, gstool.Error(`不支持的类型%s`, h.ProcessType)
 	}
 }
 
+func (h *Process) CanvasImage() (define.ProcessCode, string, error) {
+	base.Component.TPlaywright.AddTipMsg(h.Page, h.Tip)
+	h.ElementOp.Type = define.ElementCanvasImage
+	element, elementErr := h.Locator.Do(0)
+	if elementErr != nil {
+		h.callRun(elementErr.Error(), h.Locators)
+	} else {
+		base64Data, err := element.Evaluate(`canvas => {
+		  return canvas.toDataURL('image/png'); // 导出为 PNG 格式的 Base64 字符串
+		}`, nil)
+		if err != nil {
+			h.log.Debugf("提取canvas为图片失败 %v", err)
+		} else {
+			// 提取 Base64 部分（去掉前缀 "data:image/png;base64,"）
+			base64Str := strings.Split(base64Data.(string), ",")[1]
+			h.callRun(`获取二维码成功`, fmt.Sprintf(`<img src='data:image/png;base64,%s' />`, base64Str))
+		}
+	}
+	return define.ProcessOk, ``, nil
+}
+
+func (h *Process) ExistWait() (define.ProcessCode, string, error) {
+	base.Component.TPlaywright.AddTipMsg(h.Page, h.Tip)
+	h.ElementOp.Type = define.ElementExist
+	paramList := strings.Split(h.Value, `|`)
+	if len(paramList) != 2 {
+		return define.ProcessBreak, ``, gstool.Error(`exist_wait类型value格式错误`)
+	}
+	for i := 0; i < cast.ToInt(paramList[1]); i++ {
+		element, elementErr := h.Locator.Do(cast.ToInt(paramList[0]))
+		if elementErr != nil || element == nil {
+			h.callRun(fmt.Sprintf(`等待中(%d/%d)..`, i+1, cast.ToInt(paramList[1])), h.Locators)
+		} else {
+			if h.OutKey != `` {
+				h.BoolResultMap[h.OutKey] = true
+			}
+			return define.ProcessOk, ``, nil
+		}
+	}
+	if h.OutKey != `` {
+		h.BoolResultMap[h.OutKey] = false //不存在
+	}
+	return define.ProcessOk, ``, nil
+}
+
+func (h *Process) NoExistWait() (define.ProcessCode, string, error) {
+	base.Component.TPlaywright.AddTipMsg(h.Page, h.Tip)
+	h.ElementOp.Type = define.ElementExist
+	paramList := strings.Split(h.Value, `|`)
+	if len(paramList) != 2 {
+		return define.ProcessBreak, ``, gstool.Error(`exist_wait类型value格式错误`)
+	}
+	for i := 0; i < cast.ToInt(paramList[1]); i++ {
+		element, elementErr := h.Locator.Do(cast.ToInt(paramList[0]))
+		if elementErr != nil || element == nil {
+			if h.OutKey != `` {
+				h.BoolResultMap[h.OutKey] = false
+			}
+			return define.ProcessOk, ``, nil
+		} else {
+			time.Sleep(time.Second * time.Duration(cast.ToInt(paramList[0])))
+			h.callRun(fmt.Sprintf(`等待中(%d/%d)..`, i+1, cast.ToInt(paramList[1])), h.Locators)
+		}
+	}
+	if h.OutKey != `` {
+		h.BoolResultMap[h.OutKey] = true //最终都没有消失，说明没有达到目的
+	}
+	return define.ProcessOk, ``, nil
+}
+
 func (h *Process) PTextContent() (define.ProcessCode, string, error) {
 	base.Component.TPlaywright.AddTipMsg(h.Page, h.Tip)
 	h.ElementOp.Type = define.ElementTextContent
-	_, elementErr := h.Locator.Do()
+	_, elementErr := h.Locator.Do(0)
 	if elementErr != nil {
 		h.callRun(elementErr.Error(), h.Locators)
 		h.TakeContentMap[h.OutKey] = ``
@@ -105,7 +182,7 @@ func (h *Process) PBoolResult() (define.ProcessCode, string, error) {
 	base.Component.TPlaywright.AddTipMsg(h.Page, h.Tip)
 	if h.Locators != `` {
 		h.ElementOp.Type = define.ElementCount
-		_, elementErr := h.Locator.Do()
+		_, elementErr := h.Locator.Do(0)
 		if elementErr != nil || h.ElementOp.Count == 0 {
 			h.BoolResultMap[h.OutKey] = false //不存在
 		} else {
@@ -123,7 +200,7 @@ func (h *Process) PClick() (define.ProcessCode, string, error) {
 	base.Component.TPlaywright.AddTipMsg(h.Page, h.Tip)
 	h.log.Debugf(`点击 %s 允许`, h.Tip)
 	h.ElementOp.Type = define.ElementClick
-	_, elementErr := h.Locator.Do()
+	_, elementErr := h.Locator.Do(0)
 	if elementErr != nil {
 		h.callRun(elementErr.Error(), h.Locators)
 		return define.ProcessBreak, `获取需要点击的元素失败`, gstool.Error(`获取元素%s失败`, h.Locators)
@@ -137,7 +214,7 @@ func (h *Process) PInput() (define.ProcessCode, string, error) {
 	base.Component.TPlaywright.AddTipMsg(h.Page, h.Tip)
 	h.ElementOp.Type = define.ElementInput
 	h.ElementOp.FillValue = h.Value
-	_, elementErr := h.Locator.Do()
+	_, elementErr := h.Locator.Do(0)
 	if elementErr != nil {
 		h.callRun(elementErr.Error(), h.Locators)
 		return define.ProcessBreak, `获取需要输入的元素失败`, gstool.Error(`获取元素%s失败`, h.Locators)
@@ -199,7 +276,7 @@ func (h *Process) PChecks() (define.ProcessCode, string, error) {
 func (h *Process) PClose() (define.ProcessCode, string, error) {
 	base.Component.TPlaywright.AddTipMsg(h.Page, h.Tip)
 	_ = (*h.Page).Close()
-	return define.ProcessOk, ``, nil
+	return define.ProcessBreak, `页面关闭，结束`, nil
 }
 
 func (h *Process) PWait() (define.ProcessCode, string, error) {

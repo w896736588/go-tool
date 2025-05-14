@@ -22,6 +22,7 @@ func NewCheck(outKey, checks string, boolResultMap map[string]bool, log *gstool.
 }
 
 func (h *Check) OutKeyBoolResult() {
+	h.log.Debugf(`OutKey %s`, h.OutKey)
 	if h.OutKey == `` {
 		return
 	}
@@ -53,6 +54,7 @@ func (h *Check) AllowCheckKey() bool {
 	if h.Checks == `` {
 		return true
 	}
+	//"{is_login}": false,
 	checkList := strings.Split(h.Checks, `&&`)
 	for _, checkKeyVal := range checkList {
 

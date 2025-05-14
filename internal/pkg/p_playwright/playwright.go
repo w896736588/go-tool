@@ -35,7 +35,7 @@ func (h *Playwright) Open() error {
 	if base.Component.TPlaywright.Pw == nil {
 		return errors.New(`未启动浏览器核心`)
 	}
-	h.log.Debugf(`开始获取page`)
+	h.log.Debugf(`###############################################开始获取page`)
 	page, pageErr := h.GetPage()
 	if pageErr != nil {
 		return gstool.Error(`获取page失败 %s`, pageErr.Error())
@@ -45,6 +45,7 @@ func (h *Playwright) Open() error {
 	for _, processVal := range h.RunParams.ProcessList {
 		h.RunParams.ReplaceList = append(h.RunParams.ReplaceList, h.TakeContentMap)
 		process := NewProcess(processVal, page, h.RunParams, h.BoolResultMap, h.TakeContentMap, h.log)
+		sTime := gstool.TimeNowMilliInt64()
 		code, reason, err := process.Do()
 		h.log.Debugf(`执行结果 %s `, gstool.JsonFormat(map[string]any{
 			`type`:           process.ProcessType,
@@ -57,9 +58,13 @@ func (h *Playwright) Open() error {
 			`Checks`:         process.Checks,
 			`TakeContextMap`: h.TakeContentMap,
 			`BoolResultMap`:  h.BoolResultMap,
+			`耗时ms`:           gstool.TimeNowMilliInt64() - sTime,
 		}))
 		if err != nil {
 			return err
+		}
+		if code == define.ProcessBreak {
+			return nil
 		}
 	}
 	return nil
@@ -107,13 +112,13 @@ func (h *Playwright) GetPage() (*playwright.Page, error) {
 }
 
 func (h *Playwright) LastUserDataIndex(runParams *_struct.PlaywrightRunParams, userDataIndex int) {
-	gstool.FmtPrintlnLogTime(`userName %s %d %d`, runParams.UserName, runParams.Id, userDataIndex)
 	if runParams.UserName == `` || runParams.Id == 0 || runParams.Domain == `` {
 		return
 	}
 	sql := `select * from tbl_smart_link_last where  smart_link_id = ? and user_name = ? and domain = ?`
 	smartLinkLast, smartLinkErr := base.Component.TSqlite.Client.QueryBySql(sql, runParams.Id, runParams.UserName, runParams.Domain).One()
 	if smartLinkErr != nil {
+		h.log.Debugf(`获取最后使用索引失败 %s %s`, sql, smartLinkErr.Error())
 		gstool.FmtPrintlnLogTime(`查询失败 %s`, smartLinkErr.Error())
 		return
 	} else if len(smartLinkLast) > 0 {
