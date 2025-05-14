@@ -18,13 +18,16 @@ const WaitClose ProcessType = `wait_close`
 const Click ProcessType = `click`
 const Input ProcessType = `input`
 const RedirectUri ProcessType = `redirect_uri`
-const Exit ProcessType = `exit` //结束
+const CanvasImage ProcessType = `canvas_image`  //提取canvas中的图片
+const ExistWait ProcessType = `exist_wait`      //等待元素出现
+const NoExistWait ProcessType = `no_exist_wait` //等待元素消息
 
 const ElementClick = `click`              //点击
 const ElementTextContent = `text_content` //提取
 const ElementInput = `input`              //输入
 const ElementExist = `exist`              //元素存在
 const ElementCount = `count`              //元素个数
+const ElementCanvasImage = `canvas_image` //提取canvas中的图片
 
 const MaxUserDataIndex = 500
 

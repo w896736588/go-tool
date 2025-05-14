@@ -259,7 +259,12 @@ func (h *RCmd) RunPlaywright() (string, error) {
 	runParams.RunCallFunc = func(cmdType define.ProcessType, errmsg, tip, content string) {
 		switch cmdType {
 		case define.Input:
-			h.StreamMsg(base.Component.TMarkDown.BlockQuote(tip+`,`+content+` `+errmsg), true)
+			h.StreamMsg(base.Component.TMarkDown.Bold(tip)+`,`+content+` `+errmsg, true)
+		case define.CanvasImage:
+			h.StreamMsg(base.Component.TMarkDown.Bold(tip)+`,`+errmsg, true)
+			h.StreamMsg(content, true)
+		case define.ExistWait, define.NoExistWait:
+			h.StreamMsg(base.Component.TMarkDown.Bold(tip)+`,`+errmsg, true)
 		}
 	}
 	//注册需要监听的接口
@@ -294,7 +299,7 @@ func (h *RCmd) RunPlaywright() (string, error) {
 	}
 	runParams.ListenUrlList = ListenUrlList
 	for i := 0; i < runParams.OpenNum; i++ {
-		h.StreamMsg("\n"+base.Component.TMarkDown.BlockQuote(label+`,启动`), true)
+		h.StreamMsg("\n"+base.Component.TMarkDown.Bold(label)+`,启动`, true)
 		p := p_playwright.NewPlaywright(runParams, base.Component.TVariable.Log)
 		openErr := p.Open()
 		if openErr != nil {
