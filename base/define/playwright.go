@@ -27,7 +27,6 @@ const ElementTextContent = `text_content` //提取
 const ElementInput = `input`              //输入
 const ElementExist = `exist`              //元素存在
 const ElementCount = `count`              //元素个数
-const ElementCanvasImage = `canvas_image` //提取canvas中的图片
 
 const MaxUserDataIndex = 500
 

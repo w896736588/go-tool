@@ -96,7 +96,7 @@ func (h *Process) Do() (define.ProcessCode, string, error) {
 
 func (h *Process) CanvasImage() (define.ProcessCode, string, error) {
 	base.Component.TPlaywright.AddTipMsg(h.Page, h.Tip)
-	h.ElementOp.Type = define.ElementCanvasImage
+	h.ElementOp.Type = define.ElementExist
 	element, elementErr := h.Locator.Do(0)
 	if elementErr != nil {
 		h.callRun(elementErr.Error(), h.Locators)
