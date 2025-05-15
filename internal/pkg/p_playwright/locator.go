@@ -96,8 +96,6 @@ func (h *Locator) Do(second int) (playwright.Locator, error) {
 		count, numErr := element.Count()
 		h.ElementOp.Count = count
 		return element, numErr
-	case define.ElementCanvasImage: //提取canvas中的图片
-		return element, nil
 	default:
 		return nil, errors.New(`不支持的操作`)
 	}
