@@ -579,3 +579,44 @@ func SetDockerComposeDelete(c *gin.Context) {
 	}
 	gsgin.GinResponseSuccess(c, ``, nil)
 }
+
+func SetGitlabTokenList(c *gin.Context) {
+	allGit, allGitErr := base.Component.TSqlite.Client.QuickQuery(`tbl_gitlab_token`, `*`, nil).All()
+	if allGitErr != nil {
+		gsgin.GinResponseError(c, allGitErr.Error(), nil)
+		return
+	}
+	gsgin.GinResponseSuccess(c, ``, allGit)
+}
+
+func SetGitlabTokenAdd(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `url`, `access_token`})
+	if cast.ToInt(dataMap[`id`]) == 0 {
+		updateData[`create_time`] = time.Now().Unix()
+		updateData[`update_time`] = time.Now().Unix()
+		_, _ = base.Component.TSqlite.Client.QuickCreate(`tbl_gitlab_token`, updateData).Exec()
+	} else {
+		updateData[`update_time`] = time.Now().Unix()
+		_, _ = base.Component.TSqlite.Client.QuickUpdate(`tbl_gitlab_token`,
+			map[string]any{
+				`id`: dataMap[`id`],
+			}, updateData).Exec()
+	}
+	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
+func SetGitlabTokenDelete(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	if cast.ToInt(dataMap[`id`]) == 0 {
+		gsgin.GinResponseError(c, `id不能为空`, nil)
+		return
+	} else {
+		_, _ = base.Component.TSqlite.Client.QuickDelete(`tbl_gitlab_token`, map[string]any{
+			`id`: dataMap[`id`],
+		}).Exec()
+	}
+	gsgin.GinResponseSuccess(c, ``, nil)
+}

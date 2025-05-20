@@ -213,6 +213,7 @@ func (h *RCmd) RunCurl() (string, error) {
 	if url == `` {
 		return ``, errors.New(`url不能为空`)
 	}
+	url, _ = base.Component.TVariable.ParseConfig(url)
 	h.StreamMsg(base.Component.TMarkDown.BlockQuote(`请求url,`+url), true)
 	isStream := cast.ToInt(gstool.UrlGetParam(url, `is_stream`))
 	var result []byte

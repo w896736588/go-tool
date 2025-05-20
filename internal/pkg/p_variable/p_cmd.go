@@ -37,12 +37,10 @@ func (h *PCmd) ParseSelect(form *_struct.VForm) error {
 	//整体替换选项
 	form.Select.Options = base.Component.TVariable.Replace(form.Select.Options, h.replaceList)
 	//解析配置
-	if base.Component.TVariable.ExistConfigParamFull(form.Select.Options) {
-		var parseErr error
-		form.Select.Options, parseErr = base.Component.TVariable.ParseConfig(form.Select.Options)
-		if parseErr != nil {
-			return parseErr
-		}
+	var parseErr error
+	form.Select.Options, parseErr = base.Component.TVariable.ParseConfig(form.Select.Options)
+	if parseErr != nil {
+		return parseErr
 	}
 	//开始判断
 	if base.Component.TVariable.ExistReplaceParamFull(form.Select.Options) {
