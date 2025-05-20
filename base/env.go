@@ -30,7 +30,7 @@ func (h *Env) Init(appName, dbPath, ViewPath string) {
 	if dbPath != `` {
 		h.DbPath = fmt.Sprintf(dbPath+`%s`, h.AppName+`.db`)
 	} else {
-		dbPath = h.RootPath + `/config/` + h.AppName + `/` + h.AppName + `.db`
+		h.DbPath = h.RootPath + `/config/` + h.AppName + `/` + h.AppName + `.db`
 	}
 	//前端目录
 	if ViewPath == `` {
