@@ -15,6 +15,7 @@ func InitRouter() {
 	phpRouter()
 	supervisorRouter()
 	gitRouter()
+	gitLabTokenRouter()
 	loginRouter()
 	codeRouter()
 	initSocket()
@@ -77,6 +78,14 @@ func gitRouter() {
 	base.Component.TGin.GinPost(`/api/GitQueryStatus`, controller.QueryStatus)              //查询分支本地状态
 	base.Component.TGin.GinPost(`/api/GitCommitLog`, controller.GitCommitLog)               //查询提交日志
 	base.Component.TGin.GinPost(`/api/GitConfigList`, controller.GitConfigList)             //git配置
+	base.Component.TGin.GinPost(`/api/CreateMerge`, controller.CreateMerge)                 //创建合并请求
+}
+
+// gitlab token相关
+func gitLabTokenRouter() {
+	base.Component.TGin.GinPost(`/api/Set/GitLabTokenCreate`, controller.SetGitlabTokenAdd)    //创建
+	base.Component.TGin.GinPost(`/api/Set/GitLabTokenDelete`, controller.SetGitlabTokenDelete) //删除
+	base.Component.TGin.GinPost(`/api/Set/GitLabTokenList`, controller.SetGitlabTokenList)     //列表
 }
 
 // login相关

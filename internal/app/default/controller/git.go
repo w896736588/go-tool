@@ -174,6 +174,26 @@ func GitConfigList(c *gin.Context) {
 	})
 }
 
+func CreateMerge(c *gin.Context) {
+	reqMap, sshClient, err := getGitComponent(c)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	codePath := cast.ToString(reqMap[`code_path`])
+	if codePath == `` {
+		gsgin.GinResponseError(c, `git未配置目录`, nil)
+		return
+	}
+	command := base.NewCommand()
+	command.Sudo()
+	command.Cd(codePath)
+	command.GitCommitLog()
+
+	result, _ := sshClient.RunCommandWait(command.GetCommand().ToStr())
+	gsgin.GinResponseSuccess(c, ``, result)
+}
+
 func getGitComponent(c *gin.Context) (map[string]interface{}, *gsssh.SshConfig, error) {
 	reqMap := make(map[string]interface{})
 	err := gsgin.GinPostBody(c, &reqMap)

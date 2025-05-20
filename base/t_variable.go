@@ -162,8 +162,22 @@ func (h *TVariable) ParseConfig(config string) (string, error) {
 			}
 			return gstool.JsonEncode(sshList), nil
 		}
+	} else if gstool.RegexMatchString(config, `{config:gitlab_token:\d*}`) {
+		retList := gstool.RegexMatchSubString(config, `{config:gitlab_token:(\d+)}`)
+		if len(retList) != 2 {
+			return ``, gstool.Error(`获取配置失败 %s`, config)
+		}
+		tokenConfig, _ := Component.TSqlite.Client.QuickQuery(`tbl_gitlab_token`, `*`, map[string]any{
+			`id`: retList[1],
+		}).One()
+		replaceList := make(map[string]string)
+		for key, value := range tokenConfig {
+			replaceList[retList[0]+`.`+key] = cast.ToString(value)
+		}
+		config = gstool.SReplaces(config, replaceList)
+		return config, nil
 	}
-	return ``, errors.New(`不支持的解析项：` + config)
+	return config, nil
 }
 
 // Replace 替换变量
