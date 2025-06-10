@@ -171,9 +171,9 @@ func (h *RCmd) RunBash() (string, error) {
 	//	return ``, err
 	//}
 	base.Component.TVariable.Log.Debugf(`%s \n %s `, fmt.Sprintf(variableDir+`/variable_%s.sh`, cmdId), bash)
-	err = sftpClient.UploadFile(fmt.Sprintf(variableDir+`/variable_%s.sh`, cmdId), bash)
+	err = sftpClient.UploadFile(fmt.Sprintf(variableDir+`/variable_%s.sh`, cmdId), bash, ``)
 	if err != nil {
-		return "", err
+		return "", gstool.Error(`上传失败 %s %s`, fmt.Sprintf(variableDir+`/variable_%s.sh`, cmdId), err.Error())
 	}
 	_, err = sshClient.RunCommandWait(fmt.Sprintf(`sudo chmod +x %s/variable_%s.sh`, variableDir, cmdId))
 	if err != nil {
@@ -242,7 +242,7 @@ func (h *RCmd) RunUpload() (string, error) {
 	fileName := gstool.FileGetNameByPath(sourceFile)
 	targetFile := targetDir + `/` + fileName
 	h.StreamMsg(fmt.Sprintf(`准备上传文件 %s 到目标文件 %s`, sourceFile, targetFile), true)
-	err = sftpClient.UploadFile(targetFile, sourceFile)
+	err = sftpClient.UploadFile(targetFile, ``, sourceFile)
 	if err != nil {
 		h.StreamMsg(fmt.Sprintf(`上传文件失败 %s`, err.Error()), true)
 		return "", err

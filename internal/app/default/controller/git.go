@@ -167,7 +167,16 @@ func GitConfigList(c *gin.Context) {
 	gitGroupList, _ := base.Component.TSqlite.Client.QuickQuery(`tbl_group`, `*`, map[string]any{
 		`type`: define.GroupTypeGit,
 	}).All()
+	//id转为字符串
+	for k, v := range gitGroupList {
+		gitGroupList[k][`id`] = cast.ToString(v[`id`])
+	}
 	gitList, _ := base.Component.TSqlite.Client.QuickQuery(`tbl_git`, `*`, nil).All()
+	//id转为字符串
+	for k, v := range gitList {
+		gitList[k][`id`] = cast.ToString(v[`id`])
+		gitList[k][`git_group_id`] = cast.ToString(v[`git_group_id`])
+	}
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`git_group_list`: gitGroupList,
 		`git_list`:       gitList,
