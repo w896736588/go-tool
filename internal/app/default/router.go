@@ -139,6 +139,12 @@ func setRouter() {
 	base.Component.TGin.GinPost(`/api/Set/DockerComposeList`, controller.SetDockerComposeList)
 	base.Component.TGin.GinPost(`/api/Set/DockerComposeAdd`, controller.SetDockerComposeAdd)
 	base.Component.TGin.GinPost(`/api/Set/DockerComposeDelete`, controller.SetDockerComposeDelete)
+	base.Component.TGin.GinPost(`/api/Set/AccountList`, controller.SetAccountList)
+	base.Component.TGin.GinPost(`/api/Set/AccountAdd`, controller.SetAccountAdd)
+	base.Component.TGin.GinPost(`/api/Set/AccountDelete`, controller.SetAccountDelete)
+	base.Component.TGin.GinPost(`/api/Set/AccountGroupList`, controller.SetAccountGroupList)
+	base.Component.TGin.GinPost(`/api/Set/AccountGroupAdd`, controller.SetAccountGroupAdd)
+	base.Component.TGin.GinPost(`/api/Set/AccountGroupDelete`, controller.SetAccountGroupDelete)
 }
 
 func setStar() {

@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/playwright-community/playwright-go"
 	"github.com/spf13/cast"
+	"strings"
 	"time"
 )
 
@@ -50,10 +51,62 @@ func SmartLinkList(c *gin.Context) {
 		`type`: define.GroupTypeSmartLink,
 	}).All()
 	smartLinkList, _ := base.Component.TSqlite.Client.QueryBySql(`select * from tbl_smart_link where status = ? order by weight asc`, define.SmartLinkStatusNormal).All()
+	//查找配置的账号组
+	for smartLinkKey, smartLink := range smartLinkList {
+		links := cast.ToString(smartLink[`links`])
+		if links != `` {
+			linkList := make([]map[string]any, 0)
+			_ = gstool.JsonDecode(links, &linkList)
+			//循环每个链接及其配置
+			for linkKey, link := range linkList {
+				userList := getAccountListByName(link)
+				linkList[linkKey][`userList`] = userList
+			}
+			smartLinkList[smartLinkKey][`links`] = gstool.JsonEncode(linkList)
+		}
+	}
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`group_list`:      variableGroupList,
 		`smart_link_list`: smartLinkList,
 	})
+}
+
+func getAccountListByName(link map[string]any) []map[string]string {
+	userList := make([]map[string]string, 0)
+
+	accountListConfig := cast.ToString(link[`account_list`])
+	accountListConfig = gstool.SReplaces(accountListConfig, map[string]string{
+		`{`: ``,
+		`}`: ``,
+	})
+	accountConfigGroup := strings.Split(accountListConfig, `:`)
+	if len(accountConfigGroup) != 3 {
+		return userList
+	}
+	groupName := accountConfigGroup[2]
+
+	groupInfo, _ := base.Component.TSqlite.Client.QuickQuery(`tbl_group`, `*`, map[string]any{
+		`name`: groupName,
+		`type`: define.GroupTypeAccount,
+	}).One()
+	if len(groupInfo) == 0 {
+		return userList
+	}
+	groupId := cast.ToInt(groupInfo[`id`])
+	accountList, _ := base.Component.TSqlite.Client.QuickQuery(`tbl_account`, `*`, map[string]any{
+		`account_group_id`: groupId,
+	}).All()
+	if len(accountList) == 0 {
+		return userList
+	}
+
+	for _, account := range accountList {
+		userList = append(userList, map[string]string{
+			`user_name`: cast.ToString(account[`username`]),
+			`password`:  cast.ToString(account[`password`]),
+		})
+	}
+	return userList
 }
 
 // SmartLinkInfo 获取单个详情
@@ -181,16 +234,13 @@ func SmartLinkRunPlaywright(c *gin.Context) {
 	password := cast.ToString(dataMap[`password`])
 	openNum := max(1, cast.ToInt(dataMap[`open_num`]))
 	replaceList := make([]map[string]string, 0)
-	gstool.FmtPrintlnLogTime(`开始运行 %d`, openNum)
 	for i := 0; i < openNum; i++ {
 		go func() {
 			runParams, runParamsErr := base.Component.TPlaywright.GetRunParams(id, label, userName, password, openNum, &replaceList)
-			gstool.FmtPrintlnLogTime(`初始化结束1`)
 			if runParamsErr != nil {
 				gstool.FmtPrintlnLogTime(`打开错误 %s`, runParamsErr.Error())
 				return
 			}
-			gstool.FmtPrintlnLogTime(`初始化结束`)
 			p := p_playwright.NewPlaywright(runParams, base.Component.TPlaywright.Log)
 			openErr := p.Open()
 			if openErr != nil {
