@@ -1,4 +1,5 @@
 
+windows_zhima_all : zhima_tool_widows zhima_tool_pub_widows
 
 .PHONY:zhima_tool_widows
 zhima_tool_widows:
