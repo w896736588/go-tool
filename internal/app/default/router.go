@@ -159,6 +159,7 @@ func setMarkdown() {
 	base.Component.TGin.GinPost(`/api/MarkdownList`, controller.MarkdownList)
 	base.Component.TGin.GinPost(`/api/MarkdownAdd`, controller.MarkdownAdd)
 	base.Component.TGin.GinPost(`/api/MarkdownDel`, controller.MarkdownDel)
+	base.Component.TGin.GinPost(`/api/MarkdownHistoryDel`, controller.MarkdownHistoryDel)
 }
 
 func variable() {

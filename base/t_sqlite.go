@@ -267,3 +267,9 @@ func (h *TSqlite) MarkdownHistoryList(id int) ([]map[string]any, error) {
 		`markdown_id`: id,
 	}).Order("id desc").All()
 }
+
+func (h *TSqlite) MarkdownHistoryDel(historyId any) (int64, error) {
+	return h.Client.QuickDelete(`tbl_markdown_history`, map[string]any{
+		`id`: historyId,
+	}).Exec()
+}

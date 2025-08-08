@@ -37,6 +37,17 @@ func MarkdownDel(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, ``, nil)
 }
 
+func MarkdownHistoryDel(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	_, err := base.Component.TSqlite.MarkdownHistoryDel(dataMap[`id`])
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
 func MarkdownList(c *gin.Context) {
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
