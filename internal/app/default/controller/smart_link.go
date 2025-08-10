@@ -138,13 +138,8 @@ func SmartLinkInfo(c *gin.Context) {
 func SmartLinkAdd(c *gin.Context) {
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
-	validateErr := validateProcess(cast.ToString(dataMap[`process`]))
-	if validateErr != nil {
-		gsgin.GinResponseError(c, validateErr.Error(), nil)
-		return
-	}
 	var id any
-	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `smart_link_group_id`, `links`, `open_num`, `open_type`, `process`, `weight`, `combine_type`, `download_finds`, `auto_close_second`, `channel`, `show_cookies`})
+	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `smart_link_group_id`, `links`, `open_num`, `open_type`, `weight`, `combine_type`, `download_finds`, `auto_close_second`, `channel`, `show_cookies`, `process_id`})
 	if cast.ToInt(dataMap[`id`]) == 0 {
 		updateData[`create_time`] = time.Now().Unix()
 		updateData[`update_time`] = time.Now().Unix()
@@ -169,36 +164,26 @@ func SmartLinkAdd(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, ``, variable)
 }
 
-func validateProcess(process string) error {
-	if process == `` {
-		return nil
+func validateProcess(processVal map[string]any) error {
+	//类型
+	processType := cast.ToString(processVal[`type`])
+	if processType == `` {
+		return errors.New(`type不能为空`)
 	}
-	processList := make([]map[string]any, 0)
-	decodeErr := gstool.JsonDecode(process, &processList)
-	if decodeErr != nil {
-		return errors.New(`解析process失败`)
-	}
-	for _, processVal := range processList {
-		//类型
-		processType := cast.ToString(processVal[`type`])
-		if processType == `` {
-			return errors.New(`type不能为空`)
+	//元素选择
+	Locator := cast.ToString(processVal[`locator`])
+	switch processType {
+	case `click`: //点击
+		if Locator == `` {
+			return errors.New(`type为click时Locator不能为空`)
 		}
-		//元素选择
-		Locator := cast.ToString(processVal[`Locator`])
-		switch processType {
-		case `click`: //点击
-			if Locator == `` {
-				return errors.New(`type为click时Locator不能为空`)
-			}
-		case `input`: //输入
-			if cast.ToString(processVal[`value`]) == `` {
-				return errors.New(`type为input时value不能为空`)
-			}
-		case `redirect_uri`: //跳转 保持当前域名
-			if cast.ToString(processVal[`value`]) == `` {
-				return errors.New(`type为redirect_uri时，value不能为空`)
-			}
+	case `input`: //输入
+		if cast.ToString(processVal[`value`]) == `` {
+			return errors.New(`type为input时value不能为空`)
+		}
+	case `redirect_uri`: //跳转 保持当前域名
+		if cast.ToString(processVal[`value`]) == `` {
+			return errors.New(`type为redirect_uri时，value不能为空`)
 		}
 	}
 	return nil
@@ -282,4 +267,157 @@ func SmartLinkPlaywrightVersion(c *gin.Context) {
 		`is_install`: isInstall,
 		`version`:    pw.Version,
 	})
+}
+
+// SmartProcessList 获取列表
+func SmartProcessList(c *gin.Context) {
+	list, _ := base.Component.TSqlite.Client.QueryBySql(`select * from tbl_smart_link_process where status = 1  order by id desc`).All()
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`list`: list,
+	})
+}
+
+// SmartProcessAdd 新增
+func SmartProcessAdd(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	validateErr := validateProcess(dataMap)
+	if validateErr != nil {
+		gsgin.GinResponseError(c, validateErr.Error(), nil)
+		return
+	}
+	var id any
+	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`})
+	if cast.ToInt(dataMap[`id`]) == 0 {
+		updateData[`create_time`] = time.Now().Unix()
+		updateData[`update_time`] = time.Now().Unix()
+		newId, createErr := base.Component.TSqlite.Client.QuickCreate(`tbl_smart_link_process`, updateData).Exec()
+		if createErr != nil {
+			gsgin.GinResponseError(c, `创建失败 `+createErr.Error(), nil)
+			return
+		}
+		id = newId
+	} else {
+		updateData[`update_time`] = time.Now().Unix()
+		_, _ = base.Component.TSqlite.Client.QuickUpdate(`tbl_smart_link_process`,
+			map[string]any{
+				`id`: dataMap[`id`],
+			}, updateData).Exec()
+		id = dataMap[`id`]
+	}
+	info, _ := base.Component.TSqlite.Client.QuickQuery(`tbl_smart_link_process`, `*`, map[string]any{
+		`id`:     id,
+		`status`: 1,
+	}).One()
+	gsgin.GinResponseSuccess(c, ``, info)
+}
+
+// SmartProcessDelete 删除
+func SmartProcessDelete(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	if cast.ToInt(dataMap[`id`]) == 0 {
+		gsgin.GinResponseError(c, `id不能为空`, nil)
+		return
+	} else {
+		_, _ = base.Component.TSqlite.Client.QuickUpdate(`tbl_smart_link_process`, map[string]any{
+			`id`: cast.ToInt(dataMap[`id`]),
+		}, map[string]interface{}{
+			`status`: define.SmartLinkStatusDelete,
+		}).Exec()
+	}
+	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
+// SmartProcessItemList 获取列表
+func SmartProcessItemList(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	smartLinkProcessId := cast.ToInt(dataMap[`smart_link_process_id`])
+	if smartLinkProcessId == 0 {
+		gsgin.GinResponseError(c, `smart_link_process_id不能为空`, nil)
+		return
+	}
+	list, _ := base.Component.TSqlite.Client.QueryBySql(`
+		select * from tbl_smart_link_process_item where smart_link_process_id = ? and status = ? order by weight asc`, smartLinkProcessId, 1).All()
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`list`: list,
+	})
+}
+
+// SmartProcessItemAdd 新增
+func SmartProcessItemAdd(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	smartLinkProcessId := cast.ToInt(dataMap[`smart_link_process_id`])
+	if smartLinkProcessId == 0 {
+		gsgin.GinResponseError(c, `smart_link_process_id不能为空`, nil)
+		return
+	}
+	var id any
+	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `smart_link_process_id`, `type`, `locator`, `tip`, `value`, `out_key`, `check_key`, `weight`, `domain_limit`})
+	if cast.ToInt(dataMap[`id`]) == 0 {
+		updateData[`create_time`] = time.Now().Unix()
+		updateData[`update_time`] = time.Now().Unix()
+		newId, createErr := base.Component.TSqlite.Client.QuickCreate(`tbl_smart_link_process_item`, updateData).Exec()
+		if createErr != nil {
+			gsgin.GinResponseError(c, `创建失败 `+createErr.Error(), nil)
+			return
+		}
+		id = newId
+	} else {
+		updateData[`update_time`] = time.Now().Unix()
+		_, _ = base.Component.TSqlite.Client.QuickUpdate(`tbl_smart_link_process_item`,
+			map[string]any{
+				`id`: dataMap[`id`],
+			}, updateData).Exec()
+		id = dataMap[`id`]
+	}
+	info, _ := base.Component.TSqlite.Client.QuickQuery(`tbl_smart_link_process_item`, `*`, map[string]any{
+		`id`:     id,
+		`status`: 1,
+	}).One()
+	gsgin.GinResponseSuccess(c, ``, info)
+}
+
+// SmartProcessItemDelete 删除
+func SmartProcessItemDelete(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	if cast.ToInt(dataMap[`id`]) == 0 {
+		gsgin.GinResponseError(c, `id不能为空`, nil)
+		return
+	} else {
+		_, _ = base.Component.TSqlite.Client.QuickUpdate(`tbl_smart_link_process_item`, map[string]any{
+			`id`: cast.ToInt(dataMap[`id`]),
+		}, map[string]interface{}{
+			`status`: define.SmartLinkStatusDelete,
+		}).Exec()
+	}
+	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
+// SmartProcessItemSort 排序
+func SmartProcessItemSort(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	smartLinkProcessId := cast.ToInt(dataMap[`smart_link_process_id`])
+	if smartLinkProcessId == 0 {
+		gsgin.GinResponseError(c, `smart_link_process_id不能为空`, nil)
+		return
+	}
+	smartLinkProcessItemIds := cast.ToString(dataMap[`smart_link_process_item_ids`])
+	if smartLinkProcessItemIds == `` {
+		gsgin.GinResponseError(c, `smart_link_process_item_ids不能为空`, nil)
+		return
+	}
+	smartLinkProcessItemIdsArr := strings.Split(smartLinkProcessItemIds, `,`)
+	for index, item := range smartLinkProcessItemIdsArr {
+		_, _ = base.Component.TSqlite.Client.QuickUpdate(`tbl_smart_link_process_item`, map[string]any{
+			`id`: cast.ToInt(item),
+		}, map[string]interface{}{
+			`weight`: index + 1,
+		}).Exec()
+	}
+	gsgin.GinResponseSuccess(c, ``, nil)
 }

@@ -259,7 +259,7 @@ func (h *TSqlite) MarkdownDel(id any) (int64, error) {
 func (h *TSqlite) MarkdownList(markdownType string) ([]map[string]any, error) {
 	return h.Client.QuickQuery(`tbl_markdown`, `*`, map[string]any{
 		`markdown_type`: markdownType,
-	}).All()
+	}).Order("weight asc").All()
 }
 
 func (h *TSqlite) MarkdownHistoryList(id int) ([]map[string]any, error) {

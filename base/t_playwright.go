@@ -195,13 +195,12 @@ func (h *TPlaywright) GetRunParams(id int, label, userName, password string, ope
 	runParams.CombineType = cast.ToInt(smartLink[`combine_type`])
 	runParams.OpenNum = cast.ToInt(math.Max(1, cast.ToFloat64(openNum)))
 	runParams.OpenType = define.OpenType(cast.ToInt(smartLink[`open_type`]))
-	process := cast.ToString(smartLink[`process`])
+	//查询process
 	processList := make([]map[string]any, 0)
-	if process != `` {
-		decodeErr = gstool.JsonDecode(process, &processList)
-		if decodeErr != nil {
-			return runParams, errors.New(`配置失败` + decodeErr.Error())
-		}
+	processId := cast.ToInt(smartLink[`process_id`])
+	if processId > 0 {
+		processList, _ = Component.TSqlite.Client.QueryBySql("select * from tbl_smart_link_process_item where status = 1 and smart_link_process_id = ? order by weight asc", processId).All()
+
 	}
 	parsedURL, err := url.Parse(runParams.Link)
 	if err != nil {

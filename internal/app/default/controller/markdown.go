@@ -6,6 +6,7 @@ import (
 	"gitee.com/Sxiaobai/gs/gstool"
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/cast"
+	"strings"
 	"time"
 )
 
@@ -33,6 +34,26 @@ func MarkdownDel(c *gin.Context) {
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
+	}
+	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
+// MarkdownSort 排序
+func MarkdownSort(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	markdownIds := cast.ToString(dataMap[`markdown_ids`])
+	if markdownIds == `` {
+		gsgin.GinResponseError(c, `markdown_ids不能为空`, nil)
+		return
+	}
+	markdownIdsArr := strings.Split(markdownIds, `,`)
+	for index, item := range markdownIdsArr {
+		_, _ = base.Component.TSqlite.Client.QuickUpdate(`tbl_markdown`, map[string]any{
+			`id`: cast.ToInt(item),
+		}, map[string]interface{}{
+			`weight`: index + 1,
+		}).Exec()
 	}
 	gsgin.GinResponseSuccess(c, ``, nil)
 }

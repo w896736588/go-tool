@@ -39,7 +39,7 @@ func NewProcess(process map[string]any, page *playwright.Page, runParams *_struc
 	p := &Process{
 		DomainLimit:    cast.ToString(process[`domain_limit`]),
 		ProcessType:    define.ProcessType(cast.ToString(process[`type`])),
-		Locators:       cast.ToString(process[`Locator`]),
+		Locators:       cast.ToString(process[`locator`]),
 		Tip:            cast.ToString(process[`tip`]),
 		Checks:         base.Component.TPlaywright.ValueFormat(cast.ToString(process[`check_key`]), runParams),
 		OutKey:         cast.ToString(process[`out_key`]),
