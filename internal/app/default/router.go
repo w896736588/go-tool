@@ -160,6 +160,7 @@ func setMarkdown() {
 	base.Component.TGin.GinPost(`/api/MarkdownAdd`, controller.MarkdownAdd)
 	base.Component.TGin.GinPost(`/api/MarkdownDel`, controller.MarkdownDel)
 	base.Component.TGin.GinPost(`/api/MarkdownHistoryDel`, controller.MarkdownHistoryDel)
+	base.Component.TGin.GinPost(`/api/MarkdownSort`, controller.MarkdownSort)
 }
 
 func variable() {
@@ -185,6 +186,14 @@ func smartLink() {
 	base.Component.TGin.GinPost(`/api/SmartLinkChromeDownload`, controller.SmartLinkUpWebkit)
 	base.Component.TGin.GinPost(`/api/SmartLinkRecycle`, controller.SmartLinkRecycle)
 	base.Component.TGin.GinPost(`/api/SmartLinkDownloadPath`, controller.SmartLinkDownloadPath)
+	//执行逻辑
+	base.Component.TGin.GinPost(`/api/SmartProcessList`, controller.SmartProcessList)
+	base.Component.TGin.GinPost(`/api/SmartProcessAdd`, controller.SmartProcessAdd)
+	base.Component.TGin.GinPost(`/api/SmartProcessDelete`, controller.SmartProcessDelete)
+	base.Component.TGin.GinPost(`/api/SmartProcessItemList`, controller.SmartProcessItemList)
+	base.Component.TGin.GinPost(`/api/SmartProcessItemAdd`, controller.SmartProcessItemAdd)
+	base.Component.TGin.GinPost(`/api/SmartProcessItemDelete`, controller.SmartProcessItemDelete)
+	base.Component.TGin.GinPost(`/api/SmartProcessItemSort`, controller.SmartProcessItemSort)
 }
 
 func docker() {
