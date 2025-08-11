@@ -7,7 +7,6 @@ import (
 	"gitee.com/Sxiaobai/gs/gstask"
 	"gitee.com/Sxiaobai/gs/gstool"
 	"github.com/playwright-community/playwright-go"
-	"github.com/spf13/cast"
 	"strings"
 	"time"
 )
@@ -30,20 +29,19 @@ func NewLocator(locators string, page *playwright.Page, elementOp *_struct.Eleme
 
 // DoBoolResult 根据json配置的元素来解析，根据设置的值进行返回
 // 示例：[{"locator":".qrcode[style*='opacity: 0']","return":true},{"locator":".qrcode[style*='opacity: 0']","return":false},{"locator":".to-backstage-btn","return":false},{"locator":".new-to-backstage-btn","return":false}]
-func (h *Locator) DoBoolResult(second int) (bool, error) {
+func (h *Locator) DoBoolResult(waitMills float64) (bool, error) {
 	boolList := make([]_struct.ProcessBoolResult, 0)
 	decodeErr := gstool.JsonDecode(h.Locators, &boolList)
 	if decodeErr != nil {
 		return false, errors.New(`不支持的bool_result表达式`)
 	}
 	task := gstask.NewTask()
-	waitSecond := 3
-	if second > 0 {
-		waitSecond = second
+	if waitMills == 0 {
+		waitMills = 3000
 	}
 	for _, result := range boolList {
 		call := func() *gstask.Result {
-			findElemRet := h.FindLocator(result.Locator, waitSecond)
+			findElemRet := h.FindLocator(result.Locator, waitMills)
 			if findElemRet.Err != nil { //查找这个元素失败 那么直接返回失败
 				return &gstask.Result{
 					Result: nil, //没找到 那么返回反向值
@@ -70,13 +68,12 @@ func (h *Locator) DoBoolResult(second int) (bool, error) {
 	return result.Result.(bool), result.Err
 }
 
-func (h *Locator) Do(second int) (playwright.Locator, error) {
+func (h *Locator) Do(waitMills float64) (playwright.Locator, error) {
 	lists := strings.Split(h.Locators, `&&`) //多个用&&分割
 	hList := strings.Split(h.Locators, `||`) //多个用||分割
 	task := gstask.NewTask()
-	waitSecond := 3
-	if second > 0 {
-		waitSecond = second
+	if waitMills == 0 {
+		waitMills = 3000
 	}
 	//&&处理
 	if len(lists) > 1 {
@@ -84,7 +81,7 @@ func (h *Locator) Do(second int) (playwright.Locator, error) {
 		for _, locators := range lists {
 			task.Add(gstask.CallbackFunc{
 				Func: func() *gstask.Result {
-					return h.FindLocator(locators, waitSecond)
+					return h.FindLocator(locators, waitMills)
 				},
 				Timeout: 5 * time.Second, //超时时间 不是于查找元素的超时时间
 			})
@@ -96,7 +93,7 @@ func (h *Locator) Do(second int) (playwright.Locator, error) {
 		for _, locators := range hList {
 			task.Add(gstask.CallbackFunc{
 				Func: func() *gstask.Result {
-					return h.FindLocator(locators, waitSecond)
+					return h.FindLocator(locators, waitMills)
 				},
 				Timeout: 5 * time.Second,
 			})
@@ -108,7 +105,7 @@ func (h *Locator) Do(second int) (playwright.Locator, error) {
 		h.log.Debugf(`走默认 %s`, h.Locators)
 		task.Add(gstask.CallbackFunc{
 			Func: func() *gstask.Result {
-				return h.FindLocator(h.Locators, waitSecond)
+				return h.FindLocator(h.Locators, waitMills)
 			},
 			Timeout: 5 * time.Second,
 		})
@@ -159,8 +156,8 @@ func (h *Locator) parseLocator(Locator string) *_struct.Locator {
 	return &locator
 }
 
-func (h *Locator) FindLocator(locators string, waitSecond int) *gstask.Result {
-	timeout := playwright.Float(cast.ToFloat64(waitSecond * 1000))
+func (h *Locator) FindLocator(locators string, waitMills float64) *gstask.Result {
+	timeout := playwright.Float(waitMills)
 	h.log.Debugf(`查找元素%s 超时毫秒时间 %v`, locators, *timeout)
 	locator := h.parseLocator(locators)
 	selectorLoader := (*h.Page).Locator(locator.Locator)

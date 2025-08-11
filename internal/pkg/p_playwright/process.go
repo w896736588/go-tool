@@ -23,6 +23,7 @@ type Process struct {
 	OutKey         string                                           //输出的判断
 	Value          string                                           //值
 	Domain         string                                           //域名
+	WaitMills      float64                                          //等待时长
 	Locator        *Locator                                         //元素解析
 	ElementOp      *_struct.ElementOp                               //操作结构
 	Page           *playwright.Page                                 //页面
@@ -40,6 +41,7 @@ func NewProcess(process map[string]any, page *playwright.Page, runParams *_struc
 		DomainLimit:    cast.ToString(process[`domain_limit`]),
 		ProcessType:    define.ProcessType(cast.ToString(process[`type`])),
 		Locators:       cast.ToString(process[`locator`]),
+		WaitMills:      cast.ToFloat64(process[`wait_mills`]),
 		Tip:            cast.ToString(process[`tip`]),
 		Checks:         base.Component.TPlaywright.ValueFormat(cast.ToString(process[`check_key`]), runParams),
 		OutKey:         cast.ToString(process[`out_key`]),
@@ -102,7 +104,7 @@ func (h *Process) Do() (define.ProcessCode, string, error) {
 func (h *Process) CanvasImage() (define.ProcessCode, string, error) {
 	base.Component.TPlaywright.AddTipMsg(h.Page, h.Tip)
 	h.ElementOp.Type = define.ElementExist
-	element, elementErr := h.Locator.Do(0)
+	element, elementErr := h.Locator.Do(h.WaitMills)
 	if elementErr != nil {
 		h.callRun(elementErr.Error(), h.Locators)
 	} else {
@@ -128,7 +130,7 @@ func (h *Process) ExistWait() (define.ProcessCode, string, error) {
 		return define.ProcessBreak, ``, gstool.Error(`exist_wait类型value格式错误`)
 	}
 	for i := 0; i < cast.ToInt(paramList[1]); i++ {
-		element, elementErr := h.Locator.Do(cast.ToInt(paramList[0]))
+		element, elementErr := h.Locator.Do(cast.ToFloat64(cast.ToInt(paramList[0]) * 1000))
 		if elementErr != nil || element == nil {
 			h.callRun(fmt.Sprintf(`等待中(%d/%d)..`, i+1, cast.ToInt(paramList[1])), h.Locators)
 		} else {
@@ -152,7 +154,7 @@ func (h *Process) NoExistWait() (define.ProcessCode, string, error) {
 		return define.ProcessBreak, ``, gstool.Error(`exist_wait类型value格式错误`)
 	}
 	for i := 0; i < cast.ToInt(paramList[1]); i++ {
-		element, elementErr := h.Locator.Do(cast.ToInt(paramList[0]))
+		element, elementErr := h.Locator.Do(cast.ToFloat64(cast.ToInt(paramList[0]) * 1000))
 		if elementErr != nil || element == nil {
 			if h.OutKey != `` {
 				h.BoolResultMap[h.OutKey] = false
@@ -172,7 +174,7 @@ func (h *Process) NoExistWait() (define.ProcessCode, string, error) {
 func (h *Process) PTextContent() (define.ProcessCode, string, error) {
 	base.Component.TPlaywright.AddTipMsg(h.Page, h.Tip)
 	h.ElementOp.Type = define.ElementTextContent
-	_, elementErr := h.Locator.Do(0)
+	_, elementErr := h.Locator.Do(h.WaitMills)
 	if elementErr != nil {
 		h.callRun(elementErr.Error(), h.Locators)
 		h.TakeContentMap[h.OutKey] = ``
@@ -187,7 +189,7 @@ func (h *Process) PBoolResult() (define.ProcessCode, string, error) {
 	base.Component.TPlaywright.AddTipMsg(h.Page, h.Tip)
 	if h.Locators != `` {
 		h.ElementOp.Type = define.ElementCount
-		boolRet, boolErr := h.Locator.DoBoolResult(0)
+		boolRet, boolErr := h.Locator.DoBoolResult(h.WaitMills)
 		if boolErr != nil {
 			return define.ProcessBreak, `没有找到任意的元素` + h.Locators, errors.New(`没有找到任意的元素` + h.Locators)
 		} else {
@@ -205,7 +207,7 @@ func (h *Process) PClick() (define.ProcessCode, string, error) {
 	base.Component.TPlaywright.AddTipMsg(h.Page, h.Tip)
 	h.log.Debugf(`点击 %s 允许`, h.Tip)
 	h.ElementOp.Type = define.ElementClick
-	_, elementErr := h.Locator.Do(0)
+	_, elementErr := h.Locator.Do(h.WaitMills)
 	if elementErr != nil {
 		h.callRun(elementErr.Error(), h.Locators)
 		return define.ProcessBreak, `获取需要点击的元素失败`, gstool.Error(`获取元素%s失败`, h.Locators)
@@ -219,7 +221,7 @@ func (h *Process) PInput() (define.ProcessCode, string, error) {
 	base.Component.TPlaywright.AddTipMsg(h.Page, h.Tip)
 	h.ElementOp.Type = define.ElementInput
 	h.ElementOp.FillValue = h.Value
-	_, elementErr := h.Locator.Do(0)
+	_, elementErr := h.Locator.Do(h.WaitMills)
 	if elementErr != nil {
 		h.callRun(elementErr.Error(), h.Locators)
 		return define.ProcessBreak, `获取需要输入的元素失败`, gstool.Error(`获取元素%s失败`, h.Locators)
