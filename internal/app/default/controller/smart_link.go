@@ -230,6 +230,7 @@ func SmartLinkRunPlaywright(c *gin.Context) {
 			}
 			streamFunc := func(name, msg string) {
 				//执行流程输出 TODO 输出到前端
+				gstool.FmtPrintlnLogTime(`%s %s`, name, msg)
 			}
 			p := p_playwright.NewPlaywright(runParams, base.Component.TPlaywright.Log, streamFunc)
 			openErr := p.Open()
@@ -359,7 +360,7 @@ func SmartProcessItemAdd(c *gin.Context) {
 		return
 	}
 	var id any
-	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `wait_mills`, `append_to_replace`, `smart_link_process_id`, `type`, `locator`, `tip`, `value`, `out_key`, `check_key`, `weight`, `domain_limit`})
+	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `wait_mills`, `is_async`, `append_to_replace`, `smart_link_process_id`, `type`, `locator`, `tip`, `value`, `out_key`, `check_key`, `weight`, `domain_limit`})
 	if cast.ToInt(dataMap[`id`]) == 0 {
 		updateData[`create_time`] = time.Now().Unix()
 		updateData[`update_time`] = time.Now().Unix()

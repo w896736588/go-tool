@@ -31,6 +31,7 @@ type Process struct {
 	TakeContentMap map[string]string                                //提取
 	BoolResultMap  map[string]bool                                  //结果判断
 	Check          *Check                                           //判断
+	IsAsync        int                                              //是否异步执行1异步
 	RunCallFunc    func(define.ProcessType, string, string, string) //注册输出回调
 	log            *gstool.GsSlog
 	runParams      *_struct.PlaywrightRunParams
@@ -50,6 +51,7 @@ func NewProcess(process map[string]any, page *playwright.Page, runParams *_struc
 		OutKey:         cast.ToString(process[`out_key`]),
 		Value:          base.Component.TPlaywright.ValueFormat(cast.ToString(process[`name`]), cast.ToString(process[`value`]), runParams),
 		RunCallFunc:    runParams.RunCallFunc,
+		IsAsync:        cast.ToInt(process[`is_async`]),
 		Domain:         runParams.Domain,
 		ElementOp:      &_struct.ElementOp{},
 		BoolResultMap:  boolResultMap,
@@ -246,7 +248,6 @@ func (h *Process) PLoginUsernamePassword() (define.ProcessCode, string, error) {
 
 func (h *Process) PClick() (define.ProcessCode, string, error) {
 	base.Component.TPlaywright.AddTipMsg(h.Page, h.Tip)
-	h.log.Debugf(`点击 %s 允许`, h.Tip)
 	h.ElementOp.Type = define.ElementClick
 	_, elementErr := h.Locator.Do(h.WaitMills)
 	if elementErr != nil {
