@@ -5,6 +5,7 @@ import (
 	"dev_tool/base/define"
 	_struct "dev_tool/base/struct"
 	"errors"
+	"fmt"
 	"gitee.com/Sxiaobai/gs/gstool"
 	"github.com/playwright-community/playwright-go"
 	"github.com/spf13/cast"
@@ -44,36 +45,59 @@ func (h *Playwright) Open() error {
 		return gstool.Error(`获取page失败 %s`, pageErr.Error())
 	}
 	for _, processVal := range h.RunParams.ProcessList {
-		process := NewProcess(processVal, page, h.RunParams, h.BoolResultMap, h.TakeContentMap, h.log, h.streamFunc)
-		sTime := gstool.TimeNowMilliInt64()
-		code, reason, err := process.Do()
-		h.log.Debugf(`执行结果 %s `, gstool.JsonFormat(map[string]any{
-			`type`:           process.ProcessType,
-			`reason`:         reason,
-			`domain`:         h.RunParams.Domain,
-			`domain_limit`:   process.DomainLimit,
-			`Locator`:        process.Locator,
-			`tip`:            process.Tip,
-			`code`:           code,
-			`Checks`:         process.Checks,
-			`TakeContextMap`: h.TakeContentMap,
-			`BoolResultMap`:  h.BoolResultMap,
-			`耗时ms`:           gstool.TimeNowMilliInt64() - sTime,
-		}))
-		if err != nil {
-			return err
-		}
-		//对结果写入到替换列表
-		for takeKey, takeValue := range h.TakeContentMap {
-			if takeKey == cast.ToString(processVal[`out_key`]) && cast.ToInt(processVal[`append_to_replace`]) == 1 {
-				h.RunParams.ReplaceList[takeKey] = takeValue
+		if cast.ToInt(processVal[`is_async`]) == 1 {
+			go func() {
+				h.streamFunc(cast.ToString(processVal[`name`]), `异步执行`)
+				_, runErr := h.ProcessRun(processVal, page)
+				if runErr != nil {
+					h.streamFunc(cast.ToString(processVal[`name`]), fmt.Sprintf(`执行失败 %s`, runErr.Error()))
+				}
+			}()
+
+		} else {
+			boolContinue, runErr := h.ProcessRun(processVal, page)
+			if runErr != nil {
+				return runErr
+			}
+			if !boolContinue {
+				return nil
 			}
 		}
-		if code == define.ProcessBreak {
-			return nil
-		}
+
 	}
 	return nil
+}
+
+func (h *Playwright) ProcessRun(processVal map[string]any, page *playwright.Page) (bool, error) {
+	process := NewProcess(processVal, page, h.RunParams, h.BoolResultMap, h.TakeContentMap, h.log, h.streamFunc)
+	sTime := gstool.TimeNowMilliInt64()
+	code, reason, err := process.Do()
+	h.log.Debugf(`执行结果 %s `, gstool.JsonFormat(map[string]any{
+		`type`:           process.ProcessType,
+		`reason`:         reason,
+		`domain`:         h.RunParams.Domain,
+		`domain_limit`:   process.DomainLimit,
+		`Locator`:        process.Locator,
+		`tip`:            process.Tip,
+		`code`:           code,
+		`Checks`:         process.Checks,
+		`TakeContextMap`: h.TakeContentMap,
+		`BoolResultMap`:  h.BoolResultMap,
+		`耗时ms`:           gstool.TimeNowMilliInt64() - sTime,
+	}))
+	if err != nil {
+		return false, err
+	}
+	//对结果写入到替换列表
+	for takeKey, takeValue := range h.TakeContentMap {
+		if takeKey == cast.ToString(processVal[`out_key`]) && cast.ToInt(processVal[`append_to_replace`]) == 1 {
+			h.RunParams.ReplaceList[takeKey] = takeValue
+		}
+	}
+	if code == define.ProcessBreak {
+		return false, nil
+	}
+	return true, nil
 }
 
 func (h *Playwright) GetPage() (*playwright.Page, error) {
