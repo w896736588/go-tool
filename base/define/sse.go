@@ -6,6 +6,7 @@ const (
 	SseGit        = `git`
 	SseSupervisor = `supervisor`
 	SseAiCode     = `ai_code`
+	SseSmartLink  = `smart_link`
 )
 
 const (

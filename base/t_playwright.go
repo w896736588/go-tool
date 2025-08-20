@@ -216,7 +216,6 @@ func (h *TPlaywright) GetRunParams(id int, label, userName, password string, ope
 	} else {
 		runParams.LastIndexLabel = label
 	}
-	gstool.FmtPrintlnLogTime(`打开链接 %s LastIndexLabel ： %s`, runParams.Link, runParams.LastIndexLabel)
 	runParams.ProcessList = processList
 	runParams.ReplaceList = replaceList
 	runParams.LocatorTimeout = 1000
@@ -267,18 +266,26 @@ func (h *TPlaywright) ValueFormat(name, value string, runParams *_struct.Playwri
 
 	//针对输入进行替换
 	replaceValue = gstool.SReplaces(replaceValue, runParams.ReplaceList)
-	gstool.FmtPrintlnLogTime(`对%s的value %s进行替换后%s`, name, value, replaceValue)
 	return replaceValue
 }
 
 func (h *TPlaywright) ValueClean(value string) string {
-	gstool.FmtPrintlnLogTime(`--%s--%s`, value, gstool.SReplaces(value, map[string]string{
-		"\n": "",
-		" ":  "",
-	}))
-	gstool.FmtPrintlnLogTime(`--%s--%s`, value, strings.TrimSpace(value))
 	return gstool.SReplaces(value, map[string]string{
 		"\n": "",
 		" ":  "",
 	})
+}
+
+func (h *TPlaywright) StreamMsgFunc(runUniqueId string) func(msg string, enter bool) {
+	return func(msg string, enter bool) {
+		//如果本次任务已经停止 那么不再输出
+		if Component.TVariable.Get(runUniqueId) == `stop` {
+			Component.TSse.Sse.CleanMsg(runUniqueId)
+			return
+		}
+		if enter {
+			msg += "\n"
+		}
+		_ = Component.TSse.SendMsg(runUniqueId, msg, 0)
+	}
 }

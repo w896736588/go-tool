@@ -27,6 +27,7 @@ type PlaywrightRunParams struct {
 	AutoCloseSecond     int                                              //多少秒内没有操作 就进行关闭page 0表示不处理
 	Channel             string                                           //浏览器类型
 	RunCallFunc         func(define.ProcessType, string, string, string) //注册输出回调
+	StreamFunc          func(string, string)                             //执行输出
 	ListenUrlList       map[string]*ListenUrl                            //监听
 	ResponseUrls        []*ProcessResponseUrl                            //注册等待请求完成
 	ShowCookies         []ShowCookie                                     //信息提取

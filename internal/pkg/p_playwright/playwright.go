@@ -21,17 +21,15 @@ type Playwright struct {
 	BoolResultMap   map[string]bool              //判断结果
 	ContextPageList *ContextPageList             //浏览器上下文列表
 	log             *gstool.GsSlog
-	streamFunc      func(string, string) //流程日志
 }
 
-func NewPlaywright(runParams *_struct.PlaywrightRunParams, log *gstool.GsSlog, streamFunc func(string, string)) *Playwright {
+func NewPlaywright(runParams *_struct.PlaywrightRunParams, log *gstool.GsSlog) *Playwright {
 	return &Playwright{
 		RunParams:       runParams,
 		TakeContentMap:  make(map[string]string),
 		BoolResultMap:   make(map[string]bool),
 		ContextPageList: NewContextList(log),
 		log:             log,
-		streamFunc:      streamFunc,
 	}
 }
 
@@ -39,7 +37,7 @@ func (h *Playwright) Open() error {
 	if base.Component.TPlaywright.Pw == nil {
 		return errors.New(`未启动浏览器核心`)
 	}
-	h.streamFunc(`启动playwright`, `获取page`)
+	h.RunParams.StreamFunc(`启动playwright`, `获取page`)
 	page, pageErr := h.GetPage()
 	if pageErr != nil {
 		return gstool.Error(`获取page失败 %s`, pageErr.Error())
@@ -47,10 +45,10 @@ func (h *Playwright) Open() error {
 	for _, processVal := range h.RunParams.ProcessList {
 		if cast.ToInt(processVal[`is_async`]) == 1 {
 			go func() {
-				h.streamFunc(cast.ToString(processVal[`name`]), `异步执行`)
+				h.RunParams.StreamFunc(cast.ToString(processVal[`name`]), `异步执行`)
 				_, runErr := h.ProcessRun(processVal, page)
 				if runErr != nil {
-					h.streamFunc(cast.ToString(processVal[`name`]), fmt.Sprintf(`执行失败 %s`, runErr.Error()))
+					h.RunParams.StreamFunc(cast.ToString(processVal[`name`]), fmt.Sprintf(`执行失败 %s`, runErr.Error()))
 				}
 			}()
 
@@ -69,7 +67,7 @@ func (h *Playwright) Open() error {
 }
 
 func (h *Playwright) ProcessRun(processVal map[string]any, page *playwright.Page) (bool, error) {
-	process := NewProcess(processVal, page, h.RunParams, h.BoolResultMap, h.TakeContentMap, h.log, h.streamFunc)
+	process := NewProcess(processVal, page, h.RunParams, h.BoolResultMap, h.TakeContentMap, h.log)
 	sTime := gstool.TimeNowMilliInt64()
 	code, reason, err := process.Do()
 	h.log.Debugf(`执行结果 %s `, gstool.JsonFormat(map[string]any{
@@ -107,6 +105,7 @@ func (h *Playwright) GetPage() (*playwright.Page, error) {
 	if h.RunParams.CombineType == define.CombineTypeNo { //不保存用户数据
 		browser, browserErr := h.GetBrowser()
 		if browserErr != nil {
+			h.RunParams.StreamFunc(`启动playwright`, fmt.Sprintf(`获取browser失败 %s`, browserErr.Error()))
 			return nil, browserErr
 		}
 		contextPage, contextErr = h.ContextPageList.GetContextNotSaveUserData(browser, h.RunParams)

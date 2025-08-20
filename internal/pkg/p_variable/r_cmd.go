@@ -478,7 +478,8 @@ func (h *RCmd) RunPlaywright() (string, error) {
 		streamFunc := func(name, msg string) {
 			h.StreamMsg(base.Component.TMarkDown.Bold(name)+`,`+msg, true)
 		}
-		p := p_playwright.NewPlaywright(runParams, base.Component.TVariable.Log, streamFunc)
+		runParams.StreamFunc = streamFunc
+		p := p_playwright.NewPlaywright(runParams, base.Component.TVariable.Log)
 		openErr := p.Open()
 		if openErr != nil {
 			h.StreamMsg(base.Component.TMarkDown.BlockQuote(cast.ToString(h.cmd[`name`])+`,启动失败，`+openErr.Error()), true)
