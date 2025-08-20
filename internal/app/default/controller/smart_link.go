@@ -24,8 +24,7 @@ func SmartLinkUpWebkit(c *gin.Context) {
 }
 
 func SmartLinkRecycle(c *gin.Context) {
-	streamFunc := func(name, msg string) {}
-	p := p_playwright.NewPlaywright(nil, base.Component.TPlaywright.Log, streamFunc)
+	p := p_playwright.NewPlaywright(nil, base.Component.TPlaywright.Log)
 	err := p.Recycle()
 	if err != nil {
 		gsgin.GinResponseError(c, fmt.Sprintf(`释放失败 %s`, err.Error()), nil)
@@ -221,18 +220,21 @@ func SmartLinkRunPlaywright(c *gin.Context) {
 	password := cast.ToString(dataMap[`password`])
 	openNum := max(1, cast.ToInt(dataMap[`open_num`]))
 	replaceList := make(map[string]string, 0)
+	runStreamFunc := base.Component.TPlaywright.StreamMsgFunc(`smart_link`)
+	runStreamFunc(base.Component.TMarkDown.BlockQuote(`运行,开始----------------我是分隔君`), true)
 	for i := 0; i < openNum; i++ {
 		go func() {
+			streamFunc := func(name, msg string) {
+				//输出到前端
+				runStreamFunc(base.Component.TMarkDown.Bold(name)+`,`+msg, true)
+			}
 			runParams, runParamsErr := base.Component.TPlaywright.GetRunParams(id, label, userName, password, openNum, replaceList)
 			if runParamsErr != nil {
 				gstool.FmtPrintlnLogTime(`打开错误 %s`, runParamsErr.Error())
 				return
 			}
-			streamFunc := func(name, msg string) {
-				//执行流程输出 TODO 输出到前端
-				gstool.FmtPrintlnLogTime(`%s %s`, name, msg)
-			}
-			p := p_playwright.NewPlaywright(runParams, base.Component.TPlaywright.Log, streamFunc)
+			runParams.StreamFunc = streamFunc
+			p := p_playwright.NewPlaywright(runParams, base.Component.TPlaywright.Log)
 			openErr := p.Open()
 			if openErr != nil {
 				gstool.FmtPrintlnLogTime(`错误 %s`, openErr.Error())
