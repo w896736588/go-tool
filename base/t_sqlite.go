@@ -212,3 +212,64 @@ func (h *TSqlite) StarList(_type any) ([]map[string]any, error) {
 		`type`: _type,
 	}).All()
 }
+
+func (h *TSqlite) MarkdownAdd(id, name, markdownType, value any) (int64, error) {
+	if cast.ToInt(id) == 0 {
+		return h.Client.QuickCreate(`tbl_markdown`, map[string]any{
+			`name`:          name,
+			`content`:       value,
+			`markdown_type`: markdownType,
+			`create_time`:   time.Now().Unix(),
+			`update_time`:   time.Now().Unix(),
+		}).Exec()
+	} else {
+		//记录变更记录
+		oldInfo, _ := h.Client.QuickQuery(`tbl_markdown`, `content`, map[string]any{
+			`id`: id,
+		}).One()
+
+		upNum, upErr := h.Client.QuickUpdate(`tbl_markdown`, map[string]any{
+			`id`: id,
+		}, map[string]any{
+			`name`:        name,
+			`content`:     value,
+			`update_time`: time.Now().Unix(),
+		}).Exec()
+		if upErr == nil && upNum > 0 && cast.ToString(oldInfo[`content`]) != value {
+
+			_, _ = h.Client.QuickCreate(`tbl_markdown_history`, map[string]any{
+				`markdown_id`: id,
+				`old_content`: oldInfo[`content`],
+				`new_content`: value,
+				`change_desc`: Component.TBase.DiffText(cast.ToString(oldInfo[`content`]), cast.ToString(value)),
+				`create_time`: time.Now().Unix(),
+				`update_time`: time.Now().Unix(),
+			}).Exec()
+		}
+		return upNum, upErr
+	}
+}
+
+func (h *TSqlite) MarkdownDel(id any) (int64, error) {
+	return h.Client.QuickDelete(`tbl_markdown`, map[string]any{
+		`id`: id,
+	}).Exec()
+}
+
+func (h *TSqlite) MarkdownList(markdownType string) ([]map[string]any, error) {
+	return h.Client.QuickQuery(`tbl_markdown`, `*`, map[string]any{
+		`markdown_type`: markdownType,
+	}).Order("weight asc").All()
+}
+
+func (h *TSqlite) MarkdownHistoryList(id int) ([]map[string]any, error) {
+	return h.Client.QuickQuery(`tbl_markdown_history`, `*`, map[string]any{
+		`markdown_id`: id,
+	}).Order("id desc").All()
+}
+
+func (h *TSqlite) MarkdownHistoryDel(historyId any) (int64, error) {
+	return h.Client.QuickDelete(`tbl_markdown_history`, map[string]any{
+		`id`: historyId,
+	}).Exec()
+}

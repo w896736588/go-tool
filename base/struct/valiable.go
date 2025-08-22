@@ -13,43 +13,63 @@ type VariableCurl struct {
 	Method  any `json:"method"`
 }
 
-type VariableForm struct {
-	VariableType string
-	VariableId   string
-	Input        VariableFormInput  `json:"Input,omitempty"`
-	Select       VariableFormSelect `json:"Select,omitempty"`
-	Sql          VariableFormSql    `json:"Sql,omitempty"`
-	Link         VariableFormLink   `json:"Link,omitempty"`
-	ResultKey    string
-	IsShowOk     int //1准备好 0未准备好  准备好了以后就会在页面上显示选项等
-	IsRunOk      int //1准备好执行（需要选择） 全部准备好以后就是可以执行了
+type VForm struct {
+	Name       string
+	VariableId string
+	Id         string
+	CmdType    string
+	Input      VFormInput  `json:"Input,omitempty"`
+	Select     VFormSelect `json:"Select,omitempty"`
+	Sql        VFormSql    `json:"Sql,omitempty"`
+	Bash       VFormBash   `json:"Bash,omitempty"`
+	ResultKey  string
+	IsShowOk   int  //1准备好 0未准备好  准备好了以后就会在页面上显示选项等
+	IsRunOk    int  //1准备好执行（需要选择） 全部准备好以后就是可以执行了
+	IsFinish   bool //是否已经结束
 }
 
-type VariableFormInput struct {
+type VFormInput struct {
 	Label       string
 	Value       string
 	HideSureBtn int
 }
 
-type VariableFormSql struct {
+type VFormSql struct {
 	Sql     string
 	MysqlId string
 }
 
-type VariableFormLink struct {
-	Link string
-	Desc string
+type VFormBash struct {
+	Bash  string
+	SshId string
 }
 
-type VariableFormSelect struct {
+type VFormSelect struct {
 	Label      string
 	Value      string
-	OptionList []VariableFormOption
+	OptionList []VFormOption
 	Options    string //原本的
 }
 
-type VariableFormOption struct {
+func (h *VFormSelect) GetSelectOption(value string) VFormOption {
+	for _, option := range h.OptionList {
+		if option.Value == value {
+			return option
+		}
+	}
+	return VFormOption{}
+}
+
+type VFormOption struct {
 	Label  string
 	Value  string
 	Source string //原本的值
+}
+
+type VCmdResult struct {
+	Form        VForm             //显示的表单
+	RunStatus   int               //0不可以执行 1可以执行 2执行结束
+	ReplaceList map[string]string //替换数据
+	RunUniqueId string            //执行唯一ID
+	VariableId  int               //ID
 }

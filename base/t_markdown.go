@@ -1,0 +1,30 @@
+package base
+
+import (
+	"fmt"
+	"gitee.com/Sxiaobai/gs/gstool"
+)
+
+type TMarkDown struct {
+}
+
+func (h *TMarkDown) Code(str, lang string) string {
+	return fmt.Sprintf("```%s\n\n%s\n```", lang, str)
+}
+
+func (h *TMarkDown) Json(data any) string {
+	str := gstool.JsonFormat(data)
+	return h.Code(str, `json`)
+}
+
+func (h *TMarkDown) BlockQuote(str string) string {
+	return fmt.Sprintf("> %s\n", str)
+}
+
+func (h *TMarkDown) Enter(str string) string {
+	return fmt.Sprintf("%s  \n", str)
+}
+
+func (h *TMarkDown) Bold(str string) string {
+	return fmt.Sprintf("**%s**", str)
+}

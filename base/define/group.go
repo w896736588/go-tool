@@ -6,4 +6,5 @@ const (
 	GroupTypeCmd                  //命令集
 	GroupTypeVariable             //变量
 	GroupTypeSmartLink            //自动化链接
+	GroupTypeAccount              //账号分组 用于自动化链接
 )

@@ -31,7 +31,7 @@ func RedisAvailableList(c *gin.Context) {
 		//}
 		runList = append(runList, map[string]any{
 			`name`: redisConfig[`name`],
-			`id`:   redisConfig[`id`],
+			`id`:   cast.ToString(redisConfig[`id`]),
 		})
 	}
 	gsgin.GinResponseSuccess(c, ``, runList)

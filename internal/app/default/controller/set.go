@@ -3,8 +3,10 @@ package controller
 import (
 	"dev_tool/base"
 	"dev_tool/base/define"
-	"gitee.com/Sxiaobai/gs/gs"
+	"gitee.com/Sxiaobai/gs/gsdb"
 	"gitee.com/Sxiaobai/gs/gsgin"
+	"gitee.com/Sxiaobai/gs/gsssh"
+	"gitee.com/Sxiaobai/gs/gstask"
 	"gitee.com/Sxiaobai/gs/gstool"
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/cast"
@@ -25,7 +27,7 @@ func SetSshList(c *gin.Context) {
 func SetSshAdd(c *gin.Context) {
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
-	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `host`, `port`, `username`, `password`})
+	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `host`, `port`, `username`, `password`, `home`})
 	gstool.FmtPrintlnLogTime(`编辑ssh %#v`, dataMap)
 	if cast.ToInt(dataMap[`id`]) == 0 {
 		updateData[`create_time`] = time.Now().Unix()
@@ -45,13 +47,12 @@ func SetSshDelete(c *gin.Context) {
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
 	gstool.FmtPrintlnLogTime(`%#v`, dataMap)
-	dataGMap := gs.NewTransMap(&dataMap)
-	if dataGMap.G(`id`).IsZero() {
+	if cast.ToInt(dataMap[`id`]) == 0 {
 		gsgin.GinResponseError(c, `id不能为空`, nil)
 		return
 	} else {
 		_, _ = base.Component.TSqlite.Client.QuickDelete(`tbl_ssh`, map[string]any{
-			`id`: dataGMap.G(`id`).ToStr(),
+			`id`: cast.ToInt(dataMap[`id`]),
 		}).Exec()
 	}
 	gsgin.GinResponseSuccess(c, ``, nil)
@@ -205,7 +206,7 @@ func SetGitQuickList(c *gin.Context) {
 			}).One()
 			gitDirList = append(gitDirList, map[string]any{
 				`code_path`: findDir,
-				`name`: gstool.StringReplaces(findDir, map[string]string{
+				`name`: gstool.SReplaces(findDir, map[string]string{
 					searchDir: ``,
 				}),
 				`ssh_id`:       cast.ToString(sshConfig[`id`]),
@@ -289,6 +290,7 @@ func SetRedisList(c *gin.Context) {
 		gsgin.GinResponseError(c, allSshErr.Error(), nil)
 		return
 	}
+	task := gstask.NewTask()
 	for gitKey, gitValue := range allRedis {
 		allRedis[gitKey][`ssh_name`] = ``
 		gitSshId := cast.ToInt(gitValue[`ssh_id`])
@@ -299,8 +301,74 @@ func SetRedisList(c *gin.Context) {
 				}
 			}
 		}
+		callBack := gstask.CallbackFunc{
+			Func: func() *gstask.Result {
+				return testRedisConn(gitValue)
+			},
+			Timeout: 6 * time.Second,
+		}
+		task.Add(callBack)
+	}
+	resultList := task.RunAll()
+	//填充链接状态
+	for _, result := range resultList {
+		for redisKey, redisValue := range allRedis {
+			if cast.ToInt(redisValue[`id`]) == cast.ToInt(result.Result) {
+				if result.Err != nil {
+					allRedis[redisKey][`status`] = result.Err.Error()
+				} else {
+					allRedis[redisKey][`status`] = `success`
+				}
+			}
+		}
 	}
 	gsgin.GinResponseSuccess(c, ``, allRedis)
+}
+
+func testRedisConn(redisConfig map[string]any) *gstask.Result {
+	gsRedis := &gsdb.GsRedis{
+		RedisConfig: &gsdb.RedisConfig{
+			Name:              cast.ToString(redisConfig[`name`]),
+			Host:              cast.ToString(redisConfig[`host`]),
+			Port:              cast.ToInt64(redisConfig[`port`]),
+			Password:          cast.ToString(redisConfig[`password`]),
+			MaxOpenConns:      1,
+			MaxIdleConns:      1,
+			Default:           0,
+			Username:          cast.ToString(redisConfig[`username`]),
+			MaxLifetimeSecond: 3600,
+		},
+	}
+	if cast.ToInt(redisConfig[`ssh_id`]) != 0 {
+		sshConfig, sshConfigErr := base.Component.TSqlite.GetSshConfig(redisConfig[`ssh_id`])
+		if sshConfigErr != nil {
+			return &gstask.Result{
+				Err:    gstool.Error(`获取ssh配置失败 %s`, sshConfigErr.Error()),
+				Result: redisConfig[`id`],
+			}
+		}
+		gsRedis.Ssh = &gsssh.SshConfig{
+			Name:     cast.ToString(sshConfig[`name`]),
+			Host:     cast.ToString(sshConfig[`host`]),
+			Port:     cast.ToString(sshConfig[`port`]),
+			UserName: cast.ToString(sshConfig[`username`]),
+			Password: cast.ToString(sshConfig[`password`]),
+			GsSlog:   base.Component.GsLog,
+		}
+	}
+	connErr := gsRedis.CreateConn()
+	if connErr != nil {
+		return &gstask.Result{
+			Err:    connErr,
+			Result: redisConfig[`id`],
+		}
+	}
+	_ = gsRedis.Client.Close()
+	gsRedis = nil
+	return &gstask.Result{
+		Err:    nil,
+		Result: redisConfig[`id`],
+	}
 }
 
 func SetRedisAdd(c *gin.Context) {
@@ -324,13 +392,12 @@ func SetRedisAdd(c *gin.Context) {
 func SetRedisDelete(c *gin.Context) {
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
-	dataGMap := gs.NewTransMap(&dataMap)
-	if dataGMap.G(`id`).IsZero() {
+	if cast.ToInt(dataMap[`id`]) == 0 {
 		gsgin.GinResponseError(c, `id不能为空`, nil)
 		return
 	} else {
 		_, _ = base.Component.TSqlite.Client.QuickDelete(`tbl_redis`, map[string]any{
-			`id`: dataGMap.G(`id`).ToStr(),
+			`id`: cast.ToInt(dataMap[`id`]),
 		}).Exec()
 	}
 	gsgin.GinResponseSuccess(c, ``, nil)
@@ -382,13 +449,12 @@ func SetMysqlAdd(c *gin.Context) {
 func SetMysqlDelete(c *gin.Context) {
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
-	dataGMap := gs.NewTransMap(&dataMap)
-	if dataGMap.G(`id`).IsZero() {
+	if cast.ToInt(dataMap[`id`]) == 0 {
 		gsgin.GinResponseError(c, `id不能为空`, nil)
 		return
 	} else {
 		_, _ = base.Component.TSqlite.Client.QuickDelete(`tbl_mysql`, map[string]any{
-			`id`: dataGMap.G(`id`).ToStr(),
+			`id`: cast.ToInt(dataMap[`id`]),
 		}).Exec()
 	}
 	gsgin.GinResponseSuccess(c, ``, nil)
@@ -513,6 +579,245 @@ func SetSmartLinkGroupAdd(c *gin.Context) {
 }
 
 func SetSmartLinkGroupDelete(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	if cast.ToInt(dataMap[`id`]) == 0 {
+		gsgin.GinResponseError(c, `id不能为空`, nil)
+		return
+	} else {
+		_, _ = base.Component.TSqlite.Client.QuickDelete(`tbl_group`, map[string]any{
+			`id`: dataMap[`id`],
+		}).Exec()
+	}
+	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
+func SetDockerComposeList(c *gin.Context) {
+	all, allErr := base.Component.TSqlite.Client.QuickQuery(`tbl_docker_compose`, `*`, map[string]any{
+		`status`: 1,
+	}).All()
+	if allErr != nil {
+		gsgin.GinResponseError(c, allErr.Error(), nil)
+		return
+	}
+	gsgin.GinResponseSuccess(c, ``, all)
+}
+
+func SetDockerComposeAdd(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `compose_yml_path`})
+	if cast.ToInt(dataMap[`id`]) == 0 {
+		updateData[`create_time`] = time.Now().Unix()
+		updateData[`update_time`] = time.Now().Unix()
+		_, _ = base.Component.TSqlite.Client.QuickCreate(`tbl_docker_compose`, updateData).Exec()
+	} else {
+		updateData[`update_time`] = time.Now().Unix()
+		_, _ = base.Component.TSqlite.Client.QuickUpdate(`tbl_docker_compose`,
+			map[string]any{
+				`id`: dataMap[`id`],
+			}, updateData).Exec()
+	}
+	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
+func SetDockerComposeDelete(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	if cast.ToInt(dataMap[`id`]) == 0 {
+		gsgin.GinResponseError(c, `id不能为空`, nil)
+		return
+	} else {
+		ret, err := base.Component.TSqlite.Client.QuickUpdate(`tbl_docker_compose`, map[string]any{
+			`id`: dataMap[`id`],
+		}, map[string]any{
+			`status`: 0,
+		}).Exec()
+		if err != nil {
+			gsgin.GinResponseError(c, err.Error(), nil)
+			return
+		} else {
+			if ret == 0 {
+				gsgin.GinResponseError(c, `删除失败`, nil)
+				return
+			}
+		}
+	}
+	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
+func SetGitlabTokenList(c *gin.Context) {
+	allGit, allGitErr := base.Component.TSqlite.Client.QuickQuery(`tbl_gitlab_token`, `*`, nil).All()
+	if allGitErr != nil {
+		gsgin.GinResponseError(c, allGitErr.Error(), nil)
+		return
+	}
+	gsgin.GinResponseSuccess(c, ``, allGit)
+}
+
+func SetGitlabTokenAdd(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `url`, `access_token`})
+	if cast.ToInt(dataMap[`id`]) == 0 {
+		updateData[`create_time`] = time.Now().Unix()
+		updateData[`update_time`] = time.Now().Unix()
+		_, _ = base.Component.TSqlite.Client.QuickCreate(`tbl_gitlab_token`, updateData).Exec()
+	} else {
+		updateData[`update_time`] = time.Now().Unix()
+		_, _ = base.Component.TSqlite.Client.QuickUpdate(`tbl_gitlab_token`,
+			map[string]any{
+				`id`: dataMap[`id`],
+			}, updateData).Exec()
+	}
+	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
+func SetGitlabTokenDelete(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	if cast.ToInt(dataMap[`id`]) == 0 {
+		gsgin.GinResponseError(c, `id不能为空`, nil)
+		return
+	} else {
+		_, _ = base.Component.TSqlite.Client.QuickDelete(`tbl_gitlab_token`, map[string]any{
+			`id`: dataMap[`id`],
+		}).Exec()
+	}
+	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
+func SetGlobalList(c *gin.Context) {
+	allGit, allGitErr := base.Component.TSqlite.Client.QuickQuery(`tbl_global`, `*`, nil).All()
+	if allGitErr != nil {
+		gsgin.GinResponseError(c, allGitErr.Error(), nil)
+		return
+	}
+	gsgin.GinResponseSuccess(c, ``, allGit)
+}
+
+func SetGlobalAdd(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	updateData := gstool.MapTakeKeys(&dataMap, []string{`key`, `value`, `name`})
+	if cast.ToInt(dataMap[`id`]) == 0 {
+		updateData[`create_time`] = time.Now().Unix()
+		updateData[`update_time`] = time.Now().Unix()
+		_, _ = base.Component.TSqlite.Client.QuickCreate(`tbl_global`, updateData).Exec()
+	} else {
+		updateData[`update_time`] = time.Now().Unix()
+		_, _ = base.Component.TSqlite.Client.QuickUpdate(`tbl_global`,
+			map[string]any{
+				`id`: dataMap[`id`],
+			}, updateData).Exec()
+	}
+	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
+func SetGlobalDelete(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	if cast.ToInt(dataMap[`id`]) == 0 {
+		gsgin.GinResponseError(c, `id不能为空`, nil)
+		return
+	} else {
+		_, _ = base.Component.TSqlite.Client.QuickDelete(`tbl_global`, map[string]any{
+			`id`: dataMap[`id`],
+		}).Exec()
+	}
+	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
+func SetAccountList(c *gin.Context) {
+	allAccount, allAccountErr := base.Component.TSqlite.Client.QuickQuery(`tbl_account`, `*`, nil).All()
+	if allAccountErr != nil {
+		gsgin.GinResponseError(c, allAccountErr.Error(), nil)
+		return
+	}
+	allAccountGroup, allAccountGroupErr := base.Component.TSqlite.Client.QuickQuery(`tbl_group`, `*`, map[string]any{
+		`type`: define.GroupTypeAccount,
+	}).All()
+	if allAccountGroupErr != nil {
+		gsgin.GinResponseError(c, allAccountGroupErr.Error(), nil)
+		return
+	}
+	for AccountKey, AccountValue := range allAccount {
+		allAccount[AccountKey][`account_group_name`] = ``
+		AccountGroupId := cast.ToInt(AccountValue[`account_group_id`])
+		if AccountGroupId != 0 {
+			for _, AccountGroupValue := range allAccountGroup {
+				if cast.ToInt(AccountGroupValue[`id`]) == AccountGroupId {
+					allAccount[AccountKey][`account_group_name`] = AccountGroupValue[`name`]
+				}
+			}
+		}
+	}
+	gsgin.GinResponseSuccess(c, ``, allAccount)
+}
+
+func SetAccountAdd(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	updateData := gstool.MapTakeKeys(&dataMap, []string{`username`, `password`, `account_group_id`})
+	if cast.ToInt(dataMap[`id`]) == 0 {
+		updateData[`create_time`] = time.Now().Unix()
+		updateData[`update_time`] = time.Now().Unix()
+		_, _ = base.Component.TSqlite.Client.QuickCreate(`tbl_account`, updateData).Exec()
+	} else {
+		updateData[`update_time`] = time.Now().Unix()
+		_, _ = base.Component.TSqlite.Client.QuickUpdate(`tbl_account`,
+			map[string]any{
+				`id`: dataMap[`id`],
+			}, updateData).Exec()
+	}
+	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
+func SetAccountDelete(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	if cast.ToInt(dataMap[`id`]) == 0 {
+		gsgin.GinResponseError(c, `id不能为空`, nil)
+		return
+	} else {
+		_, _ = base.Component.TSqlite.Client.QuickDelete(`tbl_account`, map[string]any{
+			`id`: dataMap[`id`],
+		}).Exec()
+	}
+	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
+func SetAccountGroupList(c *gin.Context) {
+	all, allErr := base.Component.TSqlite.Client.QuickQuery(`tbl_group`, `*`, map[string]any{
+		`type`: define.GroupTypeAccount,
+	}).All()
+	if allErr != nil {
+		gsgin.GinResponseError(c, allErr.Error(), nil)
+		return
+	}
+	gsgin.GinResponseSuccess(c, ``, all)
+}
+
+func SetAccountGroupAdd(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`})
+	if cast.ToInt(dataMap[`id`]) == 0 {
+		updateData[`create_time`] = time.Now().Unix()
+		updateData[`update_time`] = time.Now().Unix()
+		updateData[`type`] = define.GroupTypeAccount
+		_, _ = base.Component.TSqlite.Client.QuickCreate(`tbl_group`, updateData).Exec()
+	} else {
+		updateData[`update_time`] = time.Now().Unix()
+		_, _ = base.Component.TSqlite.Client.QuickUpdate(`tbl_group`,
+			map[string]any{
+				`id`: dataMap[`id`],
+			}, updateData).Exec()
+	}
+	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
+func SetAccountGroupDelete(c *gin.Context) {
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
 	if cast.ToInt(dataMap[`id`]) == 0 {
