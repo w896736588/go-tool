@@ -257,19 +257,25 @@ func SmartLinkRunPlaywrightList(c *gin.Context) {
 }
 
 func SmartLinkPlaywrightVersion(c *gin.Context) {
+	base.Component.TPlaywright.SseMsg(`获取核心版本`, true)
 	pw, pwErr := base.Component.TPlaywright.SmartLinkPlaywrightVersion()
 	if pwErr != nil {
+		base.Component.TPlaywright.SseMsg(`获取核心版本失败`+pwErr.Error(), true)
 		gsgin.GinResponseError(c, `查询失败`+pwErr.Error(), nil)
 		return
 	}
 	//是否在安装中
 	isInstall := 0
 	if !gstool.FileIsExisted(base.Component.TPlaywright.LockFileFullPath) {
+		base.Component.TPlaywright.SseMsg(`核心正在安装中`, true)
 		isInstall = 1
 	} else {
 		content, _ := gstool.FileGetContent(base.Component.TPlaywright.LockFileFullPath)
 		if content == `` {
+			base.Component.TPlaywright.SseMsg(`核心正在安装中`, true)
 			isInstall = 1
+		} else {
+			base.Component.TPlaywright.SseMsg(`当前核心版本`+content, true)
 		}
 	}
 	gsgin.GinResponseSuccess(c, pw.Version, map[string]any{
