@@ -222,7 +222,8 @@ func SmartLinkRunPlaywright(c *gin.Context) {
 	userName := cast.ToString(dataMap[`user_name`])
 	password := cast.ToString(dataMap[`password`])
 	openNum := max(1, cast.ToInt(dataMap[`open_num`]))
-	replaceList := make(map[string]string, 0)
+	replaceList := make(map[string]string)
+	gstool.FmtPrintlnLogTime(`开始运行？`)
 	base.Component.TPlaywright.SseMsg(base.Component.TMarkDown.BlockQuote(`运行,开始----------------我是分隔君`), true)
 	for i := 0; i < openNum; i++ {
 		go func() {
@@ -251,6 +252,7 @@ func SmartLinkRunPlaywright(c *gin.Context) {
 func SmartLinkRunPlaywrightList(c *gin.Context) {
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
+	gstool.FmtPrintlnLogTime(`开始第一`)
 	contextPageList := p_playwright.NewContextList(base.Component.TPlaywright.Log)
 	runList := contextPageList.GetPlaywrightRunList()
 	gsgin.GinResponseSuccess(c, ``, runList)
