@@ -1,0 +1,546 @@
+package p_variable
+
+import (
+	"bytes"
+	"context"
+	"dev_tool/base"
+	"dev_tool/base/define"
+	_struct "dev_tool/base/struct"
+	"dev_tool/internal/pkg/p_playwright"
+	"errors"
+	"fmt"
+	"gitee.com/Sxiaobai/gs/gshttp"
+	"gitee.com/Sxiaobai/gs/gsssh"
+	"gitee.com/Sxiaobai/gs/gstool"
+	"github.com/spf13/cast"
+	"os"
+	"os/exec"
+	"strings"
+	"sync"
+	"time"
+)
+
+type RCmd struct {
+	cmd            map[string]any
+	replaceList    map[string]string
+	StreamMsg      func(string, bool)
+	PlaywrightLock sync.RWMutex
+	RunUniqueId    string
+}
+
+func NewRCmd(cmd map[string]any, replace map[string]string, RunUniqueId string, streamMsg func(string, bool)) *RCmd {
+	return &RCmd{
+		cmd:         cmd,
+		replaceList: replace,
+		StreamMsg:   streamMsg,
+		RunUniqueId: RunUniqueId,
+	}
+}
+
+func (h *RCmd) RunMysql() error {
+	cmdSql := cast.ToString(h.cmd[`sql`])
+	resultKey := cast.ToString(h.cmd[`result_key`])
+	//替换
+	cmdSql = base.Component.TVariable.Replace(cmdSql, h.replaceList)
+	//解析Id
+	mysqlId, sql, err := base.Component.TVariable.ParseIdContent(cmdSql)
+	if err != nil {
+		return err
+	}
+	//检查是否还有未替换的
+	if base.Component.TVariable.ExistReplaceParam(sql) {
+		return errors.New(`还存在未替换的参数：` + sql)
+	}
+	//执行
+	mysqlConfig, mysqlConfigErr := base.Component.TSqlite.GetMysqlConfig(mysqlId)
+	if mysqlConfigErr != nil {
+		return errors.New(`找不到mysql配置 ` + mysqlConfigErr.Error())
+	}
+	mysqlClient, mysqlClientErr := base.Component.TMysql.GetClient(mysqlConfig)
+	if mysqlClientErr != nil {
+		return errors.New(`获取mysql client 失败 ` + mysqlClientErr.Error())
+	}
+	result := ``
+	h.StreamMsg(fmt.Sprintf(`%s %s 执行sql:`,
+		base.Component.TMarkDown.Bold(`run`),
+		cast.ToString(h.cmd[`name`])), true)
+	if len(gstool.RegexSearchString(sql, "(?i)select")) > 0 {
+		result = base.Component.TMarkDown.Code(sql, `sql`)
+		h.StreamMsg(result, true)
+		all, allErr := mysqlClient.QueryBySql(sql).All()
+		if allErr != nil {
+			return allErr
+		}
+		//增加替换变量
+		if resultKey != `` && len(all) > 0 {
+			base.Component.TVariable.AddReplace(h.replaceList, resultKey, gstool.JsonEncode(all))
+		}
+		return nil
+	} else if len(gstool.RegexSearchString(sql, "(?i)update")) > 0 {
+		affectRows, execErr := mysqlClient.ExecBySql(sql).Exec()
+		result = base.Component.TMarkDown.Code("-- 更新数"+cast.ToString(affectRows)+"\n"+sql, `sql`)
+		h.StreamMsg(result, true)
+		if execErr != nil {
+			return execErr
+		}
+	}
+	return nil
+}
+
+func (h *RCmd) RunWindowsCmd() (string, error) {
+	bat := cast.ToString(h.cmd[`bash`])
+	//cmdId := cast.ToString(h.cmd[`id`])
+	base.Component.TVariable.Log.Debugf(`run bash \n 替换列表 %s`, gstool.JsonEncode(h.replaceList))
+	bat = base.Component.TVariable.Replace(bat, h.replaceList)
+	h.StreamMsg(fmt.Sprintf("执行：%s ", bat), true)
+	// 构建命令
+	var stdoutBuf, stderrBuf bytes.Buffer
+	cmd := exec.Command(`cmd.exe`, `/C`, bat)
+	cmd.Stdout = &stdoutBuf
+	cmd.Stderr = &stderrBuf
+	err := cmd.Run()
+	stdoutStr := stdoutBuf.String()
+	stderrStr := stderrBuf.String()
+	if err != nil {
+		return ``, gstool.Error("make 执行失败: %v\n %s", err, stderrStr)
+	}
+	h.StreamMsg(stdoutStr, true)
+	h.StreamMsg(stderrStr, true)
+	return ``, nil
+}
+
+func (h *RCmd) RunBash() (string, error) {
+	cmdBash := cast.ToString(h.cmd[`bash`])
+	cmdId := cast.ToString(h.cmd[`id`])
+	base.Component.TVariable.Log.Debugf(`run bash \n 替换列表 %s`, gstool.JsonEncode(h.replaceList))
+	cmdBash = base.Component.TVariable.Replace(cmdBash, h.replaceList)
+	sshId, bash, parseIdErr := base.Component.TVariable.ParseIdContent(cmdBash)
+	if parseIdErr != nil {
+		return ``, parseIdErr
+	}
+	//如果脚本还有未替换的
+	if base.Component.TVariable.ExistReplaceParam(bash) {
+		return ``, gstool.Error("执行的脚本还存在需要替换的内容")
+	}
+	//注册ssh
+	sshUniqueKey := base.Component.TBase.GetCombineKey(`variable`, sshId, `run`)
+	sftpUniqueKey := base.Component.TBase.GetCombineKey(`variable`, sshId, `sftp`)
+	//链接ssh
+	preConnErr := base.Component.TVariable.PreConnSsh(sshId, sshUniqueKey, sftpUniqueKey)
+	if preConnErr != nil {
+		return ``, gstool.Error(`链接失败 %s`, preConnErr.Error())
+	}
+	if !base.Component.TShell.Exist(sshUniqueKey) || !base.Component.TShell.Exist(sftpUniqueKey) {
+		return ``, errors.New(`ssh连接未初始化`)
+	}
+	//全局注册 用于停止
+	base.Component.TVariable.AddSshClient(h.RunUniqueId, sshUniqueKey)
+	base.Component.TVariable.AddSshClient(h.RunUniqueId, sftpUniqueKey)
+	//初始化
+	sshConfig, sshConfigErr := base.Component.TSqlite.GetSshConfig(sshId)
+	if sshConfigErr != nil {
+		return ``, sshConfigErr
+	}
+	var sshClientErr error
+	var sshClient *gsssh.SshConfig
+	//家目录
+	home := `/var/www`
+	if cast.ToString(sshConfig[`home`]) != `` {
+		home = cast.ToString(sshConfig[`home`])
+	}
+	variableDir := home + `/variable`
+	//ssh
+	sshClient, sshClientErr = base.Component.TShell.GetClientMarkdown(sshConfig, sshUniqueKey, define.SseVariable)
+	if sshClientErr != nil {
+		return ``, sshClientErr
+	}
+	//sftp
+	sftpClient, sftpClientErr := base.Component.TShell.GetClientMarkdown(sshConfig, sftpUniqueKey, define.SseVariable)
+	if sftpClientErr != nil {
+		return ``, sftpClientErr
+	}
+	var err error
+	//创建目录
+	_, err = sshClient.RunCommandWait(fmt.Sprintf(`sudo mkdir -p %s`, variableDir))
+	if err != nil {
+		return ``, err
+	}
+	//写入脚本 用replace后不知道为什么打印日志没有问题，一执行echo就会重复写入几次 但是不执行h.replace又没有问题
+	//_, err = sshClient.RunCommandWait(fmt.Sprintf(`sudo echo '%s' > /var/www/variable/variable_%s.sh`, bash, cmdId))
+	//if err != nil {
+	//	return ``, err
+	//}
+	base.Component.TVariable.Log.Debugf(`%s \n %s `, fmt.Sprintf(variableDir+`/variable_%s.sh`, cmdId), bash)
+	err = sftpClient.UploadFile(fmt.Sprintf(variableDir+`/variable_%s.sh`, cmdId), bash, ``)
+	if err != nil {
+		return "", gstool.Error(`上传失败 %s %s`, fmt.Sprintf(variableDir+`/variable_%s.sh`, cmdId), err.Error())
+	}
+	_, err = sshClient.RunCommandWait(fmt.Sprintf(`sudo chmod +x %s/variable_%s.sh`, variableDir, cmdId))
+	if err != nil {
+		return ``, err
+	}
+	//var result string
+	var result string
+	result, err = sshClient.RunCommandWait(fmt.Sprintf(`sudo %s/variable_%s.sh`, variableDir, cmdId))
+	if err != nil {
+		return ``, err
+	}
+	return result, nil
+}
+
+func (h *RCmd) RunUpload() (string, error) {
+	cmdBash := cast.ToString(h.cmd[`bash`])
+	//cmdId := cast.ToString(h.cmd[`id`])
+	cmdBash = base.Component.TVariable.Replace(cmdBash, h.replaceList)
+	sshId, bash, parseIdErr := base.Component.TVariable.ParseIdContent(cmdBash)
+	if parseIdErr != nil {
+		return ``, parseIdErr
+	}
+	//如果脚本还有未替换的
+	if base.Component.TVariable.ExistReplaceParam(bash) {
+		return ``, gstool.Error("上传的脚本还存在需要替换的内容")
+	}
+	//解析配置
+	bash = gstool.SReplaces(bash, map[string]string{
+		`\`: `\\`,
+	})
+	uploadConfig := make(map[string]any)
+	deErr := gstool.JsonDecode(bash, &uploadConfig)
+	if deErr != nil {
+		h.StreamMsg(fmt.Sprintf(`解析上传配置失败 %s`, bash), true)
+		return ``, deErr
+	}
+	targetDir := cast.ToString(uploadConfig[`target_dir`])
+	sourceFile := cast.ToString(uploadConfig[`source_file`])
+	if targetDir == `` {
+		h.StreamMsg(`目标目录不能为空`, true)
+		return ``, gstool.Error(`目标目录不能为空`)
+	}
+	if sourceFile == `` {
+		h.StreamMsg(`源文件不能为空`, true)
+		return ``, gstool.Error(`源文件不能为空`)
+	}
+	//注册ssh
+	sftpUniqueKey := base.Component.TBase.GetCombineKey(`variable`, sshId, `sftp`)
+	base.Component.TVariable.AddSshClient(h.RunUniqueId, sftpUniqueKey)
+	//初始化
+	sshConfig, sshConfigErr := base.Component.TSqlite.GetSshConfig(sshId)
+	if sshConfigErr != nil {
+		return ``, sshConfigErr
+	}
+	//sftp
+	sftpClient, sftpClientErr := base.Component.TShell.GetClientMarkdown(sshConfig, sftpUniqueKey, define.SseVariable)
+	if sftpClientErr != nil {
+		return ``, sftpClientErr
+	}
+	//如果是上传文件
+	isErr := false
+	if gstool.FileIsExisted(sourceFile) {
+		uploadErr := h.uploadFile(sshConfig, sshId, sftpClient, sourceFile, targetDir)
+		if uploadErr != nil {
+			return ``, uploadErr
+		}
+	} else {
+		_ = gstool.DirWalk(sourceFile, func(path string, info os.FileInfo, err error) {
+			if err != nil {
+				return
+			}
+			if info.IsDir() {
+				return
+			}
+			uploadErr := h.uploadFile(sshConfig, sshId, sftpClient, path, targetDir)
+			if uploadErr != nil {
+				base.Component.TVariable.Log.Errof(`上传失败`)
+				h.StreamMsg(fmt.Sprintf(`上传失败 %s`, uploadErr.Error()), true)
+				isErr = true
+				return
+			}
+		})
+	}
+	if isErr {
+		return ``, gstool.Error(`上传失败`)
+	}
+	h.StreamMsg(`上传完成`, true)
+	return ``, nil
+}
+
+func (h *RCmd) uploadFile(sshConfig map[string]any, sshId int, sftpClient *gsssh.SshConfig, sourceFile, targetDir string) error {
+	var err error
+	fileName := gstool.FileGetNameByPath(sourceFile)
+	targetTempFileName := fileName + base.Component.TBase.GetUnique(`_upload`)
+	targetTempFile := targetDir + `/` + targetTempFileName
+	fileSizeMb, _ := gstool.FileSize(sourceFile, `mb`)
+	h.StreamMsg(fmt.Sprintf(`准备上传文件 %s  %s 到目标文件 %s`, fileSizeMb, sourceFile, targetTempFile), true)
+	startTime := gstool.TimeNowUnixToString(`Y-m-d H:i:s`)
+	h.StreamMsg(fmt.Sprintf(`[PROCESS]%s %s`, startTime, `上传进度:\s+\d+%\s+\(\d+\/\d+\s+bytes\)`), false)
+	var lastPrintedStep int = -1
+	err = sftpClient.UploadFileProcessScp(targetTempFile, sourceFile, func(bytesWritten, totalBytes int64) {
+		// 计算当前进度百分比
+		currentPercent := float64(bytesWritten) / float64(totalBytes) * 100
+		currentStep := int(currentPercent) / 1 // 每1%为一个step
+
+		// 只有当进入新的5%区间或完成时才打印
+		if currentStep > lastPrintedStep || bytesWritten == totalBytes {
+			h.StreamMsg(fmt.Sprintf("%s 上传进度: %d%% (%d/%d bytes)",
+				startTime,
+				currentStep*1, // 显示5%的整数倍
+				bytesWritten,
+				totalBytes), true)
+
+			lastPrintedStep = currentStep
+
+			// 上传完成时换行
+			if bytesWritten == totalBytes {
+				h.StreamMsg(fmt.Sprintf("%s 上传进度: 100%% (%d/%d bytes)",
+					startTime,
+					bytesWritten,
+					totalBytes), true)
+			}
+		}
+	})
+	time.Sleep(time.Millisecond * 500)
+	if err != nil {
+		h.StreamMsg(fmt.Sprintf(`上传文件失败 %s`, err.Error()), true)
+		return err
+	}
+	//ssh
+	sshUniqueKey := base.Component.TBase.GetCombineKey(`variable`, sshId, `run`)
+	sshClient, sshClientErr := base.Component.TShell.GetClientMarkdown(sshConfig, sshUniqueKey, define.SseVariable)
+	if sshClientErr != nil {
+		h.StreamMsg(fmt.Sprintf(`上传文件失败2 %s`, sshClientErr.Error()), true)
+		return gstool.Error(`上传失败 %s`, sshClientErr.Error())
+	}
+	h.StreamMsg(fmt.Sprintf(`迁移%s %s`, targetTempFile, targetDir+`/`+fileName), true)
+	_, err = sshClient.RunCommandWait(fmt.Sprintf(`sudo mv %s %s`, targetTempFile, targetDir+`/`+fileName))
+	if err != nil {
+		h.StreamMsg(fmt.Sprintf(`迁移失败 %s`, err.Error()), true)
+		return gstool.Error(`迁移失败 %s`, err.Error())
+	}
+	return nil
+}
+
+func (h *RCmd) RunCommand() (string, error) {
+	cmdBash := cast.ToString(h.cmd[`bash`])
+	cmdBash = base.Component.TVariable.Replace(cmdBash, h.replaceList)
+	sshId, bash, parseIdErr := base.Component.TVariable.ParseIdContent(cmdBash)
+	if parseIdErr != nil {
+		return ``, parseIdErr
+	}
+	//注册client
+	sshUniqueKey := base.Component.TBase.GetCombineKey(`variable`, sshId, `run`)
+	sftpUniqueKey := base.Component.TBase.GetCombineKey(`variable`, sshId, `sftp`)
+	preConnErr := base.Component.TVariable.PreConnSsh(sshId, sshUniqueKey, sftpUniqueKey)
+	if preConnErr != nil {
+		return ``, gstool.Error(`链接失败 %s`, preConnErr.Error())
+	}
+	//全局注册 用于停止
+	base.Component.TVariable.AddSshClient(h.RunUniqueId, sshUniqueKey)
+	base.Component.TVariable.AddSshClient(h.RunUniqueId, sftpUniqueKey)
+	//分离出来多行命令
+	commandList := strings.Split(bash, "\n")
+	for _, command := range commandList {
+		if command == "" {
+			continue
+		}
+		sshUniqueKey := base.Component.TBase.GetCombineKey(`variable`, sshId, `run`)
+		if !base.Component.TShell.Exist(sshUniqueKey) {
+			return ``, errors.New(`ssh连接未初始化`)
+		}
+		sshConfig, sshConfigErr := base.Component.TSqlite.GetSshConfig(sshId)
+		if sshConfigErr != nil {
+			return ``, sshConfigErr
+		}
+		var sshClientErr error
+		var sshClient *gsssh.SshConfig
+		//ssh
+		sshClient, sshClientErr = base.Component.TShell.GetClientMarkdown(sshConfig, sshUniqueKey, define.SseVariable)
+		if sshClientErr != nil {
+			return ``, sshClientErr
+		}
+		var err error
+		runCmd := base.Command{}
+		runCmd.SetCommand(command)
+		runCmd.Sudo()
+		h.StreamMsg(base.Component.TMarkDown.Code(runCmd.GetCommand().ToStr(), `bash`), true)
+		_, err = sshClient.RunCommandWait(runCmd.GetCommand().ToStr())
+		if err != nil {
+			return ``, err
+		}
+	}
+	return ``, nil
+}
+
+func (h *RCmd) RunCurl() (string, error) {
+	resultKey := cast.ToString(h.cmd[`result_key`])
+	url := base.Component.TVariable.Replace(cast.ToString(h.cmd[`bash`]), h.replaceList)
+	if url == `` {
+		return ``, errors.New(`url不能为空`)
+	}
+	url, _ = base.Component.TVariable.ParseConfig(url)
+	h.StreamMsg(base.Component.TMarkDown.BlockQuote(`请求url,`+url), true)
+	isStream := cast.ToInt(gstool.UrlGetParam(url, `is_stream`))
+	var result []byte
+	var err error
+	if isStream == 1 {
+		result, err = gshttp.Get(url).OpenStreamBytesEnd([]byte("\n\n"), func(msg string, err error) {
+			if err != nil {
+				return
+			}
+			sendMsg := base.Component.TAi.ParseStream(url, msg)
+			h.StreamMsg(cast.ToString(sendMsg), false)
+		}, func(bytes []byte) []byte {
+			sendMsg := base.Component.TAi.ParseStream(url, cast.ToString(bytes))
+			if gstool.SContains(cast.ToString(sendMsg), []string{`commit 共：`, `获取完项目列表 共：`}) { //这种内容不要汇集到最终结果中
+				return []byte{}
+			} else {
+				return bytes
+			}
+		}).Request(200).Result()
+	} else {
+		result, err = gshttp.Get(url).Request(200).Result()
+	}
+	//增加替换变量
+	if resultKey != `` {
+		base.Component.TVariable.AddReplace(h.replaceList, resultKey, cast.ToString(result))
+	}
+	return cast.ToString(result), err
+}
+
+func (h *RCmd) RunPlaywright() (string, error) {
+	id := cast.ToInt(h.cmd[`smart_link_id`])
+	label := cast.ToString(h.cmd[`smart_link_label`])
+	if id == 0 {
+		return ``, errors.New(`链接ID不能为空`)
+	}
+	if label == `` {
+		return ``, errors.New(`链接label不能为空`)
+	}
+	runParams, runParamsErr := base.Component.TPlaywright.GetRunParams(id, label, ``, ``, 0, h.replaceList)
+	if runParamsErr != nil {
+		return ``, errors.New(runParamsErr.Error())
+	}
+	//注册链接执行时需要输出的文本类型
+	runParams.RunCallFunc = func(cmdType define.ProcessType, errmsg, tip, content string) {
+		switch cmdType {
+		case define.Input:
+			//h.StreamMsg(base.Component.TMarkDown.Bold(tip)+`,`+content+` `+errmsg, true)
+		case define.CanvasImage:
+			//h.StreamMsg(base.Component.TMarkDown.Bold(tip)+`,`+errmsg, true)
+			h.StreamMsg(content, true)
+		case define.ExistWait, define.NoExistWait:
+			//h.StreamMsg(base.Component.TMarkDown.Bold(tip)+`,`+errmsg, true)
+		case define.LoginUsernamePassword: //前端弹窗输入账号密码
+			base.Component.TVariable.LoginUsername = ``
+			base.Component.TVariable.LoginPassword = ``
+			h.StreamMsg(define.SseEventLogin, false)
+			for i := 0; i < 30; i++ {
+				time.Sleep(time.Second * 2)
+				if base.Component.TVariable.LoginUsername != `` && base.Component.TVariable.LoginPassword != `` {
+					break
+				}
+			}
+			h.replaceList[`{user_name}`] = base.Component.TVariable.LoginUsername
+			h.replaceList[`{password}`] = base.Component.TVariable.LoginPassword
+		}
+	}
+	//注册需要监听的接口
+	//需要注册的uri
+	listenUriList := cast.ToString(h.cmd[`options`])
+	ListenUrlList := make(map[string]*_struct.ListenUrl)
+	if listenUriList != `` {
+		listenM := make([]map[string]string, 0)
+		_ = gstool.JsonDecode(listenUriList, &listenM)
+		for _, v := range listenM {
+			uri := cast.ToString(v[`uri`])
+			if uri == `` {
+				continue
+			}
+			ListenUrlList[uri] = &_struct.ListenUrl{
+				IsSse: true,
+				Callback: func(url, msg string, err error) {
+					base.Component.TVariable.Log.Debugf(`收到消息---%s---`, msg)
+					sendMsg := base.Component.TAi.ParseStream(url, msg)
+					h.StreamMsg(cast.ToString(sendMsg), false)
+				},
+				StartCallBack: func(url string) {
+					base.Component.TVariable.Log.Debugf(`监听到%s`, url)
+					h.StreamMsg(base.Component.TMarkDown.BlockQuote("开始回答...")+"\n\n", true)
+				},
+				EndCallBack: func(msg string) {
+				},
+			}
+		}
+	}
+	runParams.ListenUrlList = ListenUrlList
+	for i := 0; i < runParams.OpenNum; i++ {
+		h.StreamMsg("\n"+base.Component.TMarkDown.Bold(label)+`,启动`, true)
+		streamFunc := func(name, msg string) {
+			h.StreamMsg(base.Component.TMarkDown.Bold(name)+`,`+msg, true)
+		}
+		runParams.StreamFunc = streamFunc
+		p := p_playwright.NewPlaywright(runParams, base.Component.TVariable.Log)
+		openErr := p.Open()
+		if openErr != nil {
+			h.StreamMsg(base.Component.TMarkDown.BlockQuote(cast.ToString(h.cmd[`name`])+`,启动失败，`+openErr.Error()), true)
+		}
+	}
+	return ``, nil
+}
+
+func (h *RCmd) RunCombine() (string, error) {
+	resultKey := cast.ToString(h.cmd[`result_key`])
+	combine := base.Component.TVariable.Replace(cast.ToString(h.cmd[`options`]), h.replaceList)
+
+	//增加替换变量
+	if resultKey != `` {
+		base.Component.TVariable.AddReplace(h.replaceList, resultKey, combine)
+	}
+	return ``, nil
+}
+
+func (h *RCmd) RunRedis() (string, error) {
+	name := cast.ToString(h.cmd[`name`])
+	cmdBash := base.Component.TVariable.Replace(cast.ToString(h.cmd[`bash`]), h.replaceList)
+	redisId, redisBash, parseErr := base.Component.TVariable.ParseIdContent(cmdBash)
+	if parseErr != nil {
+		return ``, errors.New(`redis解析失败` + parseErr.Error())
+	}
+	if redisBash == `` {
+		return ``, errors.New(`redis需要删除的key不能为空`)
+	}
+	redisConfig, redisConfigErr := base.Component.TSqlite.GetRedisConfig(redisId)
+	if redisConfigErr != nil {
+		return ``, redisConfigErr
+	}
+	client, clientErr := base.Component.TRedis.GetClient(redisConfig)
+	if clientErr != nil {
+		return "", clientErr
+	}
+	h.StreamMsg(name+`,`+redisBash, true)
+	//解析命令格式：
+	//字符串删除string,delete,key
+	redisBashParamList := strings.Split(redisBash, `,`)
+	if len(redisBashParamList) >= 3 {
+		switch redisBashParamList[0] {
+		case `string`:
+			switch redisBashParamList[1] {
+			case `delete`:
+				client.Client.Del(context.Background(), redisBashParamList[2])
+			default:
+				return ``, errors.New(`暂不支持的操作，` + redisBash)
+			}
+		case `hash`:
+			switch redisBashParamList[1] {
+			case `delete`:
+				client.Client.HDel(context.Background(), redisBashParamList[2], redisBashParamList[3])
+			default:
+				return ``, errors.New(`暂不支持的操作，` + redisBash)
+			}
+		default:
+			return ``, errors.New(`暂不支持的操作，` + redisBash)
+		}
+	} else {
+		return ``, errors.New(`格式错误，` + redisBash)
+	}
+	return `操作`, nil
+}

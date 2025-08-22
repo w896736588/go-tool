@@ -6,6 +6,7 @@ import (
 	"errors"
 	"gitee.com/Sxiaobai/gs/gsgin"
 	"gitee.com/Sxiaobai/gs/gsssh"
+	"gitee.com/Sxiaobai/gs/gstool"
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/cast"
 	"strings"
@@ -166,11 +167,40 @@ func GitConfigList(c *gin.Context) {
 	gitGroupList, _ := base.Component.TSqlite.Client.QuickQuery(`tbl_group`, `*`, map[string]any{
 		`type`: define.GroupTypeGit,
 	}).All()
+	//id转为字符串
+	for k, v := range gitGroupList {
+		gitGroupList[k][`id`] = cast.ToString(v[`id`])
+	}
 	gitList, _ := base.Component.TSqlite.Client.QuickQuery(`tbl_git`, `*`, nil).All()
+	//id转为字符串
+	for k, v := range gitList {
+		gitList[k][`id`] = cast.ToString(v[`id`])
+		gitList[k][`git_group_id`] = cast.ToString(v[`git_group_id`])
+	}
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`git_group_list`: gitGroupList,
 		`git_list`:       gitList,
 	})
+}
+
+func CreateMerge(c *gin.Context) {
+	reqMap, sshClient, err := getGitComponent(c)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	codePath := cast.ToString(reqMap[`code_path`])
+	if codePath == `` {
+		gsgin.GinResponseError(c, `git未配置目录`, nil)
+		return
+	}
+	command := base.NewCommand()
+	command.Sudo()
+	command.Cd(codePath)
+	command.GitCommitLog()
+
+	result, _ := sshClient.RunCommandWait(command.GetCommand().ToStr())
+	gsgin.GinResponseSuccess(c, ``, result)
 }
 
 func getGitComponent(c *gin.Context) (map[string]interface{}, *gsssh.SshConfig, error) {
@@ -185,10 +215,26 @@ func getGitComponent(c *gin.Context) (map[string]interface{}, *gsssh.SshConfig, 
 	}
 	sshConfig, _ := base.Component.TSqlite.GetSshConfig(sshId)
 	uniqueKey := base.Component.TBase.GetCombineKey(sshId, `git`)
-	sshClient, sshClientErr := base.Component.TShell.GetClient(sshConfig, uniqueKey)
+	sshClient, sshClientErr := base.Component.TShell.GetClient(sshConfig, uniqueKey, define.SseGit, func(s string) []string {
+		if gstool.SContains(s, []string{
+			`Receiving objects:`,
+			`remote: Counting objects:`,
+			`Resolving deltas:`,
+			`remote: Compressing objects:`,
+			`Checking out files:`,
+			`Unpacking objects:`}) {
+			msgList := strings.Split(s, "\r")
+			for k, msg := range msgList {
+				msgList[k] = strings.Replace(msg, "\n", "", -1)
+			}
+			msgList = append(msgList, "\n")
+			return msgList
+		} else {
+			return []string{s}
+		}
+	})
 	if sshClientErr != nil {
 		return nil, nil, err
 	}
-	sshClient.SetSocket(base.Component.TSocket.GetSocket(uniqueKey))
 	return reqMap, sshClient, nil
 }

@@ -2,11 +2,12 @@ package _default
 
 import (
 	"dev_tool/base"
+	"dev_tool/internal/pkg/p_playwright"
 	"fmt"
 	"gitee.com/Sxiaobai/gs/gsdb"
 	"gitee.com/Sxiaobai/gs/gsencrypt"
+	"gitee.com/Sxiaobai/gs/gsgin"
 	"gitee.com/Sxiaobai/gs/gssocket"
-	"gitee.com/Sxiaobai/gs/gsssh"
 	"gitee.com/Sxiaobai/gs/gstool"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -18,13 +19,11 @@ import (
 	"runtime"
 )
 
-var AppName = ``
-
-func InitBase(IsBuild, appName, DbPath string) {
-	AppName = appName
-	initComponent(IsBuild)
-	initSqlite(DbPath)
+func InitBase(IsBuild, appName, dbPath, ViewPath string) {
+	initComponent(IsBuild, appName, dbPath, ViewPath)
+	initSqlite()
 	initGin()
+	initPlaywright()
 	stdLog(IsBuild)
 }
 
@@ -47,27 +46,24 @@ func stdLog(IsBuild string) {
 	//os.Stderr = errFile
 }
 
-func initComponent(IsBuild string) {
+func initComponent(IsBuild, appName, dbPath, ViewPath string) {
 	gstool.FmtPrintlnLogTime(`IsBuild %#v`, IsBuild)
 	base.Component = base.TComponent{}
 	base.Component.Env = &base.Env{}
 	base.Component.TGin = &base.Gin{}
-	base.Component.TShell = &base.TShell{ShellClientMap: make(map[string]*gsssh.SshConfig)}
 	base.Component.TRedis = &base.TRedis{RedisClientMap: make(map[string]*gsdb.GsRedis)}
 	base.Component.TRedis.PingAll()
 	base.Component.TMysql = &base.TMysql{MysqlClientMap: make(map[string]*gsdb.GsMysql)}
 	base.Component.TCode = &base.TCode{}
-	base.Component.TBase = &base.TBase{}
-	base.Component.TSmartLink = &base.TSmartLink{
-		PageList: make(map[string]*base.TPlayWright),
+	base.Component.TBase = &base.TBase{
+		StartMillUnix: gstool.TimeNowMilliInt64(),
 	}
 	base.Component.TSocket = &base.TSocket{
 		SocketList: make(map[string]*websocket.Conn),
 	}
 	base.Component.Env.IsBuild = IsBuild == `1`
-	base.Component.Env.AppName = AppName
-	gcm := gsencrypt.NewAesGcm(AppName)
-	base.Component.AesGcm = gcm
+	base.Component.ConfigViper = viper.New()
+
 	wd := ``
 	gstool.FmtPrintlnLogTime(`运行模式 %v`, base.Component.Env.IsBuild)
 	if base.Component.Env.IsBuild {
@@ -81,33 +77,35 @@ func initComponent(IsBuild string) {
 	if err != nil {
 		panic(err.Error())
 	}
-	gstool.FmtPrintlnLogTime(`根目录 %s`, base.Component.Env.RootPath)
-	gstool.FmtPrintlnLogTime(`加载配置文件 %s`, base.Component.Env.RootPath+`/config/`+AppName)
-	base.Component.ConfigViper = viper.New()
-	base.Component.ConfigViper.AddConfigPath(base.Component.Env.RootPath + `/config/` + AppName)
-	base.Component.ConfigViper.SetConfigName(`config`)
-	base.Component.ConfigViper.SetConfigType(`ini`)
-	if readErr := base.Component.ConfigViper.ReadInConfig(); readErr != nil {
-		panic(readErr.Error())
-	}
-	base.Component.GsLog = gstool.SlogCreateDefault(base.Component.Env.RootPath+`/logs`, AppName)
+	//初始化配置
+	base.Component.Env.Init(appName, dbPath, ViewPath)
+	//初始化shell
+	base.Component.TShell = base.NewTShell()
+	//aesGcm
+	gcm := gsencrypt.NewAesGcm(base.Component.Env.AppName)
+	base.Component.AesGcm = gcm
+	base.Component.GsLog = gstool.NewSlog3(base.Component.Env.LogPath, base.Component.Env.AppName)
+	_ = base.Component.GsLog.CleanOldLogs(7)
 }
 
-func initSqlite(DbPath string) {
-	dbDir := DbPath
-	var dbPath string
-	if dbDir != `` {
-		dbPath = fmt.Sprintf(dbDir+`%s`, AppName+`.db`)
-	} else {
-		dbPath = base.Component.Env.RootPath + `/config/.db/` + AppName + `.db`
-	}
-	gstool.FmtPrintlnLogTime(`打开db %s`, dbPath)
-	_ = gstool.DirCreatePath(dbDir)
-	sqlite, err := gsdb.NewSqlite(dbPath, true)
+func initPlaywright() {
+	//初始化playwright
+	base.Component.TPlaywright = base.NewTSmartLink()
+	base.Component.TPlaywright.SetWebkitPath()
+	base.Component.TPlaywright.LockFileFullPath = filepath.Join(base.Component.Env.RootPath, `playwright.RunLock`)
+	p_playwright.InitPageActiveTime()
+	p_playwright.InitContextPageList()
+	go base.Component.TPlaywright.WitchDownload()
+	go base.Component.TPlaywright.SmartCheckAndUpdate()
+}
+
+func initSqlite() {
+	sqlite, err := gsdb.NewSqlite(base.Component.Env.DbPath, true)
 	if err != nil {
 		panic(fmt.Sprintf(`连接sqlite失败 %s`, err.Error()))
 	}
 	sqlite.SetGsLog(base.Component.GsLog)
+	sqlite.OpenDebug()
 	createErr := sqlite.CreateConn()
 	if createErr != nil {
 		panic(fmt.Sprintf(`打开sqlite失败 %s`, createErr.Error()))
@@ -135,21 +133,28 @@ func initGin() {
 	base.Component.TGin.GinInit(host, port)
 	base.Component.TGin.GinSetAllowCrossDomain()
 	gin.DefaultWriter = io.Discard
-	viewPath := filepath.Dir(base.Component.Env.RootPath)
-	if base.Component.Env.IsBuild {
-		base.Component.TGin.GinStatic(`/js`, viewPath+`/devtool/dist/js`)
-		base.Component.TGin.GinStaticFile(`/favicon.ico`, viewPath+`/devtool/dist/favicon.ico`)
-		base.Component.TGin.GinStatic(`/css`, viewPath+`/devtool/dist/css`)
-		base.Component.TGin.GinLoadHTMLFiles(viewPath + `/devtool/dist/index.html`)
-	} else {
-		base.Component.TGin.GinStatic(`/js`, base.Component.Env.RootPath+`/`+AppName+`/devtool/dist/js`)
-		base.Component.TGin.GinStaticFile(`/favicon.ico`, base.Component.Env.RootPath+`/`+AppName+`/devtool/dist/favicon.ico`)
-		base.Component.TGin.GinStatic(`/css`, base.Component.Env.RootPath+`/`+AppName+`/devtool/dist/css`)
-		base.Component.TGin.GinLoadHTMLFiles(base.Component.Env.RootPath + `/` + AppName + `/devtool/dist/index.html`)
-	}
+	base.Component.TGin.GinStatic(`/js`, base.Component.Env.ViewPath+`/js`)
+	base.Component.TGin.GinStaticFile(`/favicon.ico`, base.Component.Env.ViewPath+`/favicon.ico`)
+	base.Component.TGin.GinStatic(`/css`, base.Component.Env.ViewPath+`/css`)
+	base.Component.TGin.GinLoadHTMLFiles(base.Component.Env.ViewPath + `/index.html`)
 	base.Component.TGin.GinGet(`/`, func(context *gin.Context) {
 		context.HTML(200, `index.html`, nil)
 	})
+	base.Component.TSse = &base.TSse{
+		Sse: &gsgin.TSse{SseList: make(map[string]*gsgin.Sse)},
+	}
+	base.Component.TOs = gstool.NewGsOs()
+	base.Component.TMarkDown = &base.TMarkDown{}
+	base.Component.TAi = &base.TAi{}
+	base.Component.TAi.Init()
+	base.Component.TJas = &base.TJas{
+		Regis: map[string]string{
+			`p_js`: base.Component.Env.PkgPath + "/p_js",
+		},
+		JsData: map[string]string{},
+	}
+	base.Component.TJas.Load()
+	base.Component.TVariable = base.NewVariable()
 	base.Component.TGin.IsRun = true
 }
 

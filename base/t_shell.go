@@ -1,28 +1,40 @@
 package base
 
 import (
+	"dev_tool/base/define"
+	_struct "dev_tool/base/struct"
 	"errors"
+	"fmt"
 	"gitee.com/Sxiaobai/gs/gsssh"
 	"gitee.com/Sxiaobai/gs/gstool"
 	"github.com/spf13/cast"
+	"runtime/debug"
 	"sync"
-	"time"
 )
 
 type TShell struct {
 	ShellClientMap map[string]*gsssh.SshConfig
 	lock           sync.Mutex
+	log            *gstool.GsSlog
 }
 
-func (h *TShell) GetClient(sshConfig map[string]any, uniqueKey string) (*gsssh.SshConfig, error) {
+func NewTShell() *TShell {
+	log := gstool.NewSlog3(Component.Env.LogPath, `shell`)
+	return &TShell{
+		ShellClientMap: make(map[string]*gsssh.SshConfig),
+		log:            log,
+	}
+}
+
+// GetClient 正常输出
+func (h *TShell) GetClient(sshConfig map[string]any, shellClientId, sseClientId string, formatStream func(string) []string) (*gsssh.SshConfig, error) {
 	defer h.lock.Unlock()
 	h.lock.Lock()
 	sshId := cast.ToString(sshConfig[`id`])
 	if sshId == `` {
-		return nil, errors.New(`ssh配置错误`)
+		return nil, errors.New(`ssh配置错误，GetClient ` + cast.ToString(debug.Stack()))
 	}
-	gstool.FmtPrintlnLogTime(`获取client %v`, h.ShellClientMap)
-	if shell, ok := h.ShellClientMap[uniqueKey]; ok && shell != nil {
+	if shell, ok := h.ShellClientMap[shellClientId]; ok && shell != nil {
 		return shell, nil
 	}
 	gsShell := &gsssh.SshConfig{
@@ -32,7 +44,16 @@ func (h *TShell) GetClient(sshConfig map[string]any, uniqueKey string) (*gsssh.S
 		Password: cast.ToString(sshConfig["password"]),
 		GsSlog:   Component.GsLog,
 	}
-	gsShell.SetMaxRunSecond(20)
+
+	//TODO 有时间研究一下 为什么sftp的链接断开后没有重连
+	//设置关闭事件
+	gsShell.SetFuncBroken(func() {
+		_ = Component.TSse.SendMsg(sseClientId, sseClientId+` 注意：连接已中断，下次动作时进行链接`+"\n", 0)
+		h.RmClient(shellClientId)
+		//已经加了自动重连
+		//h.ReConn(shellClientId , sshConfig)
+	})
+	gsShell.SetMaxRunSecond(40)
 	createErr := gsShell.ConnectAuthPassword()
 	if createErr != nil {
 		return nil, createErr
@@ -42,43 +63,96 @@ func (h *TShell) GetClient(sshConfig map[string]any, uniqueKey string) (*gsssh.S
 	if err != nil {
 		return nil, err
 	}
+	//回调准备输出的内容 放到这里 就不需要链接linux出现的一大段文字
+	gsShell.SetFuncStreamReceive(func(msg string) {
+		h.log.Debugf(`receive：%s`, msg)
+		if formatStream != nil {
+			h.log.Errof(`解析前的 %s`, msg)
+			msgList := formatStream(msg)
+			h.log.Errof(`解析后的 %s`, gstool.JsonEncode(msgList))
+			_ = Component.TSse.SendMsgChunkList(sseClientId, msgList, 10)
+		} else {
+			_ = Component.TSse.SendMsgChunk(sseClientId, msg, _struct.Chunk{
+				Type: define.ChunkNum,
+				Num:  50,
+			}, 10)
+		}
+	})
 	//设置执行命令前处理
 	gsShell.SetFuncBefore(func(command string) string {
-		return `■■ ` + command
+		return command
 	})
 	//设置对收到的结果是否进行合并后处理 建议1-2
 	gsShell.SetCombineNum(1)
 	//是否显示执行命令后linux返回的执行的命令 如果设置了SetFuncBefore处理，那么就关闭
 	gsShell.CloseFirstReceiveMsg()
-	//设置关闭事件 用来进行重连
-	//TODO 有时间研究一下 为什么sftp的链接断开后没有重连
-	gsShell.SetFuncBroken(func() {
-		gstool.FmtPrintlnLogTime(uniqueKey + `连接中断，下次动作时进行链接`)
-		Component.TSocket.SendMsg(uniqueKey, uniqueKey+` 注意：连接已中断，下次动作时进行链接`)
-		h.RmClient(uniqueKey)
-		//h.ReConn(uniqueKey, sshConfig)
-	})
-	h.ShellClientMap[uniqueKey] = gsShell
+
+	h.ShellClientMap[shellClientId] = gsShell
 	return gsShell, nil
 }
 
-// ReConn 重连
-func (h *TShell) ReConn(uniqueKey string, sshConfig map[string]any) {
-	go func() {
-		ticker := time.NewTicker(10 * time.Second)
-		defer ticker.Stop()
-		for range ticker.C {
-			Component.TSocket.SendMsg(uniqueKey, uniqueKey+` 准备进行重连`)
-			shell, err := h.GetClient(sshConfig, uniqueKey)
-			if err == nil { //连接成功 那么中断重连
-				Component.TSocket.SendMsg(uniqueKey, uniqueKey+` 重连成功`)
-				shell.SetSocket(Component.TSocket.GetSocket(uniqueKey))
-				break
-			} else {
-				Component.TSocket.SendMsg(uniqueKey, uniqueKey+` 重连失败 `+err.Error())
-			}
-		}
-	}()
+// GetClientMarkdown 输出markdown格式
+func (h *TShell) GetClientMarkdown(sshConfig map[string]any, shellClientId, sseClientId string) (*gsssh.SshConfig, error) {
+	defer h.lock.Unlock()
+	h.lock.Lock()
+	sshId := cast.ToString(sshConfig[`id`])
+	if sshId == `` {
+		return nil, errors.New(`ssh配置错误，GetClientMarkdown ` + cast.ToString(debug.Stack()))
+	}
+	if shell, ok := h.ShellClientMap[shellClientId]; ok && shell != nil {
+		return shell, nil
+	}
+	gsShell := &gsssh.SshConfig{
+		Host:     cast.ToString(sshConfig["host"]),
+		Port:     cast.ToString(sshConfig["port"]),
+		UserName: cast.ToString(sshConfig["username"]),
+		Password: cast.ToString(sshConfig["password"]),
+		GsSlog:   Component.GsLog,
+	}
+
+	//TODO 有时间研究一下 为什么sftp的链接断开后没有重连
+	//设置关闭事件
+	gsShell.SetFuncBroken(func() {
+		_ = Component.TSse.SendMsg(sseClientId, sseClientId+` 注意：连接已中断，下次动作时进行链接`+"\n", 0)
+		h.RmClient(shellClientId)
+		//已经加了自动重连
+		//h.ReConn(shellClientId , sshConfig)
+	})
+	gsShell.SetMaxRunSecond(40)
+	createErr := gsShell.ConnectAuthPassword()
+	if createErr != nil {
+		return nil, createErr
+	}
+	//先执行一次确保连接正常
+	_, err := gsShell.RunCommandWait(`pwd`)
+	if err != nil {
+		return nil, err
+	}
+	//猪油：下面3个注册回调，放到这里的话就不会输出pwd以及连接相关信息
+	//回调准备输出的内容
+	gsShell.SetFuncStreamReceive(func(msg string) {
+		_ = Component.TSse.SendMsgChunk(sseClientId, msg+"  \n", _struct.Chunk{
+			Type: define.ChunkEnter,
+		}, 50)
+	})
+	gsShell.SetFuncStartCommand(func() {
+		_ = Component.TSse.SendMsg(sseClientId, fmt.Sprintf("```%s\n#%s", `bash`, `bash`)+"\n", 0)
+	})
+	gsShell.SetFuncEndCommand(func() {
+		_ = Component.TSse.SendMsg(sseClientId, "```\n", 0)
+	})
+	//设置执行命令前处理
+	gsShell.SetFuncBefore(func(command string) string {
+		return command
+		//return Component.TMarkDown.Code(command, `shell`)
+	})
+	//设置对收到的结果是否进行合并后处理 建议1-2
+	gsShell.SetCombineNum(1)
+	//是否显示执行命令后linux返回的执行的命令 如果设置了SetFuncBefore处理，那么就关闭
+	gsShell.CloseFirstReceiveMsg()
+
+	h.ShellClientMap[shellClientId] = gsShell
+	return gsShell, nil
 }
 
 func (h *TShell) Exist(uniqueKey string) bool {
@@ -94,6 +168,9 @@ func (h *TShell) Exist(uniqueKey string) bool {
 func (h *TShell) RmClient(uniqueKey string) {
 	defer h.lock.Unlock()
 	h.lock.Lock()
+	if ssh, ok := h.ShellClientMap[uniqueKey]; ok {
+		ssh.CloseTerminal()
+	}
 	delete(h.ShellClientMap, uniqueKey)
 }
 

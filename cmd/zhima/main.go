@@ -7,9 +7,11 @@ import (
 
 var IsBuild string
 var DbPath string
+var ViewPath string
 
 func main() {
-	zhima.InitBase(IsBuild, DbPath)
+	zhima.InitBase(IsBuild, DbPath, ViewPath)
 	gstool.CpuSetUsePercent(0.6)
 	gstool.SignalDefault()
+	zhima.Stop()
 }
