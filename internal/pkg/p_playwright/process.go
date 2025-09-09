@@ -111,8 +111,6 @@ func (h *Process) Do() (define.ProcessCode, string, error) {
 
 func (h *Process) CanvasImage() (define.ProcessCode, string, error) {
 	base.Component.TPlaywright.AddTipMsg(h.Page, h.Tip)
-	time.Sleep(time.Duration(cast.ToInt(h.WaitMills)) * time.Millisecond)
-	h.runParams.StreamFunc(h.Name, `等待`+cast.ToString(h.WaitMills)+`ms`)
 	h.ElementOp.Type = define.ElementExist
 	element, elementErr := h.Locator.Do(h.WaitMills)
 	if elementErr != nil {
@@ -137,8 +135,6 @@ func (h *Process) CanvasImage() (define.ProcessCode, string, error) {
 
 func (h *Process) ExistWait() (define.ProcessCode, string, error) {
 	base.Component.TPlaywright.AddTipMsg(h.Page, h.Tip)
-	time.Sleep(time.Duration(cast.ToInt(h.WaitMills)) * time.Millisecond)
-	h.runParams.StreamFunc(h.Name, `等待`+cast.ToString(h.WaitMills)+`ms`)
 	h.ElementOp.Type = define.ElementExist
 	paramList := strings.Split(h.Value, `|`)
 	if len(paramList) != 2 {
@@ -164,8 +160,6 @@ func (h *Process) ExistWait() (define.ProcessCode, string, error) {
 
 func (h *Process) NoExistWait() (define.ProcessCode, string, error) {
 	base.Component.TPlaywright.AddTipMsg(h.Page, h.Tip)
-	time.Sleep(time.Duration(cast.ToInt(h.WaitMills)) * time.Millisecond)
-	h.runParams.StreamFunc(h.Name, `等待`+cast.ToString(h.WaitMills)+`ms`)
 	h.ElementOp.Type = define.ElementExist
 	paramList := strings.Split(h.Value, `|`)
 	if len(paramList) != 2 {
@@ -191,8 +185,6 @@ func (h *Process) NoExistWait() (define.ProcessCode, string, error) {
 
 func (h *Process) PTextContent() (define.ProcessCode, string, error) {
 	base.Component.TPlaywright.AddTipMsg(h.Page, h.Tip)
-	time.Sleep(time.Duration(cast.ToInt(h.WaitMills)) * time.Millisecond)
-	h.runParams.StreamFunc(h.Name, `等待`+cast.ToString(h.WaitMills)+`ms`)
 	h.ElementOp.Type = define.ElementTextContent
 	_, elementErr := h.Locator.Do(h.WaitMills)
 	if elementErr != nil {
@@ -209,8 +201,6 @@ func (h *Process) PTextContent() (define.ProcessCode, string, error) {
 
 func (h *Process) PBoolResult() (define.ProcessCode, string, error) {
 	base.Component.TPlaywright.AddTipMsg(h.Page, h.Tip)
-	time.Sleep(time.Duration(cast.ToInt(h.WaitMills)) * time.Millisecond)
-	h.runParams.StreamFunc(h.Name, `等待`+cast.ToString(h.WaitMills)+`ms`)
 	if h.Locators != `` {
 		h.ElementOp.Type = define.ElementCount
 		boolRet, boolErr := h.Locator.DoBoolResult(h.WaitMills)
@@ -261,8 +251,6 @@ func (h *Process) PLoginUsernamePassword() (define.ProcessCode, string, error) {
 
 func (h *Process) PClick() (define.ProcessCode, string, error) {
 	base.Component.TPlaywright.AddTipMsg(h.Page, h.Tip)
-	time.Sleep(time.Duration(cast.ToInt(h.WaitMills)) * time.Millisecond)
-	h.runParams.StreamFunc(h.Name, `等待`+cast.ToString(h.WaitMills)+`ms`)
 	h.ElementOp.Type = define.ElementClick
 	_, elementErr := h.Locator.Do(h.WaitMills)
 	if elementErr != nil {
@@ -276,8 +264,6 @@ func (h *Process) PClick() (define.ProcessCode, string, error) {
 
 func (h *Process) PInput() (define.ProcessCode, string, error) {
 	base.Component.TPlaywright.AddTipMsg(h.Page, h.Tip)
-	time.Sleep(time.Duration(cast.ToInt(h.WaitMills)) * time.Millisecond)
-	h.runParams.StreamFunc(h.Name, `等待`+cast.ToString(h.WaitMills)+`ms`)
 	h.ElementOp.Type = define.ElementInput
 	h.Value = base.Component.TVariable.Replace(h.Value, h.runParams.ReplaceList)
 	h.ElementOp.FillValue = h.Value
