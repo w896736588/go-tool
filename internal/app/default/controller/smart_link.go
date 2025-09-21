@@ -393,7 +393,7 @@ func SmartProcessItemAdd(c *gin.Context) {
 		return
 	}
 	var id any
-	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `wait_mills`, `is_async`, `append_to_replace`, `smart_link_process_id`, `type`, `locator`, `tip`, `value`, `out_key`, `check_key`, `weight`, `domain_limit`, `x`, `y`})
+	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `wait_mills`, `is_async`, `append_to_replace`, `smart_link_process_id`, `type`, `locator`, `tip`, `value`, `out_key`, `check_key`, `weight`, `domain_limit`, `x`, `y`, `next_ids`})
 	if cast.ToInt(dataMap[`id`]) == 0 {
 		updateData[`create_time`] = time.Now().Unix()
 		updateData[`update_time`] = time.Now().Unix()
@@ -415,6 +415,37 @@ func SmartProcessItemAdd(c *gin.Context) {
 		`id`:     id,
 		`status`: 1,
 	}).One()
+	gsgin.GinResponseSuccess(c, ``, info)
+}
+
+// SmartProcessCancelRelation 移除连线
+func SmartProcessCancelRelation(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	var prevId = cast.ToInt(dataMap[`prev_id`])
+	var nextId = cast.ToString(dataMap[`next_id`])
+	if prevId == 0 || nextId == `` {
+		gsgin.GinResponseError(c, `节点不能为空 `, nil)
+		return
+	}
+	info, _ := base.Component.TSqlite.Client.QuickQuery(`tbl_smart_link_process_item`, `*`, map[string]any{
+		`id`:     prevId,
+		`status`: 1,
+	}).One()
+	if len(info) == 0 {
+		gsgin.GinResponseError(c, `节点不存在`, nil)
+		return
+	}
+	nextIds := cast.ToString(info[`next_ids`])
+	nextIdList := strings.Split(nextIds, `,`)
+	gstool.ArrayDeleteValue(&nextIdList, nextId)
+	updateData := make(map[string]any)
+	updateData[`next_ids`] = strings.Join(nextIdList, `,`)
+	_, _ = base.Component.TSqlite.Client.QuickUpdate(`tbl_smart_link_process_item`,
+		map[string]any{
+			`id`: prevId,
+		}, updateData).Exec()
+
 	gsgin.GinResponseSuccess(c, ``, info)
 }
 
@@ -505,11 +536,17 @@ func SmartProcessSetRelation(c *gin.Context) {
 		}
 	}
 	nextIdList = append(nextIdList, cast.ToString(nextId))
-
+	newNextIdList := make([]string, 0)
+	for _, item := range nextIdList {
+		if cast.ToInt(item) == 0 {
+			continue
+		}
+		newNextIdList = append(newNextIdList, item)
+	}
 	_, _ = base.Component.TSqlite.Client.QuickUpdate(`tbl_smart_link_process_item`, map[string]any{
 		`id`: cast.ToInt(prevId),
 	}, map[string]interface{}{
-		`next_ids`: strings.Join(nextIdList, `,`),
+		`next_ids`: strings.Join(newNextIdList, `,`),
 	}).Exec()
 	gsgin.GinResponseSuccess(c, ``, nil)
 }
