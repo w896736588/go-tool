@@ -1,3 +1,3 @@
 @echo off
-start "" cmd /c ".\build\zhima.exe --IsProd=true & pause"
+.\build\zhima.exe --IsProd=true
 start http://localhost:17170/
