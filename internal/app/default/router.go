@@ -199,6 +199,8 @@ func smartLink() {
 func docker() {
 	base.Component.TGin.GinPost(`/api/DockerComposeList`, controller.DockerComposeList)
 	base.Component.TGin.GinPost(`/api/DockerComposeRestart`, controller.DockerComposeRestart)
+	base.Component.TGin.GinPost(`/api/DockerComposeStatus`, controller.DockerComposeStatus)
+	base.Component.TGin.GinPost(`/api/DockerComposeServices`, controller.DockerComposeServices)
 	base.Component.TGin.GinPost(`/api/DockerComposeStop`, controller.DockerComposeStop)
 	base.Component.TGin.GinPost(`/api/DockerComposeConfigShow`, controller.DockerComposeConfigShow)
 	base.Component.TGin.GinPost(`/api/DockerComposeStart`, controller.DockerComposeStart)
