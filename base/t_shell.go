@@ -29,7 +29,8 @@ func NewTShell() *TShell {
 }
 
 // GetClient 正常输出
-func (h *TShell) GetClient(sshConfig map[string]any, shellClientId, sseClientId string, formatStream func(string) []string) (*gsssh.SshConfig, error) {
+func (h *TShell) GetClient(sshConfig map[string]any, shellClientId, sseClientId string,
+	formatStream func(string) []string) (*gsssh.SshConfig, error) {
 	defer h.lock.Unlock()
 	h.lock.Lock()
 	sshId := cast.ToString(sshConfig[`id`])

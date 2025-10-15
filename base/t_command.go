@@ -246,17 +246,27 @@ func (h *Command) FindGitDir(dirPath string, depth int) *Command {
 }
 
 func (h *Command) DockerComposePs(dockerCmd string) *Command {
-	h.SetCommand(fmt.Sprintf(`%s %s ps `, h.sudo, dockerCmd))
+	h.SetCommand(fmt.Sprintf(`%s %s ps`, h.sudo, dockerCmd))
+	return h
+}
+
+func (h *Command) DockerComposeServices(dockerCmd string) *Command {
+	h.SetCommand(fmt.Sprintf(`%s %s config --services`, h.sudo, dockerCmd))
 	return h
 }
 
 func (h *Command) DockerComposeStop(dockerCmd string) *Command {
-	h.SetCommand(fmt.Sprintf(`%s %s down `, h.sudo, dockerCmd))
+	h.SetCommand(fmt.Sprintf(`%s %s down`, h.sudo, dockerCmd))
 	return h
 }
 
-func (h *Command) DockerComposeRestart(dockerCmd string) *Command {
-	h.SetCommand(fmt.Sprintf(`%s %s restart`, h.sudo, dockerCmd))
+func (h *Command) DockerComposeStatus(dockerCmd string) *Command {
+	h.SetCommand(fmt.Sprintf(`%s docker stats $(sudo %s ps -q) --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.NetIO}}\t{{.BlockIO}}"`, h.sudo, dockerCmd))
+	return h
+}
+
+func (h *Command) DockerComposeRestart(dockerCmd string, services ...string) *Command {
+	h.SetCommand(fmt.Sprintf(`%s %s restart %s`, h.sudo, dockerCmd, strings.Join(services, ` `)))
 	return h
 }
 
