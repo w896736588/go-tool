@@ -17,6 +17,7 @@ type TComponent struct {
 	TGin          *Gin
 	WebSocket     *gssocket.Server
 	TShell        *TShell
+	TShellOut     *TShellOut
 	TCode         *TCode
 	TBase         *TBase
 	AesGcm        *gsencrypt.AesGcm

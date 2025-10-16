@@ -4,6 +4,11 @@ import (
 	"dev_tool/base"
 	"dev_tool/internal/pkg/p_playwright"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+
 	"gitee.com/Sxiaobai/gs/gsdb"
 	"gitee.com/Sxiaobai/gs/gsencrypt"
 	"gitee.com/Sxiaobai/gs/gsgin"
@@ -12,10 +17,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/spf13/viper"
-	"io"
-	"net/http"
-	"os"
-	"path/filepath"
 )
 
 func InitBase(appName, dbPath, ViewPath string) {
@@ -69,6 +70,7 @@ func initComponent(appName, dbPath, ViewPath string) {
 	base.Component.Env.Init(appName, dbPath, ViewPath)
 	//初始化shell
 	base.Component.TShell = base.NewTShell()
+	base.Component.TShellOut = base.NewTShellOut()
 	//aesGcm
 	gcm := gsencrypt.NewAesGcm(base.Component.Env.AppName)
 	base.Component.AesGcm = gcm

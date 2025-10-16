@@ -23,6 +23,7 @@ func InitRouter() {
 	setRouter()
 	setStar()
 	setMarkdown()
+	shellOut()
 	variable()
 	smartLink()
 	docker()
@@ -157,6 +158,11 @@ func setMarkdown() {
 	base.Component.TGin.GinPost(`/api/MarkdownDel`, controller.MarkdownDel)
 	base.Component.TGin.GinPost(`/api/MarkdownHistoryDel`, controller.MarkdownHistoryDel)
 	base.Component.TGin.GinPost(`/api/MarkdownSort`, controller.MarkdownSort)
+}
+
+func shellOut() {
+	base.Component.TGin.GinPost(`/api/shellOut`, controller.ShellOut)
+	base.Component.TGin.GinPost(`/api/shellOutSetSeeId`, controller.ShellOutSetSeeId)
 }
 
 func variable() {
