@@ -118,7 +118,7 @@ func initGin() {
 		gstool.FmtPrintlnLogTime(`端口已被占用 %s`, host+`:`+port)
 		return
 	}
-	base.Component.TGin.SetMode(gin.TestMode)
+	base.Component.TGin.SetMode(gin.DebugMode)
 	base.Component.TGin.GinInit(host, port)
 	base.Component.TGin.GinSetAllowCrossDomain()
 	gin.DefaultWriter = io.Discard

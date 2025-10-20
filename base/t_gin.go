@@ -22,6 +22,7 @@ func (h *Gin) GinInit(host, port string) *gsgin.GSGin {
 		Port: cast.ToInt(port),
 	}
 	gsGin.CreateRouter()
+	gsGin.GinH.Use(gin.Logger())
 	h.gin = gsGin
 	return h.gin
 }
