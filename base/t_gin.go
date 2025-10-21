@@ -70,6 +70,6 @@ func (h *Gin) GinStop(waitSecond int64) error {
 }
 
 func (h *Gin) SseRoute(route string,
-	openFunc func(urlValues url.Values, stopC chan int, c *gin.Context) *gsgin.Sse, closeFunc func(sse *gsgin.Sse)) {
+	openFunc func(urlValues url.Values, stopC chan int, c *gin.Context) (*gsgin.Sse, error), closeFunc func(sse *gsgin.Sse)) {
 	h.gin.SseRoute(route, true, openFunc, closeFunc)
 }

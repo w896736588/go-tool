@@ -3,6 +3,7 @@ package _default
 import (
 	"dev_tool/base"
 	"dev_tool/internal/app/default/controller"
+	"errors"
 	"net/url"
 
 	"gitee.com/Sxiaobai/gs/gsgin"
@@ -218,7 +219,7 @@ func ai(tGin *base.Gin) {
 
 func api(tGin *base.Gin) {
 	//api git logs
-	tGin.SseRoute(`/api/GitLab`, func(urlValues url.Values, stopC chan int, c *gin.Context) *gsgin.Sse {
+	tGin.SseRoute(`/api/GitLab`, func(urlValues url.Values, stopC chan int, c *gin.Context) (*gsgin.Sse, error) {
 		clientId := base.Component.TBase.GetUnique(`api_gitlab_`)
 		sse := base.Component.TSse.Sse.Register(clientId, stopC, c)
 		go func() {
@@ -231,7 +232,7 @@ func api(tGin *base.Gin) {
 			})
 			close(stopC)
 		}()
-		return sse
+		return sse, nil
 	}, func(sse *gsgin.Sse) {
 		err := base.Component.TSse.SendMsg(sse.ClientId, "[DONE]", 0)
 		if err != nil {
@@ -241,9 +242,14 @@ func api(tGin *base.Gin) {
 		base.Component.TSse.Sse.UnRegister(sse.ClientId)
 	})
 	//sse 替换 websocket
-	openFunc := func(urlValues url.Values, stopC chan int, c *gin.Context) *gsgin.Sse {
+	openFunc := func(urlValues url.Values, stopC chan int, c *gin.Context) (*gsgin.Sse, error) {
 		clientId := urlValues.Get(`client_id`)
-		return base.Component.TSse.Sse.Register(clientId, stopC, c)
+		sseC := base.Component.TSse.Sse.GetSseByClientId(clientId)
+		if sseC != nil {
+			return nil, errors.New(`已存在链接`)
+		}
+		sse := base.Component.TSse.Sse.Register(clientId, stopC, c)
+		return sse, nil
 	}
 	closeFunc := func(sse *gsgin.Sse) {
 		base.Component.TSse.Sse.UnRegister(sse.ClientId)
