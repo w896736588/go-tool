@@ -93,12 +93,12 @@ func (h *Command) GitCheckout(branch string) *Command {
 }
 
 func (h *Command) GitPullOrigin(branch string) *Command {
-	h.SetCommand(fmt.Sprintf(`%sgit pull --quiet origin %s`, h.sudo, branch))
+	h.SetCommand(fmt.Sprintf(`%sgit -c core.progress=false -c progress.enabled=false pull --no-progress origin %s`, h.sudo, branch))
 	return h
 }
 
 func (h *Command) GitPull() *Command {
-	h.SetCommand(fmt.Sprintf(`%sgit pull  --quiet`, h.sudo))
+	h.SetCommand(fmt.Sprintf(`%sgit -c core.progress=false -c progress.enabled=false pull --no-progressd cx`, h.sudo))
 	return h
 }
 
