@@ -1,15 +1,16 @@
 package base
 
 import (
-	"fmt"
-	"gitee.com/Sxiaobai/gs/gstool"
 	"os"
 	"path/filepath"
+
+	"gitee.com/Sxiaobai/gs/gstool"
 )
 
 type Env struct {
 	RootPath           string //项目根目录
 	PkgPath            string //pkg目录
+	DbName             string //数据库文件名
 	AppName            string //项目名称
 	ConfigPath         string //配置文件目录
 	LogPath            string //日志目录
@@ -25,6 +26,7 @@ func (h *Env) Init(appName, dbPath, DbName, ViewPath string) {
 	if h.RootPath == `` {
 		panic(`root_path不能为空`)
 	}
+	h.DbName = DbName
 	h.AppName = appName
 	dbFileName := h.AppName + `.db`
 	if DbName != `` {
@@ -32,7 +34,7 @@ func (h *Env) Init(appName, dbPath, DbName, ViewPath string) {
 	}
 	//配置文件目录
 	if dbPath != `` {
-		h.DbPath = fmt.Sprintf(dbPath+`%s`, dbFileName)
+		h.DbPath = filepath.Join(dbPath, dbFileName)
 	} else {
 		h.DbPath = filepath.Join(h.RootPath, `config`, h.AppName, dbFileName)
 	}
