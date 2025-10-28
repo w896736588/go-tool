@@ -65,6 +65,9 @@ func (h *TShell) GetClient(sshConfig map[string]any, shellClientId, sseClientId 
 	}
 	//回调准备输出的内容 放到这里 就不需要链接linux出现的一大段文字
 	gsShell.SetFuncStreamReceive(func(msg string) {
+		if msg == "\n" {
+			return
+		}
 		h.log.Debugf(`receive：%s`, msg)
 		if formatStream != nil {
 			h.log.Errof(`解析前的 %s`, msg)
@@ -72,10 +75,7 @@ func (h *TShell) GetClient(sshConfig map[string]any, shellClientId, sseClientId 
 			h.log.Errof(`解析后的 %s`, gstool.JsonEncode(msgList))
 			_ = Component.TSse.SendMsgChunkList(sseClientId, msgList, 10)
 		} else {
-			_ = Component.TSse.SendMsgChunk(sseClientId, msg, _struct.Chunk{
-				Type: define.ChunkNum,
-				Num:  50,
-			}, 10)
+			_ = Component.TSse.SendMsg(sseClientId, msg, 10)
 		}
 	})
 	//设置执行命令前处理

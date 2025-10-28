@@ -167,6 +167,7 @@ func shellOut(tGin *base.Gin) {
 	tGin.GinPost(`/api/shellOut`, controller.ShellOut)
 	tGin.GinPost(`/api/shellOutSetSeeId`, controller.ShellOutSetSeeId)
 	tGin.GinPost(`/api/shellOutCleanErrors`, controller.ShellOutCleanErrors)
+	tGin.GinPost(`/api/shellOuts`, controller.GetShellOuts)
 }
 
 func variable(tGin *base.Gin) {

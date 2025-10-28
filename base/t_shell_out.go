@@ -176,6 +176,8 @@ func (h *TShellOut) SendMsg(shellOut *ShellOut, msg string) {
 		`type`: `msg`,
 		`data`: msg,
 	}
+	msg = strings.Replace(msg, `\n`, "\n", -1)
+	Component.GsLog.Debugf(`输出 ----%q----`, msg)
 	_ = Component.TSse.SendMsg(shellOut.sseClientId, gstool.JsonEncode(send)+"\n", 0)
 }
 
