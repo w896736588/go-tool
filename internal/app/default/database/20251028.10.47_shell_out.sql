@@ -1,0 +1,1 @@
+ALTER TABLE tbl_shell_out ADD COLUMN shell_client_id TEXT NOT NULL DEFAULT '';

@@ -3,6 +3,7 @@ package controller
 import (
 	"dev_tool/base"
 	"errors"
+	"time"
 
 	"gitee.com/Sxiaobai/gs/gsgin"
 	"gitee.com/Sxiaobai/gs/gsssh"
@@ -18,8 +19,21 @@ func ShellOut(c *gin.Context) {
 	}
 	command := cast.ToString(reqMap[`command`])
 	_ = client.RunCommand(command)
+	id, err := base.Component.TSqlite.Client.QuickCreate(`tbl_shell_out`, map[string]any{
+		`command`:         command,
+		`shell_client_id`: shellClientId,
+		`name`:            cast.ToString(reqMap[`name`]),
+		`ssh_id`:          cast.ToString(reqMap[`ssh_id`]),
+		`create_time`:     time.Now().Unix(),
+		`update_time`:     time.Now().Unix(),
+	}).Exec()
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`shell_client_id`: shellClientId,
+		`id`:              cast.ToString(id),
 	})
 	return
 }
@@ -54,6 +68,22 @@ func ShellOutCleanErrors(c *gin.Context) {
 	shellClientId := cast.ToString(reqMap[`shell_client_id`])
 	base.Component.TShellOut.CleanErrors(shellClientId)
 	gsgin.GinResponseSuccess(c, ``, map[string]any{})
+	return
+}
+
+func GetShellOuts(c *gin.Context) {
+	reqMap := make(map[string]interface{})
+	err := gsgin.GinPostBody(c, &reqMap)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	list, err := base.Component.TSqlite.Client.QuickQuery(`tbl_shell_out`, `*`, nil).Order(`id asc`).All()
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	gsgin.GinResponseSuccess(c, ``, list)
 	return
 }
 
