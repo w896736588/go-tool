@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"gitee.com/Sxiaobai/gs/gstool"
+	"github.com/spf13/cast"
 )
 
 type TAi struct {
@@ -31,13 +32,29 @@ func (h *TAi) ParseStream(url, msg string) []byte {
 		}
 		if strings.Contains(url, `/api/assistant/chat`) { //纳米AI
 			h.ParseBot(msgVal, &resBytes)
-		} else if gstool.SContains(url, []string{`/api/v0/chat/completion`, `/api/GitLab`, `basic`}) { //git日志
+		} else if gstool.SContains(url, []string{`/api/v0/chat/completion`, `basic`}) {
 			h.ParseDeepseek(msgVal, &resBytes)
 		} else if gstool.SContains(url, []string{`/completion/stream`}) { //kimi
 			h.ParseKimi(msgVal, &resBytes)
+		} else if gstool.SContains(url, []string{`/api/GitLab`}) { //gitlab 自定义接口
+			h.ParseBaseStruct(msgVal, &resBytes)
 		}
 	}
 	return resBytes
+}
+
+// ParseBaseStruct 自定义json 格式 {"sse_client_id":"gitlab","data":"获取red_packet_send_servicecommit 共：20条  \n","type":"msg"}
+func (h *TAi) ParseBaseStruct(msg string, resBytes *[]byte) {
+	msg = gstool.SReplaces(msg, map[string]string{
+		`data: `: ``,
+	})
+	data := define.SseData{}
+	err := gstool.JsonDecode(msg, &data)
+	if err != nil {
+		Component.GsLog.Errof(`解析内容失败 --%s--`, msg)
+		return
+	}
+	*resBytes = append(*resBytes, []byte(cast.ToString(data.Data))...)
 }
 
 func (h *TAi) ParseStreamJson(url, msg string, sendFunc func(string)) {
