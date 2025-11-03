@@ -234,11 +234,12 @@ func ai(tGin *base.Gin) {
 func api(tGin *base.Gin) {
 	//api git logs
 	tGin.SseRoute(`/api/GitLab`, func(urlValues url.Values, stopC chan int, c *gin.Context) (*gsgin.Sse, error) {
-		clientId := base.Component.TBase.GetUnique(`api_gitlab_`)
+		clientId := define.SseGitLab
 		sse := base.Component.TSse.Sse.Register(clientId, stopC, c)
+		gstool.FmtPrintlnLogTime(`收到请求 /api/GitLab`)
 		go func() {
 			controller.GitLogs(gsgin.GinGetParams(c), func(s string) {
-				err := base.Component.TSse.SendMsg(clientId, define.SseContentTypeMsg, s+"\n", 0)
+				err := base.Component.TSse.SendMsg(clientId, define.SseContentTypeMsg, s+"\n", 0, []string{define.SseGitLab}...)
 				if err != nil {
 					gstool.FmtPrintlnLogTime(`错误 %s`, err.Error())
 					return
@@ -248,7 +249,7 @@ func api(tGin *base.Gin) {
 		}()
 		return sse, nil
 	}, func(sse *gsgin.Sse) {
-		err := base.Component.TSse.SendMsg(sse.ClientId, define.SseContentTypeMsg, "[DONE]", 0)
+		err := base.Component.TSse.SendMsg(sse.ClientId, define.SseContentTypeMsg, "[DONE]", 0, []string{define.SseGitLab}...)
 		if err != nil {
 			gstool.FmtPrintlnLogTime(`错误 %s`, err.Error())
 			return

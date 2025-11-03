@@ -1,8 +1,8 @@
 package define
 
 const (
-	SseAiCode       = `ai_code`    //废弃
-	SseIdDistribute = `distribute` //固定全局唯一
+	SseAiCode = `ai_code` //废弃
+	SseGitLab = `gitlab`  //固定全局唯一
 )
 
 var SseClientIds []string
