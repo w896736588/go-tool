@@ -16,8 +16,8 @@ type TSse struct {
 func (h *TSse) SendMsg(sseClient, contentType string, msg any, delayMills int, sseIds ...string) error {
 	data := define.SseData{
 		SseClientId: sseClient,
-		Data:        msg,
 		Type:        contentType,
+		Data:        msg,
 	}
 	if len(sseIds) == 0 {
 		sseIds = define.SseClientIds

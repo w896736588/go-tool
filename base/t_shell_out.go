@@ -16,7 +16,9 @@ import (
 )
 
 const ErrRegex = `(?i)\b(error|exception|fatal|panic|err|错误|报错|fail)\b`
-const MaxLength = 500000
+const MaxSourceLength = 20000 //原始内容最多保留多少行 用于搜索
+const MaxRemainLength = 10000 //过滤后内容最多保留多少行
+const MaxSendLength = 1000    //刷新页面后最多发送给前端多少行
 
 /*  等待式输出 ssh 不重复使用，持续等待 ssh 返回结果 */
 
@@ -24,24 +26,19 @@ const MaxLength = 500000
 type ShellOut struct {
 	Client           *gsssh.SshConfig
 	sseClientId      string
-	errorList        []ErrorBlock        // 最终归档的错误块
-	errorContent     string              // 错误检测内容
-	remainContent    string              // 保留的内容(替换后的)
-	sourceContent    string              // 原本内容
-	seen             map[string]struct{} // 去重表：key=错误行
-	errorRegex       *regexp.Regexp      // 错误行正则
-	mu               sync.Mutex          // 保护 errorContent / errorList / seen
-	regexFiltersTips map[string]int      //过滤正则数量统计
-	startTime        int64               //启动时间
-	groupId          int                 //分组id
-	extractTimer     *time.Timer         // 延迟提取计时器
+	errorList        []ErrorBlock   // 最终归档的错误块
+	remainContents   []string       // 保留的内容(替换后的)
+	sourceContents   []string       // 原本内容
+	regexFiltersTips map[string]int //过滤正则数量统计
+	startTime        int64          //启动时间
+	groupId          int            //分组id
 }
 
 // ErrorBlock 错误块
 type ErrorBlock struct {
-	Lines      []string `json:"lines"`      // 最多 11 行
-	ErrorLine  string   `json:"error_line"` // 用于去重
-	LineNumber int      `json:"line_no"`    // 错误行在快照里的行号（从 0 起）
+	Lines     []string `json:"lines"`
+	ErrorLine string   `json:"error_line"`
+	Time      string   `json:"time"`
 }
 
 // TShellOut 管理多个 ShellOut
@@ -50,6 +47,7 @@ type TShellOut struct {
 	lock              sync.Mutex
 	log               *gstool.GsSlog
 	GroupRegexFilters map[int][]string
+	GroupRegexErrors  map[int][]string
 	GroupConfigLock   sync.Mutex
 }
 
@@ -61,6 +59,7 @@ func NewTShellOut() *TShellOut {
 		ShellOutMap:       make(map[string]*ShellOut),
 		log:               log,
 		GroupRegexFilters: make(map[int][]string),
+		GroupRegexErrors:  make(map[int][]string),
 	}
 	return shellOut
 }
@@ -78,9 +77,10 @@ func (h *TShellOut) InitGroupConfigs() {
 	for _, item := range all {
 		groupId := cast.ToInt(item[`id`])
 		extra1 := cast.ToString(item[`extra_1`])
+		extra2 := cast.ToString(item[`extra_2`])
 		h.GroupRegexFilters[groupId] = strings.Split(extra1, "\n")
+		h.GroupRegexErrors[groupId] = strings.Split(extra2, "\n")
 	}
-	gstool.FmtPrintlnLogTime(`初始化正则 %s`, gstool.JsonEncode(h.GroupRegexFilters))
 }
 
 // GetClient 获取或新建 ssh 客户端
@@ -111,6 +111,10 @@ func (h *TShellOut) GetClient(sshConfig map[string]any, shellClientId, sseClient
 		h.RmClient(shellClientId)
 	})
 	gsShell.SetMaxRunSecond(40)
+	gsShell.SetCombineNum(1)
+	gsShell.SetPtyConfig(gsssh.PtyConfig{
+		Width: 1000,
+	})
 
 	if err := gsShell.ConnectAuthPassword(); err != nil {
 		return nil, false, err
@@ -122,12 +126,13 @@ func (h *TShellOut) GetClient(sshConfig map[string]any, shellClientId, sseClient
 	// 新建 ShellOut
 	shellOut := &ShellOut{
 		Client:           gsShell,
-		seen:             make(map[string]struct{}),
 		sseClientId:      sseClientId,
-		errorRegex:       regexp.MustCompile(ErrRegex),
 		regexFiltersTips: map[string]int{},
 		startTime:        time.Now().Unix(),
 		groupId:          groupId,
+		errorList:        make([]ErrorBlock, 0),
+		remainContents:   make([]string, 0),
+		sourceContents:   make([]string, 0),
 	}
 	h.SetReceiveMsg(shellOut, formatStream)
 	h.ShellOutMap[shellClientId] = shellOut
@@ -154,8 +159,12 @@ func (h *TShellOut) SetClientSseId(shellClientId, sshId, sseClientId, command st
 		}()
 		return nil
 	} else {
-		//最多展示10000个字符
-		h.SendMsg(shellOut, StringLastRunes(shellOut.remainContent, 10000))
+		remainLen := len(shellOut.remainContents)
+		if remainLen > MaxSendLength {
+			h.SendMsg(shellOut, strings.Join(shellOut.remainContents[(remainLen-MaxSendLength):], "\n"))
+		} else {
+			h.SendMsg(shellOut, strings.Join(shellOut.remainContents, "\n"))
+		}
 		h.SendErrList(shellOut)
 	}
 	return nil
@@ -165,6 +174,12 @@ func (h *TShellOut) GetRegexFilters(shellOut *ShellOut) []string {
 	h.GroupConfigLock.Lock()
 	defer h.GroupConfigLock.Unlock()
 	return h.GroupRegexFilters[shellOut.groupId]
+}
+
+func (h *TShellOut) GetRegexErrors(shellOut *ShellOut) []string {
+	h.GroupConfigLock.Lock()
+	defer h.GroupConfigLock.Unlock()
+	return h.GroupRegexErrors[shellOut.groupId]
 }
 
 func (h *TShellOut) CleanErrors(shellClientId string) {
@@ -191,19 +206,24 @@ func (h *TShellOut) Delete(shellClientId string) {
 
 func (h *TShellOut) SetReceiveMsg(shellOut *ShellOut, formatStream func(string) []string) {
 	shellOut.Client.SetFuncStreamReceive(func(msg string) {
+		msg = strings.Replace(msg, "\u001B", "", -1)
 		//原内容处理
-		shellOut.sourceContent += msg
-		shellOut.sourceContent = StringLastRunes(shellOut.sourceContent, MaxLength*2)
-		//保留内容处理
-		shellOut.remainContent += msg
-		shellOut.remainContent = StringLastRunes(shellOut.remainContent, MaxLength)
+		shellOut.sourceContents = append(shellOut.sourceContents, msg)
+		if len(shellOut.sourceContents) > MaxSourceLength {
+			shellOut.sourceContents = shellOut.sourceContents[MaxSourceLength:]
+		}
 		//过滤内容处理
 		boolFilter := h.RegexFilter(shellOut, msg)
 		if boolFilter {
 			return
 		}
+		//保留内容处理
+		shellOut.remainContents = append(shellOut.remainContents, msg)
+		if len(shellOut.remainContents) > MaxRemainLength {
+			shellOut.remainContents = shellOut.remainContents[MaxRemainLength:]
+		}
 		//错误检测
-		h.CheckError(shellOut, msg)
+		h.RegexError(shellOut, msg)
 		//推送
 		if formatStream != nil {
 			msgList := formatStream(msg)
@@ -216,27 +236,37 @@ func (h *TShellOut) SetReceiveMsg(shellOut *ShellOut, formatStream func(string) 
 	})
 }
 
-func (h *TShellOut) CheckError(shellOut *ShellOut, msg string) {
-	if !shellOut.errorRegex.MatchString(msg) {
-		return
+func (h *TShellOut) RegexError(shellOut *ShellOut, msg string) {
+	for _, regexError := range h.GetRegexErrors(shellOut) {
+		if regexError == `` {
+			continue
+		}
+		if strings.TrimSpace(regexError) == `` {
+			continue
+		}
+		regexParams := strings.Split(regexError, `#`)
+		if len(regexParams) == 2 {
+			regexError = regexParams[1]
+		}
+		var re = regexp.MustCompile(regexError)
+		if re.MatchString(msg) {
+			block := ErrorBlock{
+				Lines:     []string{},
+				ErrorLine: msg,
+				Time:      gstool.TimeNowUnixToString(``),
+			}
+			shellOut.errorList = append(shellOut.errorList, block)
+			h.SendErr(shellOut, block)
+		}
 	}
-	// 去重
-	if _, ok := shellOut.seen[msg]; ok {
-		return
-	}
-	shellOut.seen[msg] = struct{}{}
-
-	block := ErrorBlock{
-		Lines:     []string{},
-		ErrorLine: msg,
-	}
-	shellOut.errorList = append(shellOut.errorList, block)
-	h.SendErr(shellOut, block)
 }
 
 func (h *TShellOut) RegexFilter(shellOut *ShellOut, msg string) bool {
 	boolFilter := false
 	for _, regexFilter := range h.GetRegexFilters(shellOut) {
+		if regexFilter == `` {
+			continue
+		}
 		if strings.TrimSpace(regexFilter) == `` {
 			continue
 		}
@@ -289,13 +319,6 @@ func (h *TShellOut) RmClient(uniqueKey string) {
 	h.lock.Lock()
 	defer h.lock.Unlock()
 	if sh, ok := h.ShellOutMap[uniqueKey]; ok {
-		// 停掉可能存在的计时器，防止闭包内访问已释放对象
-		sh.mu.Lock()
-		if sh.extractTimer != nil {
-			sh.extractTimer.Stop()
-		}
-		sh.mu.Unlock()
-
 		sh.Client.CloseTerminal()
 	}
 	delete(h.ShellOutMap, uniqueKey)
@@ -309,13 +332,58 @@ func (h *TShellOut) WalkShellList(businessFunc func(uniqueKey string, gsShell *g
 	}
 }
 
-func StringLastRunes(s string, n int) string {
-	if n <= 0 {
-		return ""
+// ErrorContext 返回 错误行的上下文
+func (h *TShellOut) ErrorContext(shellClientId string, errorLine string, n int) (lines []string, firstLineNo int) {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+
+	shellOut, ok := h.ShellOutMap[shellClientId]
+	if !ok || n < 0 {
+		return []string{}, 0
 	}
-	runes := []rune(s)
-	if len(runes) > n {
-		runes = runes[len(runes)-n:]
+	src := shellOut.sourceContents
+	for i, line := range src {
+		if !strings.Contains(line, errorLine) {
+			continue
+		}
+
+		// 计算合法区间
+		start := i - n
+		if start < 0 {
+			start = 0
+		}
+		end := i + n + 1 // 切片右边界开区间
+		if end > len(src) {
+			end = len(src)
+		}
+
+		lines = make([]string, end-start)
+		copy(lines, src[start:end])
+		firstLineNo = start + 1 // 行号从 1 开始
+		return
 	}
-	return string(runes)
+	return []string{}, 0
+}
+
+// ShellOutSearchContent 匹配所有
+func (h *TShellOut) ShellOutSearchContent(shellClientId string, searchContent string, maxNum int) ([]string, int) {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+
+	shellOut, ok := h.ShellOutMap[shellClientId]
+	if !ok {
+		return []string{}, 0
+	}
+	searchs := make([]string, 0)
+	gstool.ArrayWalkDesc(shellOut.sourceContents, func(line string) bool {
+		if !strings.Contains(line, searchContent) {
+			return true
+		}
+		searchs = append(searchs, line)
+		if len(searchs) > maxNum {
+			return false
+		}
+		return true
+	})
+	return searchs, len(searchs)
 }

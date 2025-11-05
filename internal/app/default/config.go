@@ -97,7 +97,7 @@ func initSqlite() {
 		panic(fmt.Sprintf(`连接sqlite失败 %s`, err.Error()))
 	}
 	sqlite.SetGsLog(base.Component.GsLog)
-	sqlite.OpenDebug()
+	//sqlite.OpenDebug()
 	createErr := sqlite.CreateConn()
 	if createErr != nil {
 		panic(fmt.Sprintf(`打开sqlite失败 %s`, createErr.Error()))
