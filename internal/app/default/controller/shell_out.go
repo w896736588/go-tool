@@ -3,6 +3,7 @@ package controller
 import (
 	"dev_tool/base"
 	"errors"
+	"strings"
 	"time"
 
 	"gitee.com/Sxiaobai/gs/gsgin"
@@ -62,6 +63,39 @@ func ShellOutEdit(c *gin.Context) {
 	}
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`id`: cast.ToString(id),
+	})
+	return
+}
+
+func ShellOutErrorContext(c *gin.Context) {
+	reqMap := make(map[string]interface{})
+	err := gsgin.GinPostBody(c, &reqMap)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	shellClientId := cast.ToString(reqMap[`shell_client_id`])
+	errorLine := cast.ToString(reqMap[`error_line`])
+	lines, _ := base.Component.TShellOut.ErrorContext(shellClientId, errorLine, 5)
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`lines`: strings.Join(lines, "\n"),
+	})
+	return
+}
+
+func ShellOutSearchContent(c *gin.Context) {
+	reqMap := make(map[string]interface{})
+	err := gsgin.GinPostBody(c, &reqMap)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	shellClientId := cast.ToString(reqMap[`shell_client_id`])
+	searchContent := cast.ToString(reqMap[`search_content`])
+	lines, number := base.Component.TShellOut.ShellOutSearchContent(shellClientId, searchContent, 1000)
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`lines`:  strings.Join(lines, "\n"),
+		`number`: number,
 	})
 	return
 }
