@@ -1,0 +1,1 @@
+ALTER TABLE tbl_docker_compose ADD COLUMN default_service text NOT NULL DEFAULT '';

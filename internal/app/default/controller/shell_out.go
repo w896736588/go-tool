@@ -94,7 +94,7 @@ func ShellOutSearchContent(c *gin.Context) {
 	searchContent := cast.ToString(reqMap[`search_content`])
 	lines, number := base.Component.TShellOut.ShellOutSearchContent(shellClientId, searchContent, 1000)
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
-		`lines`:  strings.Join(lines, "\n"),
+		`lines`:  lines,
 		`number`: number,
 	})
 	return

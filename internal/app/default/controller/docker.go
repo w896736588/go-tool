@@ -270,10 +270,3 @@ var spinner = regexp.MustCompile(`(?m)^.*Container.*Restarting.*\n`)
 
 // 加载进度的点
 var braille = regexp.MustCompile(`[\x28\x00-\x28\xFF]`)
-
-func stripANSI(in string) []string {
-	s := garbage.ReplaceAllString(in, " ") // 1. 清转义码
-	s = spinner.ReplaceAllString(s, "")    // 2. 去掉刷行进度
-	s = braille.ReplaceAllString(s, " ")
-	return strings.Split(s, "\n")
-}

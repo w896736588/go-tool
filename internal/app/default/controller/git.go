@@ -9,6 +9,7 @@ import (
 
 	"gitee.com/Sxiaobai/gs/gsgin"
 	"gitee.com/Sxiaobai/gs/gsssh"
+	"gitee.com/Sxiaobai/gs/gstool"
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/cast"
 )
@@ -150,6 +151,8 @@ func GitPullBranchOrigin(c *gin.Context) {
 	currentBranch, _ := sshClient.RunCommandWait(command1.GetCommand().ToStr())
 	currentBranch = CleanBranchName(currentBranch)
 
+	gstool.FmtPrintlnLogTime(`获取当前分支为：%q`, currentBranch)
+
 	command := base.NewCommand()
 	//command.Sudo() 不要用sudo否则服务器会提示输入密码，导致执行被卡死
 	command.Cd(codePath)
@@ -171,12 +174,10 @@ func GitPullBranchOrigin(c *gin.Context) {
 var cleanBranchRe = regexp.MustCompile(`[^A-Za-z0-9._/-]+`)
 
 func CleanBranchName(s string) string {
+	s = gstool.StringFilterANSI(s)
 	s = cleanBranchRe.ReplaceAllString(s, "") // 只留合法字符
 	s = strings.TrimPrefix(s, ".")            // 不能以 . 开头
 	s = strings.TrimSuffix(s, "/")            // 不能以 / 结尾
-	if s == "" {                              // 兜底，防止空串
-		s = "branch"
-	}
 	return s
 }
 
