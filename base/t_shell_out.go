@@ -206,6 +206,7 @@ func (h *TShellOut) Delete(shellClientId string) {
 
 func (h *TShellOut) SetReceiveMsg(shellOut *ShellOut, formatStream func(string) []string) {
 	shellOut.Client.SetFuncStreamReceive(func(msg string) {
+		msg = gstool.StringFilterANSI(msg)
 		msg = strings.Replace(msg, "\u001B", "", -1)
 		//原内容处理
 		shellOut.sourceContents = append(shellOut.sourceContents, msg)
