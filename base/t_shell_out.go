@@ -209,7 +209,7 @@ func (h *TShellOut) SetReceiveMsg(shellOut *ShellOut, formatStream func(string) 
 		msg = gstool.StringFilterANSI(msg)
 		msg = strings.Replace(msg, "\u001B", "", -1)
 		//原内容处理
-		shellOut.sourceContents = append(shellOut.sourceContents, msg)
+		shellOut.sourceContents = append(shellOut.sourceContents, gstool.TimeNowUnixToString(``)+` `+msg)
 		if len(shellOut.sourceContents) > MaxSourceLength {
 			shellOut.sourceContents = shellOut.sourceContents[MaxSourceLength:]
 		}
