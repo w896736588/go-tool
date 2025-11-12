@@ -166,6 +166,7 @@ func (h *TShellOut) SetClientSseId(shellClientId, sshId, sseClientId, command st
 			h.SendMsg(shellOut, strings.Join(shellOut.remainContents, "\n"))
 		}
 		h.SendErrList(shellOut)
+		h.SendFilterList(shellOut)
 	}
 	return nil
 }
@@ -264,6 +265,7 @@ func (h *TShellOut) RegexError(shellOut *ShellOut, msg string) {
 
 func (h *TShellOut) RegexFilter(shellOut *ShellOut, msg string) bool {
 	boolFilter := false
+	split := `#`
 	for _, regexFilter := range h.GetRegexFilters(shellOut) {
 		if regexFilter == `` {
 			continue
@@ -272,7 +274,7 @@ func (h *TShellOut) RegexFilter(shellOut *ShellOut, msg string) bool {
 			continue
 		}
 		name := ``
-		regexParams := strings.Split(regexFilter, `#`)
+		regexParams := strings.Split(regexFilter, split)
 		if len(regexParams) == 2 {
 			regexFilter = regexParams[1]
 			name = regexParams[0]
@@ -280,18 +282,13 @@ func (h *TShellOut) RegexFilter(shellOut *ShellOut, msg string) bool {
 		var re = regexp.MustCompile(regexFilter)
 		if re.MatchString(msg) {
 			boolFilter = true
+			unikey := name + split + regexFilter
 			if gstool.MapKeyExist(&shellOut.regexFiltersTips, regexFilter) {
-				shellOut.regexFiltersTips[regexFilter] += 1
+				shellOut.regexFiltersTips[unikey] += 1
 			} else {
-				shellOut.regexFiltersTips[regexFilter] = 1
+				shellOut.regexFiltersTips[unikey] = 1
 			}
-			if shellOut.regexFiltersTips[regexFilter]%10 == 0 {
-				if name != `` {
-					h.SendMsg(shellOut, fmt.Sprintf(`%s 过滤输出：%s,已过滤：%d次`+"\n", gstool.TimeNowUnixToString(``), name, shellOut.regexFiltersTips[regexFilter]))
-				} else {
-					h.SendMsg(shellOut, fmt.Sprintf(`%s 过滤输出：%s,已过滤：%d次`+"\n", gstool.TimeNowUnixToString(``), regexFilter, shellOut.regexFiltersTips[regexFilter]))
-				}
-			}
+			h.SendFilter(shellOut, unikey)
 			break
 		}
 	}
@@ -310,6 +307,14 @@ func (h *TShellOut) SendEvent(shellOut *ShellOut, eventType, msg string) {
 
 func (h *TShellOut) SendErrList(shellOut *ShellOut) {
 	_ = Component.TSse.SendMsg(shellOut.sseClientId, define.SseContentTypeErrorList, shellOut.errorList, 0)
+}
+
+func (h *TShellOut) SendFilterList(shellOut *ShellOut) {
+	_ = Component.TSse.SendMsg(shellOut.sseClientId, define.SseContentTypeFilterList, shellOut.regexFiltersTips, 0)
+}
+
+func (h *TShellOut) SendFilter(shellOut *ShellOut, msg string) {
+	_ = Component.TSse.SendMsg(shellOut.sseClientId, define.SseContentTypeFilter, msg, 0)
 }
 
 func (h *TShellOut) SendErr(shellOut *ShellOut, err ErrorBlock) {
