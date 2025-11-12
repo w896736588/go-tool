@@ -15,7 +15,6 @@ import (
 	"github.com/spf13/cast"
 )
 
-const ErrRegex = `(?i)\b(error|exception|fatal|panic|err|错误|报错|fail)\b`
 const MaxSourceLength = 20000 //原始内容最多保留多少行 用于搜索
 const MaxRemainLength = 10000 //过滤后内容最多保留多少行
 const MaxSendLength = 1000    //刷新页面后最多发送给前端多少行
@@ -46,8 +45,9 @@ type TShellOut struct {
 	ShellOutMap       map[string]*ShellOut
 	lock              sync.Mutex
 	log               *gstool.GsSlog
-	GroupRegexFilters map[int][]string
-	GroupRegexErrors  map[int][]string
+	GroupRegexFilters map[int][]string //过滤规则
+	GroupRegexErrors  map[int][]string //错误规则
+	GroupNoErrors     map[int][]string //错误再次排除规则
 	GroupConfigLock   sync.Mutex
 }
 
@@ -60,6 +60,7 @@ func NewTShellOut() *TShellOut {
 		log:               log,
 		GroupRegexFilters: make(map[int][]string),
 		GroupRegexErrors:  make(map[int][]string),
+		GroupNoErrors:     make(map[int][]string),
 	}
 	return shellOut
 }
@@ -78,8 +79,10 @@ func (h *TShellOut) InitGroupConfigs() {
 		groupId := cast.ToInt(item[`id`])
 		extra1 := cast.ToString(item[`extra_1`])
 		extra2 := cast.ToString(item[`extra_2`])
+		extra3 := cast.ToString(item[`extra_3`])
 		h.GroupRegexFilters[groupId] = strings.Split(extra1, "\n")
 		h.GroupRegexErrors[groupId] = strings.Split(extra2, "\n")
+		h.GroupNoErrors[groupId] = strings.Split(extra3, "\n")
 	}
 }
 
@@ -183,6 +186,12 @@ func (h *TShellOut) GetRegexErrors(shellOut *ShellOut) []string {
 	return h.GroupRegexErrors[shellOut.groupId]
 }
 
+func (h *TShellOut) GetNoErrors(shellOut *ShellOut) []string {
+	h.GroupConfigLock.Lock()
+	defer h.GroupConfigLock.Unlock()
+	return h.GroupNoErrors[shellOut.groupId]
+}
+
 func (h *TShellOut) CleanErrors(shellClientId string) {
 	h.lock.Lock()
 	defer h.lock.Unlock()
@@ -239,6 +248,7 @@ func (h *TShellOut) SetReceiveMsg(shellOut *ShellOut, formatStream func(string) 
 }
 
 func (h *TShellOut) RegexError(shellOut *ShellOut, msg string) {
+	noErrors := h.GetNoErrors(shellOut)
 	for _, regexError := range h.GetRegexErrors(shellOut) {
 		if regexError == `` {
 			continue
@@ -252,6 +262,12 @@ func (h *TShellOut) RegexError(shellOut *ShellOut, msg string) {
 		}
 		var re = regexp.MustCompile(regexError)
 		if re.MatchString(msg) {
+			//再次过滤
+			for _, noError := range noErrors {
+				if strings.Contains(msg, noError) {
+					continue
+				}
+			}
 			block := ErrorBlock{
 				Lines:     []string{},
 				ErrorLine: msg,
