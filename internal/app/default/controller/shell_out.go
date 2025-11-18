@@ -219,6 +219,19 @@ func ShellOutStop(c *gin.Context) {
 	return
 }
 
+func ShellOutCleanLog(c *gin.Context) {
+	reqMap := make(map[string]interface{})
+	err := gsgin.GinPostBody(c, &reqMap)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	shellClientId := cast.ToString(reqMap[`shell_client_id`])
+	base.Component.TShellOut.CleanLog(shellClientId)
+	gsgin.GinResponseSuccess(c, ``, nil)
+	return
+}
+
 func getShellOutComponent(c *gin.Context) (map[string]interface{}, *gsssh.SshConfig, string, error) {
 	reqMap := make(map[string]interface{})
 	err := gsgin.GinPostBody(c, &reqMap)

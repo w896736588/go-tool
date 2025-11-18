@@ -180,6 +180,7 @@ func shellOut(tGin *base.Gin) {
 	tGin.GinPost(`/api/shellOutEdit`, controller.ShellOutEdit)
 	tGin.GinPost(`/api/shellOutErrorContext`, controller.ShellOutErrorContext)
 	tGin.GinPost(`/api/shellOutSearchContent`, controller.ShellOutSearchContent)
+	tGin.GinPost(`/api/shellOutCleanLog`, controller.ShellOutCleanLog)
 }
 
 func variable(tGin *base.Gin) {
