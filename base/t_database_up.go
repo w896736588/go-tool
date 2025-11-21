@@ -87,7 +87,7 @@ func (h *TDataBaseUp) Up() {
 		if err != nil {
 			Component.GsLog.Errof(`数据库升级文件执行失败 %s`, err.Error())
 			gstool.FmtPrintlnLogTime(`数据库升级文件执行失败 %s`, err.Error())
-			return
+			continue
 		}
 		_, err = Component.TSqlite.Client.QuickCreate(`tbl_database_up`, map[string]any{
 			`filename`: file,
