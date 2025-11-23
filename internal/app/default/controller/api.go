@@ -44,6 +44,34 @@ func ApiCreateCollection(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, ``, info)
 }
 
+func ApiCreateCollectionEnv(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	var id any
+	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `collection_id`, `desc`})
+	if cast.ToInt(dataMap[`id`]) == 0 {
+		updateData[`create_time`] = time.Now().Unix()
+		updateData[`update_time`] = time.Now().Unix()
+		newId, createErr := base.Component.TSqlite.Client.QuickCreate(`tbl_api_env`, updateData).Exec()
+		if createErr != nil {
+			gsgin.GinResponseError(c, `创建失败 `+createErr.Error(), nil)
+			return
+		}
+		id = newId
+	} else {
+		updateData[`update_time`] = time.Now().Unix()
+		_, _ = base.Component.TSqlite.Client.QuickUpdate(`tbl_api_env`,
+			map[string]any{
+				`id`: dataMap[`id`],
+			}, updateData).Exec()
+		id = dataMap[`id`]
+	}
+	info, _ := base.Component.TSqlite.Client.QuickQuery(`tbl_api_env`, `*`, map[string]any{
+		`id`: id,
+	}).One()
+	gsgin.GinResponseSuccess(c, ``, info)
+}
+
 func ApiCollections(c *gin.Context) {
 	list, _ := base.Component.TSqlite.Client.QueryBySql(`select * from tbl_api_collection order by id asc`).All()
 	for _, item := range list {
@@ -64,6 +92,85 @@ func ApiCollections(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`list`: list,
 	})
+}
+
+func ApiCollectionEnvs(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	collectionId := dataMap[`collection_id`]
+	if cast.ToInt(collectionId) == 0 {
+		gsgin.GinResponseError(c, `请选择集合`, nil)
+		return
+	}
+	list, _ := base.Component.TSqlite.Client.QueryBySql(`select * from tbl_api_env where collection_id = ? order by id asc`, collectionId).All()
+	//查找每一个的环境变量
+	for _, item := range list {
+		item[`variables`] = []map[string]any{}
+		envItems, _ := base.Component.TSqlite.Client.QuickQuery(`tbl_api_env_item`, `*`, map[string]any{
+			`env_id`: item[`id`],
+		}).All()
+		for _, envItem := range envItems {
+			envItem[`type`] = `env_item`
+		}
+		item[`variables`] = envItems
+	}
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`list`: list,
+	})
+}
+
+func ApiCollectionEnvItems(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	collectionId := dataMap[`collection_id`]
+	envId := dataMap[`env_id`]
+	if cast.ToInt(collectionId) == 0 {
+		gsgin.GinResponseError(c, `请选择集合`, nil)
+		return
+	}
+	if cast.ToInt(envId) == 0 {
+		gsgin.GinResponseError(c, `请选择环境`, nil)
+		return
+	}
+	list, _ := base.Component.TSqlite.Client.QuickQuery(`tbl_api_env_item`, `*`, map[string]any{
+		`collection_id`: collectionId,
+		`env_id`:        envId,
+	}).All()
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`list`: list,
+	})
+}
+
+func ApiCreateCollectionEnvItem(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	var id any
+	if cast.ToInt(dataMap[`env_id`]) == 0 || cast.ToInt(dataMap[`collection_id`]) == 0 {
+		gsgin.GinResponseError(c, `请选择集合和环境`, nil)
+		return
+	}
+	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `collection_id`, `env_id`, `desc`, `key`, `value`})
+	if cast.ToInt(dataMap[`id`]) == 0 {
+		updateData[`create_time`] = time.Now().Unix()
+		updateData[`update_time`] = time.Now().Unix()
+		newId, createErr := base.Component.TSqlite.Client.QuickCreate(`tbl_api_env_item`, updateData).Exec()
+		if createErr != nil {
+			gsgin.GinResponseError(c, `创建失败 `+createErr.Error(), nil)
+			return
+		}
+		id = newId
+	} else {
+		updateData[`update_time`] = time.Now().Unix()
+		_, _ = base.Component.TSqlite.Client.QuickUpdate(`tbl_api_env_item`,
+			map[string]any{
+				`id`: dataMap[`id`],
+			}, updateData).Exec()
+		id = dataMap[`id`]
+	}
+	info, _ := base.Component.TSqlite.Client.QuickQuery(`tbl_api_env_item`, `*`, map[string]any{
+		`id`: id,
+	}).One()
+	gsgin.GinResponseSuccess(c, ``, info)
 }
 
 func Apis(c *gin.Context) {
