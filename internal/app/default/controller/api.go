@@ -46,6 +46,51 @@ func ApiCreateCollection(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, ``, info)
 }
 
+func ApiDeleteCollection(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	if cast.ToInt(dataMap[`id`]) == 0 {
+		gsgin.GinResponseError(c, `请选择集合`, nil)
+		return
+	} else {
+		_, _ = base.Component.TSqlite.Client.QuickDelete(`tbl_api_collection`,
+			map[string]any{
+				`id`: dataMap[`id`],
+			}).Exec()
+	}
+	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
+func ApiDeleteApi(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	if cast.ToInt(dataMap[`id`]) == 0 {
+		gsgin.GinResponseError(c, `请选择集合`, nil)
+		return
+	} else {
+		_, _ = base.Component.TSqlite.Client.QuickDelete(`tbl_api`,
+			map[string]any{
+				`id`: dataMap[`id`],
+			}).Exec()
+	}
+	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
+func ApiDeleteDir(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	if cast.ToInt(dataMap[`id`]) == 0 {
+		gsgin.GinResponseError(c, `请选择集合`, nil)
+		return
+	} else {
+		_, _ = base.Component.TSqlite.Client.QuickDelete(`tbl_api_dir`,
+			map[string]any{
+				`id`: dataMap[`id`],
+			}).Exec()
+	}
+	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
 func ApiCreateCollectionEnv(c *gin.Context) {
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
@@ -79,18 +124,20 @@ func ApiCollections(c *gin.Context) {
 	for _, item := range list {
 		item[`type`] = `collection`
 		//child
-		childs, _ := base.Component.TSqlite.Client.QuickQuery(`tbl_api_dir`, `*`, map[string]any{
+		dirs, _ := base.Component.TSqlite.Client.QuickQuery(`tbl_api_dir`, `*`, map[string]any{
 			`collection_id`: item[`id`],
 		}).Order(`id asc`).All()
-		for _, child := range childs {
+		for _, child := range dirs {
 			child[`type`] = `folder`
 			child[`uniqueid`] = fmt.Sprintf(`folder%d`, child[`id`])
-		}
-		for _, child := range childs {
-			child[`children`] = []map[string]any{}
+			//查找接口
+			apis, _ := base.Component.TSqlite.Client.QuickQuery(`tbl_api`, `*`, map[string]any{
+				`folder_id`: child[`id`],
+			}).Order(`id asc`).All()
+			child[`children`] = apis
 		}
 		item[`uniqueid`] = fmt.Sprintf(`collection%d`, item[`id`])
-		item[`children`] = childs
+		item[`children`] = dirs
 	}
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`list`: list,

@@ -240,6 +240,7 @@ func ai(tGin *base.Gin) {
 
 func api(tGin *base.Gin) {
 	tGin.GinPost(`/api/CreateCollection`, controller.ApiCreateCollection)
+	tGin.GinPost(`/api/DeleteCollection`, controller.ApiDeleteCollection)
 	tGin.GinPost(`/api/Collections`, controller.ApiCollections)
 	tGin.GinPost(`/api/CollectionEnvs`, controller.ApiCollectionEnvs)
 	tGin.GinPost(`/api/CreateCollectionEnv`, controller.ApiCreateCollectionEnv)
@@ -247,6 +248,8 @@ func api(tGin *base.Gin) {
 	tGin.GinPost(`/api/CreateCollectionEnvItem`, controller.ApiCreateCollectionEnvItem)
 	tGin.GinPost(`/api/CreateDir`, controller.ApiCreateDir)
 	tGin.GinPost(`/api/CreateApi`, controller.ApiCreateApi)
+	tGin.GinPost(`/api/DeleteApi`, controller.ApiDeleteApi)
+	tGin.GinPost(`/api/DeleteDir`, controller.ApiDeleteDir)
 	tGin.GinPost(`/api/Apis`, controller.Apis)
 	tGin.GinPost(`/api/ApiRun`, controller.ApiRun)
 }
