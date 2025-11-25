@@ -1,23 +1,15 @@
 ### 启动
 双击start.bat启动
 
-- 如果编译遇到错误 那么修改包中的检测内容大小后再编译（我们的编译是32位的）
-- 如果发布后打开报错，那么打开一个cmd窗口，然后直接输入.exe完整目录执行
-
 ### 新环境安装
 go env -w GOPROXY=https://goproxy.cn,direct
 
-### 插件
-- Batch Scripts support 允许在README.md中直接执行命令
-- MarkDown Editor Markdown编辑器
-
-### 各个master分支
-- master负责修改代码，其他代码永远使用master的代码，master不保留数据库配置文件
-- 其他master只保留有自己的编译文件，数据库文件
-
-### 编译及运行设置的参数说明
-- -X main.DbPath 本地数据库文件
-- -X main.ViewPath 前端页面dist目录
+### 更新计划
+1. 数据库变更：文件支持按年按月目录分类执行 wait
+2. 接口开发：执行后保存最后一次的结果 wait
+3. 接口开发：执行时需要等待保存完后再执行，且自动切换到结果 wait
+4. 接口开发：接口详情页面，右上角环境变量鼠标指上去需要显示所有的变量，同时支持弹窗修改 wait
+5. 接口开发：支持文件夹详情中显示所有接口说明 wait
 
 ```shell
 #公司编译

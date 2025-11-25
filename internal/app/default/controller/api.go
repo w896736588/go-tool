@@ -4,6 +4,7 @@ import (
 	"dev_tool/base"
 	"dev_tool/base/define"
 	"dev_tool/internal/pkg/p_api"
+	"errors"
 	"fmt"
 	"reflect"
 	"time"
@@ -173,18 +174,12 @@ func ApiCollectionEnvItems(c *gin.Context) {
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
 	collectionId := dataMap[`collection_id`]
-	envId := dataMap[`env_id`]
 	if cast.ToInt(collectionId) == 0 {
 		gsgin.GinResponseError(c, `请选择集合`, nil)
 		return
 	}
-	if cast.ToInt(envId) == 0 {
-		gsgin.GinResponseError(c, `请选择环境`, nil)
-		return
-	}
 	list, _ := base.Component.TSqlite.Client.QuickQuery(`tbl_api_env_item`, `*`, map[string]any{
 		`collection_id`: collectionId,
-		`env_id`:        envId,
 	}).All()
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`list`: list,
@@ -276,11 +271,30 @@ func ApiCreateApi(c *gin.Context) {
 	_ = gsgin.GinPostBody(c, &dataMap)
 	var id any
 	updateData := gstool.MapTakeKeys(&dataMap, []string{`folder_id`, `collection_id`, `name`, `method`, `url`,
-		`protocol`, `desc`, `headers`, `query_params`, `content_type`, `body_form`, `body_json`})
+		`protocol`, `desc`, `headers`, `query_params`, `content_type`, `body_form`, `body_json`, `env_id`})
 	for key, value := range updateData {
 		if gstool.ArrayExistValue(&[]string{reflect.Array.String(), reflect.Map.String(), reflect.Slice.String()}, gstool.ReflectGetType(value).String()) {
 			updateData[key] = gstool.JsonEncode(value)
 		}
+	}
+	var err error
+	//处理请求参数空值
+	updateData[`query_params`], err = filterEmptyArrayMap(cast.ToString(updateData[`query_params`]), `field`, `请求参数格式错误`, 500)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), ``)
+		return
+	}
+	//处理headers参数空值
+	updateData[`headers`], err = filterEmptyMap(cast.ToString(updateData[`headers`]), `headers格式错误`, 500)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), ``)
+		return
+	}
+	//处理请求参数空值
+	updateData[`body_form`], err = filterEmptyArrayMap(cast.ToString(updateData[`body_form`]), `field`, `请求体格式错误`, 500)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), ``)
+		return
 	}
 	if cast.ToInt(dataMap[`id`]) == 0 {
 		updateData[`create_time`] = time.Now().Unix()
@@ -309,6 +323,42 @@ func ApiCreateApi(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, ``, info)
 }
 
+func filterEmptyArrayMap(queryParams, fieldKey, errmsg string, max int) (string, error) {
+	queryParamsData := make([]map[string]any, 0)
+	queryParamsDataNew := make([]map[string]any, 0)
+	dErr := gstool.JsonDecode(queryParams, &queryParamsData)
+	if dErr != nil {
+		return ``, errors.New(errmsg)
+	}
+	for _, item := range queryParamsData {
+		if cast.ToString(item[fieldKey]) != `` {
+			queryParamsDataNew = append(queryParamsDataNew, item)
+		}
+	}
+	if len(queryParamsDataNew) > max {
+		return ``, errors.New(errmsg + `,最多` + cast.ToString(max) + `条`)
+	}
+	return gstool.JsonEncode(queryParamsDataNew), nil
+}
+
+func filterEmptyMap(queryParams, errmsg string, max int) (string, error) {
+	queryParamsData := make(map[string]any)
+	queryParamsDataNew := make(map[string]any)
+	dErr := gstool.JsonDecode(queryParams, &queryParamsData)
+	if dErr != nil {
+		return ``, errors.New(errmsg)
+	}
+	for key, item := range queryParamsData {
+		if key != `` {
+			queryParamsDataNew[key] = item
+		}
+	}
+	if len(queryParamsDataNew) > max {
+		return ``, errors.New(errmsg + `,最多` + cast.ToString(max) + `条`)
+	}
+	return gstool.JsonEncode(queryParamsDataNew), nil
+}
+
 func ApiRun(c *gin.Context) {
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
@@ -320,6 +370,7 @@ func ApiRun(c *gin.Context) {
 		gsgin.GinResponseError(c, `api不存在`, nil)
 		return
 	}
+	gstool.FmtPrintlnLogTime(`%s`, gstool.JsonFormat(apiInfo))
 	apiCli := p_api.NewApi(apiInfo)
 	err := apiCli.Run()
 	if err != nil {

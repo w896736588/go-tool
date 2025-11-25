@@ -1,6 +1,7 @@
 package p_api
 
 import (
+	"dev_tool/base"
 	"errors"
 	"net/http"
 	"time"
@@ -40,6 +41,7 @@ type Result struct {
 
 type Api struct {
 	BaseInfo *BaseInfo
+	EnvItems map[string]string
 	Result
 }
 
@@ -48,7 +50,17 @@ func NewApi(apiInfo map[string]any) *Api {
 	_ = gstool.JsonDecode(cast.ToString(apiInfo[`headers`]), &headers)
 	urlParams := make(map[string]any)
 	_ = gstool.JsonDecode(cast.ToString(apiInfo[`query_params`]), &urlParams)
-	requestUrl := cast.ToString(apiInfo[`protocol`]) + `://` + gstool.UrlAppendParams(cast.ToString(apiInfo[`url`]), urlParams)
+	url, _ := gstool.UrlDecode(gstool.UrlAppendParams(cast.ToString(apiInfo[`url`]), urlParams))
+	requestUrl := cast.ToString(apiInfo[`protocol`]) + `://` + url
+	envItems := make(map[string]string)
+	if cast.ToInt(apiInfo[`env_id`]) > 0 {
+		envItemList, _ := base.Component.TSqlite.Client.QuickQuery(`tbl_api_env_item`, `*`, map[string]any{
+			`env_id`: apiInfo[`env_id`],
+		}).All()
+		for _, envItem := range envItemList {
+			envItems[`{`+cast.ToString(envItem[`key`])+`}`] = cast.ToString(envItem[`value`])
+		}
+	}
 	return &Api{
 		BaseInfo: &BaseInfo{
 			Id:           cast.ToString(apiInfo[`id`]),
@@ -63,12 +75,23 @@ func NewApi(apiInfo map[string]any) *Api {
 			Headers:      headers,
 			BodyForm:     cast.ToString(apiInfo[`body_form`]),
 		},
-		Result: Result{},
+		EnvItems: envItems,
+		Result:   Result{},
+	}
+}
+
+func (h *Api) ReplaceEnv() {
+	gstool.FmtPrintlnLogTime(`开始替换环境变量 %s`, h.BaseInfo.Url)
+	h.BaseInfo.Url = gstool.SReplaces(h.BaseInfo.Url, h.EnvItems)
+	gstool.FmtPrintlnLogTime(`替换完后 %s %s`, h.BaseInfo.Url, h.BaseInfo.Url)
+	for k, v := range h.BaseInfo.Headers {
+		h.BaseInfo.Headers[k] = gstool.SReplaces(v, h.EnvItems)
 	}
 }
 
 func (h *Api) Run() error {
 	var cli *gshttp.Client
+	h.ReplaceEnv()
 	if h.BaseInfo.Method == http.MethodPost {
 		if h.BaseInfo.ContentType == `application/json` {
 			h.Result.Url = h.BaseInfo.Url
@@ -95,10 +118,14 @@ func (h *Api) Run() error {
 	}
 	//填充header
 	cli.Headers(h.BaseInfo.Headers)
+	h.Result.Headers = cli.GetHeaders()
 	startMill := time.Now().UnixMilli()
 	cli.Request(20)
 	if cli.ErrInfo() != nil {
-		return cli.ErrInfo()
+		h.Result.Millisecond = time.Now().UnixMilli() - startMill
+		h.Result.Errmsg = cli.ErrInfo().Error()
+		h.Result.Result = ``
+		return nil
 	}
 	var err error
 	h.Result.Result, err = cli.ResultStr()
@@ -109,7 +136,6 @@ func (h *Api) Run() error {
 	h.Result.StatusCode = response.StatusCode
 	h.Result.Status = response.Status
 	h.Result.Millisecond = time.Now().UnixMilli() - startMill
-	h.Result.Headers = cli.GetHeaders()
 	return nil
 }
 
