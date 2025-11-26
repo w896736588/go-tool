@@ -122,7 +122,8 @@ func (h *TShellOut) GetClient(sshConfig map[string]any, shellClientId, sseClient
 	if err := gsShell.ConnectAuthPassword(); err != nil {
 		return nil, false, err
 	}
-	if _, err := gsShell.RunCommandWait(`pwd`); err != nil {
+	if err := gsShell.RunCommand(`pwd`); err != nil {
+		gstool.FmtPrintlnLogTime(`shell out 执行失败 %s`, err.Error())
 		return nil, false, err
 	}
 
@@ -226,6 +227,7 @@ func (h *TShellOut) CleanLog(shellClientId string) {
 
 func (h *TShellOut) SetReceiveMsg(shellOut *ShellOut, formatStream func(string) []string) {
 	shellOut.Client.SetFuncStreamReceive(func(msg string) {
+		gstool.FmtPrintlnLogTime(`收到消息 %s`, msg)
 		msg = gstool.StringFilterANSI(msg)
 		msg = strings.Replace(msg, "\u001B", "", -1)
 		//原内容处理

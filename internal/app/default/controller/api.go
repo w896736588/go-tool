@@ -135,6 +135,10 @@ func ApiCollections(c *gin.Context) {
 			apis, _ := base.Component.TSqlite.Client.QuickQuery(`tbl_api`, `*`, map[string]any{
 				`folder_id`: child[`id`],
 			}).Order(`id asc`).All()
+			for _, api := range apis {
+				api[`type`] = `api`
+				api[`uniqueid`] = fmt.Sprintf(`api%d`, api[`id`])
+			}
 			child[`children`] = apis
 		}
 		item[`uniqueid`] = fmt.Sprintf(`collection%d`, item[`id`])

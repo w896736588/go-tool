@@ -48,11 +48,9 @@ func (h *TDataBaseUp) CheckDataBaseUp() {
 }
 
 func (h *TDataBaseUp) Up() {
-	gstool.FmtPrintlnLogTime(`开始扫描升级sql文件 %s`, Component.Env.DatabaseUpPath)
 	allAlreadyUpFiles, err := Component.TSqlite.Client.QuickQuery(`tbl_database_up`, `filename`, nil).All()
 	if err != nil {
-		Component.GsLog.Errof(`数据库升级表查询失败 %s`, err.Error())
-		panic(fmt.Sprintf(`数据库升级表查询失败 %s`, err.Error()))
+		gstool.FmtPrintlnLogTime(`数据库升级表查询失败 %s`, err.Error())
 		return
 	}
 	upFileNames := make([]string, 0)
@@ -61,26 +59,40 @@ func (h *TDataBaseUp) Up() {
 	}
 	gstool.FmtPrintlnLogTime(`当前已执行sql文件 %d`, len(allAlreadyUpFiles))
 	files := make([]string, 0)
-	walkErr := gstool.DirWalk(Component.Env.DatabaseUpPath, func(path string, info os.FileInfo, err error) {
-		if info.IsDir() {
+	//循环处理
+	checkDirs := make([]string, 0)
+	for startYear := 2025; startYear <= cast.ToInt(gstool.TimeNowUnixToString(`Y`)); startYear++ {
+		for month := 1; month <= 12; month++ {
+			month := fmt.Sprintf(`%02d`, month)
+			dir := filepath.Join(Component.Env.DatabaseUpPath, cast.ToString(startYear), month)
+			exist, _ := gstool.DirPathExists(dir)
+			if exist {
+				checkDirs = append(checkDirs, dir)
+			}
+		}
+	}
+	for _, dir := range checkDirs {
+		gstool.FmtPrintlnLogTime(`开始扫描升级目录 %s`, dir)
+		walkErr := gstool.DirWalk(dir, func(path string, info os.FileInfo, err error) {
+			if info.IsDir() {
+				return
+			}
+			if !gstool.ArrayExistValue(&upFileNames, info.Name()) {
+				files = append(files, filepath.Join(dir, info.Name()))
+			}
+		})
+		if walkErr != nil {
+			gstool.FmtPrintlnLogTime(`数据库升级文件扫描失败 %s`, walkErr.Error())
 			return
 		}
-		if !gstool.ArrayExistValue(&upFileNames, info.Name()) {
-			files = append(files, info.Name())
-		}
-	})
-	if walkErr != nil {
-		Component.GsLog.Errof(`数据库升级文件扫描失败 %s`, walkErr.Error())
-		panic(fmt.Sprintf(`数据库升级文件扫描失败 %s`, walkErr.Error()))
-		return
 	}
+
 	gstool.ArraySort(files, gsdefine.SortAsc)
 	for _, file := range files {
 		gstool.FmtPrintlnLogTime(`开始处理升级文件 %s`, file)
-		sql, err := gstool.FileGetContent(filepath.Join(Component.Env.DatabaseUpPath, file))
+		sql, err := gstool.FileGetContent(file)
 		if err != nil {
-			Component.GsLog.Errof(`数据库升级文件读取失败 %s`, err.Error())
-			gstool.FmtPrintlnLogTime(`读取文件内容失败%s %s`, filepath.Join(Component.Env.DatabaseUpPath, file), err.Error())
+			gstool.FmtPrintlnLogTime(`读取文件内容失败%s %s`, file, err.Error())
 			return
 		}
 		_, err = Component.TSqlite.Client.ExecBySql(sql).Exec()
