@@ -173,13 +173,6 @@ func (h *Api) Run() error {
 	return nil
 }
 
-type KeyValue struct {
-	Description string `json:"description"`
-	Field       string `json:"field"`
-	Type        string `json:"type"`
-	Value       string `json:"value"`
-}
-
 func (h *Api) FormatBodyData(cli *gshttp.Client, bodyForm []KeyValue) error {
 	resultBodyForms := make([]map[string]any, 0)
 	//塞入的数据 所有的数据以数组的形式存入 如果是一个那么自然是单个，如果是多个就自动是数组传递
