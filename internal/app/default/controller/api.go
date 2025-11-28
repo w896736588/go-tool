@@ -290,14 +290,14 @@ func ApiCreateApi(c *gin.Context) {
 			gsgin.GinResponseError(c, err.Error(), ``)
 			return
 		}
-		gstool.FmtPrintlnLogTime(`%s`, gstool.JsonFormat(parsed.Form))
+		gstool.FmtPrintlnLogTime(`%s`, gstool.JsonFormat(parsed.FormData))
 		dataMap[`name`] = `从Curl导入`
 		dataMap[`method`] = parsed.Method
 		dataMap[`query_params`] = p_api.UrlParseParams(parsed.URL)
 		dataMap[`protocol`], dataMap[`url`] = gstool.URLGetBase(parsed.URL)
 		dataMap[`headers`] = parsed.Headers
 		dataMap[`content_type`] = parsed.ContentType
-		dataMap[`body_form`] = parsed.Form
+		dataMap[`body_form`] = parsed.FormData
 		dataMap[`body_json`] = parsed.Data
 
 	}

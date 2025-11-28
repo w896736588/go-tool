@@ -13,23 +13,13 @@ import (
 )
 
 type BaseInfo struct {
-	Id            string            `json:"id"`
-	Name          string            `json:"name"`
-	FolderId      string            `json:"folder_id"`
-	CollectionId  string            `json:"collection_id"`
-	Method        string            `json:"method"`
-	Url           string            `json:"url"`
-	Protocol      string            `json:"protocol"`
-	Desc          string            `json:"desc"`
-	ContentType   string            `json:"content_type"`
-	Headers       map[string]string `json:"headers"`
-	QueryParams   string            `json:"query_params"`
-	BodyForm      []KeyValue        `json:"body_form"`       // application/x-www-form-urlencoded
-	BodyJson      string            `json:"body_json"`       // application/json
-	BodyMultiForm string            `json:"body_multi_form"` // multipart/form-data
-	ResponseTake  []ResponseTake    `json:"response_take"`   // 提取
-	EnvItems      map[string]string `json:"env_items"`       //环境变量
-	EnvId         int               `json:"env_id"`          //所属环境变量
+	Id           string            `json:"id"`
+	Name         string            `json:"name"`
+	FolderId     string            `json:"folder_id"`
+	CollectionId string            `json:"collection_id"`
+	ResponseTake []ResponseTake    `json:"response_take"` // 提取
+	EnvItems     map[string]string `json:"env_items"`     //环境变量
+	EnvId        int               `json:"env_id"`        //所属环境变量
 }
 
 type ResponseTake struct {
@@ -53,7 +43,8 @@ type Result struct {
 }
 
 type Api struct {
-	BaseInfo *BaseInfo
+	BaseInfo   *BaseInfo
+	CurlStruct CurlStruct
 	Result
 }
 
@@ -88,16 +79,18 @@ func NewApi(apiInfo map[string]any) *Api {
 			Name:         cast.ToString(apiInfo[`name`]),
 			FolderId:     cast.ToString(apiInfo[`folder_id`]),
 			CollectionId: cast.ToString(apiInfo[`collection_id`]),
-			Method:       cast.ToString(apiInfo[`method`]),
-			Url:          requestUrl,
-			Protocol:     cast.ToString(apiInfo[`protocol`]),
-			Desc:         cast.ToString(apiInfo[`desc`]),
-			ContentType:  cast.ToString(apiInfo[`content_type`]),
-			Headers:      headers,
-			BodyForm:     bodyFormData,
 			ResponseTake: responseTake,
 			EnvItems:     envItems,
 			EnvId:        cast.ToInt(apiInfo[`env_id`]),
+		},
+		CurlStruct: CurlStruct{
+			Method:      cast.ToString(apiInfo[`method`]),
+			Url:         requestUrl,
+			Protocol:    cast.ToString(apiInfo[`protocol`]),
+			Desc:        cast.ToString(apiInfo[`desc`]),
+			ContentType: cast.ToString(apiInfo[`content_type`]),
+			Headers:     headers,
+			BodyForm:    bodyFormData,
 		},
 		Result: Result{
 			ResponseTake: responseTake,
@@ -108,38 +101,37 @@ func NewApi(apiInfo map[string]any) *Api {
 
 func (h *Api) ReplaceEnv() {
 	//url替换
-	h.BaseInfo.Url = gstool.SReplaces(h.BaseInfo.Url, h.BaseInfo.EnvItems)
+	h.CurlStruct.Url = gstool.SReplaces(h.CurlStruct.Url, h.BaseInfo.EnvItems)
 	//headers替换
-	for k, v := range h.BaseInfo.Headers {
-		h.BaseInfo.Headers[k] = gstool.SReplaces(v, h.BaseInfo.EnvItems)
+	for k, v := range h.CurlStruct.Headers {
+		h.CurlStruct.Headers[k] = gstool.SReplaces(v, h.BaseInfo.EnvItems)
 	}
 	//body form替换
-	for k, v := range h.BaseInfo.BodyForm {
-		h.BaseInfo.BodyForm[k].Value = gstool.SReplaces(v.Value, h.BaseInfo.EnvItems)
+	for k, v := range h.CurlStruct.BodyForm {
+		h.CurlStruct.BodyForm[k].Value = gstool.SReplaces(v.Value, h.BaseInfo.EnvItems)
 	}
 	//body json替换
-	h.BaseInfo.BodyJson = gstool.SReplaces(h.BaseInfo.BodyJson, h.BaseInfo.EnvItems)
+	h.CurlStruct.BodyJson = gstool.SReplaces(h.CurlStruct.BodyJson, h.BaseInfo.EnvItems)
 }
 
 func (h *Api) Run() error {
 	var cli *gshttp.Client
 	h.ReplaceEnv()
-	gstool.FmtPrintlnLogTime(`接口地址`, h.BaseInfo.Url)
-	if h.BaseInfo.Method == http.MethodPost {
-		if h.BaseInfo.ContentType == `application/json` {
-			h.Result.Url = h.BaseInfo.Url
-			cli = gshttp.PostJson(h.BaseInfo.Url).BodyStr(h.BaseInfo.BodyJson)
-		} else if h.BaseInfo.ContentType == `application/x-www-form-urlencoded` {
-			h.Result.Url = h.BaseInfo.Url
-			cli = gshttp.PostForm(h.BaseInfo.Url)
-			err := h.FormatBodyData(cli, h.BaseInfo.BodyForm)
+	if h.CurlStruct.Method == http.MethodPost {
+		if h.CurlStruct.ContentType == `application/json` {
+			h.Result.Url = h.CurlStruct.Url
+			cli = gshttp.PostJson(h.CurlStruct.Url).BodyStr(h.CurlStruct.BodyJson)
+		} else if h.CurlStruct.ContentType == `application/x-www-form-urlencoded` {
+			h.Result.Url = h.CurlStruct.Url
+			cli = gshttp.PostForm(h.CurlStruct.Url)
+			err := h.FormatBodyData(cli, h.CurlStruct.BodyForm)
 			if err != nil {
 				return err
 			}
-		} else if h.BaseInfo.ContentType == `multipart/form-data` {
-			h.Result.Url = h.BaseInfo.Url
-			cli = gshttp.PostMultiForm(h.BaseInfo.Url)
-			err := h.FormatBodyData(cli, h.BaseInfo.BodyForm)
+		} else if h.CurlStruct.ContentType == `multipart/form-data` {
+			h.Result.Url = h.CurlStruct.Url
+			cli = gshttp.PostMultiForm(h.CurlStruct.Url)
+			err := h.FormatBodyData(cli, h.CurlStruct.BodyForm)
 			if err != nil {
 				return err
 			}
@@ -147,11 +139,11 @@ func (h *Api) Run() error {
 			return errors.New(`不支持的请求类型`)
 		}
 	} else {
-		h.Result.Url = h.BaseInfo.Url
+		h.Result.Url = h.CurlStruct.Url
 		cli = gshttp.Get(h.Result.Url)
 	}
 	//填充header
-	cli.Headers(h.BaseInfo.Headers)
+	cli.Headers(h.CurlStruct.Headers)
 	h.Result.Headers = cli.GetHeaders()
 	startMill := time.Now().UnixMilli()
 	cli.Request(20)
@@ -184,7 +176,7 @@ func (h *Api) FormatBodyData(cli *gshttp.Client, bodyForm []KeyValue) error {
 		}
 		if keyValue.Type == `string` {
 			bodyMaps[keyValue.Field] = append(bodyMaps[keyValue.Field], cast.ToString(keyValue.Value))
-			if h.BaseInfo.ContentType == `application/x-www-form-urlencoded` {
+			if h.CurlStruct.ContentType == `application/x-www-form-urlencoded` {
 				resultBodyForms = append(resultBodyForms, map[string]any{
 					`field`: keyValue.Field,
 					`type`:  keyValue.Type,
@@ -201,7 +193,7 @@ func (h *Api) FormatBodyData(cli *gshttp.Client, bodyForm []KeyValue) error {
 			cli.BodyFile(keyValue.Field, keyValue.Value, gstool.FileGetNameByPath(keyValue.Value))
 		} else if keyValue.Type == `integer` {
 			bodyMaps[keyValue.Field] = append(bodyMaps[keyValue.Field], cast.ToInt(keyValue.Value))
-			if h.BaseInfo.ContentType == `application/x-www-form-urlencoded` {
+			if h.CurlStruct.ContentType == `application/x-www-form-urlencoded` {
 				resultBodyForms = append(resultBodyForms, map[string]any{
 					`field`: keyValue.Field,
 					`type`:  keyValue.Type,
@@ -216,7 +208,7 @@ func (h *Api) FormatBodyData(cli *gshttp.Client, bodyForm []KeyValue) error {
 			}
 		} else if keyValue.Type == `float` {
 			bodyMaps[keyValue.Field] = append(bodyMaps[keyValue.Field], cast.ToFloat64(keyValue.Value))
-			if h.BaseInfo.ContentType == `application/x-www-form-urlencoded` {
+			if h.CurlStruct.ContentType == `application/x-www-form-urlencoded` {
 				resultBodyForms = append(resultBodyForms, map[string]any{
 					`field`: keyValue.Field,
 					`type`:  keyValue.Type,
@@ -237,7 +229,7 @@ func (h *Api) FormatBodyData(cli *gshttp.Client, bodyForm []KeyValue) error {
 				setValue = false
 			}
 			bodyMaps[keyValue.Field] = append(bodyMaps[keyValue.Field], setValue)
-			if h.BaseInfo.ContentType == `application/x-www-form-urlencoded` {
+			if h.CurlStruct.ContentType == `application/x-www-form-urlencoded` {
 				resultBodyForms = append(resultBodyForms, map[string]any{
 					`field`: keyValue.Field,
 					`type`:  keyValue.Type,

@@ -45,7 +45,8 @@ func baseRouter(tGin *base.Gin) {
 	tGin.GinPost(`/api/BaseCheckUnikeyExist`, controller.BaseCheckUnikeyExist) //检查unikey是否已经登录注册
 	tGin.GinPost(`/api/BaseSshList`, controller.BaseSshList)                   //ssh列表
 	tGin.GinPost(`/api/Ip`, controller.Ip)                                     //登录
-	tGin.GinPost(`/api/ports`, controller.Ports)
+	tGin.GinPost(`/api/ports`, controller.Ports)                               //获取支持的端口
+	tGin.GinPost(`/api/Upload`, controller.Upload)                             //上传文件
 }
 
 // redis相关

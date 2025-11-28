@@ -6,7 +6,9 @@ import (
 	_struct "dev_tool/base/struct"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"gitee.com/Sxiaobai/gs/gsgin"
 	"gitee.com/Sxiaobai/gs/gstool"
@@ -116,5 +118,28 @@ func Ip(c *gin.Context) {
 func Ports(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, `获取成功`, map[string]any{
 		`ports`: base.Component.Env.Ports,
+	})
+}
+
+func Upload(c *gin.Context) {
+	file, err := c.FormFile(`file`)
+	if err != nil {
+		gsgin.GinResponseError(c, `上传失败:`+err.Error(), ``)
+		return
+	}
+	uploadDir := filepath.Join(base.Component.Env.RootPath, `upload`)
+	_ = gstool.DirCreatePath(uploadDir)
+	// 生成新名字：时间戳+扩展名
+	ext := filepath.Ext(file.Filename)
+	newName := fmt.Sprintf("%d%s", time.Now().UnixMicro(), ext)
+	dst := filepath.Join(uploadDir, newName)
+
+	if err := c.SaveUploadedFile(file, dst); err != nil {
+		gsgin.GinResponseError(c, `上传存储文件失败:`+err.Error(), ``)
+		return
+	}
+
+	gsgin.GinResponseSuccess(c, `上传成功`, map[string]string{
+		`url`: dst,
 	})
 }
