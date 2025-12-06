@@ -20,8 +20,8 @@ import (
 	"github.com/spf13/viper"
 )
 
-func InitBase(appName, ViewPath string) {
-	initComponent(appName, ViewPath)
+func InitBase(appName, ConfigFile string) {
+	initComponent(appName, ConfigFile)
 	initSqlite()
 	initGin()
 	initOther()
@@ -45,7 +45,7 @@ func stdLog() {
 	//os.Stderr = errFile
 }
 
-func initComponent(appName, ViewPath string) {
+func initComponent(appName, ConfigFile string) {
 	base.Component = base.TComponent{}
 	base.Component.Env = &base.Env{}
 	base.Component.TGins = make([]*base.Gin, 0)
@@ -69,7 +69,7 @@ func initComponent(appName, ViewPath string) {
 		panic(err.Error())
 	}
 	//初始化配置
-	base.Component.Env.Init(appName)
+	base.Component.Env.Init(appName, ConfigFile)
 	base.Component.Env.DatabaseUpPath = filepath.Join(base.Component.Env.RootPath, `internal`, `app`, `default`, `database`)
 	//初始化shell
 	base.Component.TShell = base.NewTShell()

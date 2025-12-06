@@ -5,6 +5,7 @@ import (
 	"dev_tool/base/define"
 	_struct "dev_tool/base/struct"
 	"fmt"
+	"gitee.com/Sxiaobai/gs/v2/gshttp/stream"
 	"time"
 
 	"gitee.com/Sxiaobai/gs/v2/gshttp"
@@ -158,54 +159,65 @@ func (h *ContextPage) ListenUrl(route playwright.Route, listen *_struct.ListenUr
 	var res []byte
 	var resErr error
 	listen.StartCallBack(requestUrl)
-	if listen.IsSse {
-		if listen.ParseType == define.RegisterLinkParseTypeJson { //增量json流式分段
-			for i := 0; i < 10; i++ { //不知道为什么有时候报错 所以重试看看
-				base.Component.GsLog.Debugf(`----------------------`)
-				cli := gshttp.PostJson(requestUrl).
-					BodyStr(postData).
-					Headers(headers)
-				cli.OpenKeepAlive()
-				res, resErr = cli.OpenStreamBytesEnd([]byte("}}}"), func(s string, err error) {
-					listen.Callback(requestUrl, s, err)
-				}, func(bytes []byte) []byte {
-					return bytes
-				}).Request(200).Result()
-				if resErr == nil {
-					base.Component.GsLog.Debugf(`成功请求 url--%s--`, originalRequest.URL())
-					base.Component.GsLog.Debugf(`成功请求 headers--%s--`, gstool.JsonEncode(originalRequest.Headers()))
-					data, err := originalRequest.PostData()
-					if err != nil {
-						base.Component.GsLog.Debugf(`成功请求 data error %s`, err.Error())
-					} else {
-						base.Component.GsLog.Debugf(`成功请求 data--%s--`, data)
-					}
-					listen.MsgBack(fmt.Sprintf(`%s 第%d次尝试，成功`, "\n"+gstool.TimeNowUnixToString(`Y-m-d H:i:s`), i))
-					break
-				} else {
-					listen.MsgBack(fmt.Sprintf(`%s 第%d次尝试，失败 %s`, "\n"+gstool.TimeNowUnixToString(`Y-m-d H:i:s`), i, resErr.Error()))
-					base.Component.GsLog.Debugf(`失败请求 url--%s--`, originalRequest.URL())
-					base.Component.GsLog.Debugf(`失败请求 headers--%s--`, gstool.JsonEncode(originalRequest.Headers()))
-					data, err := originalRequest.PostData()
-					if err != nil {
-						base.Component.GsLog.Debugf(`失败请求 data error %s`, err.Error())
-					} else {
-						base.Component.GsLog.Debugf(`失败请求 data--%s--`, data)
-					}
-					time.Sleep(time.Second * 5)
-				}
-			}
-		} else {
+	if listen.ParseConfig.IsStream == 1 {
+		retryNum := max(1, listen.ParseConfig.Retry)
+		retryWaitSecond := max(2, listen.ParseConfig.RetrySecond)
+		for i := 0; i < retryNum; i++ { //重试
+			base.Component.GsLog.Debugf(`----------------------`)
 			cli := gshttp.PostJson(requestUrl).
 				BodyStr(postData).
 				Headers(headers)
-			res, resErr = cli.OpenStreamBytesEnd([]byte("\n\n"), func(s string, err error) {
-				listen.Callback(requestUrl, s, err)
-			}, func(bytes []byte) []byte {
-				return bytes
-			}).Request(200).Result()
+			cli.OpenKeepAlive()
+			//注册接收处理函数
+			var fac gshttp.StreamInterface
+			if len(listen.ParseConfig.ReceiveRegex) > 0 {
+				base.Component.TVariable.Log.Debugf(`通过正则分割接收 %q`, listen.ParseConfig.ReceiveRegex)
+				fac = &stream.Reges{
+					Reges: listen.ParseConfig.ReceiveRegex,
+					CallFunc: func(s string, err error) {
+						listen.Callback(requestUrl, s, err)
+					},
+					FormatFunc: nil,
+				}
+			} else if len(listen.ParseConfig.ReceiveSignal) > 0 {
+				base.Component.TVariable.Log.Debugf(`通过字符串分割接收 %q`, listen.ParseConfig.ReceiveSignal)
+				fac = &stream.Byts{
+					Byts: []byte(listen.ParseConfig.ReceiveSignal),
+					CallFunc: func(s string, err error) {
+						listen.Callback(requestUrl, s, err)
+					},
+					FormatFunc: nil,
+				}
+			}
+			if fac != nil {
+				res, resErr = cli.SetStreamFac(fac).Request(200).Result()
+			} else {
+				res, resErr = cli.Request(200).Result()
+			}
+			if resErr == nil {
+				base.Component.GsLog.Debugf(`成功请求 url--%s--`, originalRequest.URL())
+				base.Component.GsLog.Debugf(`成功请求 headers--%s--`, gstool.JsonEncode(originalRequest.Headers()))
+				data, err := originalRequest.PostData()
+				if err != nil {
+					base.Component.GsLog.Debugf(`成功请求 data error %s`, err.Error())
+				} else {
+					base.Component.GsLog.Debugf(`成功请求 data--%s--`, data)
+				}
+				listen.MsgBack(fmt.Sprintf(`%s 第%d次尝试，成功`, "\n"+gstool.TimeNowUnixToString(`Y-m-d H:i:s`), i))
+				break
+			} else {
+				listen.MsgBack(fmt.Sprintf(`%s 第%d次尝试，失败 %s`, "\n"+gstool.TimeNowUnixToString(`Y-m-d H:i:s`), i, resErr.Error()))
+				base.Component.GsLog.Debugf(`失败请求 url--%s--`, originalRequest.URL())
+				base.Component.GsLog.Debugf(`失败请求 headers--%s--`, gstool.JsonEncode(originalRequest.Headers()))
+				data, err := originalRequest.PostData()
+				if err != nil {
+					base.Component.GsLog.Debugf(`失败请求 data error %s`, err.Error())
+				} else {
+					base.Component.GsLog.Debugf(`失败请求 data--%s--`, data)
+				}
+				time.Sleep(time.Second * time.Duration(retryWaitSecond))
+			}
 		}
-
 	} else {
 		cli := gshttp.PostJson(requestUrl).
 			BodyStr(postData).

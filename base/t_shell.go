@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"runtime/debug"
 	"sync"
+	"time"
 
 	"gitee.com/Sxiaobai/gs/v2/gsssh"
 	"gitee.com/Sxiaobai/gs/v2/gstool"
@@ -13,7 +14,7 @@ import (
 )
 
 type TShell struct {
-	ShellClientMap map[string]*gsssh.SshConfig
+	ShellClientMap map[string]*gsssh.SshTerminal
 	lock           sync.Mutex
 	log            *gstool.GsSlog
 }
@@ -22,14 +23,14 @@ func NewTShell() *TShell {
 	log := gstool.NewSlog3(Component.Env.LogPath, `shell`)
 	_ = log.CleanOldLogs(2)
 	return &TShell{
-		ShellClientMap: make(map[string]*gsssh.SshConfig),
+		ShellClientMap: make(map[string]*gsssh.SshTerminal),
 		log:            log,
 	}
 }
 
 // GetClient 正常输出
 func (h *TShell) GetClient(sshConfig map[string]any, shellClientId, sseClientId string,
-	formatStream func(string) []string) (*gsssh.SshConfig, error) {
+	formatStream func(string) []string) (*gsssh.SshTerminal, error) {
 	defer h.lock.Unlock()
 	h.lock.Lock()
 	sshId := cast.ToString(sshConfig[`id`])
@@ -39,24 +40,22 @@ func (h *TShell) GetClient(sshConfig map[string]any, shellClientId, sseClientId 
 	if shell, ok := h.ShellClientMap[shellClientId]; ok && shell != nil {
 		return shell, nil
 	}
-	gsShell := gsssh.NewSshAuthPassword(cast.ToString(sshConfig["host"]),
-		cast.ToString(sshConfig["port"]), cast.ToString(sshConfig["username"]),
-		cast.ToString(sshConfig["password"]))
-	gsShell.GsSlog = Component.GsLog
-
+	gsShell := gsssh.NewSshTerminal(gsssh.NewSsh(&gsssh.SshConfig{
+		Name:     "",
+		Host:     cast.ToString(sshConfig["host"]),
+		Port:     cast.ToString(sshConfig["port"]),
+		UserName: cast.ToString(sshConfig["username"]),
+		Password: cast.ToString(sshConfig["password"]),
+	}))
 	//设置关闭事件
 	gsShell.SetFuncBroken(func() {
 		_ = Component.TSse.SendMsg(sseClientId, define.SseContentTypeMsg, sseClientId+` 注意：连接已中断，下次动作时进行链接`+"\n", 0)
 		h.RmClient(shellClientId)
 	})
-	gsShell.SetMaxRunSecond(40)
 	gsShell.SetMaxBufferSize(2 * 1024 * 1024) //最大允许2M的输出
-	createErr := gsShell.ConnectAuthPassword()
-	if createErr != nil {
-		return nil, createErr
-	}
 	//先执行一次确保连接正常
-	_, err := gsShell.RunCommandWait(`pwd`)
+	maxRunSecond := time.Second * 40
+	_, err := gsShell.RunCommandWait(`pwd`, maxRunSecond)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +84,7 @@ func (h *TShell) GetClient(sshConfig map[string]any, shellClientId, sseClientId 
 }
 
 // GetClientMarkdown 输出markdown格式
-func (h *TShell) GetClientMarkdown(sshConfig map[string]any, shellClientId, sseClientId string) (*gsssh.SshConfig, error) {
+func (h *TShell) GetClientMarkdown(sshConfig map[string]any, shellClientId, sseClientId string) (*gsssh.SshTerminal, error) {
 	defer h.lock.Unlock()
 	h.lock.Lock()
 	sshId := cast.ToString(sshConfig[`id`])
@@ -96,10 +95,13 @@ func (h *TShell) GetClientMarkdown(sshConfig map[string]any, shellClientId, sseC
 		return shell, nil
 	}
 
-	gsShell := gsssh.NewSshAuthPassword(cast.ToString(sshConfig["host"]),
-		cast.ToString(sshConfig["port"]), cast.ToString(sshConfig["username"]),
-		cast.ToString(sshConfig["password"]))
-	gsShell.GsSlog = Component.GsLog
+	gsShell := gsssh.NewSshTerminal(gsssh.NewSsh(&gsssh.SshConfig{
+		Name:     "",
+		Host:     cast.ToString(sshConfig["host"]),
+		Port:     cast.ToString(sshConfig["port"]),
+		UserName: cast.ToString(sshConfig["username"]),
+		Password: cast.ToString(sshConfig["password"]),
+	}))
 
 	//TODO 有时间研究一下 为什么sftp的链接断开后没有重连
 	//设置关闭事件
@@ -107,14 +109,9 @@ func (h *TShell) GetClientMarkdown(sshConfig map[string]any, shellClientId, sseC
 		_ = Component.TSse.SendMsg(sseClientId, define.SseContentTypeMsg, sseClientId+` 注意：连接已中断，下次动作时进行链接`+"\n", 0)
 		h.RmClient(shellClientId)
 	})
-	gsShell.SetMaxRunSecond(40)
 	gsShell.SetMaxBufferSize(2 * 1024 * 1024) //最大允许2M的输出
-	createErr := gsShell.ConnectAuthPassword()
-	if createErr != nil {
-		return nil, createErr
-	}
 	//先执行一次确保连接正常
-	_, err := gsShell.RunCommandWait(`pwd`)
+	_, err := gsShell.RunCommandWait(`pwd`, time.Second*40)
 	if err != nil {
 		return nil, err
 	}
@@ -144,6 +141,22 @@ func (h *TShell) GetClientMarkdown(sshConfig map[string]any, shellClientId, sseC
 	return gsShell, nil
 }
 
+func (h *TShell) GetSshOnce(sshConfig map[string]any) (*gsssh.SshOnce, error) {
+	sshId := cast.ToString(sshConfig[`id`])
+	if sshId == `` {
+		return nil, errors.New(`ssh配置错误，GetClientMarkdown ` + cast.ToString(debug.Stack()))
+	}
+
+	return gsssh.NewSshOnce(gsssh.NewSsh(&gsssh.SshConfig{
+		Name:     "",
+		Host:     cast.ToString(sshConfig["host"]),
+		Port:     cast.ToString(sshConfig["port"]),
+		UserName: cast.ToString(sshConfig["username"]),
+		Password: cast.ToString(sshConfig["password"]),
+	})), nil
+
+}
+
 func (h *TShell) Exist(uniqueKey string) bool {
 	defer h.lock.Unlock()
 	h.lock.Lock()
@@ -163,7 +176,7 @@ func (h *TShell) RmClient(uniqueKey string) {
 	delete(h.ShellClientMap, uniqueKey)
 }
 
-func (h *TShell) WalkShellList(businessFunc func(uniqueKey string, gsShell *gsssh.SshConfig)) {
+func (h *TShell) WalkShellList(businessFunc func(uniqueKey string, gsShell *gsssh.SshTerminal)) {
 	defer h.lock.Unlock()
 	h.lock.Lock()
 	for uniqueKey, gsShell := range h.ShellClientMap {

@@ -46,14 +46,13 @@ func (h *TMysql) GetClient(mysqlConfig map[string]any) (*gsdb.GsMysql, error) {
 		if sshConfigErr != nil {
 			return nil, gstool.Error(`获取ssh配置失败 %s`, sshConfigErr.Error())
 		}
-		gsMysql.Ssh = &gsssh.SshConfig{
+		gsMysql.SshBridge = gsssh.NewSshBridge(gsssh.NewSsh(&gsssh.SshConfig{
 			Name:     cast.ToString(sshConfig[`name`]),
 			Host:     cast.ToString(sshConfig[`host`]),
 			Port:     cast.ToString(sshConfig[`port`]),
 			UserName: cast.ToString(sshConfig[`username`]),
 			Password: cast.ToString(sshConfig[`password`]),
-			GsSlog:   Component.GsLog,
-		}
+		}))
 	}
 	connErr := gsMysql.CreateConn()
 	if connErr != nil {

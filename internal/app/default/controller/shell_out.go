@@ -235,7 +235,7 @@ func ShellOutCleanLog(c *gin.Context) {
 	return
 }
 
-func getShellOutComponent(c *gin.Context) (map[string]interface{}, *gsssh.SshConfig, string, error) {
+func getShellOutComponent(c *gin.Context) (map[string]interface{}, *gsssh.SshTerminal, string, error) {
 	reqMap := make(map[string]interface{})
 	err := gsgin.GinPostBody(c, &reqMap)
 	if err != nil {

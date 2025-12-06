@@ -48,14 +48,13 @@ func (h *TRedis) GetClient(redisConfig map[string]any) (*gsdb.GsRedis, error) {
 		if sshConfigErr != nil {
 			return nil, gstool.Error(`获取ssh配置失败 %s`, sshConfigErr.Error())
 		}
-		gsRedis.Ssh = &gsssh.SshConfig{
+		gsRedis.SshBridge = gsssh.NewSshBridge(gsssh.NewSsh(&gsssh.SshConfig{
 			Name:     cast.ToString(sshConfig[`name`]),
 			Host:     cast.ToString(sshConfig[`host`]),
 			Port:     cast.ToString(sshConfig[`port`]),
 			UserName: cast.ToString(sshConfig[`username`]),
 			Password: cast.ToString(sshConfig[`password`]),
-			GsSlog:   Component.GsLog,
-		}
+		}))
 	}
 	connErr := gsRedis.CreateConn()
 	if connErr != nil {

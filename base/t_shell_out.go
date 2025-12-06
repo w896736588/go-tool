@@ -23,7 +23,7 @@ const MaxSendLength = 1000    //刷新页面后最多发送给前端多少行
 
 // ShellOut 单个 ssh 会话
 type ShellOut struct {
-	Client           *gsssh.SshConfig
+	Client           *gsssh.SshTerminal
 	sseClientId      string
 	errorList        []ErrorBlock   // 最终归档的错误块
 	remainContents   []string       // 保留的内容(替换后的)
@@ -101,28 +101,24 @@ func (h *TShellOut) GetClient(sshConfig map[string]any, shellClientId, sseClient
 		return shellOut, true, nil
 	}
 
-	gsShell := gsssh.NewSshAuthPassword(
-		cast.ToString(sshConfig["host"]),
-		cast.ToString(sshConfig["port"]),
-		cast.ToString(sshConfig["username"]),
-		cast.ToString(sshConfig["password"]))
-	gsShell.GsSlog = Component.GsLog
-
+	gsShell := gsssh.NewSshTerminal(gsssh.NewSsh(&gsssh.SshConfig{
+		Name:     "",
+		Host:     cast.ToString(sshConfig["host"]),
+		Port:     cast.ToString(sshConfig["port"]),
+		UserName: cast.ToString(sshConfig["username"]),
+		Password: cast.ToString(sshConfig["password"]),
+	}))
 	// 断开回调
 	gsShell.SetFuncBroken(func() {
 		_ = Component.TSse.SendMsg(sseClientId, define.SseContentTypeMsg, sseClientId+` 注意：连接已中断，下次动作时进行链接`+"\n", 0)
 		h.RmClient(shellClientId)
 	})
-	gsShell.SetMaxRunSecond(40)
 	gsShell.SetCombineNum(1)
 	gsShell.SetMaxBufferSize(2 * 1024 * 1024) //最大允许2M的输出
 	gsShell.SetPtyConfig(gsssh.PtyConfig{
 		Width: 1000,
 	})
 
-	if err := gsShell.ConnectAuthPassword(); err != nil {
-		return nil, false, err
-	}
 	if err := gsShell.RunCommand(`pwd`); err != nil {
 		gstool.FmtPrintlnLogTime(`shell out 执行失败 %s`, err.Error())
 		return nil, false, err
@@ -358,7 +354,7 @@ func (h *TShellOut) RmClient(uniqueKey string) {
 	delete(h.ShellOutMap, uniqueKey)
 }
 
-func (h *TShellOut) WalkShellList(businessFunc func(uniqueKey string, gsShell *gsssh.SshConfig)) {
+func (h *TShellOut) WalkShellList(businessFunc func(uniqueKey string, gsShell *gsssh.SshTerminal)) {
 	h.lock.Lock()
 	defer h.lock.Unlock()
 	for k, v := range h.ShellOutMap {

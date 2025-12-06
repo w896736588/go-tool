@@ -21,15 +21,15 @@ export GOARCH=amd64
 export GOOS=windows
 # DbPath数据库目录
 # DbName数据库文件名 为空的话取服务名
-go build -tags timetzdata -ldflags " -s -w" -o ./build/zhima.exe ./cmd/zhima/main.go
-#git add ./build/zhima.exe
-#git update-index --chmod=+x ./build/zhima.exe
-git ls-files --stage ./build/zhima.exe
-go build -tags timetzdata -ldflags " -s -w" -o ./build/zhimaPub.exe ./cmd/zhima/main.go
+go build -tags timetzdata -ldflags " -s -w" -o ./build/dtool.exe ./cmd/dtool/main.go
+#git add ./build/dtool.exe
+#git update-index --chmod=+x ./build/dtool.exe
+git ls-files --stage ./build/dtool.exe
+go build -tags timetzdata -ldflags " -s -w" -o ./build/zhimaPub.exe ./cmd/dtool/main.go
 git ls-files --stage ./build/zhimaPub.exe
 ```
 
 ```shell
 export CGO_ENABLED=1
-go run -ldflags " -s -w" cmd/zhima/main.go
+go run -ldflags " -s -w" cmd/dtool/main.go --ConfigFile=company
 ```

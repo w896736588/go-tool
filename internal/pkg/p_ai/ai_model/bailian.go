@@ -6,6 +6,7 @@ import (
 	_struct "dev_tool/base/struct"
 	"errors"
 	"gitee.com/Sxiaobai/gs/v2/gshttp"
+	"gitee.com/Sxiaobai/gs/v2/gshttp/stream"
 	"gitee.com/Sxiaobai/gs/v2/gstool"
 	"github.com/spf13/cast"
 )
@@ -54,9 +55,14 @@ func (h *Bailian) Api(messageList []_struct.Message, tools []_struct.Tool) (stri
 	var res []byte
 	var resErr error
 	if h.streamFunc != nil {
-		res, resErr = cli.OpenStreamBytesEnd([]byte("\n\n"), h.streamFunc, func(bytes []byte) []byte {
-			return bytes
-		}).Request(200).Result()
+		fac := &stream.Byts{
+			Byts: []byte("\n\n"),
+			CallFunc: func(s string, err error) {
+				h.streamFunc(s, err)
+			},
+			FormatFunc: nil,
+		}
+		res, resErr = cli.SetStreamFac(fac).Request(200).Result()
 	} else {
 		res, resErr = cli.Request(200).Result()
 	}

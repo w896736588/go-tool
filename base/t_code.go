@@ -3,6 +3,7 @@ package base
 import (
 	"gitee.com/Sxiaobai/gs/v2/gstool"
 	"strings"
+	"time"
 )
 
 type TCode struct {
@@ -21,8 +22,8 @@ func (h *TCode) FindCode(sshConfig map[string]any, dirPath string) []string {
 		return codeDirList
 	}
 	defer Component.TShell.RmClient(uniqueKey)
-	defer client.Close()
-	ret, retErr := client.RunCommandWait(command.GetCommand().ToStr())
+	defer client.CloseTerminal()
+	ret, retErr := client.RunCommandWait(command.GetCommand().ToStr(), 40*time.Second)
 	if retErr != nil {
 		gstool.FmtPrintlnLogTime(`执行命令失败 %s`, retErr.Error())
 	} else {

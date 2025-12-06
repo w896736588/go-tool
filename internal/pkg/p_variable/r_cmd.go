@@ -9,6 +9,7 @@ import (
 	"dev_tool/internal/pkg/p_playwright"
 	"errors"
 	"fmt"
+	"gitee.com/Sxiaobai/gs/v2/gshttp/stream"
 	"os"
 	"os/exec"
 	"strings"
@@ -152,7 +153,7 @@ func (h *RCmd) RunBash() (string, error) {
 		return ``, sshConfigErr
 	}
 	var sshClientErr error
-	var sshClient *gsssh.SshConfig
+	var sshClient *gsssh.SshTerminal
 	//家目录
 	home := `/var/www`
 	if cast.ToString(sshConfig[`home`]) != `` {
@@ -165,13 +166,13 @@ func (h *RCmd) RunBash() (string, error) {
 		return ``, sshClientErr
 	}
 	//sftp
-	sftpClient, sftpClientErr := base.Component.TShell.GetClientMarkdown(sshConfig, sftpUniqueKey, h.SseId)
-	if sftpClientErr != nil {
-		return ``, sftpClientErr
+	sshOnce, sshOnceErr := base.Component.TShell.GetSshOnce(sshConfig)
+	if sshOnceErr != nil {
+		return ``, sshOnceErr
 	}
 	var err error
 	//创建目录
-	_, err = sshClient.RunCommandWait(fmt.Sprintf(`sudo mkdir -p %s`, variableDir))
+	_, err = sshClient.RunCommandWait(fmt.Sprintf(`sudo mkdir -p %s`, variableDir), 40*time.Second)
 	if err != nil {
 		return ``, err
 	}
@@ -181,17 +182,17 @@ func (h *RCmd) RunBash() (string, error) {
 	//	return ``, err
 	//}
 	base.Component.TVariable.Log.Debugf(`%s \n %s `, fmt.Sprintf(variableDir+`/variable_%s.sh`, cmdId), bash)
-	err = sftpClient.UploadFile(fmt.Sprintf(variableDir+`/variable_%s.sh`, cmdId), bash, ``)
+	err = sshOnce.UploadFile(fmt.Sprintf(variableDir+`/variable_%s.sh`, cmdId), bash, ``)
 	if err != nil {
 		return "", gstool.Error(`上传失败 %s %s`, fmt.Sprintf(variableDir+`/variable_%s.sh`, cmdId), err.Error())
 	}
-	_, err = sshClient.RunCommandWait(fmt.Sprintf(`sudo chmod +x %s/variable_%s.sh`, variableDir, cmdId))
+	_, err = sshClient.RunCommandWait(fmt.Sprintf(`sudo chmod +x %s/variable_%s.sh`, variableDir, cmdId), 40*time.Second)
 	if err != nil {
 		return ``, err
 	}
 	//var result string
 	var result string
-	result, err = sshClient.RunCommandWait(fmt.Sprintf(`sudo %s/variable_%s.sh`, variableDir, cmdId))
+	result, err = sshClient.RunCommandWait(fmt.Sprintf(`sudo %s/variable_%s.sh`, variableDir, cmdId), 40*time.Second)
 	if err != nil {
 		return ``, err
 	}
@@ -239,15 +240,15 @@ func (h *RCmd) RunUpload() (string, error) {
 		return ``, sshConfigErr
 	}
 	//sftp
-	sftpClient, sftpClientErr := base.Component.TShell.GetClientMarkdown(sshConfig, sftpUniqueKey, h.SseId)
-	if sftpClientErr != nil {
-		return ``, sftpClientErr
+	sshOnce, sshOnceErr := base.Component.TShell.GetSshOnce(sshConfig)
+	if sshOnceErr != nil {
+		return ``, sshOnceErr
 	}
 	//如果是上传文件
 	isErr := false
 	if gstool.FileIsExisted(sourceFile) {
 		h.StreamMsg(`本地存在文件：`+sourceFile+`，准备上传`, true)
-		uploadErr := h.uploadFile(sshConfig, sshId, sftpClient, sourceFile, targetDir)
+		uploadErr := h.uploadFile(sshConfig, sshId, sshOnce, sourceFile, targetDir)
 		if uploadErr != nil {
 			return ``, uploadErr
 		}
@@ -260,7 +261,7 @@ func (h *RCmd) RunUpload() (string, error) {
 			if info.IsDir() {
 				return
 			}
-			uploadErr := h.uploadFile(sshConfig, sshId, sftpClient, path, targetDir)
+			uploadErr := h.uploadFile(sshConfig, sshId, sshOnce, path, targetDir)
 			if uploadErr != nil {
 				base.Component.TVariable.Log.Errof(`上传失败`)
 				h.StreamMsg(fmt.Sprintf(`上传失败 %s`, uploadErr.Error()), true)
@@ -276,7 +277,7 @@ func (h *RCmd) RunUpload() (string, error) {
 	return ``, nil
 }
 
-func (h *RCmd) uploadFile(sshConfig map[string]any, sshId int, sftpClient *gsssh.SshConfig, sourceFile, targetDir string) error {
+func (h *RCmd) uploadFile(sshConfig map[string]any, sshId int, sshOnce *gsssh.SshOnce, sourceFile, targetDir string) error {
 	var err error
 	fileName := gstool.FileGetNameByPath(sourceFile)
 	targetTempFileName := fileName + base.Component.TBase.GetUnique(`_upload`)
@@ -286,7 +287,7 @@ func (h *RCmd) uploadFile(sshConfig map[string]any, sshId int, sftpClient *gsssh
 	startTime := gstool.TimeNowUnixToString(`Y-m-d H:i:s`)
 	h.StreamMsg(fmt.Sprintf(`[PROCESS]%s %s`, startTime, `上传进度:\s+\d+%\s+\(\d+\/\d+\s+bytes\)`), false)
 	var lastPrintedStep int = -1
-	err = sftpClient.UploadFileProcessScp(targetTempFile, sourceFile, func(bytesWritten, totalBytes int64) {
+	err = sshOnce.UploadFileProcessScp(targetTempFile, sourceFile, func(bytesWritten, totalBytes int64) {
 		// 计算当前进度百分比
 		currentPercent := float64(bytesWritten) / float64(totalBytes) * 100
 		currentStep := int(currentPercent) / 1 // 每1%为一个step
@@ -323,7 +324,7 @@ func (h *RCmd) uploadFile(sshConfig map[string]any, sshId int, sftpClient *gsssh
 		return gstool.Error(`上传失败 %s`, sshClientErr.Error())
 	}
 	h.StreamMsg(fmt.Sprintf(`迁移%s %s`, targetTempFile, targetDir+`/`+fileName), true)
-	_, err = sshClient.RunCommandWait(fmt.Sprintf(`sudo mv %s %s`, targetTempFile, targetDir+`/`+fileName))
+	_, err = sshClient.RunCommandWait(fmt.Sprintf(`sudo mv %s %s`, targetTempFile, targetDir+`/`+fileName), 40*time.Second)
 	if err != nil {
 		h.StreamMsg(fmt.Sprintf(`迁移失败 %s`, err.Error()), true)
 		return gstool.Error(`迁移失败 %s`, err.Error())
@@ -363,7 +364,7 @@ func (h *RCmd) RunCommand() (string, error) {
 			return ``, sshConfigErr
 		}
 		var sshClientErr error
-		var sshClient *gsssh.SshConfig
+		var sshClient *gsssh.SshTerminal
 		//ssh
 		sshClient, sshClientErr = base.Component.TShell.GetClientMarkdown(sshConfig, sshUniqueKey, h.SseId)
 		if sshClientErr != nil {
@@ -374,7 +375,7 @@ func (h *RCmd) RunCommand() (string, error) {
 		runCmd.SetCommand(command)
 		runCmd.Sudo()
 		h.StreamMsg(base.Component.TMarkDown.Code(runCmd.GetCommand().ToStr(), `bash`), true)
-		_, err = sshClient.RunCommandWait(runCmd.GetCommand().ToStr())
+		_, err = sshClient.RunCommandWait(runCmd.GetCommand().ToStr(), 40*time.Second)
 		if err != nil {
 			return ``, err
 		}
@@ -394,20 +395,20 @@ func (h *RCmd) RunCurl() (string, error) {
 	var result []byte
 	var err error
 	if isStream == 1 {
-		result, err = gshttp.Get(url).OpenStreamBytesEnd([]byte("\n\n"), func(msg string, err error) {
-			if err != nil {
-				return
-			}
-			sendMsg := base.Component.TAi.ParseStream(url, msg)
-			h.StreamMsg(cast.ToString(sendMsg), false)
-		}, func(bytes []byte) []byte {
-			sendMsg := base.Component.TAi.ParseStream(url, cast.ToString(bytes))
-			if gstool.SContains(cast.ToString(sendMsg), []string{`commit 共：`, `获取完项目列表 共：`}) { //这种内容不要汇集到最终结果中
-				return []byte{}
-			} else {
-				return bytes
-			}
-		}).Request(200).Result()
+		fac := &stream.Byts{
+			Byts: []byte("\n\n"),
+			CallFunc: func(s string, err error) {
+				h.StreamMsg(s, false)
+			},
+			FormatFunc: func(s []byte) []byte {
+				if gstool.SContains(cast.ToString(s), []string{`commit 共：`, `获取完项目列表 共：`}) { //这种内容不要汇集到最终结果中
+					return []byte{}
+				} else {
+					return s
+				}
+			},
+		}
+		result, err = gshttp.Get(url).SetStreamFac(fac).Request(200).Result()
 	} else {
 		result, err = gshttp.Get(url).Request(200).Result()
 	}
@@ -460,29 +461,21 @@ func (h *RCmd) RunPlaywright() (string, error) {
 	listenUriList := cast.ToString(h.cmd[`options`])
 	ListenUrlList := make(map[string]*_struct.ListenUrl)
 	if listenUriList != `` {
-		listenM := make([]map[string]string, 0)
-		_ = gstool.JsonDecode(listenUriList, &listenM)
-		for _, v := range listenM {
-			uri := cast.ToString(v[`uri`])
+		parseConfigs := make([]_struct.CurlResultParse, 0)
+		_ = gstool.JsonDecode(listenUriList, &parseConfigs)
+		gstool.FmtPrintlnLogTime(`解析规则 %s`, gstool.JsonFormat(parseConfigs))
+		for _, parseConfig := range parseConfigs {
+			uri := parseConfig.Uri
 			if uri == `` {
 				continue
 			}
 			ListenUrlList[uri] = &_struct.ListenUrl{
-				ParseType: cast.ToString(v[`parse_type`]),
-				IsSse:     true,
+				ParseConfig: parseConfig,
 				Callback: func(url, msg string, err error) {
-					if cast.ToString(v[`parse_type`]) == define.RegisterLinkParseTypeJson {
-						base.Component.TAi.ParseStreamJson(url, msg, func(sendMsg string) {
-							h.StreamMsg(cast.ToString(sendMsg), false)
-						})
-
-					} else {
-						base.Component.TVariable.Log.Debugf(`收到消息2---%s---`, msg)
-						sendMsg := base.Component.TAi.ParseStream(url, msg)
-						h.StreamMsg(cast.ToString(sendMsg), false)
-					}
+					h.StreamDataReceive(&parseConfig, msg)
 				},
 				MsgBack: func(msg string) {
+					gstool.FmtPrintlnLogTime(`普通接收消息 %s`, msg)
 					h.StreamMsg(msg, true)
 				},
 				StartCallBack: func(url string) {
@@ -514,6 +507,41 @@ func (h *RCmd) RunPlaywright() (string, error) {
 		}
 	}
 	return ``, nil
+}
+
+// StreamDataReceive 流式结果解析
+func (h *RCmd) StreamDataReceive(parseConfig *_struct.CurlResultParse, msg string) {
+	if parseConfig.IsStream == 1 { //流式
+		if len(parseConfig.TakeJsons) > 0 { //配置了提取规则
+			jsonLists := gstool.JsonParseFromStr([]byte(msg))
+			for _, part := range jsonLists {
+				if part == `` {
+					continue
+				}
+				for _, takeJson := range parseConfig.TakeJsons {
+					extractor, err := gstool.NewJsonExtractorFromJSON(part)
+					if err != nil {
+						base.Component.TVariable.Log.Debugf(`解析json失败%v`, part)
+						continue
+					}
+					realTakeJson, _ := strings.CutPrefix(takeJson.Take, `res.`)
+					ret, err := extractor.Extract(realTakeJson)
+					if err != nil {
+						base.Component.TVariable.Log.Debugf(`提取json失败%v`, part)
+						continue
+					}
+					base.Component.TVariable.Log.Debugf(`提取json成功%v---%s`, part, cast.ToString(ret))
+					if cast.ToString(ret) != `` { //发送到sse
+						h.StreamMsg(cast.ToString(ret), false)
+					}
+				}
+			}
+		} else {
+			h.StreamMsg(cast.ToString(msg), false)
+		}
+	} else {
+		h.StreamMsg(cast.ToString(msg), false)
+	}
 }
 
 func (h *RCmd) RunCombine() (string, error) {

@@ -1,4 +1,4 @@
-package zhima
+package dtool
 
 import (
 	"dev_tool/base"

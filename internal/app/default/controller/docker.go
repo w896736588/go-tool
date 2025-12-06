@@ -6,6 +6,7 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"time"
 
 	"gitee.com/Sxiaobai/gs/v2/gsdefine"
 	"gitee.com/Sxiaobai/gs/v2/gsgin"
@@ -59,7 +60,7 @@ func DockerComposeServices(c *gin.Context) {
 	command1.Sudo()
 	command1.Cd(path.Dir(composeYmlPath))
 	command1.DockerComposeServices(cast.ToString(one[`docker_cmd`]), envFile)
-	result1, _ := sshClient.RunCommandWait(command1.GetCommand().ToStr())
+	result1, _ := sshClient.RunCommandWait(command1.GetCommand().ToStr(), 40*time.Second)
 	services := strings.Split(result1, "\n")
 	services = gstool.ArrayFilterEmpty(&services)
 	services = services[1:]
@@ -81,7 +82,7 @@ func DockerComposeConfigShow(c *gin.Context) {
 		return
 	}
 	catCommand := base.NewCommand().Sudo().ConsumerConfigCat(cast.ToString(data[`config_path`]), ``)
-	ret, _ := sshClient.RunCommandWait(catCommand.GetCommand().ToStr())
+	ret, _ := sshClient.RunCommandWait(catCommand.GetCommand().ToStr(), 40*time.Second)
 	retMsgList := make([]string, 0)
 	retMsgList = append(retMsgList, ret)
 	gsgin.GinResponseSuccess(c, ``, strings.Join(retMsgList, gsdefine.Enter))
@@ -112,7 +113,7 @@ func DockerComposeRestart(c *gin.Context) {
 	command.Sudo()
 	command.Cd(path.Dir(composeYmlPath))
 	command.DockerComposeRestart(cast.ToString(one[`docker_cmd`]), envFile, []string{service})
-	_, _ = sshClient.RunCommandWait(command.GetCommand().ToStr())
+	_, _ = sshClient.RunCommandWait(command.GetCommand().ToStr(), 40*time.Second)
 	gsgin.GinResponseSuccess(c, ``, map[string]any{})
 }
 
@@ -140,7 +141,7 @@ func DockerComposeStatus(c *gin.Context) {
 	command.Sudo()
 	command.Cd(path.Dir(composeYmlPath))
 	command.DockerComposeStatus(cast.ToString(one[`docker_cmd`]), envFile)
-	status, _ := sshClient.RunCommandWait(command.GetCommand().ToStr())
+	status, _ := sshClient.RunCommandWait(command.GetCommand().ToStr(), 40*time.Second)
 	headers := []string{`服务名`, `CPU 使用率`, `内存用量 / 内存上限`, `内存使用率`, `网络收发流量`, `磁盘块设备读写量`}
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`status`:  ParseStats(status),
@@ -208,7 +209,7 @@ func DockerComposeStop(c *gin.Context) {
 	command.Sudo()
 	command.Cd(path.Dir(composeYmlPath))
 	command.DockerComposeStop(cast.ToString(one[`docker_cmd`]), envFile)
-	_, _ = sshClient.RunCommandWait(command.GetCommand().ToStr())
+	_, _ = sshClient.RunCommandWait(command.GetCommand().ToStr(), 40*time.Second)
 	gsgin.GinResponseSuccess(c, ``, map[string]any{})
 }
 
@@ -236,11 +237,11 @@ func DockerComposeStart(c *gin.Context) {
 	command.Sudo()
 	command.Cd(path.Dir(composeYmlPath))
 	command.DockerComposeStart(cast.ToString(one[`docker_cmd`]), envFile)
-	_, _ = sshClient.RunCommandWait(command.GetCommand().ToStr())
+	_, _ = sshClient.RunCommandWait(command.GetCommand().ToStr(), 40*time.Second)
 	gsgin.GinResponseSuccess(c, ``, map[string]any{})
 }
 
-func getDockerComponent(c *gin.Context) (map[string]interface{}, *gsssh.SshConfig, error) {
+func getDockerComponent(c *gin.Context) (map[string]interface{}, *gsssh.SshTerminal, error) {
 	reqMap := make(map[string]interface{})
 	err := gsgin.GinPostBody(c, &reqMap)
 	if err != nil {

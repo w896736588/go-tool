@@ -6,6 +6,7 @@ import (
 	"errors"
 	"regexp"
 	"strings"
+	"time"
 
 	"gitee.com/Sxiaobai/gs/v2/gsgin"
 	"gitee.com/Sxiaobai/gs/v2/gsssh"
@@ -37,7 +38,7 @@ func GitCurrentBranch(c *gin.Context) {
 	command.GitShowBranch()
 	command.Echo(`远程分支：`)
 	command.GitShowOriginBranch()
-	result, _ := sshClient.RunCommandWait(command.GetCommand().ToStr())
+	result, _ := sshClient.RunCommandWait(command.GetCommand().ToStr(), 40*time.Second)
 	gsgin.GinResponseSuccess(c, ``, result)
 }
 
@@ -63,7 +64,7 @@ func GitChangeBranch(c *gin.Context) {
 	//command.Sudo() 不要用sudo否则服务器会提示输入密码，导致执行被卡死
 	command1.Cd(codePath)
 	command1.GitShowBranch()
-	currentBranch, _ := sshClient.RunCommandWait(command1.GetCommand().ToStr())
+	currentBranch, _ := sshClient.RunCommandWait(command1.GetCommand().ToStr(), 40*time.Second)
 	currentBranch = CleanBranchName(currentBranch)
 
 	command := base.NewCommand()
@@ -83,7 +84,7 @@ func GitChangeBranch(c *gin.Context) {
 	command.GitShowBranch()
 	command.Echo(`远程分支：`)
 	command.GitShowOriginBranch()
-	result, _ := sshClient.RunCommandWait(command.GetCommand().ToStr())
+	result, _ := sshClient.RunCommandWait(command.GetCommand().ToStr(), 40*time.Second)
 	gsgin.GinResponseSuccess(c, ``, result)
 }
 
@@ -109,7 +110,7 @@ func GitChangeBranchRemote(c *gin.Context) {
 	//command.Sudo() 不要用sudo否则服务器会提示输入密码，导致执行被卡死
 	command1.Cd(codePath)
 	command1.GitShowBranch()
-	currentBranch, _ := sshClient.RunCommandWait(command1.GetCommand().ToStr())
+	currentBranch, _ := sshClient.RunCommandWait(command1.GetCommand().ToStr(), 40*time.Second)
 	currentBranch = CleanBranchName(currentBranch)
 
 	command := base.NewCommand()
@@ -127,7 +128,7 @@ func GitChangeBranchRemote(c *gin.Context) {
 	command.GitShowBranch()
 	command.Echo(`远程分支：`)
 	command.GitShowOriginBranch()
-	result, _ := sshClient.RunCommandWait(command.GetCommand().ToStr())
+	result, _ := sshClient.RunCommandWait(command.GetCommand().ToStr(), 40*time.Second)
 	gsgin.GinResponseSuccess(c, ``, result)
 }
 
@@ -148,7 +149,7 @@ func GitPullBranchOrigin(c *gin.Context) {
 	//command.Sudo() 不要用sudo否则服务器会提示输入密码，导致执行被卡死
 	command1.Cd(codePath)
 	command1.GitShowBranch()
-	currentBranch, _ := sshClient.RunCommandWait(command1.GetCommand().ToStr())
+	currentBranch, _ := sshClient.RunCommandWait(command1.GetCommand().ToStr(), 40*time.Second)
 	currentBranch = CleanBranchName(currentBranch)
 
 	gstool.FmtPrintlnLogTime(`获取当前分支为：%q`, currentBranch)
@@ -165,7 +166,7 @@ func GitPullBranchOrigin(c *gin.Context) {
 	command.GitShowBranch()
 	command.Echo(`远程分支：`)
 	command.GitShowOriginBranch()
-	result, _ := sshClient.RunCommandWait(command.GetCommand().ToStr())
+	result, _ := sshClient.RunCommandWait(command.GetCommand().ToStr(), 40*time.Second)
 	gsgin.GinResponseSuccess(c, ``, result)
 }
 
@@ -205,7 +206,7 @@ func QueryStatus(c *gin.Context) {
 	command.Cd(codePath)
 	command.GitStatus()
 
-	result, _ := sshClient.RunCommandWait(command.GetCommand().ToStr())
+	result, _ := sshClient.RunCommandWait(command.GetCommand().ToStr(), 40*time.Second)
 	gsgin.GinResponseSuccess(c, ``, result)
 }
 
@@ -226,7 +227,7 @@ func GitCommitLog(c *gin.Context) {
 	command.Cd(codePath)
 	command.GitCommitLog()
 
-	result, _ := sshClient.RunCommandWait(command.GetCommand().ToStr())
+	result, _ := sshClient.RunCommandWait(command.GetCommand().ToStr(), 40*time.Second)
 	gsgin.GinResponseSuccess(c, ``, result)
 }
 
@@ -266,11 +267,11 @@ func CreateMerge(c *gin.Context) {
 	command.Cd(codePath)
 	command.GitCommitLog()
 
-	result, _ := sshClient.RunCommandWait(command.GetCommand().ToStr())
+	result, _ := sshClient.RunCommandWait(command.GetCommand().ToStr(), 40*time.Second)
 	gsgin.GinResponseSuccess(c, ``, result)
 }
 
-func getGitComponent(c *gin.Context) (map[string]interface{}, *gsssh.SshConfig, error) {
+func getGitComponent(c *gin.Context) (map[string]interface{}, *gsssh.SshTerminal, error) {
 	reqMap := make(map[string]interface{})
 	err := gsgin.GinPostBody(c, &reqMap)
 	if err != nil {

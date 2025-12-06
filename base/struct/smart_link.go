@@ -35,8 +35,7 @@ type PlaywrightRunParams struct {
 }
 
 type ListenUrl struct {
-	ParseType     string
-	IsSse         bool
+	ParseConfig   CurlResultParse
 	Callback      func(string, string, error) //HTTP返回消息回调
 	MsgBack       func(string)                //正常消息展示
 	StartCallBack func(string)                //开始回调

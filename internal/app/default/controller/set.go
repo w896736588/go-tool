@@ -379,14 +379,13 @@ func testRedisConn(redisConfig map[string]any) *gstask.Result {
 				Result: redisConfig[`id`],
 			}
 		}
-		gsRedis.Ssh = &gsssh.SshConfig{
+		gsRedis.SshBridge = gsssh.NewSshBridge(gsssh.NewSsh(&gsssh.SshConfig{
 			Name:     cast.ToString(sshConfig[`name`]),
 			Host:     cast.ToString(sshConfig[`host`]),
 			Port:     cast.ToString(sshConfig[`port`]),
 			UserName: cast.ToString(sshConfig[`username`]),
 			Password: cast.ToString(sshConfig[`password`]),
-			GsSlog:   base.Component.GsLog,
-		}
+		}))
 	}
 	connErr := gsRedis.CreateConn()
 	if connErr != nil {
@@ -404,13 +403,13 @@ func testRedisConn(redisConfig map[string]any) *gstask.Result {
 }
 
 func testSshConn(sshConfig map[string]any) *gstask.Result {
-	ssh := &gsssh.SshConfig{
+	ssh := gsssh.NewSsh(&gsssh.SshConfig{
 		Name:     cast.ToString(sshConfig[`name`]),
 		Host:     cast.ToString(sshConfig[`host`]),
 		Port:     cast.ToString(sshConfig[`port`]),
 		Password: cast.ToString(sshConfig[`password`]),
 		UserName: cast.ToString(sshConfig[`username`]),
-	}
+	})
 	connErr := ssh.ConnectAuthPassword()
 	if connErr != nil {
 		return &gstask.Result{

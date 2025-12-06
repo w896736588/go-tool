@@ -1,4 +1,4 @@
-package zhima
+package dtool
 
 import (
 	"dev_tool/base"
@@ -13,19 +13,15 @@ import (
 	"github.com/spf13/cast"
 )
 
-var AppName = `zhima`
+var AppName = `dtool`
 
-func InitBase(ViewPath string) {
-	_default.InitBase(AppName, ViewPath)
+func InitBase(ConfigFile string) {
+	_default.InitBase(AppName, ConfigFile)
 	initComponent()
 }
 
 func initComponent() {
 	base.Component.AesGcm = gsencrypt.NewAesGcm(AppName)
-	base.Component.EncryptDesCbc = &gsencrypt.DesCbc{
-		Key: base.Component.ConfigViper.GetString(`encrypt.key`),
-		Iv:  base.Component.ConfigViper.GetString(`encrypt.iv`),
-	}
 	for _, tGin := range base.Component.TGins {
 		if tGin.IsRun == true {
 			initRouter(tGin)

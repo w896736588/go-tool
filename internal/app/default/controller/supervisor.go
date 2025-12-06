@@ -4,6 +4,7 @@ import (
 	"dev_tool/base"
 	"errors"
 	"strings"
+	"time"
 
 	"gitee.com/Sxiaobai/gs/v2/gsdefine"
 	"gitee.com/Sxiaobai/gs/v2/gsgin"
@@ -26,7 +27,7 @@ func SupervisorRestartAll(c *gin.Context) {
 	} else {
 		restartCommand.DockerExecConsumerRestartAll(dockerName)
 	}
-	_, _ = sshClient.RunCommandWait(restartCommand.GetCommand().ToStr())
+	_, _ = sshClient.RunCommandWait(restartCommand.GetCommand().ToStr(), 40*time.Second)
 	statusRet, statusRetErr := getConsumerStatus(dockerName, sshClient)
 	if statusRetErr != nil {
 		gsgin.GinResponseError(c, statusRetErr.Error(), nil)
@@ -49,7 +50,7 @@ func SupervisorStopAll(c *gin.Context) {
 	} else {
 		restartCommand.DockerExecConsumerStopAll(dockerName)
 	}
-	_, _ = sshClient.RunCommandWait(restartCommand.GetCommand().ToStr())
+	_, _ = sshClient.RunCommandWait(restartCommand.GetCommand().ToStr(), 40*time.Second)
 	statusRet, statusRetErr := getConsumerStatus(dockerName, sshClient)
 	if statusRetErr != nil {
 		gsgin.GinResponseError(c, statusRetErr.Error(), nil)
@@ -74,17 +75,17 @@ func SupervisorStatusList(c *gin.Context) {
 }
 
 // 拿到消费者状态 支持docker与非docker
-func getConsumerStatus(dockerName string, sshClient *gsssh.SshConfig) ([]string, error) {
+func getConsumerStatus(dockerName string, sshClient *gsssh.SshTerminal) ([]string, error) {
 	//消费者
 	retMsgList := make([]string, 0)
 	if dockerName == `` { //非docker环境
 		statusCommand := base.NewCommand().Sudo().ConsumerStatus()
-		statusRet, _ := sshClient.RunCommandWait(statusCommand.GetCommand().ToStr())
+		statusRet, _ := sshClient.RunCommandWait(statusCommand.GetCommand().ToStr(), 40*time.Second)
 		retMsgList = append(retMsgList, statusRet)
 	} else {
 		xkfStatusCommand := base.NewCommand().Sudo()
 		xkfStatusCommand.DockerExecConsumerStatus(dockerName)
-		xkfStatusRet, _ := sshClient.RunCommandWait(xkfStatusCommand.GetCommand().ToStr())
+		xkfStatusRet, _ := sshClient.RunCommandWait(xkfStatusCommand.GetCommand().ToStr(), 40*time.Second)
 		retMsgList = append(retMsgList, xkfStatusRet)
 	}
 	return retMsgList, nil
@@ -101,7 +102,7 @@ func SupervisorConfigShow(c *gin.Context) {
 	configPath := cast.ToString(reqMap[`config_path`])
 	retMsgList := make([]string, 0)
 	catCommand := base.NewCommand().Sudo().ConsumerConfigCat(configPath, dockerName)
-	ret, _ := sshClient.RunCommandWait(catCommand.GetCommand().ToStr())
+	ret, _ := sshClient.RunCommandWait(catCommand.GetCommand().ToStr(), 40*time.Second)
 	retMsgList = append(retMsgList, ret)
 	gsgin.GinResponseSuccess(c, ``, strings.Join(retMsgList, gsdefine.Enter))
 	return
@@ -124,7 +125,7 @@ func SupervisorRestart(c *gin.Context) {
 	restartCommand := base.NewCommand().Sudo()
 	restartCommand.ConsumerRestart(dockerName, supervisorName)
 	restartCommand.ConsumerStatusGrep(dockerName, supervisorName)
-	ret, _ := sshClient.RunCommandWait(restartCommand.GetCommand().ToStr())
+	ret, _ := sshClient.RunCommandWait(restartCommand.GetCommand().ToStr(), 40*time.Second)
 	retMsgList = append(retMsgList, ret)
 	gsgin.GinResponseSuccess(c, ``, strings.Join(retMsgList, gsdefine.Enter))
 	return
@@ -147,7 +148,7 @@ func SupervisorStop(c *gin.Context) {
 	stopCommand := base.NewCommand().Sudo()
 	stopCommand.ConsumerStop(dockerName, supervisorName)
 	stopCommand.ConsumerStatusGrep(dockerName, supervisorName)
-	ret, _ := sshClient.RunCommandWait(stopCommand.GetCommand().ToStr())
+	ret, _ := sshClient.RunCommandWait(stopCommand.GetCommand().ToStr(), 40*time.Second)
 	retMsgList = append(retMsgList, ret)
 	gsgin.GinResponseSuccess(c, ``, strings.Join(retMsgList, gsdefine.Enter))
 	return
@@ -164,7 +165,7 @@ func SupervisorConfList(c *gin.Context) {
 	dockerName := cast.ToString(reqMap[`docker_name`])
 	configListCommand := base.NewCommand()
 	configListCommand.ConsumerConfigList(dockerName)
-	ret, _ := sshClient.RunCommandWait(configListCommand.GetCommand().ToStr())
+	ret, _ := sshClient.RunCommandWait(configListCommand.GetCommand().ToStr(), 40*time.Second)
 	retMsgList = append(retMsgList, ret)
 	gsgin.GinResponseSuccess(c, ``, strings.Join(retMsgList, gsdefine.Enter))
 	return
@@ -177,7 +178,7 @@ func SupervisorConfigList(c *gin.Context) {
 	})
 }
 
-func getSupervisorComponent(c *gin.Context) (map[string]interface{}, *gsssh.SshConfig, error) {
+func getSupervisorComponent(c *gin.Context) (map[string]interface{}, *gsssh.SshTerminal, error) {
 	reqMap := make(map[string]interface{})
 	err := gsgin.GinPostBody(c, &reqMap)
 	if err != nil {

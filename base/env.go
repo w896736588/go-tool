@@ -26,6 +26,7 @@ type Env struct {
 	RootPath           string     //项目根目录
 	PkgPath            string     //pkg目录
 	AppName            string     //项目名称
+	ConfigFile         string     //配置文件名
 	ConfigPath         string     //配置文件目录
 	DatabaseUpPath     string     //数据库升级目录
 	LogPath            string     //日志目录
@@ -39,17 +40,21 @@ type Env struct {
 	WebConfig          *WebConfig //web配置
 }
 
-func (h *Env) Init(appName string) {
+func (h *Env) Init(appName, ConfigFile string) {
 	if h.RootPath == `` {
 		panic(`root_path不能为空`)
 	}
 	h.AppName = appName
+	if ConfigFile == `` {
+		ConfigFile = `config`
+	}
+	h.ConfigFile = ConfigFile
 
 	//基础
 	h.ConfigPath = filepath.Join(Component.Env.RootPath, `config`, Component.Env.AppName)
 	//配置初始化
 	Component.ConfigViper.AddConfigPath(h.ConfigPath)
-	Component.ConfigViper.SetConfigName(`config`)
+	Component.ConfigViper.SetConfigName(h.ConfigFile)
 	Component.ConfigViper.SetConfigType(`ini`)
 	if readErr := Component.ConfigViper.ReadInConfig(); readErr != nil {
 		panic(readErr.Error())
