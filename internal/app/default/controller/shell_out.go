@@ -118,7 +118,6 @@ func ShellOutSetSeeId(c *gin.Context) {
 		return
 	}
 	shellClientId := cast.ToString(reqMap[`shell_client_id`])
-	sseId := cast.ToString(reqMap[`sse_id`])
 	sshId := cast.ToString(reqMap[`ssh_id`])
 	command := cast.ToString(reqMap[`command`])
 	groupId := cast.ToInt(reqMap[`group_id`])
@@ -126,7 +125,10 @@ func ShellOutSetSeeId(c *gin.Context) {
 		gsgin.GinResponseError(c, `组id不能为空`, nil)
 		return
 	}
-	err = base.Component.TShellOut.SetClientSseId(shellClientId, sshId, sseId, command, groupId, nil)
+	fullSse := base.Component.TBase.GetSse(c, reqMap)
+	sseSend := base.GetShellOutSseSend(&fullSse)
+
+	err = base.Component.TShellOut.SetClientSseId(shellClientId, sshId, &fullSse, sseSend, command, groupId, nil)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
@@ -209,31 +211,6 @@ func ShellOutStop(c *gin.Context) {
 	return
 }
 
-func ShellOutRestart(c *gin.Context) {
-	reqMap := make(map[string]interface{})
-	err := gsgin.GinPostBody(c, &reqMap)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	shellClientId := cast.ToString(reqMap[`shell_client_id`])
-	sseId := cast.ToString(reqMap[`sse_id`])
-	sshId := cast.ToString(reqMap[`ssh_id`])
-	command := cast.ToString(reqMap[`command`])
-	groupId := cast.ToInt(reqMap[`group_id`])
-	if groupId == 0 {
-		gsgin.GinResponseError(c, `组id不能为空`, nil)
-		return
-	}
-	base.Component.TShellOut.RmClient(shellClientId)
-	err = base.Component.TShellOut.SetClientSseId(shellClientId, sshId, sseId, command, groupId, nil)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	gsgin.GinResponseSuccess(c, ``, map[string]any{})
-}
-
 func ShellOutCleanLog(c *gin.Context) {
 	reqMap := make(map[string]interface{})
 	err := gsgin.GinPostBody(c, &reqMap)
@@ -257,11 +234,14 @@ func getShellOutComponent(c *gin.Context) (map[string]interface{}, *gsssh.SshTer
 	if cast.ToString(sshId) == `` {
 		return nil, nil, ``, errors.New(`缺少ssh_id参数`)
 	}
-	sseId := reqMap[`sse_id`]
 	groupId := cast.ToInt(reqMap[`group_id`])
 	sshConfig, _ := base.Component.TSqlite.GetSshConfig(sshId)
 	shellClientId := base.Component.TBase.GetUnique(`shell_out_`)
-	shellOut, _, sshClientErr := base.Component.TShellOut.GetClient(sshConfig, shellClientId, cast.ToString(sseId), groupId, nil)
+
+	fullSse := base.Component.TBase.GetSse(c, reqMap)
+	sseSend := base.GetShellOutSseSend(&fullSse)
+
+	shellOut, _, sshClientErr := base.Component.TShellOut.GetClient(sshConfig, shellClientId, &fullSse, sseSend, groupId, nil)
 	if sshClientErr != nil {
 		return nil, nil, ``, sshClientErr
 	}

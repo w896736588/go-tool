@@ -27,19 +27,17 @@ import (
 type RCmd struct {
 	cmd            map[string]any
 	replaceList    map[string]string
-	StreamMsg      func(string, bool)
 	PlaywrightLock sync.RWMutex
-	RunUniqueId    string
-	SseId          string
+	SseSend        func(string, bool)
+	FullSse        *base.FullSse
 }
 
-func NewRCmd(cmd map[string]any, replace map[string]string, RunUniqueId string, streamMsg func(string, bool), sseId string) *RCmd {
+func NewRCmd(cmd map[string]any, replace map[string]string, fullSse *base.FullSse, sseSend func(string, bool)) *RCmd {
 	return &RCmd{
 		cmd:         cmd,
 		replaceList: replace,
-		StreamMsg:   streamMsg,
-		RunUniqueId: RunUniqueId,
-		SseId:       sseId,
+		SseSend:     sseSend,
+		FullSse:     fullSse,
 	}
 }
 
@@ -67,12 +65,12 @@ func (h *RCmd) RunMysql() error {
 		return errors.New(`获取mysql client 失败 ` + mysqlClientErr.Error())
 	}
 	result := ``
-	h.StreamMsg(fmt.Sprintf(`%s %s 执行sql:`,
+	h.SseSend(fmt.Sprintf(`%s %s 执行sql:`,
 		base.Component.TMarkDown.Bold(`run`),
 		cast.ToString(h.cmd[`name`])), true)
 	if len(gstool.RegexSearchString(sql, "(?i)select")) > 0 {
 		result = base.Component.TMarkDown.Code(sql, `sql`)
-		h.StreamMsg(result, true)
+		h.SseSend(result, true)
 		all, allErr := mysqlClient.QueryBySql(sql).All()
 		if allErr != nil {
 			return allErr
@@ -85,7 +83,7 @@ func (h *RCmd) RunMysql() error {
 	} else if len(gstool.RegexSearchString(sql, "(?i)update")) > 0 {
 		affectRows, execErr := mysqlClient.ExecBySql(sql).Exec()
 		result = base.Component.TMarkDown.Code("-- 更新数"+cast.ToString(affectRows)+"\n"+sql, `sql`)
-		h.StreamMsg(result, true)
+		h.SseSend(result, true)
 		if execErr != nil {
 			return execErr
 		}
@@ -105,7 +103,7 @@ func (h *RCmd) RunWindowsCmd() (string, error) {
 			cast.ToString(makeRet[`key`]): cast.ToString(makeRet[`value`]),
 		})
 	}
-	h.StreamMsg(fmt.Sprintf("执行：%s ", bat), true)
+	h.SseSend(fmt.Sprintf("执行：%s ", bat), true)
 	// 构建命令
 	var stdoutBuf, stderrBuf bytes.Buffer
 	cmd := exec.Command(`cmd.exe`, `/C`, bat)
@@ -117,8 +115,8 @@ func (h *RCmd) RunWindowsCmd() (string, error) {
 	if err != nil {
 		return ``, gstool.Error("make 执行失败: %v\n %s", err, stderrStr)
 	}
-	h.StreamMsg(stdoutStr, true)
-	h.StreamMsg(stderrStr, true)
+	h.SseSend(stdoutStr, true)
+	h.SseSend(stderrStr, true)
 	return ``, nil
 }
 
@@ -139,16 +137,13 @@ func (h *RCmd) RunBash() (string, error) {
 	sshUniqueKey := base.Component.TBase.GetCombineKey(`variable`, sshId, `run`)
 	sftpUniqueKey := base.Component.TBase.GetCombineKey(`variable`, sshId, `sftp`)
 	//链接ssh
-	preConnErr := base.Component.TVariable.PreConnSsh(sshId, sshUniqueKey, sftpUniqueKey, h.SseId)
+	preConnErr := base.Component.TVariable.PreConnSsh(sshId, sshUniqueKey, sftpUniqueKey, h.FullSse.SseDistributeId)
 	if preConnErr != nil {
 		return ``, gstool.Error(`链接失败 %s`, preConnErr.Error())
 	}
 	if !base.Component.TShell.Exist(sshUniqueKey) || !base.Component.TShell.Exist(sftpUniqueKey) {
 		return ``, errors.New(`ssh连接未初始化`)
 	}
-	//全局注册 用于停止
-	base.Component.TVariable.AddSshClient(h.RunUniqueId, sshUniqueKey)
-	base.Component.TVariable.AddSshClient(h.RunUniqueId, sftpUniqueKey)
 	//初始化
 	sshConfig, sshConfigErr := base.Component.TSqlite.GetSshConfig(sshId)
 	if sshConfigErr != nil {
@@ -163,7 +158,7 @@ func (h *RCmd) RunBash() (string, error) {
 	}
 	variableDir := home + `/variable`
 	//ssh
-	sshClient, sshClientErr = base.Component.TShell.GetClientMarkdown(sshConfig, sshUniqueKey, h.SseId)
+	sshClient, sshClientErr = base.Component.TShell.GetClientMarkdown(sshConfig, sshUniqueKey, h.FullSse.SseDistributeId)
 	if sshClientErr != nil {
 		return ``, sshClientErr
 	}
@@ -220,22 +215,19 @@ func (h *RCmd) RunUpload() (string, error) {
 	uploadConfig := make(map[string]any)
 	deErr := gstool.JsonDecode(bash, &uploadConfig)
 	if deErr != nil {
-		h.StreamMsg(fmt.Sprintf(`解析上传配置失败 %s`, bash), true)
+		h.SseSend(fmt.Sprintf(`解析上传配置失败 %s`, bash), true)
 		return ``, deErr
 	}
 	targetDir := cast.ToString(uploadConfig[`target_dir`])
 	sourceFile := cast.ToString(uploadConfig[`source_file`])
 	if targetDir == `` {
-		h.StreamMsg(`目标目录不能为空`, true)
+		h.SseSend(`目标目录不能为空`, true)
 		return ``, gstool.Error(`目标目录不能为空`)
 	}
 	if sourceFile == `` {
-		h.StreamMsg(`源文件不能为空`, true)
+		h.SseSend(`源文件不能为空`, true)
 		return ``, gstool.Error(`源文件不能为空`)
 	}
-	//注册ssh
-	sftpUniqueKey := base.Component.TBase.GetCombineKey(`variable`, sshId, `sftp`)
-	base.Component.TVariable.AddSshClient(h.RunUniqueId, sftpUniqueKey)
 	//初始化
 	sshConfig, sshConfigErr := base.Component.TSqlite.GetSshConfig(sshId)
 	if sshConfigErr != nil {
@@ -249,13 +241,13 @@ func (h *RCmd) RunUpload() (string, error) {
 	//如果是上传文件
 	isErr := false
 	if gstool.FileIsExisted(sourceFile) {
-		h.StreamMsg(`本地存在文件：`+sourceFile+`，准备上传`, true)
+		h.SseSend(`本地存在文件：`+sourceFile+`，准备上传`, true)
 		uploadErr := h.uploadFile(sshConfig, sshId, sshOnce, sourceFile, targetDir)
 		if uploadErr != nil {
 			return ``, uploadErr
 		}
 	} else {
-		h.StreamMsg(`本地不存在文件,那么将上传整个文件夹：`+sourceFile, true)
+		h.SseSend(`本地不存在文件,那么将上传整个文件夹：`+sourceFile, true)
 		_ = gstool.DirWalk(sourceFile, func(path string, info os.FileInfo, err error) {
 			if err != nil {
 				return
@@ -266,7 +258,7 @@ func (h *RCmd) RunUpload() (string, error) {
 			uploadErr := h.uploadFile(sshConfig, sshId, sshOnce, path, targetDir)
 			if uploadErr != nil {
 				base.Component.TVariable.Log.Errof(`上传失败`)
-				h.StreamMsg(fmt.Sprintf(`上传失败 %s`, uploadErr.Error()), true)
+				h.SseSend(fmt.Sprintf(`上传失败 %s`, uploadErr.Error()), true)
 				isErr = true
 				return
 			}
@@ -275,7 +267,7 @@ func (h *RCmd) RunUpload() (string, error) {
 	if isErr {
 		return ``, gstool.Error(`上传失败`)
 	}
-	h.StreamMsg(`上传完成`, true)
+	h.SseSend(`上传完成`, true)
 	return ``, nil
 }
 
@@ -285,9 +277,9 @@ func (h *RCmd) uploadFile(sshConfig map[string]any, sshId int, sshOnce *gsssh.Ss
 	targetTempFileName := fileName + base.Component.TBase.GetUnique(`_upload`)
 	targetTempFile := targetDir + `/` + targetTempFileName
 	fileSizeMb, _ := gstool.FileSize(sourceFile, `mb`)
-	h.StreamMsg(fmt.Sprintf(`准备上传文件 %s  %s 到目标文件 %s`, fileSizeMb, sourceFile, targetTempFile), true)
+	h.SseSend(fmt.Sprintf(`准备上传文件 %s  %s 到目标文件 %s`, fileSizeMb, sourceFile, targetTempFile), true)
 	startTime := gstool.TimeNowUnixToString(`Y-m-d H:i:s`)
-	h.StreamMsg(fmt.Sprintf(`[PROCESS]%s %s`, startTime, `上传进度:\s+\d+%\s+\(\d+\/\d+\s+bytes\)`), false)
+	h.SseSend(fmt.Sprintf(`[PROCESS]%s %s`, startTime, `上传进度:\s+\d+%\s+\(\d+\/\d+\s+bytes\)`), false)
 	var lastPrintedStep int = -1
 	err = sshOnce.UploadFileProcessScp(targetTempFile, sourceFile, func(bytesWritten, totalBytes int64) {
 		// 计算当前进度百分比
@@ -296,7 +288,7 @@ func (h *RCmd) uploadFile(sshConfig map[string]any, sshId int, sshOnce *gsssh.Ss
 
 		// 只有当进入新的5%区间或完成时才打印
 		if currentStep > lastPrintedStep || bytesWritten == totalBytes {
-			h.StreamMsg(fmt.Sprintf("%s 上传进度: %d%% (%d/%d bytes)",
+			h.SseSend(fmt.Sprintf("%s 上传进度: %d%% (%d/%d bytes)",
 				startTime,
 				currentStep*1, // 显示5%的整数倍
 				bytesWritten,
@@ -306,7 +298,7 @@ func (h *RCmd) uploadFile(sshConfig map[string]any, sshId int, sshOnce *gsssh.Ss
 
 			// 上传完成时换行
 			if bytesWritten == totalBytes {
-				h.StreamMsg(fmt.Sprintf("%s 上传进度: 100%% (%d/%d bytes)",
+				h.SseSend(fmt.Sprintf("%s 上传进度: 100%% (%d/%d bytes)",
 					startTime,
 					bytesWritten,
 					totalBytes), true)
@@ -315,20 +307,20 @@ func (h *RCmd) uploadFile(sshConfig map[string]any, sshId int, sshOnce *gsssh.Ss
 	})
 	time.Sleep(time.Millisecond * 500)
 	if err != nil {
-		h.StreamMsg(fmt.Sprintf(`上传文件失败 %s`, err.Error()), true)
+		h.SseSend(fmt.Sprintf(`上传文件失败 %s`, err.Error()), true)
 		return err
 	}
 	//ssh
 	sshUniqueKey := base.Component.TBase.GetCombineKey(`variable`, sshId, `run`)
-	sshClient, sshClientErr := base.Component.TShell.GetClientMarkdown(sshConfig, sshUniqueKey, h.SseId)
+	sshClient, sshClientErr := base.Component.TShell.GetClientMarkdown(sshConfig, sshUniqueKey, h.FullSse.SseDistributeId)
 	if sshClientErr != nil {
-		h.StreamMsg(fmt.Sprintf(`上传文件失败2 %s`, sshClientErr.Error()), true)
+		h.SseSend(fmt.Sprintf(`上传文件失败2 %s`, sshClientErr.Error()), true)
 		return gstool.Error(`上传失败 %s`, sshClientErr.Error())
 	}
-	h.StreamMsg(fmt.Sprintf(`迁移%s %s`, targetTempFile, targetDir+`/`+fileName), true)
+	h.SseSend(fmt.Sprintf(`迁移%s %s`, targetTempFile, targetDir+`/`+fileName), true)
 	_, err = sshClient.RunCommandWait(fmt.Sprintf(`sudo mv %s %s`, targetTempFile, targetDir+`/`+fileName), 40*time.Second)
 	if err != nil {
-		h.StreamMsg(fmt.Sprintf(`迁移失败 %s`, err.Error()), true)
+		h.SseSend(fmt.Sprintf(`迁移失败 %s`, err.Error()), true)
 		return gstool.Error(`迁移失败 %s`, err.Error())
 	}
 	return nil
@@ -344,13 +336,10 @@ func (h *RCmd) RunCommand() (string, error) {
 	//注册client
 	sshUniqueKey := base.Component.TBase.GetCombineKey(`variable`, sshId, `run`)
 	sftpUniqueKey := base.Component.TBase.GetCombineKey(`variable`, sshId, `sftp`)
-	preConnErr := base.Component.TVariable.PreConnSsh(sshId, sshUniqueKey, sftpUniqueKey, h.SseId)
+	preConnErr := base.Component.TVariable.PreConnSsh(sshId, sshUniqueKey, sftpUniqueKey, h.FullSse.SseDistributeId)
 	if preConnErr != nil {
 		return ``, gstool.Error(`链接失败 %s`, preConnErr.Error())
 	}
-	//全局注册 用于停止
-	base.Component.TVariable.AddSshClient(h.RunUniqueId, sshUniqueKey)
-	base.Component.TVariable.AddSshClient(h.RunUniqueId, sftpUniqueKey)
 	//分离出来多行命令
 	commandList := strings.Split(bash, "\n")
 	for _, command := range commandList {
@@ -368,7 +357,7 @@ func (h *RCmd) RunCommand() (string, error) {
 		var sshClientErr error
 		var sshClient *gsssh.SshTerminal
 		//ssh
-		sshClient, sshClientErr = base.Component.TShell.GetClientMarkdown(sshConfig, sshUniqueKey, h.SseId)
+		sshClient, sshClientErr = base.Component.TShell.GetClientMarkdown(sshConfig, sshUniqueKey, h.FullSse.SseDistributeId)
 		if sshClientErr != nil {
 			return ``, sshClientErr
 		}
@@ -376,7 +365,7 @@ func (h *RCmd) RunCommand() (string, error) {
 		runCmd := base.Command{}
 		runCmd.SetCommand(command)
 		runCmd.Sudo()
-		h.StreamMsg(base.Component.TMarkDown.Code(runCmd.GetCommand().ToStr(), `bash`), true)
+		h.SseSend(base.Component.TMarkDown.Code(runCmd.GetCommand().ToStr(), `bash`), true)
 		_, err = sshClient.RunCommandWait(runCmd.GetCommand().ToStr(), 40*time.Second)
 		if err != nil {
 			return ``, err
@@ -390,7 +379,7 @@ func (h *RCmd) RunCurl() (string, error) {
 	parseConfig := _struct.CurlParseConfig{}
 	err := gstool.JsonDecode(cast.ToString(h.cmd[`options`]), &parseConfig)
 	if err != nil {
-		h.StreamMsg(`解析失败 `+cast.ToString(h.cmd[`options`]), true)
+		h.SseSend(`解析失败 `+cast.ToString(h.cmd[`options`]), true)
 		return ``, err
 	}
 	parseConfig.Uri = base.Component.TVariable.Replace(parseConfig.Uri, h.replaceList)
@@ -398,16 +387,16 @@ func (h *RCmd) RunCurl() (string, error) {
 		ParseConfig: parseConfig,
 		CurlEvents: _struct.CurlEvents{
 			StreamDataCall: func(s string) {
-				h.StreamMsg(s, false)
+				h.SseSend(s, false)
 			},
 			NoticeCall: func(s string) {
-				h.StreamMsg(fmt.Sprintf(`%s`, s), true)
+				h.SseSend(fmt.Sprintf(`%s`, s), true)
 			},
 			EndCall: func() {
-				h.StreamMsg(fmt.Sprintf(`结束请求 %s`, parseConfig.Uri), true)
+				h.SseSend(fmt.Sprintf(`结束请求 %s`, parseConfig.Uri), true)
 			},
 			StartCall: func() {
-				h.StreamMsg(fmt.Sprintf(`开始请求 %s`, parseConfig.Uri), true)
+				h.SseSend(fmt.Sprintf(`开始请求 %s`, parseConfig.Uri), true)
 			},
 		},
 	}
@@ -436,16 +425,16 @@ func (h *RCmd) RunPlaywright() (string, error) {
 	runParams.RunCallFunc = func(cmdType define.ProcessType, errmsg, tip, content string) {
 		switch cmdType {
 		case define.Input:
-			//h.StreamMsg(base.Component.TMarkDown.Bold(tip)+`,`+content+` `+errmsg, true)
+			//h.SseSend(base.Component.TMarkDown.Bold(tip)+`,`+content+` `+errmsg, true)
 		case define.CanvasImage:
-			//h.StreamMsg(base.Component.TMarkDown.Bold(tip)+`,`+errmsg, true)
-			h.StreamMsg(content, true)
+			//h.SseSend(base.Component.TMarkDown.Bold(tip)+`,`+errmsg, true)
+			h.SseSend(content, true)
 		case define.ExistWait, define.NoExistWait:
-			//h.StreamMsg(base.Component.TMarkDown.Bold(tip)+`,`+errmsg, true)
+			//h.SseSend(base.Component.TMarkDown.Bold(tip)+`,`+errmsg, true)
 		case define.LoginUsernamePassword: //前端弹窗输入账号密码
 			base.Component.TVariable.LoginUsername = ``
 			base.Component.TVariable.LoginPassword = ``
-			h.StreamMsg(define.SseEventLogin, false)
+			h.SseSend(define.SseEventLogin, false)
 			for i := 0; i < 30; i++ {
 				time.Sleep(time.Second * 2)
 				if base.Component.TVariable.LoginUsername != `` && base.Component.TVariable.LoginPassword != `` {
@@ -474,15 +463,15 @@ func (h *RCmd) RunPlaywright() (string, error) {
 						h.StreamDataReceive(parseConfig, s)
 					},
 					NoticeCall: func(s string) {
-						h.StreamMsg(s, true)
+						h.SseSend(s, true)
 					},
 					EndCall: func() {
-						h.StreamMsg("\n"+base.Component.TMarkDown.Bold("end ")+"\n\n", true)
+						h.SseSend("\n"+base.Component.TMarkDown.Bold("end ")+"\n\n", true)
 					},
 					StartCall: func() {
 						runParams.StopEchoTips = true
 						base.Component.TVariable.Log.Debugf(`监听到%s`, parseConfig.Uri)
-						h.StreamMsg(base.Component.TMarkDown.BlockQuote("开始回答...")+"\n\n", true)
+						h.SseSend(base.Component.TMarkDown.BlockQuote("开始回答...")+"\n\n", true)
 					},
 				},
 			}
@@ -491,18 +480,18 @@ func (h *RCmd) RunPlaywright() (string, error) {
 
 	runParams.ListenUrlList = ListenUrlList
 	for i := 0; i < runParams.OpenNum; i++ {
-		h.StreamMsg("\n"+base.Component.TMarkDown.Bold(label)+`,启动`, true)
+		h.SseSend("\n"+base.Component.TMarkDown.Bold(label)+`,启动`, true)
 		streamFunc := func(name, msg string) {
 			if runParams.StopEchoTips {
 				return
 			}
-			h.StreamMsg(base.Component.TMarkDown.Bold(name)+`,`+msg, true)
+			h.SseSend(base.Component.TMarkDown.Bold(name)+`,`+msg, true)
 		}
 		runParams.StreamFunc = streamFunc
 		p := p_playwright.NewPlaywright(runParams, base.Component.TVariable.Log)
 		openErr := p.Open()
 		if openErr != nil {
-			h.StreamMsg(base.Component.TMarkDown.BlockQuote(cast.ToString(h.cmd[`name`])+`,启动失败，`+openErr.Error()), true)
+			h.SseSend(base.Component.TMarkDown.BlockQuote(cast.ToString(h.cmd[`name`])+`,启动失败，`+openErr.Error()), true)
 		}
 	}
 	return ``, nil
@@ -523,15 +512,15 @@ func (h *RCmd) StreamDataReceive(parseConfig _struct.CurlParseConfig, msg string
 					base.Component.TVariable.Log.Debugf(`提取json成功#%s#%v`, part, ret.String())
 					if ret.String() != `` { //发送到sse
 						base.Component.TVariable.Log.Debugf(`发送到sse#%s#`, ret.String())
-						h.StreamMsg(ret.String(), false)
+						h.SseSend(ret.String(), false)
 					}
 				}
 			}
 		} else {
-			h.StreamMsg(cast.ToString(msg), false)
+			h.SseSend(cast.ToString(msg), false)
 		}
 	} else {
-		h.StreamMsg(cast.ToString(msg), false)
+		h.SseSend(cast.ToString(msg), false)
 	}
 }
 
@@ -564,7 +553,7 @@ func (h *RCmd) RunRedis() (string, error) {
 	if clientErr != nil {
 		return "", clientErr
 	}
-	h.StreamMsg(name+`,`+redisBash, true)
+	h.SseSend(name+`,`+redisBash, true)
 	//解析命令格式：
 	//字符串删除string,delete,key
 	redisBashParamList := strings.Split(redisBash, `,`)

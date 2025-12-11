@@ -30,7 +30,7 @@ func NewTShell() *TShell {
 }
 
 // GetClient 正常输出
-func (h *TShell) GetClient(sshConfig map[string]any, shellClientId, sseClientId string,
+func (h *TShell) GetClient(sshConfig map[string]any, shellClientId string, sseSend func(string),
 	formatStream func(string) []string) (*gsssh.SshTerminal, error) {
 	defer h.lock.Unlock()
 	h.lock.Lock()
@@ -41,7 +41,6 @@ func (h *TShell) GetClient(sshConfig map[string]any, shellClientId, sseClientId 
 	if shell, ok := h.ShellClientMap[shellClientId]; ok && shell != nil {
 		return shell, nil
 	}
-	sse := gsgin.SseGetByClientId(sseClientId)
 	gsShell := gsssh.NewSshTerminal(gsssh.NewSsh(&gsssh.SshConfig{
 		Name:     "",
 		Host:     cast.ToString(sshConfig["host"]),
@@ -51,10 +50,7 @@ func (h *TShell) GetClient(sshConfig map[string]any, shellClientId, sseClientId 
 	}))
 	//设置关闭事件
 	gsShell.SetFuncBroken(func() {
-		_ = sse.SendToChan(gstool.JsonEncode(define.SseData{
-			Data: sseClientId + ` 注意：连接已中断，下次动作时进行链接` + "\n",
-			Type: define.SseContentTypeMsg,
-		}))
+		sseSend(` 注意：连接已中断，下次动作时进行链接`)
 		h.RmClient(shellClientId)
 	})
 	gsShell.SetMaxBufferSize(2 * 1024 * 1024) //最大允许2M的输出
@@ -71,16 +67,10 @@ func (h *TShell) GetClient(sshConfig map[string]any, shellClientId, sseClientId 
 		if formatStream != nil {
 			msgList := formatStream(msg)
 			for _, msg := range msgList {
-				_ = sse.SendToChan(gstool.JsonEncode(define.SseData{
-					Data: msg,
-					Type: define.SseContentTypeMsg,
-				}))
+				sseSend(msg)
 			}
 		} else {
-			_ = sse.SendToChan(gstool.JsonEncode(define.SseData{
-				Data: msg,
-				Type: define.SseContentTypeMsg,
-			}))
+			sseSend(msg)
 		}
 	})
 	//设置执行命令前处理

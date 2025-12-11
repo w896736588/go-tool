@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"gitee.com/Sxiaobai/gs/v2/gsgin"
 	"gitee.com/Sxiaobai/gs/v2/gsssh"
 	"gitee.com/Sxiaobai/gs/v2/gstool"
 	"github.com/spf13/cast"
@@ -25,7 +24,8 @@ const MaxSendLength = 1000    //刷新页面后最多发送给前端多少行
 // ShellOut 单个 ssh 会话
 type ShellOut struct {
 	Client           *gsssh.SshTerminal
-	sseClientId      string
+	SseSend          func(any, string)
+	FullSee          *FullSse
 	errorList        []ErrorBlock   // 最终归档的错误块
 	remainContents   []string       // 保留的内容(替换后的)
 	sourceContents   []string       // 原本内容
@@ -92,7 +92,7 @@ func (h *TShellOut) InitGroupConfigs() {
 }
 
 // GetClient 获取或新建 ssh 客户端
-func (h *TShellOut) GetClient(sshConfig map[string]any, shellClientId, sseClientId string, groupId int,
+func (h *TShellOut) GetClient(sshConfig map[string]any, shellClientId string, fullSse *FullSse, sseSend func(any, string), groupId int,
 	formatStream func(string) []string) (*ShellOut, bool, error) {
 	h.lock.Lock()
 	defer h.lock.Unlock()
@@ -105,7 +105,6 @@ func (h *TShellOut) GetClient(sshConfig map[string]any, shellClientId, sseClient
 		shellOut.groupId = groupId
 		return shellOut, true, nil
 	}
-	sse := gsgin.SseGetByClientId(sseClientId)
 	gsShell := gsssh.NewSshTerminal(gsssh.NewSsh(&gsssh.SshConfig{
 		Name:     "",
 		Host:     cast.ToString(sshConfig["host"]),
@@ -115,10 +114,7 @@ func (h *TShellOut) GetClient(sshConfig map[string]any, shellClientId, sseClient
 	}))
 	// 断开回调
 	gsShell.SetFuncBroken(func() {
-		_ = sse.SendToChan(gstool.JsonEncode(define.SseData{
-			Data: sseClientId + ` 注意：连接已中断，下次动作时进行链接` + "\n",
-			Type: define.SseContentTypeMsg,
-		}))
+		sseSend(` 注意：连接已中断，下次动作时进行链接`+"\n", ``)
 		h.RmClient(shellClientId)
 	})
 	gsShell.SetCombineNum(1)
@@ -135,7 +131,8 @@ func (h *TShellOut) GetClient(sshConfig map[string]any, shellClientId, sseClient
 	// 新建 ShellOut
 	shellOut := &ShellOut{
 		Client:           gsShell,
-		sseClientId:      sseClientId,
+		SseSend:          sseSend,
+		FullSee:          fullSse,
 		regexFiltersTips: map[string]int{},
 		startTime:        time.Now().Unix(),
 		groupId:          groupId,
@@ -149,15 +146,16 @@ func (h *TShellOut) GetClient(sshConfig map[string]any, shellClientId, sseClient
 }
 
 // SetClientSseId 设置 sse 推送 & 错误检测
-func (h *TShellOut) SetClientSseId(shellClientId, sshId, sseClientId, command string, groupId int,
+func (h *TShellOut) SetClientSseId(shellClientId, sshId string, fullSse *FullSse, sseSend func(any, string), command string, groupId int,
 	formatStream func(string) []string) error {
 
 	sshConfig, _ := Component.TSqlite.GetSshConfig(sshId)
-	shellOut, exist, err := h.GetClient(sshConfig, shellClientId, sseClientId, groupId, formatStream)
+	shellOut, exist, err := h.GetClient(sshConfig, shellClientId, fullSse, sseSend, groupId, formatStream)
 	if err != nil {
 		return err
 	}
-	shellOut.sseClientId = sseClientId
+	shellOut.FullSee = fullSse
+	shellOut.SseSend = sseSend
 	h.SetReceiveMsg(shellOut, formatStream)
 	if !exist {
 		go func() {
@@ -329,43 +327,28 @@ func (h *TShellOut) RegexFilter(shellOut *ShellOut, msg string) bool {
 
 func (h *TShellOut) SendMsg(shellOut *ShellOut, msg string) {
 	msg = strings.Replace(msg, `\n`, "\n", -1)
-	_ = gsgin.SseGetByClientId(shellOut.sseClientId).SendToChan(gstool.JsonEncode(define.SseData{
-		Data: msg,
-		Type: define.SseContentTypeMsg,
-	}))
+	shellOut.SseSend(msg, ``)
 }
 
 func (h *TShellOut) SendEvent(shellOut *ShellOut, eventType, msg string) {
 	msg = strings.Replace(msg, `\n`, "\n", -1)
-	_ = gsgin.SseGetByClientId(shellOut.sseClientId).SendToChan(msg)
+	shellOut.SseSend(msg, ``)
 }
 
 func (h *TShellOut) SendErrList(shellOut *ShellOut) {
-	_ = gsgin.SseGetByClientId(shellOut.sseClientId).SendToChan(gstool.JsonEncode(define.SseData{
-		Data: shellOut.errorList,
-		Type: define.SseContentTypeErrorList,
-	}))
+	shellOut.SseSend(shellOut.errorList, define.SseContentTypeErrorList)
 }
 
 func (h *TShellOut) SendFilterList(shellOut *ShellOut) {
-	_ = gsgin.SseGetByClientId(shellOut.sseClientId).SendToChan(gstool.JsonEncode(define.SseData{
-		Data: shellOut.regexFiltersTips,
-		Type: define.SseContentTypeFilterList,
-	}))
+	shellOut.SseSend(shellOut.regexFiltersTips, define.SseContentTypeFilterList)
 }
 
 func (h *TShellOut) SendFilter(shellOut *ShellOut, msg string) {
-	_ = gsgin.SseGetByClientId(shellOut.sseClientId).SendToChan(gstool.JsonEncode(define.SseData{
-		Data: msg,
-		Type: define.SseContentTypeFilter,
-	}))
+	shellOut.SseSend(msg, define.SseContentTypeFilter)
 }
 
 func (h *TShellOut) SendErr(shellOut *ShellOut, err ErrorBlock) {
-	_ = gsgin.SseGetByClientId(shellOut.sseClientId).SendToChan(gstool.JsonEncode(define.SseData{
-		Data: err,
-		Type: define.SseContentTypeError,
-	}))
+	shellOut.SseSend(err, define.SseContentTypeError)
 }
 
 func (h *TShellOut) RmClient(uniqueKey string) {

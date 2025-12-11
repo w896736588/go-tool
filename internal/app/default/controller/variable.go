@@ -215,11 +215,12 @@ func VariableCmdSet(c *gin.Context) {
 		gsgin.GinResponseError(c, `解析replace_list失败`, nil)
 		return
 	}
-	set := p_variable.NewVariableSet(variableId, runCmdId, editValue, runUniqueId, replaceList)
+	fullSse := base.Component.TBase.GetSse(c, dataMap)
+	set := p_variable.NewVariableSet(&fullSse, variableId, runCmdId, editValue, runUniqueId, replaceList)
 	result, setErr := set.Set()
 	if setErr != nil {
 		result.RunStatus = 2
-		set.StreamMsg(fmt.Sprintf(`error：%s`, setErr.Error()), true)
+		fullSse.SendDistribute(fmt.Sprintf(`error：%s`, setErr.Error())+"\n", define.SseContentTypeMsg)
 	}
 	gsgin.GinResponseSuccess(c, ``, result)
 }
@@ -230,7 +231,6 @@ func VariableCmdRun(c *gin.Context) {
 	_ = gsgin.GinPostBody(c, &dataMap)
 	variableId := cast.ToInt(dataMap[`variable_id`])
 	runCmdId := cast.ToInt(dataMap[`run_cmd_id`])
-	sseId := cast.ToString(dataMap[`sse_id`])
 	runUniqueId := cast.ToString(dataMap[`run_unique_id`])
 	if runCmdId != 0 && runUniqueId == `` { //初始
 		gsgin.GinResponseError(c, `缺少本次执行唯一ID`, nil)
@@ -246,12 +246,12 @@ func VariableCmdRun(c *gin.Context) {
 			return
 		}
 	}
-
-	variable := p_variable.NewVariable(sseId, variableId, runCmdId, isRun, replaceList, runUniqueId)
+	fullSse := base.Component.TBase.GetSse(c, dataMap)
+	variable := p_variable.NewVariable(&fullSse, variableId, runCmdId, isRun, replaceList, runUniqueId)
 	result, resultErr := variable.Run()
 	if resultErr != nil {
 		result.RunStatus = 2
-		variable.StreamMsg(fmt.Sprintf(`执行失败%s`, resultErr.Error()), true)
+		variable.SseSend(fmt.Sprintf(`执行失败%s`, resultErr.Error()), true)
 	}
 	gsgin.GinResponseSuccess(c, ``, result)
 }

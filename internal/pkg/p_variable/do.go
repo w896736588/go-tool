@@ -6,8 +6,6 @@ import (
 	_struct "dev_tool/base/struct"
 	"errors"
 	"fmt"
-
-	"gitee.com/Sxiaobai/gs/v2/gsgin"
 	"github.com/spf13/cast"
 )
 
@@ -17,23 +15,23 @@ type Variable struct {
 	RunUniqueId string             //本次执行唯一ID
 	ReplaceList map[string]string  //替换列表
 	IsRun       int                //最终执行1 最终执行
-	StreamMsg   func(string, bool) //输出方法
-	SseId       string             //sse id
+	SseSend     func(string, bool) //流式输出方法
+	FullSse     *base.FullSse      //流式handle
 }
 
-func NewVariable(sseId string, variableId, runCmdId int, isRun int, replaceList map[string]string, runUniqueId string) *Variable {
+func NewVariable(fullSse *base.FullSse, variableId, runCmdId int, isRun int, replaceList map[string]string, runUniqueId string) *Variable {
 	variable := &Variable{
 		VariableId:  variableId,
 		RunCmdId:    runCmdId,
 		ReplaceList: replaceList,
 		IsRun:       isRun,
 		RunUniqueId: runUniqueId,
-		SseId:       sseId,
+		FullSse:     fullSse,
 	}
 	if variable.RunCmdId == 0 {
 		variable.InitRunUniqueId()
 	} else {
-		variable.StreamMsg = base.Component.TVariable.StreamMsgFuncBySseId(variable.SseId, variable.RunUniqueId)
+		variable.SseSend = base.GetVariableSseSend(fullSse, runUniqueId)
 	}
 
 	return variable
@@ -47,17 +45,17 @@ func (h *Variable) InitRunUniqueId() {
 	//停止其他任务
 	base.Component.TVariable.StopOther(h.RunUniqueId)
 	//清除服务端所有的消息
-	gsgin.SseGetByClientId(h.SseId).CleanMsg()
+	h.FullSse.Sse.CleanMsg()
 	//消息输出函数注册
-	h.StreamMsg = base.Component.TVariable.StreamMsgFuncBySseId(h.SseId, h.RunUniqueId)
+	h.SseSend = base.GetVariableSseSend(h.FullSse, h.RunUniqueId)
 	//清除前端所有的消息
-	h.StreamMsg(define.SseEventClean, false)
+	h.SseSend(define.SseEventClean, false)
 }
 
 func (h *Variable) Run() (_struct.VCmdResult, error) {
 	//注入全局替换
 	base.Component.TVariable.RegisterAllGlobal(h.ReplaceList, func(s string) {
-		h.StreamMsg(`注入全局常量 `+s, true)
+		h.SseSend(`注入全局常量 `+s, true)
 	})
 	//初始化结果
 	cmdResult := _struct.VCmdResult{
@@ -91,14 +89,14 @@ func (h *Variable) Run() (_struct.VCmdResult, error) {
 		h.Replace(cmd)
 		//是否需要执行
 		if !base.Component.TVariable.ChecksCanDo(cmd) {
-			h.StreamMsg(fmt.Sprintf(`%s %s %s %s`, base.Component.TMarkDown.Bold(`check`), name, base.Component.TMarkDown.Bold(`not run：`), cmd[`checks`]), true)
+			h.SseSend(fmt.Sprintf(`%s %s %s %s`, base.Component.TMarkDown.Bold(`check`), name, base.Component.TMarkDown.Bold(`not run：`), cmd[`checks`]), true)
 			continue
 		}
 		cmdType := cast.ToInt(cmd[`type`])
 		runType := cast.ToString(cmd[`run_type`])
 		//非最终执行并且等待客户点击运行
 		if h.IsRun != 1 && runType == define.RunTypeRun {
-			h.StreamMsg(fmt.Sprintf(`%s %s`, base.Component.TMarkDown.Bold(`wait run 请点击执行`), name), true)
+			h.SseSend(fmt.Sprintf(`%s %s`, base.Component.TMarkDown.Bold(`wait run 请点击执行`), name), true)
 			cmdResult.ReplaceList = h.ReplaceList
 			cmdResult.Form = _struct.VForm{Id: cmdId}
 			cmdResult.RunStatus = define.RunStatusCanRun
@@ -133,7 +131,7 @@ func (h *Variable) Run() (_struct.VCmdResult, error) {
 		//输出表单
 		if runType == define.RunTypeForm {
 			cmdResult.RunStatus = define.RunStatusWaitRun
-			h.StreamMsg(base.Component.TMarkDown.Bold(`form`)+" "+name, true)
+			h.SseSend(base.Component.TMarkDown.Bold(`form`)+" "+name, true)
 			return cmdResult, nil
 		}
 		//中间层
@@ -143,7 +141,7 @@ func (h *Variable) Run() (_struct.VCmdResult, error) {
 	}
 	//执行结束
 	if !havePlaywright {
-		h.StreamMsg(base.Component.TMarkDown.Bold(`end.`), true)
+		h.SseSend(base.Component.TMarkDown.Bold(`end.`), true)
 	}
 	cmdResult.RunStatus = define.RunStatusFinish
 	return cmdResult, nil
@@ -151,7 +149,7 @@ func (h *Variable) Run() (_struct.VCmdResult, error) {
 
 func (h *Variable) RunCmd(cmd map[string]any) error {
 	//执行
-	rCmd := NewRCmd(cmd, h.ReplaceList, h.RunUniqueId, h.StreamMsg, h.SseId)
+	rCmd := NewRCmd(cmd, h.ReplaceList, h.FullSse, h.SseSend)
 	var err error
 	switch cast.ToInt(cmd[`type`]) {
 	case define.VariableCmdMysql:
@@ -188,7 +186,7 @@ func (h *Variable) BuildCmd(cmd map[string]any) (_struct.VForm, error) {
 		CmdType:    cast.ToString(cmd[`type`]),       //cmd 类型
 	}
 	//执行
-	vCmd := NewPCmd(h.SseId, cmd, h.ReplaceList, h.RunUniqueId)
+	vCmd := NewPCmd(h.SseSend, cmd, h.ReplaceList)
 	var err error
 	switch cast.ToInt(cmd[`type`]) {
 	case define.VariableCmdInput, define.VariableCmdTextarea:

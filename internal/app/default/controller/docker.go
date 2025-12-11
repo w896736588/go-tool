@@ -262,7 +262,9 @@ func getDockerComponent(c *gin.Context) (map[string]interface{}, *gsssh.SshTermi
 	//sshClient, sshClientErr := base.Component.TShell.GetClient(sshConfig, uniqueKey, sseId, func(s string) []string {
 	//	return stripANSI(s)
 	//})
-	sshClient, sshClientErr := base.Component.TShell.GetClient(sshConfig, uniqueKey, sseId, nil)
+	fullSse := base.Component.TBase.GetSse(c, reqMap)
+	sseSend := base.GetGitSseSend(&fullSse)
+	sshClient, sshClientErr := base.Component.TShell.GetClient(sshConfig, uniqueKey, sseSend, nil)
 	if sshClientErr != nil {
 		return nil, nil, sshClientErr
 	}

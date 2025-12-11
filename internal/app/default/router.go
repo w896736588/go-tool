@@ -231,7 +231,6 @@ func shellOut(tGin *base.Gin) {
 	tGin.GinPost(`/api/shellOutErrorContext`, controller.ShellOutErrorContext)
 	tGin.GinPost(`/api/shellOutSearchContent`, controller.ShellOutSearchContent)
 	tGin.GinPost(`/api/shellOutCleanLog`, controller.ShellOutCleanLog)
-	tGin.GinPost(`/api/shellOutRestart`, controller.ShellOutRestart)
 }
 
 func variable(tGin *base.Gin) {
@@ -321,9 +320,9 @@ func apiUse(tGin *base.Gin) {
 		return sse, nil
 	}, func(sse *gsgin.Sse) {
 		err := sse.SendToChan(gstool.JsonEncode(define.SseData{
-			SseClientId: "",
-			Data:        "[DONE]",
-			Type:        define.SseContentTypeMsg,
+			SseDistributeId: "",
+			Data:            "[DONE]",
+			Type:            define.SseContentTypeMsg,
 		}))
 		if err != nil {
 			gstool.FmtPrintlnLogTime(`错误 %s`, err.Error())
@@ -331,7 +330,6 @@ func apiUse(tGin *base.Gin) {
 		}
 		sse.UnRegister()
 	})
-	//sse 替换 websocket
 	openFunc := func(urlValues url.Values, stopC chan int, c *gin.Context) (*gsgin.Sse, error) {
 		clientId := urlValues.Get(`client_id`)
 		sseC := gsgin.SseGetByClientId(clientId)
@@ -339,14 +337,13 @@ func apiUse(tGin *base.Gin) {
 			return nil, errors.New(`已存在链接`)
 		}
 		sse := gsgin.SseRegister(clientId, stopC, c)
+		gstool.FmtPrintlnLogTime(`注册链接 %s`, clientId)
 		//发送一个事件 前端才会建立连接
 		_ = sse.SendToChan(define.SseConnect)
-		define.RegisterDistributeSseId(clientId)
 		return sse, nil
 	}
 	closeFunc := func(sse *gsgin.Sse) {
 		sse.UnRegister()
-		define.UnRegisterDistributeSseId(sse.ClientId)
 	}
 	tGin.SseRoute(`/sse`, openFunc, closeFunc)
 }
