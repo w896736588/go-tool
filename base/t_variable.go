@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"gitee.com/Sxiaobai/gs/v2/gsgin"
 	"gitee.com/Sxiaobai/gs/v2/gstool"
 	"github.com/spf13/cast"
 )
@@ -316,7 +315,7 @@ func (h *TVariable) ChecksCanDo(cmd map[string]any) bool {
 }
 
 // PreConnSsh 初始化ssh连接
-func (h *TVariable) PreConnSsh(sshId int, sshUniqueKey, sftpUniqueKey, sseId string) error {
+func (h *TVariable) PreConnSsh(sshId int, sshUniqueKey, sftpUniqueKey string, sse *SseShell) error {
 	if sshId == 0 {
 		return errors.New(`ssh_id不能为空`)
 	}
@@ -330,12 +329,12 @@ func (h *TVariable) PreConnSsh(sshId int, sshUniqueKey, sftpUniqueKey, sseId str
 		return sshConfigErr
 	}
 	//ssh
-	_, sshClientErr := Component.TShell.GetClientMarkdown(sshConfig, sshUniqueKey, sseId)
+	_, sshClientErr := Component.TShell.GetClientMarkdown(sshConfig, sshUniqueKey, sse)
 	if sshClientErr != nil {
 		return sshClientErr
 	}
 	//sftp
-	_, sftpClientErr := Component.TShell.GetClientMarkdown(sshConfig, sftpUniqueKey, sseId)
+	_, sftpClientErr := Component.TShell.GetClientMarkdown(sshConfig, sftpUniqueKey, sse)
 	if sftpClientErr != nil {
 		return sftpClientErr
 	}
@@ -363,23 +362,5 @@ func (h *TVariable) SelectChooseReplace(variableForm *_struct.VForm,
 			//替换整体
 			h.AddReplace(replaceList, variableForm.ResultKey, option.Source)
 		}
-	}
-}
-
-func (h *TVariable) StreamMsgFuncBySseId(sseId, runUniqueId string) func(msg string, enter bool) {
-	return func(msg string, enter bool) {
-		sse := gsgin.SseGetByClientId(sseId)
-		//如果本次任务已经停止 那么不再输出
-		if Component.TVariable.Get(runUniqueId) == `stop` {
-			sse.CleanMsg()
-			return
-		}
-		if enter {
-			msg += "\n"
-		}
-		_ = sse.SendToChan(gstool.JsonEncode(define.SseData{
-			Data: msg,
-			Type: define.SseContentTypeMsg,
-		}))
 	}
 }

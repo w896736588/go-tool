@@ -87,7 +87,7 @@ func initPlaywright() {
 	base.Component.TPlaywright.LockFileFullPath = filepath.Join(base.Component.Env.RootPath, `playwright.RunLock`)
 	p_playwright.InitPageActiveTime()
 	go base.Component.TPlaywright.WitchDownload()
-	go base.Component.TPlaywright.SmartCheckAndUpdate()
+	go base.Component.TPlaywright.SmartCheckAndUpdate(&base.SseShell{})
 }
 
 func initSqlite() {

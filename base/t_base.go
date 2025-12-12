@@ -2,16 +2,14 @@ package base
 
 import (
 	"fmt"
-	"gitee.com/Sxiaobai/gs/v2/gsgin"
-	"gitee.com/Sxiaobai/gs/v2/gstool"
-	"github.com/gin-gonic/gin"
-	"github.com/pion/stun"
-	"github.com/spf13/cast"
 	"net"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"gitee.com/Sxiaobai/gs/v2/gstool"
+	"github.com/pion/stun"
 )
 
 type TBase struct {
@@ -123,14 +121,4 @@ func (h *TBase) DiffText(text1, text2 string) string {
 	}
 	return stats
 
-}
-
-func (h *TBase) GetSse(c *gin.Context, data map[string]any) FullSse {
-	sseClientId := c.GetHeader(`SseClientId`)
-	sse := gsgin.SseGetByClientId(sseClientId)
-	gstool.FmtPrintlnLogTime(`sse id  %#v`, data[`sse_id`], data)
-	return FullSse{
-		Sse:             sse,
-		SseDistributeId: cast.ToString(data[`sse_id`]),
-	}
 }

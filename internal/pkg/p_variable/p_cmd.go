@@ -12,11 +12,11 @@ import (
 type PCmd struct {
 	cmd         map[string]any
 	replaceList map[string]string
-	SseSend     func(string, bool)
+	Sse         *base.SseVariable
 }
 
-func NewPCmd(sseSend func(string, bool), cmd map[string]any, replace map[string]string) *PCmd {
-	return &PCmd{cmd: cmd, replaceList: replace, SseSend: sseSend}
+func NewPCmd(sse *base.SseVariable, cmd map[string]any, replace map[string]string) *PCmd {
+	return &PCmd{cmd: cmd, replaceList: replace, Sse: sse}
 }
 
 func (h *PCmd) ParseInput(form *_struct.VForm) error {

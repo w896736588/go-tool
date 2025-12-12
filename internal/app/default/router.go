@@ -337,7 +337,6 @@ func apiUse(tGin *base.Gin) {
 			return nil, errors.New(`已存在链接`)
 		}
 		sse := gsgin.SseRegister(clientId, stopC, c)
-		gstool.FmtPrintlnLogTime(`注册链接 %s`, clientId)
 		//发送一个事件 前端才会建立连接
 		_ = sse.SendToChan(define.SseConnect)
 		return sse, nil

@@ -16,38 +16,19 @@ type VariableSet struct {
 	VariableId  int
 	RunCmdId    int
 	EditValue   string
-	RunUniqueId string
 	ReplaceList map[string]string
-	SseSend     func(string, bool)
-	FullSse     *base.FullSse
+	Sse         *base.SseVariable
 }
 
-func NewVariableSet(fullSse *base.FullSse, variableId, runCmdId int, editValue, runUniqueId string, replaceList map[string]string) *VariableSet {
+func NewVariableSet(sse *base.SseVariable, variableId, runCmdId int, editValue string, replaceList map[string]string) *VariableSet {
 	variableSet := &VariableSet{
 		RunCmdId:    runCmdId,
-		RunUniqueId: runUniqueId,
 		EditValue:   editValue,
 		VariableId:  variableId,
 		ReplaceList: replaceList,
-		FullSse:     fullSse,
+		Sse:         sse,
 	}
-	variableSet.SseSend = variableSet.getSseSend(runUniqueId)
 	return variableSet
-}
-
-func (h *VariableSet) getSseSend(runUniqueId string) func(msg string, enter bool) {
-	return func(msg string, enter bool) {
-		//如果本次任务已经停止 那么不再输出
-		if base.Component.TVariable.Get(runUniqueId) == `stop` {
-			h.FullSse.Sse.CleanMsg()
-			return
-		}
-		if enter {
-			msg += "\n"
-		}
-		//发送结构化数据
-		h.FullSse.SendDistribute(msg, define.SseContentTypeMsg)
-	}
 }
 
 func (h *VariableSet) Set() (_struct.VCmdResult, error) {
@@ -63,15 +44,15 @@ func (h *VariableSet) Set() (_struct.VCmdResult, error) {
 	cmdResult := _struct.VCmdResult{
 		VariableId: h.VariableId,
 	}
-	cmdResult.RunUniqueId = h.RunUniqueId
-	vCmd := NewPCmd(h.SseSend, cmd, h.ReplaceList)
+	cmdResult.RunUniqueId = h.Sse.RunUniqueId
+	vCmd := NewPCmd(h.Sse, cmd, h.ReplaceList)
 	switch cast.ToInt(form.CmdType) {
 	case define.VariableCmdRadio: //单选
 		err := vCmd.ParseSelect(&form)
 		if err != nil {
 			return cmdResult, errors.New(`解析select失败 ` + err.Error())
 		}
-		vCmd.SseSend(fmt.Sprintf(`%s %s %s %s`,
+		h.Sse.Send(fmt.Sprintf(`%s %s %s %s`,
 			base.Component.TMarkDown.Bold(`set`),
 			form.Name,
 			base.Component.TMarkDown.Bold(`choose：`),
@@ -79,18 +60,18 @@ func (h *VariableSet) Set() (_struct.VCmdResult, error) {
 		base.Component.TVariable.SelectChooseReplace(&form, h.ReplaceList, h.EditValue)
 	case define.VariableCmdInput, define.VariableCmdTextarea:
 		if gstool.SContains(strings.ToLower(form.Name), []string{`php`}) {
-			vCmd.SseSend(fmt.Sprintf(`%s %s %s`,
+			h.Sse.Send(fmt.Sprintf(`%s %s %s`,
 				base.Component.TMarkDown.Bold(`set`),
 				form.Name,
 				base.Component.TMarkDown.Bold(`input：`)), true)
-			vCmd.SseSend(base.Component.TMarkDown.Code(h.EditValue, `php`), true)
+			h.Sse.Send(base.Component.TMarkDown.Code(h.EditValue, `php`), true)
 		} else if gstool.SContains(strings.ToLower(form.Name), []string{`sql`}) {
-			vCmd.SseSend(fmt.Sprintf(`%s %s %s`,
+			h.Sse.Send(fmt.Sprintf(`%s %s %s`,
 				base.Component.TMarkDown.Bold(`set`),
 				form.Name, base.Component.TMarkDown.Bold(`input：`)), true)
-			vCmd.SseSend(base.Component.TMarkDown.Code(h.EditValue, `sql`), true)
+			h.Sse.Send(base.Component.TMarkDown.Code(h.EditValue, `sql`), true)
 		} else {
-			vCmd.SseSend(fmt.Sprintf(`%s %s %s %s`,
+			h.Sse.Send(fmt.Sprintf(`%s %s %s %s`,
 				base.Component.TMarkDown.Bold(`set`),
 				form.Name, base.Component.TMarkDown.Bold(`input：`),
 				h.EditValue), true)

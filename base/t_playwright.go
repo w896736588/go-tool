@@ -12,7 +12,6 @@ import (
 	"strings"
 	"sync"
 
-	"gitee.com/Sxiaobai/gs/v2/gsgin"
 	"gitee.com/Sxiaobai/gs/v2/gstool"
 	"github.com/playwright-community/playwright-go"
 	"github.com/spf13/cast"
@@ -97,17 +96,17 @@ func (h *TPlaywright) AddTipMsg(page *playwright.Page, tip string) {
 	_, _ = (*page).Evaluate(content)
 }
 
-func (h *TPlaywright) SmartCheckAndUpdate() {
+func (h *TPlaywright) SmartCheckAndUpdate(sse *SseShell) {
 	gstool.FmtPrintlnLogTime(`检查并更新核心`)
 	pw, _ := playwright.NewDriver()
 	if !gstool.FileIsExisted(h.LockFileFullPath) {
-		go h.Install(``, pw.Version)
+		go h.Install(sse, pw.Version)
 	} else {
 		content, contentErr := gstool.FileGetContent(h.LockFileFullPath)
 		if contentErr != nil {
 			gstool.FmtPrintlnLogTime(`获取文件内容失败 %s`, contentErr.Error())
 		} else if content != pw.Version {
-			go h.Install(``, pw.Version)
+			go h.Install(sse, pw.Version)
 		} else {
 			gstool.FmtPrintlnLogTime(`浏览器核心最新版本为：%s ，当前安装版本为：%s,不需要进行更新`, pw.Version, content)
 			go h.InitPlaywright()
@@ -131,17 +130,17 @@ func (h *TPlaywright) InitPlaywright() {
 	gstool.FmtPrintlnLogTime(`启动成功..`)
 }
 
-func (h *TPlaywright) Install(sseId, version string) {
-	h.SseMsgByClient(sseId, `开始安装浏览器核心(只安装chrome),大约几分钟时间`, true)
+func (h *TPlaywright) Install(sse *SseShell, version string) {
+	sse.Send(`开始安装浏览器核心(只安装chrome),大约几分钟时间` + "\n")
 	err := playwright.Install(&playwright.RunOptions{
 		Browsers: []string{`chromium`},
 	})
 	if err != nil {
-		h.SseMsgByClient(sseId, fmt.Sprintf(`安装浏览器核心失败 %s`, err.Error()), true)
+		sse.Send(fmt.Sprintf(`安装浏览器核心失败 %s`, err.Error()) + "\n")
 		_ = gstool.FileDelete(h.LockFileFullPath)
 	} else {
 		_ = gstool.FilePutContentCover(h.LockFileFullPath, version)
-		h.SseMsgByClient(sseId, `安装完成`, true)
+		sse.Send(`安装完成` + "\n")
 		h.InitPlaywright()
 	}
 }
@@ -282,26 +281,4 @@ func (h *TPlaywright) ValueClean(value string) string {
 		"\n": "",
 		" ":  "",
 	})
-}
-
-func (h *TPlaywright) StreamMsgFunc(runUniqueId string) func(msg string, enter bool) {
-	return func(msg string, enter bool) {
-		if enter {
-			msg += "\n"
-		}
-		_ = gsgin.SseGetByClientId(runUniqueId).SendToChan(gstool.JsonEncode(define.SseData{
-			Data: msg,
-			Type: define.SseContentTypeMsg,
-		}))
-	}
-}
-
-func (h *TPlaywright) SseMsgByClient(sseId string, msg string, enter bool) {
-	if enter {
-		msg += "\n"
-	}
-	_ = gsgin.SseGetByClientId(sseId).SendToChan(gstool.JsonEncode(define.SseData{
-		Data: msg,
-		Type: define.SseContentTypeMsg,
-	}))
 }

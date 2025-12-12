@@ -215,12 +215,16 @@ func VariableCmdSet(c *gin.Context) {
 		gsgin.GinResponseError(c, `解析replace_list失败`, nil)
 		return
 	}
-	fullSse := base.Component.TBase.GetSse(c, dataMap)
-	set := p_variable.NewVariableSet(&fullSse, variableId, runCmdId, editValue, runUniqueId, replaceList)
+	sse := &base.SseVariable{
+		Sse:             gsgin.SseGetByClientId(c.GetHeader(`SseClientId`)),
+		SseDistributeId: cast.ToString(dataMap[`sse_id`]),
+		RunUniqueId:     runUniqueId,
+	}
+	set := p_variable.NewVariableSet(sse, variableId, runCmdId, editValue, replaceList)
 	result, setErr := set.Set()
 	if setErr != nil {
 		result.RunStatus = 2
-		fullSse.SendDistribute(fmt.Sprintf(`error：%s`, setErr.Error())+"\n", define.SseContentTypeMsg)
+		sse.Send(fmt.Sprintf(`error：%s`, setErr.Error())+"\n", false)
 	}
 	gsgin.GinResponseSuccess(c, ``, result)
 }
@@ -246,12 +250,17 @@ func VariableCmdRun(c *gin.Context) {
 			return
 		}
 	}
-	fullSse := base.Component.TBase.GetSse(c, dataMap)
-	variable := p_variable.NewVariable(&fullSse, variableId, runCmdId, isRun, replaceList, runUniqueId)
+	//sse
+	sse := &base.SseVariable{
+		Sse:             gsgin.SseGetByClientId(c.GetHeader(`SseClientId`)),
+		SseDistributeId: cast.ToString(dataMap[`sse_id`]),
+		RunUniqueId:     runUniqueId,
+	}
+	variable := p_variable.NewVariable(sse, variableId, runCmdId, isRun, replaceList)
 	result, resultErr := variable.Run()
 	if resultErr != nil {
 		result.RunStatus = 2
-		variable.SseSend(fmt.Sprintf(`执行失败%s`, resultErr.Error()), true)
+		sse.Send(fmt.Sprintf(`执行失败%s`, resultErr.Error()), true)
 	}
 	gsgin.GinResponseSuccess(c, ``, result)
 }

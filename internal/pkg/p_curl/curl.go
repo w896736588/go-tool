@@ -56,10 +56,10 @@ func (h *CurlRun) Run() (string, error) {
 			res, err = cli.Request(200).Result()
 		}
 		if err == nil {
-			h.CurlEvents.NoticeCall(fmt.Sprintf(`%s 第%d次尝试，成功`, "\n"+gstool.TimeNowUnixToString(`Y-m-d H:i:s`), i))
+			h.CurlEvents.NoticeCall(fmt.Sprintf(`%s 第%d次尝试，成功`, "\n"+gstool.TimeNowUnixToString(`Y-m-d H:i:s`), i) + "\n")
 			return cast.ToString(res), nil
 		} else {
-			h.CurlEvents.NoticeCall(fmt.Sprintf(`%s 第%d次尝试，失败 %s`, "\n"+gstool.TimeNowUnixToString(`Y-m-d H:i:s`), i, err.Error()))
+			h.CurlEvents.NoticeCall(fmt.Sprintf(`%s 第%d次尝试，失败 %s`, "\n"+gstool.TimeNowUnixToString(`Y-m-d H:i:s`), i, err.Error()) + "\n")
 			time.Sleep(time.Second * time.Duration(retryWaitSecond))
 		}
 	}

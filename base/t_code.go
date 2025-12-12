@@ -1,9 +1,10 @@
 package base
 
 import (
-	"gitee.com/Sxiaobai/gs/v2/gstool"
 	"strings"
 	"time"
+
+	"gitee.com/Sxiaobai/gs/v2/gstool"
 )
 
 type TCode struct {
@@ -16,9 +17,7 @@ func (h *TCode) FindCode(sshConfig map[string]any, dirPath string) []string {
 	command.FindGitDir(dirPath, 2)
 	uniqueKey := Component.TBase.GetCombineKey(sshConfig[`id`], `code`)
 	//这里不需要输出sse 传空
-	client, err := Component.TShell.GetClient(sshConfig, uniqueKey, func(s string) {
-
-	}, nil)
+	client, err := Component.TShell.GetClient(sshConfig, uniqueKey, &SseShell{}, nil)
 	if err != nil {
 		gstool.FmtPrintlnLogTime(`连接ssh失败 %s`, err.Error())
 		return codeDirList

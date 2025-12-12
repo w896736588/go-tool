@@ -247,28 +247,30 @@ func DockerComposeStart(c *gin.Context) {
 }
 
 func getDockerComponent(c *gin.Context) (map[string]interface{}, *gsssh.SshTerminal, error) {
-	reqMap := make(map[string]interface{})
-	err := gsgin.GinPostBody(c, &reqMap)
+	dataMap := make(map[string]interface{})
+	err := gsgin.GinPostBody(c, &dataMap)
 	if err != nil {
 		return nil, nil, err
 	}
-	sshId := reqMap[`ssh_id`]
+	sshId := dataMap[`ssh_id`]
 	if cast.ToInt(sshId) == 0 {
 		return nil, nil, errors.New(`缺少ssh_id参数`)
 	}
-	sseId := cast.ToString(reqMap[`sse_id`])
+	sseId := cast.ToString(dataMap[`sse_id`])
 	sshConfig, _ := base.Component.TSqlite.GetSshConfig(sshId)
 	uniqueKey := base.Component.TBase.GetCombineKey(sshId, sseId)
 	//sshClient, sshClientErr := base.Component.TShell.GetClient(sshConfig, uniqueKey, sseId, func(s string) []string {
 	//	return stripANSI(s)
 	//})
-	fullSse := base.Component.TBase.GetSse(c, reqMap)
-	sseSend := base.GetGitSseSend(&fullSse)
-	sshClient, sshClientErr := base.Component.TShell.GetClient(sshConfig, uniqueKey, sseSend, nil)
+	sse := &base.SseShell{
+		Sse:             gsgin.SseGetByClientId(c.GetHeader(`SseClientId`)),
+		SseDistributeId: cast.ToString(dataMap[`sse_id`]),
+	}
+	sshClient, sshClientErr := base.Component.TShell.GetClient(sshConfig, uniqueKey, sse, nil)
 	if sshClientErr != nil {
 		return nil, nil, sshClientErr
 	}
-	return reqMap, sshClient, nil
+	return dataMap, sshClient, nil
 }
 
 var garbage = regexp.MustCompile(`(?m)\x1b\[[0-9;?]*[a-zA-Z]|[\r\x00]`)

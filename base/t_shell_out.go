@@ -24,8 +24,7 @@ const MaxSendLength = 1000    //刷新页面后最多发送给前端多少行
 // ShellOut 单个 ssh 会话
 type ShellOut struct {
 	Client           *gsssh.SshTerminal
-	SseSend          func(any, string)
-	FullSee          *FullSse
+	Sse              *SseShell
 	errorList        []ErrorBlock   // 最终归档的错误块
 	remainContents   []string       // 保留的内容(替换后的)
 	sourceContents   []string       // 原本内容
@@ -92,7 +91,7 @@ func (h *TShellOut) InitGroupConfigs() {
 }
 
 // GetClient 获取或新建 ssh 客户端
-func (h *TShellOut) GetClient(sshConfig map[string]any, shellClientId string, fullSse *FullSse, sseSend func(any, string), groupId int,
+func (h *TShellOut) GetClient(sshConfig map[string]any, shellClientId string, sse *SseShell, groupId int,
 	formatStream func(string) []string) (*ShellOut, bool, error) {
 	h.lock.Lock()
 	defer h.lock.Unlock()
@@ -102,7 +101,6 @@ func (h *TShellOut) GetClient(sshConfig map[string]any, shellClientId string, fu
 		return nil, false, errors.New(`ssh配置错误，GetClient ` + cast.ToString(debug.Stack()))
 	}
 	if shellOut, ok := h.ShellOutMap[shellClientId]; ok && shellOut != nil {
-		shellOut.groupId = groupId
 		return shellOut, true, nil
 	}
 	gsShell := gsssh.NewSshTerminal(gsssh.NewSsh(&gsssh.SshConfig{
@@ -114,7 +112,7 @@ func (h *TShellOut) GetClient(sshConfig map[string]any, shellClientId string, fu
 	}))
 	// 断开回调
 	gsShell.SetFuncBroken(func() {
-		sseSend(` 注意：连接已中断，下次动作时进行链接`+"\n", ``)
+		sse.Send(` 注意：连接已中断，下次动作时进行链接` + "\n")
 		h.RmClient(shellClientId)
 	})
 	gsShell.SetCombineNum(1)
@@ -131,8 +129,7 @@ func (h *TShellOut) GetClient(sshConfig map[string]any, shellClientId string, fu
 	// 新建 ShellOut
 	shellOut := &ShellOut{
 		Client:           gsShell,
-		SseSend:          sseSend,
-		FullSee:          fullSse,
+		Sse:              sse,
 		regexFiltersTips: map[string]int{},
 		startTime:        time.Now().Unix(),
 		groupId:          groupId,
@@ -146,16 +143,16 @@ func (h *TShellOut) GetClient(sshConfig map[string]any, shellClientId string, fu
 }
 
 // SetClientSseId 设置 sse 推送 & 错误检测
-func (h *TShellOut) SetClientSseId(shellClientId, sshId string, fullSse *FullSse, sseSend func(any, string), command string, groupId int,
+func (h *TShellOut) SetClientSseId(shellClientId, sshId string, sse *SseShell, command string, groupId int,
 	formatStream func(string) []string) error {
 
 	sshConfig, _ := Component.TSqlite.GetSshConfig(sshId)
-	shellOut, exist, err := h.GetClient(sshConfig, shellClientId, fullSse, sseSend, groupId, formatStream)
+	shellOut, exist, err := h.GetClient(sshConfig, shellClientId, sse, groupId, formatStream)
 	if err != nil {
 		return err
 	}
-	shellOut.FullSee = fullSse
-	shellOut.SseSend = sseSend
+	shellOut.groupId = groupId
+	shellOut.Sse = sse
 	h.SetReceiveMsg(shellOut, formatStream)
 	if !exist {
 		go func() {
@@ -327,28 +324,28 @@ func (h *TShellOut) RegexFilter(shellOut *ShellOut, msg string) bool {
 
 func (h *TShellOut) SendMsg(shellOut *ShellOut, msg string) {
 	msg = strings.Replace(msg, `\n`, "\n", -1)
-	shellOut.SseSend(msg, ``)
+	shellOut.Sse.Send(msg)
 }
 
 func (h *TShellOut) SendEvent(shellOut *ShellOut, eventType, msg string) {
 	msg = strings.Replace(msg, `\n`, "\n", -1)
-	shellOut.SseSend(msg, ``)
+	shellOut.Sse.Send(msg)
 }
 
 func (h *TShellOut) SendErrList(shellOut *ShellOut) {
-	shellOut.SseSend(shellOut.errorList, define.SseContentTypeErrorList)
+	shellOut.Sse.Send(shellOut.errorList, define.SseContentTypeErrorList)
 }
 
 func (h *TShellOut) SendFilterList(shellOut *ShellOut) {
-	shellOut.SseSend(shellOut.regexFiltersTips, define.SseContentTypeFilterList)
+	shellOut.Sse.Send(shellOut.regexFiltersTips, define.SseContentTypeFilterList)
 }
 
 func (h *TShellOut) SendFilter(shellOut *ShellOut, msg string) {
-	shellOut.SseSend(msg, define.SseContentTypeFilter)
+	shellOut.Sse.Send(msg, define.SseContentTypeFilter)
 }
 
 func (h *TShellOut) SendErr(shellOut *ShellOut, err ErrorBlock) {
-	shellOut.SseSend(err, define.SseContentTypeError)
+	shellOut.Sse.Send(err, define.SseContentTypeError)
 }
 
 func (h *TShellOut) RmClient(uniqueKey string) {
