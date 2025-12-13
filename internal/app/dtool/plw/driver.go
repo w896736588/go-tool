@@ -1,0 +1,156 @@
+package plw
+
+import (
+	"dev_tool/internal/app/dtool/common"
+	"dev_tool/internal/pkg/p_common"
+	"dev_tool/internal/pkg/p_sse"
+	"fmt"
+	"gitee.com/Sxiaobai/gs/v2/gstool"
+	"github.com/playwright-community/playwright-go"
+	"log"
+	"os"
+	"strings"
+	"sync"
+)
+
+type TPlaywright struct {
+	//处理下载后自动打开
+	DownloadPath string
+	EventLock    sync.Mutex
+	//全局
+	BrowserWebkitChrome  playwright.Browser
+	BrowserWebkitSilence playwright.Browser
+	//pw
+	Pw  *playwright.Playwright
+	Log *gstool.GsSlog
+	//文件
+	LockFileFullPath string
+}
+
+var PlaywrightClient *TPlaywright
+
+func NewTPlaywright() *TPlaywright {
+	gsLog := gstool.NewSlog2(common.EnvClient.LogPath, `playwright`)
+	_ = gsLog.CleanOldLogs(2)
+	return &TPlaywright{
+		Log:          gsLog,
+		DownloadPath: common.EnvClient.WebkitDownloadPath,
+	}
+}
+
+func (h *TPlaywright) SetWebkitPath() {
+	// 设置自定义浏览器安装路径
+	_ = os.Setenv("PLAYWRIGHT_BROWSERS_PATH", common.EnvClient.WebkitDriverPath)
+	_ = os.Setenv("PLAYWRIGHT_DRIVER_PATH", common.EnvClient.NodePath)
+	_ = os.Setenv("GOPROXY", "https://goproxy.cn,direct")
+}
+
+func (h *TPlaywright) WaitForLoadState(page *playwright.Page, timeout float64) {
+	_ = (*page).WaitForLoadState(playwright.PageWaitForLoadStateOptions{
+		State:   playwright.LoadStateDomcontentloaded,
+		Timeout: &timeout,
+	})
+	_ = (*page).WaitForLoadState(playwright.PageWaitForLoadStateOptions{
+		State:   playwright.LoadStateNetworkidle,
+		Timeout: &timeout,
+	})
+	_ = (*page).WaitForLoadState(playwright.PageWaitForLoadStateOptions{
+		State:   playwright.LoadStateLoad,
+		Timeout: &timeout,
+	})
+}
+
+func (h *TPlaywright) IsSameLink(smartLinkUniqueKeyS, smartLinkUniqueKeyT string) bool {
+	return strings.Split(smartLinkUniqueKeyS, `_`)[0] == strings.Split(smartLinkUniqueKeyT, `_`)[0]
+}
+
+func (h *TPlaywright) WitchDownload() {
+	if err := os.MkdirAll(h.DownloadPath, 0755); err != nil {
+		log.Fatalf("创建目录失败: %v", err)
+	}
+	h.Log.Debugf(`开始监听%s`, h.DownloadPath)
+}
+
+// SetTitle 设置title
+func (h *TPlaywright) SetTitle(page playwright.Page, title string) {
+	_, _ = page.Evaluate(`(function() {
+			document.title = "` + title + `";
+	})();`)
+}
+
+// AddTipMsg 向页面上输出提示
+func (h *TPlaywright) AddTipMsg(page *playwright.Page, tip string) {
+	if tip == `` {
+		return
+	}
+	content := p_common.TJasClient.Get(`p_js`, `tip.js`)
+	content = gstool.SReplaces(content, map[string]string{
+		`{tip}`: tip,
+	})
+	_, _ = (*page).Evaluate(content)
+}
+
+func (h *TPlaywright) SmartCheckAndUpdate(sse *p_sse.SseShell) {
+	gstool.FmtPrintlnLogTime(`检查并更新核心`)
+	pw, _ := playwright.NewDriver()
+	if !gstool.FileIsExisted(h.LockFileFullPath) {
+		go h.Install(sse, pw.Version)
+	} else {
+		content, contentErr := gstool.FileGetContent(h.LockFileFullPath)
+		if contentErr != nil {
+			gstool.FmtPrintlnLogTime(`获取文件内容失败 %s`, contentErr.Error())
+		} else if content != pw.Version {
+			go h.Install(sse, pw.Version)
+		} else {
+			gstool.FmtPrintlnLogTime(`浏览器核心最新版本为：%s ，当前安装版本为：%s,不需要进行更新`, pw.Version, content)
+			go h.InitPlaywright()
+		}
+	}
+}
+
+func (h *TPlaywright) InitPlaywright() {
+	gstool.FmtPrintlnLogTime(`启动浏览器核心..`)
+	var pwErr error
+	h.Pw, pwErr = playwright.Run()
+	if pwErr != nil {
+		gstool.FmtPrintlnLogTime(`启动浏览器核心失败 %s`, pwErr.Error())
+		return
+	}
+	h.BrowserWebkitSilence, _ = h.Pw.Chromium.Launch()
+	h.BrowserWebkitChrome, _ = h.Pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
+		//DownloadsPath: &h.DownloadPath,
+		Headless: playwright.Bool(false), //有界面模式
+	})
+	gstool.FmtPrintlnLogTime(`启动成功..`)
+}
+
+func (h *TPlaywright) Install(sse *p_sse.SseShell, version string) {
+	sse.Send(`开始安装浏览器核心(只安装chrome),大约几分钟时间` + "\n")
+	err := playwright.Install(&playwright.RunOptions{
+		Browsers: []string{`chromium`},
+	})
+	if err != nil {
+		sse.Send(fmt.Sprintf(`安装浏览器核心失败 %s`, err.Error()) + "\n")
+		_ = gstool.FileDelete(h.LockFileFullPath)
+	} else {
+		_ = gstool.FilePutContentCover(h.LockFileFullPath, version)
+		sse.Send(`安装完成` + "\n")
+		h.InitPlaywright()
+	}
+}
+
+// SmartLinkPlaywrightVersion 获取浏览器核心版本
+func (h *TPlaywright) SmartLinkPlaywrightVersion() (*playwright.PlaywrightDriver, error) {
+	return playwright.NewDriver()
+}
+
+func (h *TPlaywright) SmartLinkDownloadPath() error {
+	return p_common.TOsClient.OpenDirWindows(gstool.DirPathFormatToWindows(h.DownloadPath))
+}
+
+func (h *TPlaywright) ValueClean(value string) string {
+	return gstool.SReplaces(value, map[string]string{
+		"\n": "",
+		" ":  "",
+	})
+}
