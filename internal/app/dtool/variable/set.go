@@ -18,11 +18,11 @@ type VariableSet struct {
 	RunCmdId    int
 	EditValue   string
 	ReplaceList map[string]string
-	Sse         *p_sse.SseVariable
+	Sse         *p_sse.SseShell
 	Call        *p_common.Call
 }
 
-func NewVariableSet(sse *p_sse.SseVariable, variableId, runCmdId int, editValue string, replaceList map[string]string, call *p_common.Call) *VariableSet {
+func NewVariableSet(sse *p_sse.SseShell, variableId, runCmdId int, editValue string, replaceList map[string]string, call *p_common.Call) *VariableSet {
 	variableSet := &VariableSet{
 		RunCmdId:    runCmdId,
 		EditValue:   editValue,
@@ -47,7 +47,6 @@ func (h *VariableSet) Set() (_struct.VCmdResult, error) {
 	cmdResult := _struct.VCmdResult{
 		VariableId: h.VariableId,
 	}
-	cmdResult.RunUniqueId = h.Sse.RunUniqueId
 	vCmd := NewPCmd(h.Sse, cmd, h.ReplaceList, h.Call)
 	switch cast.ToInt(form.CmdType) {
 	case define.VariableCmdRadio: //单选
@@ -59,25 +58,25 @@ func (h *VariableSet) Set() (_struct.VCmdResult, error) {
 			p_common.TMarkDownClient.Bold(`set`),
 			form.Name,
 			p_common.TMarkDownClient.Bold(`choose：`),
-			form.Select.GetSelectOption(h.EditValue).Label), true)
+			form.Select.GetSelectOption(h.EditValue).Label) + "\n")
 		VariableClient.SelectChooseReplace(&form, h.ReplaceList, h.EditValue)
 	case define.VariableCmdInput, define.VariableCmdTextarea:
 		if gstool.SContains(strings.ToLower(form.Name), []string{`php`}) {
 			h.Sse.Send(fmt.Sprintf(`%s %s %s`,
 				p_common.TMarkDownClient.Bold(`set`),
 				form.Name,
-				p_common.TMarkDownClient.Bold(`input：`)), true)
-			h.Sse.Send(p_common.TMarkDownClient.Code(h.EditValue, `php`), true)
+				p_common.TMarkDownClient.Bold(`input：`)) + "\n")
+			h.Sse.Send(p_common.TMarkDownClient.Code(h.EditValue, `php`) + "\n")
 		} else if gstool.SContains(strings.ToLower(form.Name), []string{`sql`}) {
 			h.Sse.Send(fmt.Sprintf(`%s %s %s`,
 				p_common.TMarkDownClient.Bold(`set`),
-				form.Name, p_common.TMarkDownClient.Bold(`input：`)), true)
-			h.Sse.Send(p_common.TMarkDownClient.Code(h.EditValue, `sql`), true)
+				form.Name, p_common.TMarkDownClient.Bold(`input：`)) + "\n")
+			h.Sse.Send(p_common.TMarkDownClient.Code(h.EditValue, `sql`) + "\n")
 		} else {
 			h.Sse.Send(fmt.Sprintf(`%s %s %s %s`,
 				p_common.TMarkDownClient.Bold(`set`),
 				form.Name, p_common.TMarkDownClient.Bold(`input：`),
-				h.EditValue), true)
+				h.EditValue) + "\n")
 		}
 		err := vCmd.ParseInput(&form)
 		if err != nil {

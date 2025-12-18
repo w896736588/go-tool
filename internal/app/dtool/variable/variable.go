@@ -8,20 +8,16 @@ import (
 	"dev_tool/internal/pkg/p_sse"
 	"errors"
 	"fmt"
+	"gitee.com/Sxiaobai/gs/v2/gstool"
+	"github.com/spf13/cast"
 	"regexp"
 	"strings"
 	"sync"
-	"time"
-
-	"gitee.com/Sxiaobai/gs/v2/gstool"
-	"github.com/spf13/cast"
 )
 
 type TVariable struct {
-	TaskList      map[string]string
-	SshClientList map[string][]string
-	lock          sync.RWMutex
-	Log           *gstool.GsSlog
+	lock sync.RWMutex
+	Log  *gstool.GsSlog
 	//临时输入的账号密码
 	LoginUsername string
 	LoginPassword string
@@ -33,78 +29,8 @@ func NewVariableClient() *TVariable {
 	log := gstool.NewSlog3(component.EnvClient.LogPath, `variable`)
 	_ = log.CleanOldLogs(2)
 	return &TVariable{
-		TaskList:      make(map[string]string),
-		SshClientList: make(map[string][]string),
-		Log:           log,
+		Log: log,
 	}
-}
-
-func (h *TVariable) StopAll() {
-	h.lock.Lock()
-	defer h.lock.Unlock()
-	for k, _ := range h.TaskList {
-		h.TaskList[k] = "stop"
-		if clientList, ok := h.SshClientList[k]; ok {
-			for _, clientId := range clientList {
-				component.ShellClient.RmClient(clientId)
-			}
-			delete(h.SshClientList, k)
-		}
-	}
-}
-
-func (h *TVariable) StopOther(runUniqueId string) {
-	h.lock.Lock()
-	defer h.lock.Unlock()
-	for k, _ := range h.TaskList {
-		if k == runUniqueId {
-			continue
-		}
-		h.TaskList[k] = "stop"
-		if clientList, ok := h.SshClientList[k]; ok {
-			for _, clientId := range clientList {
-				component.ShellClient.RmClient(clientId)
-			}
-			delete(h.SshClientList, k)
-		}
-	}
-	time.Sleep(time.Second)
-}
-
-func (h *TVariable) Add(id string) {
-	h.lock.Lock()
-	defer h.lock.Unlock()
-	h.TaskList[id] = "run"
-}
-
-func (h *TVariable) Del(id string) {
-	h.lock.Lock()
-	defer h.lock.Unlock()
-	delete(h.TaskList, id)
-}
-
-func (h *TVariable) Get(id string) string {
-	h.lock.RLock()
-	defer h.lock.RUnlock()
-	return h.TaskList[id]
-}
-
-func (h *TVariable) AddSshClient(id, clientId string) {
-	h.lock.Lock()
-	defer h.lock.Unlock()
-	if clientList, ok := h.SshClientList[id]; ok {
-		clientList = append(clientList, clientId)
-		h.SshClientList[id] = clientList
-	} else {
-		clientList = []string{clientId}
-		h.SshClientList[id] = clientList
-	}
-}
-
-func (h *TVariable) DelSshClient(id string) {
-	h.lock.Lock()
-	defer h.lock.Unlock()
-	delete(h.SshClientList, id)
 }
 
 // WaitReplace 是否属于待替换的字符串

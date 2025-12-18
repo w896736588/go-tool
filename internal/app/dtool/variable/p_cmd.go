@@ -13,11 +13,11 @@ import (
 type PCmd struct {
 	cmd         map[string]any
 	replaceList map[string]string
-	Sse         *p_sse.SseVariable
+	Sse         *p_sse.SseShell
 	Call        *p_common.Call
 }
 
-func NewPCmd(sse *p_sse.SseVariable, cmd map[string]any, replace map[string]string, call *p_common.Call) *PCmd {
+func NewPCmd(sse *p_sse.SseShell, cmd map[string]any, replace map[string]string, call *p_common.Call) *PCmd {
 	return &PCmd{cmd: cmd, replaceList: replace, Sse: sse, Call: call}
 }
 

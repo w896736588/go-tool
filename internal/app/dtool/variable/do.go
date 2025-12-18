@@ -13,15 +13,15 @@ import (
 )
 
 type Variable struct {
-	RunCmdId    int                //当前运行的cmd
-	VariableId  int                //脚本ID
-	ReplaceList map[string]string  //替换列表
-	IsRun       int                //最终执行1 最终执行
-	Sse         *p_sse.SseVariable //流式输出方法
+	RunCmdId    int               //当前运行的cmd
+	VariableId  int               //脚本ID
+	ReplaceList map[string]string //替换列表
+	IsRun       int               //最终执行1 最终执行
+	Sse         *p_sse.SseShell   //流式输出方法
 	Call        *p_common.Call
 }
 
-func NewVariable(sse *p_sse.SseVariable, variableId, runCmdId int, isRun int, replaceList map[string]string, call *p_common.Call) *Variable {
+func NewVariable(sse *p_sse.SseShell, variableId, runCmdId int, isRun int, replaceList map[string]string, call *p_common.Call) *Variable {
 	variable := &Variable{
 		VariableId:  variableId,
 		RunCmdId:    runCmdId,
@@ -38,17 +38,10 @@ func NewVariable(sse *p_sse.SseVariable, variableId, runCmdId int, isRun int, re
 }
 
 func (h *Variable) InitRunUniqueId() {
-	//生成本次执行ID
-	runUniqueId := p_common.TBaseClient.GetUnique(`variable`)
-	//注册本次执行ID
-	VariableClient.Add(runUniqueId)
-	//停止其他任务
-	VariableClient.StopOther(runUniqueId)
 	//清除服务端所有的消息
 	h.Sse.CleanMsg()
-	h.Sse.SetRunUniqueId(runUniqueId)
 	//清除前端所有的消息
-	h.Sse.Send(define.SseEventClean, false)
+	h.Sse.Send(define.SseEventClean)
 }
 
 func (h *Variable) Run() (_struct.VCmdResult, error) {
@@ -61,7 +54,6 @@ func (h *Variable) Run() (_struct.VCmdResult, error) {
 	cmdResult := _struct.VCmdResult{
 		VariableId: h.VariableId,
 	}
-	cmdResult.RunUniqueId = h.Sse.RunUniqueId
 	cmdList, cmdErr := common.DbMain.CmdList(h.VariableId)
 	if cmdErr != nil {
 		return cmdResult, cmdErr
@@ -89,14 +81,14 @@ func (h *Variable) Run() (_struct.VCmdResult, error) {
 		h.Replace(cmd)
 		//是否需要执行
 		if !VariableClient.ChecksCanDo(cmd) {
-			h.Sse.Send(fmt.Sprintf(`%s %s %s %s`, p_common.TMarkDownClient.Bold(`check`), name, p_common.TMarkDownClient.Bold(`not run：`), cmd[`checks`]), true)
+			h.Sse.Send(fmt.Sprintf(`%s %s %s %s`, p_common.TMarkDownClient.Bold(`check`), name, p_common.TMarkDownClient.Bold(`not run：`), cmd[`checks`]) + "\n")
 			continue
 		}
 		cmdType := cast.ToInt(cmd[`type`])
 		runType := cast.ToString(cmd[`run_type`])
 		//非最终执行并且等待客户点击运行
 		if h.IsRun != 1 && runType == define.RunTypeRun {
-			h.Sse.Send(fmt.Sprintf(`%s %s`, p_common.TMarkDownClient.Bold(`wait run 请点击执行`), name), true)
+			h.Sse.Send(fmt.Sprintf(`%s %s`, p_common.TMarkDownClient.Bold(`wait run 请点击执行`), name) + "\n")
 			cmdResult.ReplaceList = h.ReplaceList
 			cmdResult.Form = _struct.VForm{Id: cmdId}
 			cmdResult.RunStatus = define.RunStatusCanRun
@@ -131,7 +123,7 @@ func (h *Variable) Run() (_struct.VCmdResult, error) {
 		//输出表单
 		if runType == define.RunTypeForm {
 			cmdResult.RunStatus = define.RunStatusWaitRun
-			h.Sse.Send(p_common.TMarkDownClient.Bold(`form`)+" "+name, true)
+			h.Sse.Send(p_common.TMarkDownClient.Bold(`form`) + " " + name + "\n")
 			return cmdResult, nil
 		}
 		//中间层
@@ -141,7 +133,7 @@ func (h *Variable) Run() (_struct.VCmdResult, error) {
 	}
 	//执行结束
 	if !havePlaywright {
-		h.Sse.Send(p_common.TMarkDownClient.Bold(`end.`), true)
+		h.Sse.Send(p_common.TMarkDownClient.Bold(`end.`) + "\n")
 	}
 	cmdResult.RunStatus = define.RunStatusFinish
 	return cmdResult, nil

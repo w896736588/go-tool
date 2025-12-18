@@ -27,3 +27,7 @@ func (h *SseShell) Send(msg any, typs ...string) {
 		gstool.FmtPrintlnLogTime(`发送sse错误 %s`, err.Error())
 	}
 }
+
+func (h *SseShell) CleanMsg() {
+	h.Sse.CleanMsg()
+}

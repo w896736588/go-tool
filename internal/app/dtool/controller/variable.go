@@ -204,11 +204,6 @@ func VariableCmdSet(c *gin.Context) {
 	variableId := cast.ToInt(dataMap[`variable_id`])
 	runCmdId := cast.ToInt(dataMap[`run_cmd_id`])
 	editValue := cast.ToString(dataMap[`edit_value`])
-	runUniqueId := cast.ToString(dataMap[`run_unique_id`])
-	if runUniqueId == `` {
-		gsgin.GinResponseError(c, `缺少本次执行唯一ID`, nil)
-		return
-	}
 	replaceLists := cast.ToString(dataMap[`replace_list`])
 	replaceList := make(map[string]string, 0)
 	err := gstool.JsonDecode(replaceLists, &replaceList)
@@ -216,19 +211,15 @@ func VariableCmdSet(c *gin.Context) {
 		gsgin.GinResponseError(c, `解析replace_list失败`, nil)
 		return
 	}
-	sse := &p_sse.SseVariable{
+	sse := &p_sse.SseShell{
 		Sse:             gsgin.SseGetByClientId(c.GetHeader(`SseClientId`)),
 		SseDistributeId: cast.ToString(dataMap[`sse_id`]),
-		RunUniqueId:     runUniqueId,
-		StopCall: func(runUniqueId string) string {
-			return variable.VariableClient.Get(runUniqueId)
-		},
 	}
 	set := variable.NewVariableSet(sse, variableId, runCmdId, editValue, replaceList, common.GetCall())
 	result, setErr := set.Set()
 	if setErr != nil {
 		result.RunStatus = 2
-		sse.Send(fmt.Sprintf(`error：%s`, setErr.Error())+"\n", false)
+		sse.Send(fmt.Sprintf(`error：%s`, setErr.Error()) + "\n")
 	}
 	gsgin.GinResponseSuccess(c, ``, result)
 }
@@ -238,12 +229,7 @@ func VariableCmdRun(c *gin.Context) {
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
 	variableId := cast.ToInt(dataMap[`variable_id`])
-	runCmdId := cast.ToInt(dataMap[`run_cmd_id`])
-	runUniqueId := cast.ToString(dataMap[`run_unique_id`])
-	if runCmdId != 0 && runUniqueId == `` { //初始
-		gsgin.GinResponseError(c, `缺少本次执行唯一ID`, nil)
-		return
-	}
+	runCmdId := cast.ToInt(dataMap[`run_cmd_id`]) //本次执行的某一步操作
 	isRun := cast.ToInt(dataMap[`is_run`])
 	replaceLists := cast.ToString(dataMap[`replace_list`])
 	replaceList := make(map[string]string, 0)
@@ -255,20 +241,16 @@ func VariableCmdRun(c *gin.Context) {
 		}
 	}
 	//sse
-	sse := &p_sse.SseVariable{
+	sse := &p_sse.SseShell{
 		Sse:             gsgin.SseGetByClientId(c.GetHeader(`SseClientId`)),
 		SseDistributeId: cast.ToString(dataMap[`sse_id`]),
-		RunUniqueId:     runUniqueId,
-		StopCall: func(runUniqueId string) string {
-			return variable.VariableClient.Get(runUniqueId)
-		},
 	}
 
 	variable := variable.NewVariable(sse, variableId, runCmdId, isRun, replaceList, common.GetCall())
 	result, resultErr := variable.Run()
 	if resultErr != nil {
 		result.RunStatus = 2
-		sse.Send(fmt.Sprintf(`执行失败%s`, resultErr.Error()), true)
+		sse.Send(fmt.Sprintf(`执行失败%s`, resultErr.Error()) + "\n")
 	}
 	gsgin.GinResponseSuccess(c, ``, result)
 }
