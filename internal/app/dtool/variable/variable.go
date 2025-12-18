@@ -21,6 +21,7 @@ type TVariable struct {
 	//临时输入的账号密码
 	LoginUsername string
 	LoginPassword string
+	RunTaskId     string //正在执行的任务ID 一次只能一个任务
 }
 
 var VariableClient *TVariable
@@ -31,6 +32,17 @@ func NewVariableClient() *TVariable {
 	return &TVariable{
 		Log: log,
 	}
+}
+
+func (h *TVariable) CreateTask(taskId string) {
+	h.RunTaskId = taskId
+}
+
+func (h *TVariable) IsStop(taskId string) bool {
+	if taskId == `` {
+		return false
+	}
+	return h.RunTaskId != taskId
 }
 
 // WaitReplace 是否属于待替换的字符串

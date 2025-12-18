@@ -4,6 +4,7 @@ import (
 	"dev_tool/internal/app/dtool/common"
 	"dev_tool/internal/app/dtool/define"
 	"dev_tool/internal/app/dtool/variable"
+	"dev_tool/internal/pkg/p_common"
 	"dev_tool/internal/pkg/p_sse"
 	"fmt"
 	"strings"
@@ -240,17 +241,29 @@ func VariableCmdRun(c *gin.Context) {
 			return
 		}
 	}
+	//如果是预执行 那么重置任务ID为0 让前一个退出
+	if runCmdId == 0 {
+		variable.VariableClient.CreateTask(``)
+	}
+	//登录任务执行中
+	taskId := ``
+	if isRun == 1 {
+		taskId = p_common.TBaseClient.GetUnique(`variable_run_`)
+		variable.VariableClient.CreateTask(taskId)
+	}
 	//sse
 	sse := &p_sse.SseShell{
 		Sse:             gsgin.SseGetByClientId(c.GetHeader(`SseClientId`)),
 		SseDistributeId: cast.ToString(dataMap[`sse_id`]),
 	}
 
-	variable := variable.NewVariable(sse, variableId, runCmdId, isRun, replaceList, common.GetCall())
+	variable := variable.NewVariable(sse, variableId, runCmdId, taskId, replaceList, common.GetCall())
 	result, resultErr := variable.Run()
 	if resultErr != nil {
 		result.RunStatus = 2
 		sse.Send(fmt.Sprintf(`执行失败%s`, resultErr.Error()) + "\n")
+		gsgin.GinResponseError(c, fmt.Sprintf(`执行失败%s`, resultErr.Error()), nil)
+	} else {
+		gsgin.GinResponseSuccess(c, ``, result)
 	}
-	gsgin.GinResponseSuccess(c, ``, result)
 }

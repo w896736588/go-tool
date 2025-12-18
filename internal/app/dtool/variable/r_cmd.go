@@ -429,7 +429,7 @@ func (h *RCmd) RunCurl() (string, error) {
 	return cast.ToString(result), err
 }
 
-func (h *RCmd) RunPlaywright() (string, error) {
+func (h *RCmd) RunPlaywright(stopCall func() bool) (string, error) {
 	id := cast.ToInt(h.cmd[`smart_link_id`])
 	label := cast.ToString(h.cmd[`smart_link_label`])
 	if id == 0 {
@@ -499,20 +499,19 @@ func (h *RCmd) RunPlaywright() (string, error) {
 		}
 	}
 
-	for i := 0; i < runParams.OpenNum; i++ {
-		sse.Send("\n" + p_common.TMarkDownClient.Bold(label) + `,启动` + "\n")
-		streamFunc := func(name, msg string) {
-			if runParams.StopEchoTips {
-				return
-			}
-			sse.Send(p_common.TMarkDownClient.Bold(name) + `,` + msg + "\n")
+	sse.Send("\n" + p_common.TMarkDownClient.Bold(label) + `,启动` + "\n")
+	streamFunc := func(name, msg string) {
+		if runParams.StopEchoTips {
+			return
 		}
-		runParams.StreamFunc = streamFunc
-		p := plw.NewPlaywright(runParams, VariableClient.Log)
-		openErr := p.Open(h.Call)
-		if openErr != nil {
-			sse.Send(p_common.TMarkDownClient.BlockQuote(cast.ToString(h.cmd[`name`])+`,启动失败，`+openErr.Error()) + "\n")
-		}
+		sse.Send(p_common.TMarkDownClient.Bold(name) + `,` + msg + "\n")
+	}
+	runParams.StreamFunc = streamFunc
+	p := plw.NewPlaywright(runParams, VariableClient.Log)
+	openErr := p.Open(h.Call, stopCall)
+	if openErr != nil {
+		sse.Send(p_common.TMarkDownClient.BlockQuote(cast.ToString(h.cmd[`name`])+`,启动失败，`+openErr.Error()) + "\n")
+		return ``, openErr
 	}
 	return ``, nil
 }

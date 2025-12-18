@@ -264,7 +264,7 @@ func SmartLinkRunPlaywright(c *gin.Context) {
 			streamFunc(`构建run_params`, `成功，准备打开的链接：`+runParams.Link+`,链接类型：`+runParams.LinkIdLabel)
 			streamFunc(`打开浏览器实例`, `开始`)
 			p := plw.NewPlaywright(runParams, plw.PlaywrightClient.Log)
-			openErr := p.Open(common.GetCall())
+			openErr := p.Open(common.GetCall(), nil)
 			if openErr != nil {
 				streamFunc(`打开浏览器实例`, `失败：`+openErr.Error())
 				return

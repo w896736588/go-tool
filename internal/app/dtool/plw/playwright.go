@@ -34,7 +34,7 @@ func NewPlaywright(runParams *PlaywrightRunParams, log *gstool.GsSlog) *Playwrig
 	}
 }
 
-func (h *Playwright) Open(call *p_common.Call) error {
+func (h *Playwright) Open(call *p_common.Call, stopCall func() bool) error {
 	if PlaywrightClient.Pw == nil {
 		return errors.New(`未启动浏览器核心`)
 	}
@@ -44,6 +44,10 @@ func (h *Playwright) Open(call *p_common.Call) error {
 		return gstool.Error(`获取page失败 %s`, pageErr.Error())
 	}
 	for _, processVal := range h.RunParams.ProcessList {
+		if stopCall != nil && stopCall() {
+			_ = (*page).Close()
+			return errors.New(`任务已被取消`)
+		}
 		if cast.ToInt(processVal[`is_async`]) == 1 {
 			go func() {
 				h.RunParams.StreamFunc(cast.ToString(processVal[`name`]), `异步执行`)

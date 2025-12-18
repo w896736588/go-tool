@@ -8,7 +8,6 @@ import (
 	"dev_tool/internal/pkg/p_sse"
 	"errors"
 	"fmt"
-
 	"github.com/spf13/cast"
 )
 
@@ -16,17 +15,17 @@ type Variable struct {
 	RunCmdId    int               //当前运行的cmd
 	VariableId  int               //脚本ID
 	ReplaceList map[string]string //替换列表
-	IsRun       int               //最终执行1 最终执行
+	TaskId      string            //最终执行时才会有的taskId
 	Sse         *p_sse.SseShell   //流式输出方法
 	Call        *p_common.Call
 }
 
-func NewVariable(sse *p_sse.SseShell, variableId, runCmdId int, isRun int, replaceList map[string]string, call *p_common.Call) *Variable {
+func NewVariable(sse *p_sse.SseShell, variableId, runCmdId int, taskId string, replaceList map[string]string, call *p_common.Call) *Variable {
 	variable := &Variable{
 		VariableId:  variableId,
 		RunCmdId:    runCmdId,
 		ReplaceList: replaceList,
-		IsRun:       isRun,
+		TaskId:      taskId,
 		Sse:         sse,
 		Call:        call,
 	}
@@ -63,12 +62,15 @@ func (h *Variable) Run() (_struct.VCmdResult, error) {
 	runWeight := cast.ToInt(cmdInfo[`weight`])
 	havePlaywright := false //如果有自定义链接 那么不输出end
 	for _, cmd := range cmdList {
+		if VariableClient.IsStop(h.TaskId) {
+			return cmdResult, errors.New(`任务被取消`)
+		}
 		name := cast.ToString(cmd[`name`])
 		cmdId := cast.ToString(cmd[`id`])
 		weight := cast.ToInt(cmd[`weight`])
 		//最终执行时 需要从当前cmd开始执行
 		//非最终执行时，从下一个开始执行
-		if h.IsRun == 1 {
+		if h.TaskId != `` {
 			if weight < runWeight {
 				continue
 			}
@@ -87,7 +89,7 @@ func (h *Variable) Run() (_struct.VCmdResult, error) {
 		cmdType := cast.ToInt(cmd[`type`])
 		runType := cast.ToString(cmd[`run_type`])
 		//非最终执行并且等待客户点击运行
-		if h.IsRun != 1 && runType == define.RunTypeRun {
+		if h.TaskId == `` && runType == define.RunTypeRun {
 			h.Sse.Send(fmt.Sprintf(`%s %s`, p_common.TMarkDownClient.Bold(`wait run 请点击执行`), name) + "\n")
 			cmdResult.ReplaceList = h.ReplaceList
 			cmdResult.Form = _struct.VForm{Id: cmdId}
@@ -117,7 +119,7 @@ func (h *Variable) Run() (_struct.VCmdResult, error) {
 			return cmdResult, errors.New(fmt.Sprintf(`不支持的类型%s（%s）`, cast.ToString(cmd[`type`]), name))
 		}
 		//开始执行 那么一直到底
-		if h.IsRun == 1 {
+		if h.TaskId != `` {
 			continue
 		}
 		//输出表单
@@ -161,7 +163,9 @@ func (h *Variable) RunCmd(cmd map[string]any) error {
 	case define.VariableCmdCombine:
 		_, err = rCmd.RunCombine()
 	case define.VariableCmdPlaywright:
-		_, err = rCmd.RunPlaywright()
+		_, err = rCmd.RunPlaywright(func() bool {
+			return VariableClient.IsStop(h.TaskId)
+		})
 	default:
 		return errors.New(`不支持的类型` + cast.ToString(cmd[`type`]))
 	}
