@@ -8,9 +8,10 @@ import (
 	"dev_tool/internal/pkg/p_sse"
 	"errors"
 	"fmt"
-	"github.com/playwright-community/playwright-go"
 	"strings"
 	"time"
+
+	"github.com/playwright-community/playwright-go"
 
 	"gitee.com/Sxiaobai/gs/v2/gsgin"
 	"gitee.com/Sxiaobai/gs/v2/gstool"
@@ -22,11 +23,11 @@ import (
 func SmartLinkUpWebkit(c *gin.Context) {
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
-	sseId := cast.ToString(dataMap[`sse_id`])
+	sseDistributeId := cast.ToString(dataMap[`sse_distribute_id`])
 	pw, _ := playwright.NewDriver()
 	sse := &p_sse.SseShell{
 		Sse:             gsgin.SseGetByClientId(c.GetHeader(`SseClientId`)),
-		SseDistributeId: sseId,
+		SseDistributeId: sseDistributeId,
 	}
 	go plw.PlaywrightClient.Install(sse, pw.Version)
 	gsgin.GinResponseSuccess(c, `更新浏览器核心中`, ``)
@@ -36,10 +37,10 @@ func SmartLinkUpWebkit(c *gin.Context) {
 func SmartLinkRecycle(c *gin.Context) {
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
-	sseId := cast.ToString(dataMap[`sse_id`])
+	sseDistributeId := cast.ToString(dataMap[`sse_distribute_id`])
 	sse := &p_sse.SseShell{
 		Sse:             gsgin.SseGetByClientId(c.GetHeader(`SseClientId`)),
-		SseDistributeId: sseId,
+		SseDistributeId: sseDistributeId,
 	}
 	sse.Send(`开始释放实例` + "\n")
 	p := plw.NewPlaywright(nil, plw.PlaywrightClient.Log)
@@ -238,7 +239,7 @@ func SmartLinkRunPlaywright(c *gin.Context) {
 	}
 	sse := &p_sse.SseShell{
 		Sse:             gsgin.SseGetByClientId(c.GetHeader(`SseClientId`)),
-		SseDistributeId: cast.ToString(dataMap[`sse_id`]),
+		SseDistributeId: cast.ToString(dataMap[`sse_distribute_id`]),
 	}
 	userName := cast.ToString(dataMap[`user_name`])
 	password := cast.ToString(dataMap[`password`])
@@ -290,7 +291,7 @@ func SmartLinkPlaywrightVersion(c *gin.Context) {
 	_ = gsgin.GinPostBody(c, &dataMap)
 	sse := &p_sse.SseShell{
 		Sse:             gsgin.SseGetByClientId(c.GetHeader(`SseClientId`)),
-		SseDistributeId: cast.ToString(dataMap[`sse_id`]),
+		SseDistributeId: cast.ToString(dataMap[`sse_distribute_id`]),
 	}
 	sse.Send(`获取核心版本` + "\n")
 	pw, pwErr := plw.PlaywrightClient.SmartLinkPlaywrightVersion()

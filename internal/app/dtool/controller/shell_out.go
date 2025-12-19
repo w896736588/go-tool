@@ -129,7 +129,7 @@ func ShellOutSetSeeId(c *gin.Context) {
 	}
 	sse := &p_sse.SseShell{
 		Sse:             gsgin.SseGetByClientId(c.GetHeader(`SseClientId`)),
-		SseDistributeId: cast.ToString(dataMap[`sse_id`]),
+		SseDistributeId: cast.ToString(dataMap[`sse_distribute_id`]),
 	}
 	err = common.ShellOutClient.SetClientSseId(shellClientId, sshId, sse, command, groupId, nil)
 	if err != nil {
@@ -242,7 +242,7 @@ func getShellOutComponent(c *gin.Context) (map[string]interface{}, *gsssh.SshTer
 	shellClientId := p_common.TBaseClient.GetUnique(`shell_out_`)
 	sse := &p_sse.SseShell{
 		Sse:             gsgin.SseGetByClientId(c.GetHeader(`SseClientId`)),
-		SseDistributeId: cast.ToString(dataMap[`sse_id`]),
+		SseDistributeId: cast.ToString(dataMap[`sse_distribute_id`]),
 	}
 
 	shellOut, _, sshClientErr := common.ShellOutClient.GetClient(sshConfig, shellClientId, sse, groupId, nil)

@@ -3,13 +3,19 @@ package p_gitlab
 import (
 	"errors"
 	"fmt"
-	"gitee.com/Sxiaobai/gs/v2/gsapi"
-	"gitee.com/Sxiaobai/gs/v2/gstool"
-	"github.com/spf13/cast"
 	"regexp"
 	"strings"
 	"time"
+
+	"gitee.com/Sxiaobai/gs/v2/gsapi"
+	"gitee.com/Sxiaobai/gs/v2/gstool"
+	"github.com/spf13/cast"
 )
+
+// MergeMainBranchs 已上线的记录 只要包含以下就可以
+var MergeMainBranchs = []string{
+	`master`, `main`,
+}
 
 type TGitlab struct {
 	GitLab  gsapi.GsGitLab
@@ -64,6 +70,9 @@ func (h *TGitlab) getLogs(startDay, endDay time.Time) ([]Combine, error) {
 	h.pushLog(`获取完项目列表 共：` + cast.ToString(len(projectMap)) + `个`)
 	masterCommits := make([]string, 0)
 	for projectId, projectName := range projectMap {
+		if !strings.Contains(projectName, `chatwiki`) {
+			continue
+		}
 		err := h.checkCommits(projectId, projectName, h.Author, perPage, startTimestamp, endTimestamp, &combineList, &masterCommits)
 		if err != nil {
 			return combineList, err
@@ -162,7 +171,7 @@ func (h *TGitlab) checkCommits(projectId, projectName, author string,
 		if resErr != nil {
 			return resErr
 		}
-		h.pushLog(fmt.Sprintf(`获取%scommit 共：%d条`, projectName, len(commitList)))
+		h.pushLog(fmt.Sprintf(`获取project:%s commit:%d条`, projectName, len(commitList)))
 		boolBroken := false
 		for _, commit := range commitList {
 			id := cast.ToString(commit[`id`])
@@ -181,7 +190,8 @@ func (h *TGitlab) checkCommits(projectId, projectName, author string,
 			}
 			message := cast.ToString(commit[`message`])
 			title := cast.ToString(commit[`title`])
-			if strings.Contains(title, `into 'master'`) {
+			re := regexp.MustCompile(`into '[a-zA-Z0-9_]*(` + strings.Join(MergeMainBranchs, `|`) + `)[a-zA-Z0-9_]*'`)
+			if re.MatchString(title) {
 				if strings.Contains(message, author) {
 					combine := Combine{
 						Message: message,

@@ -74,6 +74,7 @@ func DockerComposeServices(c *gin.Context) {
 			`name`: v,
 		})
 	}
+	gstool.ArrayMapSort(&list, `name`, `asc`)
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`services`: list,
 	})
@@ -242,10 +243,11 @@ func DockerComposeStart(c *gin.Context) {
 	}
 	composeYmlPath := one[`compose_yml_path`].(string)
 	envFile := cast.ToString(one[`env_file`])
+	service := cast.ToString(data[`service`])
 	command := p_shell.NewCommand()
 	command.Sudo()
 	command.Cd(path.Dir(composeYmlPath))
-	command.DockerComposeStart(cast.ToString(one[`docker_cmd`]), envFile)
+	command.DockerComposeUpd(cast.ToString(one[`docker_cmd`]), envFile, service)
 	_, _ = sshClient.RunCommandWait(command.GetCommand().ToStr(), 40*time.Second)
 	gsgin.GinResponseSuccess(c, ``, map[string]any{})
 }
@@ -260,15 +262,15 @@ func getDockerComponent(c *gin.Context) (map[string]interface{}, *gsssh.SshTermi
 	if cast.ToInt(sshId) == 0 {
 		return nil, nil, errors.New(`缺少ssh_id参数`)
 	}
-	sseId := cast.ToString(dataMap[`sse_id`])
+	sseDistributeId := cast.ToString(dataMap[`sse_distribute_id`])
 	sshConfig, _ := common.DbMain.GetSshConfig(sshId)
-	uniqueKey := p_common.TBaseClient.GetCombineKey(sshId, sseId)
+	uniqueKey := p_common.TBaseClient.GetCombineKey(sshId, sseDistributeId)
 	//sshClient, sshClientErr := base.Component.TShell.GetClient(sshConfig, uniqueKey, sseId, func(s string) []string {
 	//	return stripANSI(s)
 	//})
 	sse := &p_sse.SseShell{
 		Sse:             gsgin.SseGetByClientId(c.GetHeader(`SseClientId`)),
-		SseDistributeId: cast.ToString(dataMap[`sse_id`]),
+		SseDistributeId: sseDistributeId,
 	}
 	sshClient, sshClientErr := component.ShellClient.GetClient(sshConfig, uniqueKey, sse, nil)
 	if sshClientErr != nil {
@@ -276,11 +278,3 @@ func getDockerComponent(c *gin.Context) (map[string]interface{}, *gsssh.SshTermi
 	}
 	return dataMap, sshClient, nil
 }
-
-var garbage = regexp.MustCompile(`(?m)\x1b\[[0-9;?]*[a-zA-Z]|[\r\x00]`)
-
-// 可选：把旋转进度条那几行也整行干掉
-var spinner = regexp.MustCompile(`(?m)^.*Container.*Restarting.*\n`)
-
-// 加载进度的点
-var braille = regexp.MustCompile(`[\x28\x00-\x28\xFF]`)

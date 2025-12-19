@@ -7,7 +7,6 @@ toolchain go1.24.4
 require (
 	gitee.com/Sxiaobai/gs/v2 v2.0.39
 	github.com/gin-gonic/gin v1.9.1
-	github.com/gorilla/websocket v1.5.1
 	github.com/pion/stun v0.6.1
 	github.com/playwright-community/playwright-go v0.4901.0
 	github.com/redis/go-redis/v9 v9.2.0

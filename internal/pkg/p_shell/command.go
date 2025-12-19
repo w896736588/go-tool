@@ -2,8 +2,9 @@ package p_shell
 
 import (
 	"fmt"
-	"gitee.com/Sxiaobai/gs/v2/gstool"
 	"strings"
+
+	"gitee.com/Sxiaobai/gs/v2/gstool"
 )
 
 type Command struct {
@@ -278,6 +279,11 @@ func (h *Command) DockerComposeStopService(dockerCmd, envFile string, services [
 
 func (h *Command) DockerComposeStart(dockerCmd, envFile string) *Command {
 	h.SetCommand(fmt.Sprintf(`%s %s %s up -d`, h.sudo, dockerCmd, h.getEnvFileCommand(envFile)))
+	return h
+}
+
+func (h *Command) DockerComposeUpd(dockerCmd, envFile, service string) *Command {
+	h.SetCommand(fmt.Sprintf(`%s %s %s up -d %s`, h.sudo, dockerCmd, h.getEnvFileCommand(envFile), service))
 	return h
 }
 

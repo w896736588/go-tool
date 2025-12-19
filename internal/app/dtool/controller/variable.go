@@ -214,7 +214,7 @@ func VariableCmdSet(c *gin.Context) {
 	}
 	sse := &p_sse.SseShell{
 		Sse:             gsgin.SseGetByClientId(c.GetHeader(`SseClientId`)),
-		SseDistributeId: cast.ToString(dataMap[`sse_id`]),
+		SseDistributeId: cast.ToString(dataMap[`sse_distribute_id`]),
 	}
 	set := variable.NewVariableSet(sse, variableId, runCmdId, editValue, replaceList, common.GetCall())
 	result, setErr := set.Set()
@@ -254,7 +254,7 @@ func VariableCmdRun(c *gin.Context) {
 	//sse
 	sse := &p_sse.SseShell{
 		Sse:             gsgin.SseGetByClientId(c.GetHeader(`SseClientId`)),
-		SseDistributeId: cast.ToString(dataMap[`sse_id`]),
+		SseDistributeId: cast.ToString(dataMap[`sse_distribute_id`]),
 	}
 
 	variable := variable.NewVariable(sse, variableId, runCmdId, taskId, replaceList, common.GetCall())

@@ -1,4 +1,4 @@
-package api
+package p_curl
 
 import (
 	"dev_tool/internal/app/dtool/define"
@@ -8,6 +8,21 @@ import (
 	"strings"
 
 	"gitee.com/Sxiaobai/gs/v2/gstool"
+)
+
+type KeyValue struct {
+	Description string `json:"description"` //描述
+	Field       string `json:"field"`       //字段key
+	Type        string `json:"type"`        //字段类型 string int  float bool file
+	Value       string `json:"value"`       //字段值，如果是文件则存储文件地址,如果是二进制内容则空着
+}
+
+const (
+	FieldTypeString = "string"
+	FieldTypeInt    = "int"
+	FieldTypeFloat  = "float"
+	FieldTypeBool   = "bool"
+	FieldTypeFile   = "file"
 )
 
 // CurlStruct 表示解析后的 curl 命令结构

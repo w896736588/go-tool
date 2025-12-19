@@ -303,3 +303,9 @@ func (h *CSqlite) Variable(variableId any) map[string]any {
 	}).One()
 	return variableInfo
 }
+
+func (h *CSqlite) GetApiInfo(id int) (map[string]any, error) {
+	return h.Client.QuickQuery(`tbl_api`, `*`, map[string]interface{}{
+		`id`: id,
+	}).One()
+}

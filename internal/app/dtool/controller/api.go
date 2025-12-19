@@ -4,6 +4,7 @@ import (
 	"dev_tool/internal/app/dtool/api"
 	"dev_tool/internal/app/dtool/common"
 	"dev_tool/internal/app/dtool/define"
+	"dev_tool/internal/pkg/p_curl"
 	"errors"
 	"fmt"
 	"reflect"
@@ -286,7 +287,7 @@ func ApiCreateApi(c *gin.Context) {
 	curlData := cast.ToString(dataMap[`curlData`])
 	var updateData map[string]any
 	if curlData != `` {
-		parsed := api.NewParseCurl(curlData)
+		parsed := p_curl.NewParseCurl(curlData)
 		err := parsed.Parse()
 		if err != nil {
 			gsgin.GinResponseError(c, `Curl解析失败 `+err.Error(), nil)
@@ -470,10 +471,26 @@ func ApiTakeJsonResult(c *gin.Context) {
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
 	json := cast.ToString(dataMap[`json`])
+	id := cast.ToInt(dataMap[`id`])
 	list, err := gstool.JsonFlatPaths(json)
 	if err != nil {
 		gsgin.GinResponseError(c, `json格式错误`, nil)
 		return
+	}
+	apiInfo, err := common.DbMain.GetApiInfo(id)
+	if err != nil {
+		gsgin.GinResponseError(c, `api不存在`, nil)
+		return
+	}
+	takeResults := make([]gstool.FlatItem, 0)
+	_ = gstool.JsonDecode(cast.ToString(apiInfo[`take_result`]), &takeResults)
+	gstool.FmtPrintlnLogTime(`已经提取 的参数描述 %s`, gstool.JsonFormat(takeResults))
+	for _, takeResult := range takeResults {
+		for key, _ := range list {
+			if list[key].Key == takeResult.Key {
+				list[key].Desc = takeResult.Desc
+			}
+		}
 	}
 	gsgin.GinResponseSuccess(c, ``, list)
 	return

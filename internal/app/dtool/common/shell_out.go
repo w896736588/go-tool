@@ -7,24 +7,28 @@ import (
 	"dev_tool/internal/pkg/p_sse"
 	"errors"
 	"fmt"
-	"gitee.com/Sxiaobai/gs/v2/gsssh"
-	"gitee.com/Sxiaobai/gs/v2/gstool"
-	"github.com/spf13/cast"
 	"regexp"
 	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
+
+	"gitee.com/Sxiaobai/gs/v2/gsssh"
+	"gitee.com/Sxiaobai/gs/v2/gstool"
+	"github.com/spf13/cast"
 )
 
 const MaxSourceLength = 20000 //原始内容最多保留多少行 用于搜索
 const MaxRemainLength = 10000 //过滤后内容最多保留多少行
 const MaxSendLength = 1000    //刷新页面后最多发送给前端多少行
 
+const ExistTip = `command is exit`
+
 /*  等待式输出 ssh 不重复使用，持续等待 ssh 返回结果 */
 
 // ShellOut 单个 ssh 会话
 type ShellOut struct {
+	ShellClientId    string
 	Client           *gsssh.SshTerminal
 	Sse              *p_sse.SseShell
 	errorList        []ErrorBlock   // 最终归档的错误块
@@ -128,6 +132,7 @@ func (h *TShellOut) GetClient(sshConfig map[string]any, shellClientId string, ss
 
 	// 新建 ShellOut
 	shellOut := &ShellOut{
+		ShellClientId:    shellClientId,
 		Client:           gsShell,
 		Sse:              sse,
 		regexFiltersTips: map[string]int{},
@@ -156,7 +161,7 @@ func (h *TShellOut) SetClientSseId(shellClientId, sshId string, sse *p_sse.SseSh
 	h.SetReceiveMsg(shellOut, formatStream)
 	if !exist {
 		go func() {
-			err := shellOut.Client.RunCommand(command)
+			err := shellOut.Client.RunCommand(command + fmt.Sprintf(";echo '%s'", ExistTip))
 			if err != nil {
 				fmt.Println(fmt.Sprintf(`执行错误 %s`, err.Error()))
 			}
@@ -227,6 +232,14 @@ func (h *TShellOut) CleanLog(shellClientId string) {
 
 func (h *TShellOut) SetReceiveMsg(shellOut *ShellOut, formatStream func(string) []string) {
 	shellOut.Client.SetFuncStreamReceive(func(msg string) {
+		if strings.Contains(msg, ExistTip) {
+			if !strings.Contains(msg, fmt.Sprintf(`;echo '%s'`, ExistTip)) {
+				h.SendMsg(shellOut, msg)
+				h.SendMsg(shellOut, `监听到命令已中断，刷新后再次链接`)
+				h.RmClient(shellOut.ShellClientId)
+				return
+			}
+		}
 		msg = gstool.StringFilterANSI(msg)
 		msg = strings.Replace(msg, "\u001B", "", -1)
 		//原内容处理

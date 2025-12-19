@@ -104,7 +104,7 @@ func (h *TDataBaseUp) Up() {
 			continue
 		}
 		_, err = common.DbMain.Client.QuickCreate(`tbl_database_up`, map[string]any{
-			`filename`: file,
+			`filename`: gstool.FileGetNameByPath(file),
 		}).Exec()
 		if err != nil {
 			gstool.FmtPrintlnLogTime(`数据库升级表插入失败 %s`, err.Error())

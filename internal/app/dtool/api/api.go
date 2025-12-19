@@ -5,6 +5,7 @@ import (
 	"dev_tool/internal/app/dtool/common"
 	"dev_tool/internal/app/dtool/component"
 	"dev_tool/internal/app/dtool/define"
+	"dev_tool/internal/pkg/p_curl"
 	"errors"
 	"fmt"
 	"mime/multipart"
@@ -51,7 +52,7 @@ type Result struct {
 
 type Api struct {
 	BaseInfo   *BaseInfo
-	CurlStruct CurlStruct
+	CurlStruct p_curl.CurlStruct
 	Result
 }
 
@@ -78,7 +79,7 @@ func NewApi(apiInfo map[string]any) *Api {
 	responseTake := make([]ResponseTake, 0)
 	_ = gstool.JsonDecode(cast.ToString(apiInfo[`response_take`]), &responseTake)
 	//body form
-	bodyFormData := make([]KeyValue, 0)
+	bodyFormData := make([]p_curl.KeyValue, 0)
 	err := gstool.JsonDecode(cast.ToString(apiInfo[`body_form`]), &bodyFormData)
 	if err != nil {
 		gstool.FmtPrintlnLogTime(`解析bodyForm(%s)失败，%s`, cast.ToString(apiInfo[`body_form`]), err.Error())
@@ -93,7 +94,7 @@ func NewApi(apiInfo map[string]any) *Api {
 			EnvItems:     envItems,
 			EnvId:        cast.ToInt(apiInfo[`env_id`]),
 		},
-		CurlStruct: CurlStruct{
+		CurlStruct: p_curl.CurlStruct{
 			Method:      cast.ToString(apiInfo[`method`]),
 			Url:         url,
 			Protocol:    cast.ToString(apiInfo[`protocol`]),
@@ -174,7 +175,7 @@ func (h *Api) Run() error {
 	return nil
 }
 
-func (h *Api) FormatBodyData(cli *gshttp.Client, bodyForm []KeyValue) error {
+func (h *Api) FormatBodyData(cli *gshttp.Client, bodyForm []p_curl.KeyValue) error {
 	resultBodyForms := make([]map[string]any, 0)
 	//塞入的数据 所有的数据以数组的形式存入 如果是一个那么自然是单个，如果是多个就自动是数组传递
 	bodyMaps := make(map[string][]any, 0)
@@ -305,7 +306,7 @@ func (h *Api) ToChromeCurlBash() string {
 			writer := multipart.NewWriter(&body)
 			boundary := writer.Boundary()
 			for _, value := range h.CurlStruct.BodyForm {
-				if value.Type == FieldTypeFile {
+				if value.Type == p_curl.FieldTypeFile {
 					_, err := writer.CreateFormFile(value.Field, value.Value)
 					if err != nil {
 						gstool.FmtPrintlnLogTime(`添加文件字段失败 %s`, err.Error())

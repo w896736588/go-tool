@@ -30,24 +30,19 @@ func BaseLogin(c *gin.Context) {
 	userId, loginErr := common.DbMain.Login(reqBody.UserName, reqBody.Password)
 	if loginErr != nil {
 		gsgin.GinResponseError(c, `登录失败（`+loginErr.Error()+`）`, map[string]string{
-			`NeedLogin`: `1`,
-			`unikey`:    ``,
-			`token`:     ``,
+			`token`: ``,
 		})
 		return
 	}
 	token, tokenErr := p_common.AesGcmClient.Encrypt([]byte(cast.ToString(userId)))
 	if tokenErr != nil {
 		gsgin.GinResponseError(c, `登录失败（`+tokenErr.Error()+`）`, map[string]string{
-			`NeedLogin`: `1`,
-			`unikey`:    ``,
-			`token`:     ``,
+			`token`: ``,
 		})
 	}
 	gsgin.GinResponseSuccess(c, `获取成功`, map[string]any{
-		`unikey`: token,
-		`token`:  token,
-		`ports`:  strings.Split(component.ConfigViper.GetString(`run.ports`), `,`),
+		`token`: token,
+		`ports`: strings.Split(component.ConfigViper.GetString(`run.ports`), `,`),
 	})
 }
 

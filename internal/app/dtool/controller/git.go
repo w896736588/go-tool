@@ -285,12 +285,12 @@ func getGitComponent(c *gin.Context) (map[string]interface{}, *gsssh.SshTerminal
 	if cast.ToString(sshId) == `` {
 		return nil, nil, errors.New(`缺少ssh_id参数`)
 	}
-	sseId := dataMap[`sse_id`]
+	sseDistributeId := cast.ToString(dataMap[`sse_distribute_id`])
 	sshConfig, _ := common.DbMain.GetSshConfig(sshId)
-	uniqueKey := p_common.TBaseClient.GetCombineKey(sshId, sseId)
+	uniqueKey := p_common.TBaseClient.GetCombineKey(sshId, sseDistributeId)
 	sse := &p_sse.SseShell{
 		Sse:             gsgin.SseGetByClientId(c.GetHeader(`SseClientId`)),
-		SseDistributeId: cast.ToString(dataMap[`sse_id`]),
+		SseDistributeId: sseDistributeId,
 	}
 
 	sshClient, sshClientErr := component.ShellClient.GetClient(sshConfig, uniqueKey, sse, nil)
