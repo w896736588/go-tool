@@ -1,0 +1,1 @@
+ALTER TABLE tbl_smart_link ADD COLUMN filter_uris text NOT NULL DEFAULT '';

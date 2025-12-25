@@ -4,12 +4,13 @@ import (
 	"dev_tool/internal/pkg/p_sse"
 	"errors"
 	"fmt"
-	"gitee.com/Sxiaobai/gs/v2/gsssh"
-	"gitee.com/Sxiaobai/gs/v2/gstool"
-	"github.com/spf13/cast"
 	"runtime/debug"
 	"sync"
 	"time"
+
+	"gitee.com/Sxiaobai/gs/v2/gsssh"
+	"gitee.com/Sxiaobai/gs/v2/gstool"
+	"github.com/spf13/cast"
 )
 
 type Shell struct {
@@ -95,6 +96,7 @@ func (h *Shell) GetClientMarkdown(sshConfig map[string]any, shellClientId string
 		return nil, errors.New(`ssh配置错误，GetClientMarkdown ` + cast.ToString(debug.Stack()))
 	}
 	if shell, ok := h.ShellClientMap[shellClientId]; ok && shell != nil {
+		h.SetSse(shell, sse)
 		return shell, nil
 	}
 	gsShell := gsssh.NewSshTerminal(gsssh.NewSsh(&gsssh.SshConfig{
@@ -118,16 +120,7 @@ func (h *Shell) GetClientMarkdown(sshConfig map[string]any, shellClientId string
 		return nil, err
 	}
 	//猪油：下面3个注册回调，放到这里的话就不会输出pwd以及连接相关信息
-	//回调准备输出的内容
-	gsShell.SetFuncStreamReceive(func(msg string) {
-		sse.Send(msg)
-	})
-	gsShell.SetFuncStartCommand(func() {
-		sse.Send(fmt.Sprintf("```%s\n#%s", `bash`, `bash`) + "\n")
-	})
-	gsShell.SetFuncEndCommand(func() {
-		sse.Send("```\n")
-	})
+	h.SetSse(gsShell, sse)
 	//设置执行命令前处理
 	gsShell.SetFuncBefore(func(command string) string {
 		return command
@@ -140,6 +133,19 @@ func (h *Shell) GetClientMarkdown(sshConfig map[string]any, shellClientId string
 
 	h.ShellClientMap[shellClientId] = gsShell
 	return gsShell, nil
+}
+
+func (h *Shell) SetSse(gsShell *gsssh.SshTerminal, sse *p_sse.SseShell) {
+	//回调准备输出的内容
+	gsShell.SetFuncStreamReceive(func(msg string) {
+		sse.Send(msg)
+	})
+	gsShell.SetFuncStartCommand(func() {
+		sse.Send(fmt.Sprintf("```%s\n#%s", `bash`, `bash`) + "\n")
+	})
+	gsShell.SetFuncEndCommand(func() {
+		sse.Send("```\n")
+	})
 }
 
 func (h *Shell) GetSshOnce(sshConfig map[string]any) (*gsssh.SshOnce, error) {

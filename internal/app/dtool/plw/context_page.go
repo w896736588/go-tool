@@ -117,7 +117,7 @@ func (h *ContextPage) InitEvents(page *playwright.Page) {
 	})
 }
 
-func (h *ContextPage) RegisterLinks(page playwright.Page, registerLinks map[string]*p_curl.CurlRun) {
+func (h *ContextPage) RegisterLinks(page playwright.Page, registerLinks map[string]*p_curl.CurlRun, filterUris []string) {
 	if registerLinks != nil {
 		for listenUri, cur := range registerLinks {
 			cur.CurlEvents.NoticeCall(`注册 **` + listenUri)
@@ -132,6 +132,18 @@ func (h *ContextPage) RegisterLinks(page playwright.Page, registerLinks map[stri
 				_ = route.Abort()
 			})
 		}
+		//拦截
+		for _, uri := range filterUris {
+			_ = page.Route("**"+uri+"*", func(route playwright.Route) {
+				_ = route.Abort()
+			})
+		}
+		_ = page.Route("**googleads.g.doubleclick.net*", func(route playwright.Route) {
+			_ = route.Abort()
+		})
+		_ = page.Route("**google.com*", func(route playwright.Route) {
+			_ = route.Abort()
+		})
 	}
 }
 

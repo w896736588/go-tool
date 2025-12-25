@@ -3,12 +3,13 @@ package p_db
 import (
 	"dev_tool/internal/pkg/p_common"
 	"errors"
+	"sync"
+	"time"
+
 	"gitee.com/Sxiaobai/gs/v2/gsdb"
 	"gitee.com/Sxiaobai/gs/v2/gsssh"
 	"gitee.com/Sxiaobai/gs/v2/gstool"
 	"github.com/spf13/cast"
-	"sync"
-	"time"
 )
 
 var MysqlClient *TMysql
@@ -18,9 +19,15 @@ type TMysql struct {
 	lock           sync.Mutex
 }
 
+func InitMysql() {
+	MysqlClient = &TMysql{
+		MysqlClientMap: make(map[string]*gsdb.GsMysql),
+	}
+}
+
 func (h *TMysql) GetClient(mysqlConfig map[string]any, call *p_common.Call) (*gsdb.GsMysql, error) {
-	defer h.lock.Unlock()
 	h.lock.Lock()
+	defer h.lock.Unlock()
 	mysqlId := cast.ToString(mysqlConfig[`id`])
 	if mysqlId == `` {
 		return nil, errors.New(`mysql配置错误`)

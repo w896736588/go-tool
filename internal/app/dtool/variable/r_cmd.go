@@ -133,10 +133,12 @@ func (h *RCmd) RunBash() (string, error) {
 	cmdBash = p_common.Replace(cmdBash, h.replaceList)
 	sshId, bash, parseIdErr := VariableClient.ParseIdContent(cmdBash)
 	if parseIdErr != nil {
+		gstool.FmtPrintlnLogTime(`解析配置失败`)
 		return ``, parseIdErr
 	}
 	//如果脚本还有未替换的
 	if VariableClient.ExistReplaceParam(bash) {
+		gstool.FmtPrintlnLogTime(`执行的脚本存在未替换的参数`)
 		return ``, gstool.Error("执行的脚本还存在需要替换的内容")
 	}
 	//注册ssh
@@ -148,14 +150,17 @@ func (h *RCmd) RunBash() (string, error) {
 		SseDistributeId: h.Sse.SseDistributeId,
 	}, h.Call)
 	if preConnErr != nil {
+		gstool.FmtPrintlnLogTime(`链接失败 %s`, preConnErr.Error())
 		return ``, gstool.Error(`链接失败 %s`, preConnErr.Error())
 	}
 	if !component.ShellClient.Exist(sshUniqueKey) || !component.ShellClient.Exist(sftpUniqueKey) {
+		gstool.FmtPrintlnLogTime(`ssh连接未初始化`)
 		return ``, errors.New(`ssh连接未初始化`)
 	}
 	//初始化
 	sshConfig, sshConfigErr := h.Call.GetSshConfig(sshId)
 	if sshConfigErr != nil {
+		gstool.FmtPrintlnLogTime(`获取ssh配置失败 %s`, sshConfigErr.Error())
 		return ``, sshConfigErr
 	}
 	var sshClientErr error
@@ -172,17 +177,20 @@ func (h *RCmd) RunBash() (string, error) {
 		SseDistributeId: h.Sse.SseDistributeId,
 	})
 	if sshClientErr != nil {
+		gstool.FmtPrintlnLogTime(`获取ssh client 失败 %s`, sshClientErr.Error())
 		return ``, sshClientErr
 	}
 	//sftp
 	sshOnce, sshOnceErr := component.ShellClient.GetSshOnce(sshConfig)
 	if sshOnceErr != nil {
+		gstool.FmtPrintlnLogTime(`获取ssh once 失败 %s`, sshOnceErr.Error())
 		return ``, sshOnceErr
 	}
 	var err error
 	//创建目录
 	_, err = sshClient.RunCommandWait(fmt.Sprintf(`sudo mkdir -p %s`, variableDir), 40*time.Second)
 	if err != nil {
+		gstool.FmtPrintlnLogTime(`创建目录失败 %s`, err.Error())
 		return ``, err
 	}
 	//写入脚本 用replace后不知道为什么打印日志没有问题，一执行echo就会重复写入几次 但是不执行h.replace又没有问题
@@ -193,16 +201,19 @@ func (h *RCmd) RunBash() (string, error) {
 	VariableClient.Log.Debugf(`%s \n %s `, fmt.Sprintf(variableDir+`/variable_%s.sh`, cmdId), bash)
 	err = sshOnce.UploadFile(fmt.Sprintf(variableDir+`/variable_%s.sh`, cmdId), bash, ``)
 	if err != nil {
+		gstool.FmtPrintlnLogTime(`上传失败 %s %s`, fmt.Sprintf(variableDir+`/variable_%s.sh`, cmdId), err.Error())
 		return "", gstool.Error(`上传失败 %s %s`, fmt.Sprintf(variableDir+`/variable_%s.sh`, cmdId), err.Error())
 	}
 	_, err = sshClient.RunCommandWait(fmt.Sprintf(`sudo chmod +x %s/variable_%s.sh`, variableDir, cmdId), 40*time.Second)
 	if err != nil {
+		gstool.FmtPrintlnLogTime(`修改权限失败 %s`, err.Error())
 		return ``, err
 	}
 	//var result string
 	var result string
 	result, err = sshClient.RunCommandWait(fmt.Sprintf(`sudo %s/variable_%s.sh`, variableDir, cmdId), 40*time.Second)
 	if err != nil {
+		gstool.FmtPrintlnLogTime(`执行失败 %s`, err.Error())
 		return ``, err
 	}
 	return result, nil

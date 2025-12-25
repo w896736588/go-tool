@@ -18,9 +18,9 @@ import (
 	"github.com/spf13/cast"
 )
 
-const MaxSourceLength = 20000 //原始内容最多保留多少行 用于搜索
-const MaxRemainLength = 10000 //过滤后内容最多保留多少行
-const MaxSendLength = 1000    //刷新页面后最多发送给前端多少行
+const MaxSourceLength = 100000 //原始内容最多保留多少行 用于搜索
+const MaxRemainLength = 10000  //过滤后内容最多保留多少行
+const MaxSendLength = 1000     //刷新页面后最多发送给前端多少行
 
 const ExistTip = `command is exit`
 
@@ -28,15 +28,16 @@ const ExistTip = `command is exit`
 
 // ShellOut 单个 ssh 会话
 type ShellOut struct {
-	ShellClientId    string
-	Client           *gsssh.SshTerminal
-	Sse              *p_sse.SseShell
-	errorList        []ErrorBlock   // 最终归档的错误块
-	remainContents   []string       // 保留的内容(替换后的)
-	sourceContents   []string       // 原本内容
-	regexFiltersTips map[string]int //过滤正则数量统计
-	startTime        int64          //启动时间
-	groupId          int            //分组id
+	ShellClientId      string
+	Client             *gsssh.SshTerminal
+	Sse                *p_sse.SseShell
+	errorList          []ErrorBlock   // 最终归档的错误块
+	remainContents     []string       // 保留的内容(替换后的)
+	sourceContents     []string       // 原本内容
+	searchReadContents map[string]any //已经搜索过的内容
+	regexFiltersTips   map[string]int //过滤正则数量统计
+	startTime          int64          //启动时间
+	groupId            int            //分组id
 }
 
 // ErrorBlock 错误块
@@ -132,15 +133,16 @@ func (h *TShellOut) GetClient(sshConfig map[string]any, shellClientId string, ss
 
 	// 新建 ShellOut
 	shellOut := &ShellOut{
-		ShellClientId:    shellClientId,
-		Client:           gsShell,
-		Sse:              sse,
-		regexFiltersTips: map[string]int{},
-		startTime:        time.Now().Unix(),
-		groupId:          groupId,
-		errorList:        make([]ErrorBlock, 0),
-		remainContents:   make([]string, 0),
-		sourceContents:   make([]string, 0),
+		ShellClientId:      shellClientId,
+		Client:             gsShell,
+		Sse:                sse,
+		regexFiltersTips:   map[string]int{},
+		startTime:          time.Now().Unix(),
+		groupId:            groupId,
+		errorList:          make([]ErrorBlock, 0),
+		remainContents:     make([]string, 0),
+		sourceContents:     make([]string, 0),
+		searchReadContents: map[string]any{},
 	}
 	h.SetReceiveMsg(shellOut, formatStream)
 	h.ShellOutMap[shellClientId] = shellOut
@@ -411,21 +413,37 @@ func (h *TShellOut) ErrorContext(shellClientId string, errorLine string, n int) 
 	return []string{}, 0
 }
 
+type Search struct {
+	Content string //匹配的内容
+	IsRead  bool   //true 已经搜索过
+}
+
 // ShellOutSearchContent 匹配所有
-func (h *TShellOut) ShellOutSearchContent(shellClientId string, searchContent string, maxNum int) ([]string, int) {
+func (h *TShellOut) ShellOutSearchContent(shellClientId string, searchContent string, maxNum int) ([]Search, int) {
 	h.lock.Lock()
 	defer h.lock.Unlock()
 
 	shellOut, ok := h.ShellOutMap[shellClientId]
 	if !ok {
-		return []string{}, 0
+		return []Search{}, 0
 	}
-	searchs := make([]string, 0)
+	searchs := make([]Search, 0)
 	gstool.ArrayWalkDesc(shellOut.sourceContents, func(line string) bool {
 		if !strings.Contains(line, searchContent) {
 			return true
 		}
-		searchs = append(searchs, line)
+		if _, ok := shellOut.searchReadContents[line]; ok {
+			searchs = append(searchs, Search{
+				Content: line,
+				IsRead:  true,
+			})
+		} else {
+			searchs = append(searchs, Search{
+				Content: line,
+				IsRead:  false,
+			})
+			shellOut.searchReadContents[line] = nil
+		}
 		if len(searchs) > maxNum {
 			return false
 		}

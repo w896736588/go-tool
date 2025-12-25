@@ -100,6 +100,7 @@ func GetRunParams(id int, label, userName, password string, openType int, openNu
 	runParams.LocatorTimeout = 1000
 	runParams.GetPageTimeout = 3000
 	runParams.ListenCurls = make(map[string]*p_curl.CurlRun)
+	runParams.FilterUris = strings.Split(cast.ToString(smartLink[`filter_uris`]), "\n")
 	return runParams, nil
 }
 

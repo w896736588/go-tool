@@ -95,7 +95,7 @@ func ShellOutSearchContent(c *gin.Context) {
 	shellClientId := cast.ToString(reqMap[`shell_client_id`])
 	searchContent := cast.ToString(reqMap[`search_content`])
 	searchContents := strings.Split(searchContent, "##")
-	allLines := make([]string, 0)
+	allLines := make([]common.Search, 0)
 	allNumber := 0
 	for _, searchContent := range searchContents {
 		if searchContent == `` {

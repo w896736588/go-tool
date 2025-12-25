@@ -30,7 +30,8 @@ type PlaywrightRunParams struct {
 	Channel             string                                           //浏览器类型
 	RunCallFunc         func(define.ProcessType, string, string, string) //注册输出回调
 	StreamFunc          func(string, string)                             //执行输出
-	ListenCurls         map[string]*p_curl.CurlRun                       //拦截请求
+	ListenCurls         map[string]*p_curl.CurlRun                       //拦截并重新请求
+	FilterUris          []string                                         //拦截请求 半匹配 例如：google.com直接拦截
 	ResponseUrls        []*_struct.ProcessResponseUrl                    //注册等待请求完成
 	ShowCookies         []ShowCookie                                     //信息提取
 	StopEchoTips        bool                                             //是否停止输出执行过程到sse 当大模型正在回复时，不需要再将执行过程输出到sse

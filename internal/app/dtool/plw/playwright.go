@@ -153,7 +153,7 @@ func (h *Playwright) GetPage(call *p_common.Call) (*playwright.Page, error) {
 			return nil, pageErr
 		}
 	}
-	(*contextPage).RegisterLinks(page, h.RunParams.ListenCurls)
+	(*contextPage).RegisterLinks(page, h.RunParams.ListenCurls, h.RunParams.FilterUris)
 	//记录登录记录
 	h.LastUserDataIndex(h.RunParams, contextPage.UserDataIndex, call)
 	// 关闭一个blank
@@ -162,6 +162,7 @@ func (h *Playwright) GetPage(call *p_common.Call) (*playwright.Page, error) {
 	}
 	//跳转链接
 	u, _ := url.Parse(h.RunParams.Link)
+	h.RunParams.StreamFunc(`启动playwright`, `打开link：`+h.RunParams.Link)
 	if _, goErr := page.Goto(u.String()); goErr != nil {
 		return nil, goErr
 	}

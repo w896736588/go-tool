@@ -193,6 +193,7 @@ func initSqlite() {
 	if err != nil {
 		panic(fmt.Sprintf(`连接sqlite失败 %s`, err.Error()))
 	}
+	p_db.InitMysql()
 	common.DbMain = &common.CSqlite{Client: component.SqliteClient, Env: component.EnvClient}
 	business.DataBaseUp = business.NewTDataBaseUp()
 	business.DataBaseUp.Run()

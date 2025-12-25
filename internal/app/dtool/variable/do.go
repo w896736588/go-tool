@@ -8,6 +8,8 @@ import (
 	"dev_tool/internal/pkg/p_sse"
 	"errors"
 	"fmt"
+
+	"gitee.com/Sxiaobai/gs/v2/gstool"
 	"github.com/spf13/cast"
 )
 
@@ -142,6 +144,7 @@ func (h *Variable) Run() (_struct.VCmdResult, error) {
 }
 
 func (h *Variable) RunCmd(cmd map[string]any) error {
+	gstool.FmtPrintlnLogTime(`执行cmd %s`, gstool.JsonEncode(cmd))
 	//执行
 	rCmd := NewRCmd(cmd, h.ReplaceList, h.Sse, h.Call)
 	var err error
