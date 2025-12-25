@@ -134,16 +134,13 @@ func (h *ContextPage) RegisterLinks(page playwright.Page, registerLinks map[stri
 		}
 		//拦截
 		for _, uri := range filterUris {
+			if uri == `` {
+				continue
+			}
 			_ = page.Route("**"+uri+"*", func(route playwright.Route) {
 				_ = route.Abort()
 			})
 		}
-		_ = page.Route("**googleads.g.doubleclick.net*", func(route playwright.Route) {
-			_ = route.Abort()
-		})
-		_ = page.Route("**google.com*", func(route playwright.Route) {
-			_ = route.Abort()
-		})
 	}
 }
 
