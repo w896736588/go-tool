@@ -67,7 +67,8 @@ func (h *ParseCurl) Parse() error {
 		if strings.HasPrefix(line, `-H`) {
 			h.GetH(line)
 			//通过header解析content-type
-			h.contentType()
+			h.contentType(`Content-Type`)
+			h.contentType(`content-type`)
 			continue
 		}
 		//解析header
@@ -79,7 +80,8 @@ func (h *ParseCurl) Parse() error {
 		if strings.HasPrefix(line, `--header`) {
 			h.GetHeader(line)
 			//通过header解析content-type
-			h.contentType()
+			h.contentType(`Content-Type`)
+			h.contentType(`content-type`)
 			continue
 		}
 		//解析 data
@@ -219,21 +221,21 @@ func (h *ParseCurl) GetHeader(line string) {
 	}
 }
 
-func (h *ParseCurl) contentType() {
-	if _, ok := h.CurlStruct.Headers[`Content-Type`]; ok {
-		if strings.Contains(h.CurlStruct.Headers[`Content-Type`], define.ContentTypeForm) {
+func (h *ParseCurl) contentType(contentTypeKey string) {
+	if _, ok := h.CurlStruct.Headers[contentTypeKey]; ok {
+		if strings.Contains(h.CurlStruct.Headers[contentTypeKey], define.ContentTypeForm) {
 			h.CurlStruct.Headers[`Content-Type`] = define.ContentTypeForm
 			h.CurlStruct.Method = http.MethodPost
 			h.CurlStruct.ContentType = define.ContentTypeForm
-		} else if strings.Contains(h.CurlStruct.Headers[`Content-Type`], define.ContentTypeJson) {
+		} else if strings.Contains(h.CurlStruct.Headers[contentTypeKey], define.ContentTypeJson) {
 			h.CurlStruct.Headers[`Content-Type`] = define.ContentTypeJson
 			h.CurlStruct.Method = http.MethodPost
 			h.CurlStruct.ContentType = define.ContentTypeJson
-		} else if strings.Contains(h.CurlStruct.Headers[`Content-Type`], define.ContentTypeMultiForm) {
+		} else if strings.Contains(h.CurlStruct.Headers[contentTypeKey], define.ContentTypeMultiForm) {
 			h.CurlStruct.Headers[`Content-Type`] = define.ContentTypeMultiForm
 			h.CurlStruct.Method = http.MethodPost
 			h.CurlStruct.ContentType = define.ContentTypeMultiForm
-		} else if strings.Contains(h.CurlStruct.Headers[`Content-Type`], define.ContentTypeRaw) {
+		} else if strings.Contains(h.CurlStruct.Headers[contentTypeKey], define.ContentTypeRaw) {
 			h.CurlStruct.Headers[`Content-Type`] = define.ContentTypeRaw
 			h.CurlStruct.ContentType = define.ContentTypeRaw
 			h.CurlStruct.Method = http.MethodPost
