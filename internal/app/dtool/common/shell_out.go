@@ -38,6 +38,8 @@ type ShellOut struct {
 	regexFiltersTips   map[string]int //过滤正则数量统计
 	startTime          int64          //启动时间
 	groupId            int            //分组id
+	breakTimer         *time.Ticker
+	lastReceiveTime    int64
 }
 
 // ErrorBlock 错误块
@@ -143,6 +145,8 @@ func (h *TShellOut) GetClient(sshConfig map[string]any, shellClientId string, ss
 		remainContents:     make([]string, 0),
 		sourceContents:     make([]string, 0),
 		searchReadContents: map[string]any{},
+		breakTimer:         time.NewTicker(time.Second * 30),
+		lastReceiveTime:    time.Now().Unix(),
 	}
 	h.SetReceiveMsg(shellOut, formatStream)
 	h.ShellOutMap[shellClientId] = shellOut
@@ -233,7 +237,9 @@ func (h *TShellOut) CleanLog(shellClientId string) {
 }
 
 func (h *TShellOut) SetReceiveMsg(shellOut *ShellOut, formatStream func(string) []string) {
+	go h.timeBreakSsh(shellOut)
 	shellOut.Client.SetFuncStreamReceive(func(msg string) {
+		shellOut.lastReceiveTime = time.Now().Unix()
 		if strings.Contains(msg, ExistTip) {
 			if !strings.Contains(msg, fmt.Sprintf(`;echo '%s'`, ExistTip)) {
 				h.SendMsg(shellOut, msg)
@@ -271,6 +277,21 @@ func (h *TShellOut) SetReceiveMsg(shellOut *ShellOut, formatStream func(string) 
 			h.SendMsg(shellOut, msg)
 		}
 	})
+}
+
+func (h *TShellOut) timeBreakSsh(shellOut *ShellOut) {
+	for {
+		select {
+		case <-shellOut.breakTimer.C:
+			gstool.FmtPrintlnLogTime(`开始检测 %d %d`, time.Now().Unix(), shellOut.lastReceiveTime)
+			second := time.Now().Unix() - shellOut.lastReceiveTime
+			if second > 30 {
+				if shellOut.Sse != nil {
+					shellOut.Sse.Send(`warning:` + cast.ToString(second) + `秒未收到任何内容返回,链接可能已断开,尝试重新启动` + "\n")
+				}
+			}
+		}
+	}
 }
 
 func (h *TShellOut) RegexError(shellOut *ShellOut, msg string) {
@@ -369,6 +390,7 @@ func (h *TShellOut) RmClient(uniqueKey string) {
 	if sh, ok := h.ShellOutMap[uniqueKey]; ok {
 		sh.Client.CloseTerminal()
 	}
+	h.ShellOutMap[uniqueKey].breakTimer.Stop()
 	delete(h.ShellOutMap, uniqueKey)
 }
 

@@ -117,7 +117,7 @@ func (h *ContextPage) InitEvents(page *playwright.Page) {
 	})
 }
 
-func (h *ContextPage) RegisterLinks(page playwright.Page, registerLinks map[string]*p_curl.CurlRun, filterUris []string) {
+func (h *ContextPage) RegisterLinks(page playwright.Page, registerLinks map[string]*p_curl.CurlRun, filterUris []string, tipFunc func(string, string)) {
 	if registerLinks != nil {
 		for listenUri, cur := range registerLinks {
 			cur.CurlEvents.NoticeCall(`注册 **` + listenUri)
@@ -132,15 +132,16 @@ func (h *ContextPage) RegisterLinks(page playwright.Page, registerLinks map[stri
 				_ = route.Abort()
 			})
 		}
-		//拦截
-		for _, uri := range filterUris {
-			if uri == `` {
-				continue
-			}
-			_ = page.Route("**"+uri+"*", func(route playwright.Route) {
-				_ = route.Abort()
-			})
+	}
+	//拦截
+	for _, uri := range filterUris {
+		if uri == `` {
+			continue
 		}
+		tipFunc(`注册过滤请求,`, uri)
+		_ = page.Route("**"+uri+"*", func(route playwright.Route) {
+			_ = route.Abort()
+		})
 	}
 }
 

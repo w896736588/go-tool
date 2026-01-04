@@ -145,7 +145,7 @@ func (h *ParseCurl) GetDataRaw(line string) {
 
 func (h *ParseCurl) GetDataRawUrls(line string) {
 	line = strings.TrimLeft(line, "--data-raw '")
-	line = strings.TrimRight(line, "'")
+	line = strings.TrimRight(line, "' \\")
 	values, err := url.ParseQuery(line)
 	if err != nil {
 		gstool.FmtPrintlnLogTime(`解析url参数错误 %s`, line)

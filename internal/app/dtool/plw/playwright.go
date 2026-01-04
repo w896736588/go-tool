@@ -153,7 +153,8 @@ func (h *Playwright) GetPage(call *p_common.Call) (*playwright.Page, error) {
 			return nil, pageErr
 		}
 	}
-	(*contextPage).RegisterLinks(page, h.RunParams.ListenCurls, h.RunParams.FilterUris)
+	h.RunParams.StreamFunc(`启动playwright`, `传入过滤url`+gstool.JsonEncode(h.RunParams.FilterUris))
+	(*contextPage).RegisterLinks(page, h.RunParams.ListenCurls, h.RunParams.FilterUris, h.RunParams.StreamFunc)
 	//记录登录记录
 	h.LastUserDataIndex(h.RunParams, contextPage.UserDataIndex, call)
 	// 关闭一个blank

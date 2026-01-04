@@ -96,6 +96,8 @@ func (h *Process) Do() (define.ProcessCode, string, error) {
 		return h.PWaitClose()
 	case define.Click: //点击
 		return h.PClick()
+	case define.DeleteElement: //删除元素
+		return h.PDeleteElement()
 	case define.Input: //输入
 		return h.PInput()
 	case define.RedirectUri: //跳转 保持当前域名
@@ -263,6 +265,25 @@ func (h *Process) PClick() (define.ProcessCode, string, error) {
 		h.runParams.StreamFunc(h.Name, h.Locators+` 点击元素成功 `)
 		h.callRun(``, h.Locators)
 	}
+	return define.ProcessOk, ``, nil
+}
+
+func (h *Process) PDeleteElement() (define.ProcessCode, string, error) {
+	PlaywrightClient.AddTipMsg(h.Page, h.Tip)
+	h.ElementOp.Type = define.DeleteElement
+	content := p_common.TJasClient.Get(`p_js`, `delete.js`)
+	locators := strings.Split(h.Locators, `|`)
+	for _, locator := range locators {
+		locator = strings.TrimLeft(locator, `.`)
+		if len(locator) == 0 {
+			continue
+		}
+		content = gstool.SReplaces(content, map[string]string{
+			`{delete_class_name}`: locator,
+		})
+		_, _ = (*h.Page).Evaluate(content)
+	}
+
 	return define.ProcessOk, ``, nil
 }
 

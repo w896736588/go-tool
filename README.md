@@ -11,12 +11,14 @@ go env -w GOPROXY=https://goproxy.cn,direct
 7. 输出监控：修复某些情况下丢失数据问题（可能是缓冲区不够，还没到换行） ok
 8. 输出监控：优化拦截展示页面，把拦截的标题和次数用表格更清晰展示 ok
 9. docker服务列表固定按自然顺序排序 ok
+10. docker可以为每一个服务指定上传可执行文件到对应目录并重启服务 wait
+11. 自定义网页执行逻辑支持复制新增 ok
 
 ### go run 启动
 ConfigFile设置为config/dtool下面的某个文件
 ```shell
 export CGO_ENABLED=1
-go run -ldflags " -s -w" cmd/dtool/main.go --ConfigFile=xxx
+go run -ldflags " -s -w" cmd/dtool/main.go --ConfigFile=company
 ```
 
 ### bat启动
