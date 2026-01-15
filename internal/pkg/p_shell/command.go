@@ -97,6 +97,12 @@ func (h *Command) GitPullOrigin(branch string) *Command {
 	return h
 }
 
+// GitCleanCredentialCache 清除认证信息 防止缓存上一次认证的错误
+func (h *Command) GitCleanCredentialCache() *Command {
+	h.SetCommand(fmt.Sprintf(`%sgit credential-cache exit; unset GIT_ASKPASS`, h.sudo))
+	return h
+}
+
 func (h *Command) GitPull() *Command {
 	h.SetCommand(fmt.Sprintf(`%sgit pull  --quiet`, h.sudo))
 	return h

@@ -5,12 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
+
+	"io"
 
 	"gitee.com/Sxiaobai/gs/v2/gsssh"
 	"gitee.com/Sxiaobai/gs/v2/gstool"
 	"github.com/spf13/cast"
+	"golang.org/x/crypto/ssh"
 )
 
 type Shell struct {
@@ -74,6 +78,27 @@ func (h *Shell) GetClient(sshConfig map[string]any, shellClientId string, sse *p
 			sse.Send(msg)
 		}
 	})
+	//提示输入账号密码登处理
+	gsShell.SetAuthPromptKeywords([]string{
+		"Username for",
+		"Password for",
+		"用户名：",
+		"密码：",
+		"passphrase",
+		"Passphrase",
+	})
+	gsShell.SetFuncAuthPrompt(func(prompt string, stdin io.WriteCloser, session *ssh.Session) string {
+		// 发送 Ctrl+C 信号（模拟终端中断）
+		if session != nil {
+			_ = session.Signal(ssh.SIGINT)
+			//清除认证缓存
+			if strings.Contains(strings.ToLower(prompt), `git`) {
+				_, _ = stdin.Write([]byte("git credential-cache exit; unset GIT_ASKPASS\n"))
+			}
+			return "\n需要输入账号或密码，暂时不支持，请解决后再次执行\n"
+		}
+		return ``
+	})
 	//设置执行命令前处理
 	gsShell.SetFuncBefore(func(command string) string {
 		return command
@@ -125,6 +150,27 @@ func (h *Shell) GetClientMarkdown(sshConfig map[string]any, shellClientId string
 	gsShell.SetFuncBefore(func(command string) string {
 		return command
 		//return Component.TMarkDown.Code(command, `shell`)
+	})
+	//提示输入账号密码登处理
+	gsShell.SetAuthPromptKeywords([]string{
+		"Username for",
+		"Password for",
+		"用户名：",
+		"密码：",
+		"passphrase",
+		"Passphrase",
+	})
+	gsShell.SetFuncAuthPrompt(func(prompt string, stdin io.WriteCloser, session *ssh.Session) string {
+		// 发送 Ctrl+C 信号（模拟终端中断）
+		if session != nil {
+			_ = session.Signal(ssh.SIGINT)
+			//清除认证缓存
+			if strings.Contains(strings.ToLower(prompt), `git`) {
+				_, _ = stdin.Write([]byte("git credential-cache exit; unset GIT_ASKPASS\n"))
+			}
+			return "\n需要输入账号或密码，暂时不支持，请解决后再次执行\n"
+		}
+		return ``
 	})
 	//设置对收到的结果是否进行合并后处理 建议1-2
 	gsShell.SetCombineNum(1)

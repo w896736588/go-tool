@@ -2,14 +2,16 @@ package p_common
 
 import (
 	"fmt"
-	"gitee.com/Sxiaobai/gs/v2/gsencrypt"
-	"gitee.com/Sxiaobai/gs/v2/gstool"
-	"github.com/pion/stun"
 	"net"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
+
+	"gitee.com/Sxiaobai/gs/v2/gsencrypt"
+	"gitee.com/Sxiaobai/gs/v2/gstool"
+	"github.com/pion/stun"
 )
 
 var TBaseClient *TBase
@@ -128,4 +130,29 @@ func (h *TBase) DiffText(text1, text2 string) string {
 	}
 	return stats
 
+}
+
+// 过滤终端控制符，标准化换行
+// 新增过滤 \x1b] 开头的终端标题/控制序列（如 \u001b]0;）
+func (h *TBase) FilterTerminalChars(msg string) string {
+	// 1. 过滤 ANSI 颜色/控制符（匹配 \x1b 开头的所有控制序列）
+	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+	msg = ansiRegex.ReplaceAllString(msg, "")
+
+	// 2. 过滤清行符 \x1b[K、终端模式切换符（如 \x1b[?1l\x1b>）
+	cleanRegex := regexp.MustCompile(`\x1b\[[?<>].*?[a-zA-Z]`)
+	msg = cleanRegex.ReplaceAllString(msg, "")
+
+	// 3. 新增：过滤 \x1b] 开头的终端标题/控制序列（如 \u001b]0;、\x1b]2;title\x07 等）
+	// 匹配规则：\x1b] 开头，后面跟任意字符（非贪婪匹配），直到遇到 BEL 符(\x07)或字符串结束
+	titleRegex := regexp.MustCompile(`\x1b\].*?(\x07|$)`)
+	msg = titleRegex.ReplaceAllString(msg, "")
+
+	// 4. 统一换行格式：将 \r\n、\r 都转为 \n，合并连续换行
+	newlineRegex := regexp.MustCompile(`\r\n|\r`)
+	msg = newlineRegex.ReplaceAllString(msg, "\n")
+	multiNewlineRegex := regexp.MustCompile(`\n{2,}`)
+	msg = multiNewlineRegex.ReplaceAllString(msg, "\n")
+
+	return msg
 }

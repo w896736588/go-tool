@@ -199,7 +199,9 @@ func getSupervisorComponent(c *gin.Context) (map[string]interface{}, *gsssh.SshT
 		Sse:             gsgin.SseGetByClientId(c.GetHeader(`SseClientId`)),
 		SseDistributeId: sseDistributeId,
 	}
-	sshClient, sshClientErr := component.ShellClient.GetClient(sshConfig, uniqueKey, sse, nil)
+	sshClient, sshClientErr := component.ShellClient.GetClient(sshConfig, uniqueKey, sse, func(s string) []string {
+		return []string{p_common.TBaseClient.FilterTerminalChars(s)}
+	})
 	if sshClientErr != nil {
 		return nil, nil, sshClientErr
 	}

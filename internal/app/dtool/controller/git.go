@@ -38,6 +38,7 @@ func GitCurrentBranch(c *gin.Context) {
 	command := p_shell.NewCommand()
 	//command.Sudo() 不要用sudo否则服务器会提示输入密码，导致执行被卡死
 	command.Cd(codePath)
+	command.GitCleanCredentialCache()
 	command.Echo(`当前分支：`)
 	command.GitShowBranch()
 	command.Echo(`远程分支：`)
@@ -74,6 +75,7 @@ func GitChangeBranch(c *gin.Context) {
 	command := p_shell.NewCommand()
 	//command.Sudo() 不要用sudo否则服务器会提示输入密码，导致执行被卡死
 	command.Cd(codePath)
+	command.GitCleanCredentialCache()
 	command.GitIgnoreAll()
 	command.GitCleanAll()
 	command.GitFetch()
@@ -120,6 +122,7 @@ func GitChangeBranchRemote(c *gin.Context) {
 	command := p_shell.NewCommand()
 	//command.Sudo() 不要用sudo否则服务器会提示输入密码，导致执行被卡死
 	command.Cd(codePath)
+	command.GitCleanCredentialCache()
 	command.GitIgnoreAll()
 	command.GitFetch()
 	command.GitPull()
@@ -161,6 +164,7 @@ func GitPullBranchOrigin(c *gin.Context) {
 	command := p_shell.NewCommand()
 	//command.Sudo() 不要用sudo否则服务器会提示输入密码，导致执行被卡死
 	command.Cd(codePath)
+	command.GitCleanCredentialCache()
 	command.GitIgnoreAll()
 	command.GitCleanAll()
 	command.GitFetch()
@@ -208,6 +212,7 @@ func QueryStatus(c *gin.Context) {
 	command := p_shell.NewCommand()
 	//command.Sudo() 不要用sudo否则服务器会提示输入密码，导致执行被卡死
 	command.Cd(codePath)
+	command.GitCleanCredentialCache()
 	command.GitStatus()
 
 	result, _ := sshClient.RunCommandWait(command.GetCommand().ToStr(), 40*time.Second)
@@ -229,6 +234,7 @@ func GitCommitLog(c *gin.Context) {
 	command := p_shell.NewCommand()
 	//command.Sudo() 不要用sudo否则服务器会提示输入密码，导致执行被卡死
 	command.Cd(codePath)
+	command.GitCleanCredentialCache()
 	command.GitCommitLog()
 
 	result, _ := sshClient.RunCommandWait(command.GetCommand().ToStr(), 40*time.Second)
@@ -269,6 +275,7 @@ func CreateMerge(c *gin.Context) {
 	command := p_shell.NewCommand()
 	//command.Sudo() 不要用sudo否则服务器会提示输入密码，导致执行被卡死
 	command.Cd(codePath)
+	command.GitCleanCredentialCache()
 	command.GitCommitLog()
 
 	result, _ := sshClient.RunCommandWait(command.GetCommand().ToStr(), 40*time.Second)
@@ -293,7 +300,9 @@ func getGitComponent(c *gin.Context) (map[string]interface{}, *gsssh.SshTerminal
 		SseDistributeId: sseDistributeId,
 	}
 
-	sshClient, sshClientErr := component.ShellClient.GetClient(sshConfig, uniqueKey, sse, nil)
+	sshClient, sshClientErr := component.ShellClient.GetClient(sshConfig, uniqueKey, sse, func(s string) []string {
+		return []string{p_common.TBaseClient.FilterTerminalChars(s)}
+	})
 	if sshClientErr != nil {
 		return nil, nil, sshClientErr
 	}
