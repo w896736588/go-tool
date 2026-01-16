@@ -212,12 +212,17 @@ func (h *Command) ConsumerStatusGrep(dockerName, consumerName string) *Command {
 }
 
 func (h *Command) DockerExecConsumerStatus(dockerName string) *Command {
-	h.SetCommand(fmt.Sprintf(`%sdocker exec %s supervisorctl status`, h.sudo, dockerName))
+	h.SetCommand(fmt.Sprintf(`%s docker exec %s supervisorctl status`, h.sudo, dockerName))
 	return h
 }
 
-func (h *Command) ConsumerConfigCat(fileName, dockerName string) *Command {
-	h.SetCommand(fmt.Sprintf(`%scat %s`, h.sudo, fileName))
+func (h *Command) Cat(fileName string) *Command {
+	h.SetCommand(fmt.Sprintf(`%s cat %s`, h.sudo, fileName))
+	return h
+}
+
+func (h *Command) Append(fileName, content string) *Command {
+	h.SetCommand(fmt.Sprintf(`%s printf '%s' >> %s`, h.sudo, content, fileName))
 	return h
 }
 

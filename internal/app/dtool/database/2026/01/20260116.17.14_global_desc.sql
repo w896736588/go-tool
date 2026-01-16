@@ -1,0 +1,1 @@
+ALTER TABLE tbl_global ADD COLUMN desc text NOT NULL DEFAULT '';

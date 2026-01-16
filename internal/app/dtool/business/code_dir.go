@@ -23,7 +23,7 @@ func FindCode(sshConfig map[string]any, dirPath string) []string {
 	//这里不需要输出sse 传空
 	client, err := component.ShellClient.GetClient(sshConfig, uniqueKey, &p_sse.SseShell{}, func(s string) []string {
 		return []string{p_common.TBaseClient.FilterTerminalChars(s)}
-	})
+	}, nil, nil)
 	if err != nil {
 		gstool.FmtPrintlnLogTime(`连接ssh失败 %s`, err.Error())
 		return codeDirList

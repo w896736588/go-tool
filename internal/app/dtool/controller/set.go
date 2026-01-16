@@ -769,7 +769,7 @@ func SetGlobalList(c *gin.Context) {
 func SetGlobalAdd(c *gin.Context) {
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
-	updateData := gstool.MapTakeKeys(&dataMap, []string{`key`, `value`, `name`})
+	updateData := gstool.MapTakeKeys(&dataMap, []string{`key`, `value`, `name`, `desc`})
 	if cast.ToInt(dataMap[`id`]) == 0 {
 		updateData[`create_time`] = time.Now().Unix()
 		updateData[`update_time`] = time.Now().Unix()

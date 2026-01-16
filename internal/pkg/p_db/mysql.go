@@ -48,7 +48,13 @@ func (h *TMysql) GetClient(mysqlConfig map[string]any, call *p_common.Call) (*gs
 			Dbname:   cast.ToString(mysqlConfig[`dbname`]),
 		},
 	}
-	gsMysql.OpenDebug()
+	gsMysql.RegisterDebugHook(func(sql string, err error) {
+		if err != nil {
+			gstool.FmtPrintlnLogTime(`error sql：mysql %s %s`, sql, err.Error())
+		} else {
+			gstool.FmtPrintlnLogTime(`success sql：mysql %s`, sql)
+		}
+	})
 	if cast.ToInt(mysqlConfig[`ssh_id`]) != 0 {
 		sshConfig, sshConfigErr := call.GetSshConfig(mysqlConfig[`ssh_id`])
 		if sshConfigErr != nil {

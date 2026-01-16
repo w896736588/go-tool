@@ -133,26 +133,59 @@ func (h *TBase) DiffText(text1, text2 string) string {
 }
 
 // 过滤终端控制符，标准化换行
-// 新增过滤 \x1b] 开头的终端标题/控制序列（如 \u001b]0;）
+// 修复：避免过度匹配导致核心文本被删除
 func (h *TBase) FilterTerminalChars(msg string) string {
-	// 1. 过滤 ANSI 颜色/控制符（匹配 \x1b 开头的所有控制序列）
+	// 1. 过滤常规 ANSI 颜色/控制符（\x1b[数字;字母 格式）
 	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
 	msg = ansiRegex.ReplaceAllString(msg, "")
 
-	// 2. 过滤清行符 \x1b[K、终端模式切换符（如 \x1b[?1l\x1b>）
-	cleanRegex := regexp.MustCompile(`\x1b\[[?<>].*?[a-zA-Z]`)
+	// 2. 过滤特殊终端模式控制符（如 \x1b[?2004h/l）
+	// 优化：精准匹配 \x1b[? 开头 + 数字 + 字母，避免过度匹配
+	cleanRegex := regexp.MustCompile(`\x1b\[\?[0-9]+[a-zA-Z]`)
 	msg = cleanRegex.ReplaceAllString(msg, "")
 
-	// 3. 新增：过滤 \x1b] 开头的终端标题/控制序列（如 \u001b]0;、\x1b]2;title\x07 等）
-	// 匹配规则：\x1b] 开头，后面跟任意字符（非贪婪匹配），直到遇到 BEL 符(\x07)或字符串结束
-	titleRegex := regexp.MustCompile(`\x1b\].*?(\x07|$)`)
+	// 3. 修复：精准过滤 \x1b] 开头的OSC命令（仅匹配命令本身，不吞后续文本）
+	// 匹配规则：
+	// - \x1b] 开头
+	// - [0-2] 标题相关参数
+	// - ;? 可选的分隔符
+	// - ([^\x07\n\r]*)? 可选的标题内容（仅匹配非换行/非BEL的字符，避免跨行）
+	// - \x07? 可选的结束符
+	titleRegex := regexp.MustCompile(`\x1b\][0-2];?([^\x07\n\r]*)?\x07?`)
 	msg = titleRegex.ReplaceAllString(msg, "")
 
-	// 4. 统一换行格式：将 \r\n、\r 都转为 \n，合并连续换行
+	// 4. 统一换行格式：保留核心文本的换行逻辑，仅清理杂乱回车
 	newlineRegex := regexp.MustCompile(`\r\n|\r`)
 	msg = newlineRegex.ReplaceAllString(msg, "\n")
-	multiNewlineRegex := regexp.MustCompile(`\n{2,}`)
+	// 优化：只合并3个及以上连续换行（避免把有效换行也合并），可根据需求调整
+	multiNewlineRegex := regexp.MustCompile(`\n{3,}`)
 	msg = multiNewlineRegex.ReplaceAllString(msg, "\n")
 
+	// 可选：清理首尾多余的换行（如果需要）
+	// msg = strings.Trim(msg, "\n")
+
 	return msg
+}
+
+func (h *TBase) GetGitPromptHosts(input string) string {
+	// 正则表达式解释：
+	// 1. (Username|Password) for ' ：匹配固定前缀
+	// 2. http(s)?:// ：匹配 http:// 或 https://（s可选）
+	// 3. (?:[^@']+@)? ：非捕获组，匹配可选的用户名@部分
+	// 4. ([^']+) ：捕获组，提取核心域名（直到单引号结束）
+	re := regexp.MustCompile(`(Username|Password) for 'http(s)?://(?:[^@']+@)?([^']+)`)
+
+	matches := re.FindStringSubmatch(input)
+	if len(matches) < 4 {
+		return ""
+	}
+
+	// 拼接完整地址：协议（http/https） + 核心域名
+	protocol := "http"
+	if matches[2] == "s" { // matches[2] 是可选的 "s" 字符
+		protocol = "https"
+	}
+	fullURL := fmt.Sprintf("%s://%s", protocol, matches[3])
+
+	return fullURL
 }

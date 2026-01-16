@@ -30,7 +30,7 @@ func (h *TDataBaseUp) CheckDataBaseUp() {
 	gstool.FmtPrintlnLogTime(`开始检查数据库升级表`)
 	name, err := common.DbMain.Client.QuickQuery(`sqlite_master`, `name`, map[string]any{
 		`name`: `tbl_database_up`,
-	}).Select()
+	}).Value(`name`)
 	if err != nil {
 		panic(fmt.Sprintf(`数据库升级表查询失败 %s`, err.Error()))
 		return

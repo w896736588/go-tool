@@ -86,7 +86,7 @@ func DockerComposeConfigShow(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	catCommand := p_shell.NewCommand().Sudo().ConsumerConfigCat(cast.ToString(data[`config_path`]), ``)
+	catCommand := p_shell.NewCommand().Sudo().Cat(cast.ToString(data[`config_path`]))
 	ret, _ := sshClient.RunCommandWait(catCommand.GetCommand().ToStr(), 40*time.Second)
 	retMsgList := make([]string, 0)
 	retMsgList = append(retMsgList, ret)
@@ -274,7 +274,7 @@ func getDockerComponent(c *gin.Context) (map[string]interface{}, *gsssh.SshTermi
 	}
 	sshClient, sshClientErr := component.ShellClient.GetClient(sshConfig, uniqueKey, sse, func(s string) []string {
 		return []string{p_common.TBaseClient.FilterTerminalChars(s)}
-	})
+	}, nil, nil)
 	if sshClientErr != nil {
 		return nil, nil, sshClientErr
 	}

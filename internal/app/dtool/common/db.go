@@ -283,6 +283,10 @@ func (h *CSqlite) AllGlobal() ([]map[string]any, error) {
 	return h.Client.QuickQuery(`tbl_global`, `*`, map[string]any{}).All()
 }
 
+func (h *CSqlite) AllGlobalMap() (map[string]any, error) {
+	return h.Client.QuickQuery(`tbl_global`, `*`, map[string]any{}).ToMap(`key`, `value`)
+}
+
 func (h *CSqlite) CmdList(variableId any) ([]map[string]any, error) {
 	return h.Client.QuickQuery(`tbl_variable_cmd`, `*`, map[string]any{
 		`variable_id`: variableId,

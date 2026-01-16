@@ -102,10 +102,9 @@ func SupervisorConfigShow(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	dockerName := cast.ToString(reqMap[`docker_name`])
 	configPath := cast.ToString(reqMap[`config_path`])
 	retMsgList := make([]string, 0)
-	catCommand := p_shell.NewCommand().Sudo().ConsumerConfigCat(configPath, dockerName)
+	catCommand := p_shell.NewCommand().Sudo().Cat(configPath)
 	ret, _ := sshClient.RunCommandWait(catCommand.GetCommand().ToStr(), 40*time.Second)
 	retMsgList = append(retMsgList, ret)
 	gsgin.GinResponseSuccess(c, ``, strings.Join(retMsgList, gsdefine.Enter))
@@ -201,7 +200,7 @@ func getSupervisorComponent(c *gin.Context) (map[string]interface{}, *gsssh.SshT
 	}
 	sshClient, sshClientErr := component.ShellClient.GetClient(sshConfig, uniqueKey, sse, func(s string) []string {
 		return []string{p_common.TBaseClient.FilterTerminalChars(s)}
-	})
+	}, nil, nil)
 	if sshClientErr != nil {
 		return nil, nil, sshClientErr
 	}

@@ -36,7 +36,7 @@ func NewShell(logPath string) *Shell {
 
 // GetClient 正常输出
 func (h *Shell) GetClient(sshConfig map[string]any, shellClientId string, sse *p_sse.SseShell,
-	formatStream func(string) []string) (*gsssh.SshTerminal, error) {
+	formatStream func(string) []string, promptKeywords []string, promptFunc func(string, io.WriteCloser, *ssh.Session) string) (*gsssh.SshTerminal, error) {
 	defer h.lock.Unlock()
 	h.lock.Lock()
 	sshId := cast.ToString(sshConfig[`id`])
@@ -78,27 +78,21 @@ func (h *Shell) GetClient(sshConfig map[string]any, shellClientId string, sse *p
 			sse.Send(msg)
 		}
 	})
-	//提示输入账号密码登处理
-	gsShell.SetAuthPromptKeywords([]string{
-		"Username for",
-		"Password for",
-		"用户名：",
-		"密码：",
-		"passphrase",
-		"Passphrase",
-	})
-	gsShell.SetFuncAuthPrompt(func(prompt string, stdin io.WriteCloser, session *ssh.Session) string {
-		// 发送 Ctrl+C 信号（模拟终端中断）
-		if session != nil {
-			_ = session.Signal(ssh.SIGINT)
-			//清除认证缓存
-			if strings.Contains(strings.ToLower(prompt), `git`) {
-				_, _ = stdin.Write([]byte("git credential-cache exit; unset GIT_ASKPASS\n"))
-			}
-			return "\n需要输入账号或密码，暂时不支持，请解决后再次执行\n"
+	//提示验证提示
+	if len(promptKeywords) == 0 {
+		promptKeywords = []string{
+			"Username for",
+			"Password for",
+			"用户名：",
+			"密码：",
+			"passphrase",
+			"Passphrase",
 		}
-		return ``
-	})
+	}
+	gsShell.SetAuthPromptKeywords(promptKeywords)
+	if promptFunc != nil {
+		gsShell.SetFuncAuthPrompt(promptFunc)
+	}
 	//设置执行命令前处理
 	gsShell.SetFuncBefore(func(command string) string {
 		return command

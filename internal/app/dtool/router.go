@@ -140,6 +140,7 @@ func gitRouter(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/GitConfigList`, controller.GitConfigList)                 //git配置
 	tGin.GinPost(`/api/CreateMerge`, controller.CreateMerge)                     //创建合并请求
 	tGin.GinPost(`/api/GitSetSafeLog`, controller.GitSetSafeLog)                 //设置项目安全
+	tGin.GinPost(`/api/GitSaveCredentials`, controller.GitSaveCredentials)       //保存git记住密码账号
 }
 
 // gitlab token相关

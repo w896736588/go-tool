@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"gitee.com/Sxiaobai/gs/v2/gsgin"
 	"gitee.com/Sxiaobai/gs/v2/gstool"
@@ -127,9 +126,9 @@ func Upload(c *gin.Context) {
 	uploadDir := filepath.Join(component.EnvClient.RootPath, `upload`)
 	_ = gstool.DirCreatePath(uploadDir)
 	// 生成新名字：时间戳+扩展名
-	ext := filepath.Ext(file.Filename)
-	newName := fmt.Sprintf("%d%s", time.Now().UnixMicro(), ext)
-	dst := filepath.Join(uploadDir, newName)
+	//ext := filepath.Ext(file.Filename)
+	//newName := fmt.Sprintf("%d%s", time.Now().UnixMicro(), ext)
+	dst := filepath.Join(uploadDir, file.Filename)
 
 	if err := c.SaveUploadedFile(file, dst); err != nil {
 		gsgin.GinResponseError(c, `上传存储文件失败:`+err.Error(), ``)

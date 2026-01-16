@@ -202,6 +202,11 @@ func (h *Api) FormatBodyData(cli *gshttp.Client, bodyForm []p_curl.KeyValue) err
 			}
 		} else if keyValue.Type == `file` {
 			cli.BodyFile(keyValue.Field, keyValue.Value, gstool.FileGetNameByPath(keyValue.Value))
+			resultBodyForms = append(resultBodyForms, map[string]any{
+				`field`: keyValue.Field,
+				`type`:  keyValue.Type,
+				`value`: keyValue.Value,
+			})
 		} else if keyValue.Type == `integer` {
 			bodyMaps[keyValue.Field] = append(bodyMaps[keyValue.Field], cast.ToInt(keyValue.Value))
 			if h.CurlStruct.ContentType == `application/x-www-form-urlencoded` {
