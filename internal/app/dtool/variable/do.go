@@ -3,13 +3,12 @@ package variable
 import (
 	"dev_tool/internal/app/dtool/common"
 	"dev_tool/internal/app/dtool/define"
-	"dev_tool/internal/app/dtool/struct"
+	_struct "dev_tool/internal/app/dtool/struct"
 	"dev_tool/internal/pkg/p_common"
 	"dev_tool/internal/pkg/p_sse"
 	"errors"
 	"fmt"
 
-	"gitee.com/Sxiaobai/gs/v2/gstool"
 	"github.com/spf13/cast"
 )
 
@@ -144,7 +143,6 @@ func (h *Variable) Run() (_struct.VCmdResult, error) {
 }
 
 func (h *Variable) RunCmd(cmd map[string]any) error {
-	gstool.FmtPrintlnLogTime(`执行cmd %s`, gstool.JsonEncode(cmd))
 	//执行
 	rCmd := NewRCmd(cmd, h.ReplaceList, h.Sse, h.Call)
 	var err error
@@ -202,7 +200,10 @@ func (h *Variable) BuildCmd(cmd map[string]any) (_struct.VForm, error) {
 }
 
 func (h *Variable) Replace(cmd map[string]any) {
-	cmd[`options`] = p_common.Replace(cast.ToString(cmd[`options`]), h.ReplaceList)
+	//curl类型的不进行替换，因为会出现一些\n 如果json_decode会报错
+	if cast.ToInt(cmd[`type`]) != define.VariableCmdCurl {
+		cmd[`options`] = p_common.Replace(cast.ToString(cmd[`options`]), h.ReplaceList)
+	}
 	cmd[`checks`] = p_common.Replace(cast.ToString(cmd[`checks`]), h.ReplaceList)
 }
 

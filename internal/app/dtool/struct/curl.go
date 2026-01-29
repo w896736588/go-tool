@@ -20,8 +20,8 @@ type CurlParseConfig struct {
 	} `json:"take_jsons"`
 	Retry       int               `json:"retry"`        //尝试多少次
 	RetrySecond int               `json:"retry_second"` //每次间隔多少秒
-	Body        string            //body内容 适用于post
-	Headers     map[string]string //headers
+	Body        string            `json:"body"`         //body内容 适用于post
+	Headers     map[string]string `json:"headers"`      //headers
 }
 
 type CurlEvents struct {

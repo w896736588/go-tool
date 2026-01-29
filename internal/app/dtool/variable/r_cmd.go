@@ -6,7 +6,7 @@ import (
 	"dev_tool/internal/app/dtool/component"
 	"dev_tool/internal/app/dtool/define"
 	"dev_tool/internal/app/dtool/plw"
-	"dev_tool/internal/app/dtool/struct"
+	_struct "dev_tool/internal/app/dtool/struct"
 	"dev_tool/internal/pkg/p_common"
 	"dev_tool/internal/pkg/p_curl"
 	"dev_tool/internal/pkg/p_db"
@@ -406,15 +406,41 @@ func (h *RCmd) RunCommand() (string, error) {
 	return ``, nil
 }
 
+type StructOpenAiBody struct {
+	Temperature float64 `json:"temperature"`
+	Model       string  `json:"model"`
+	Messages    []struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	} `json:"messages"`
+}
+
 func (h *RCmd) RunCurl() (string, error) {
 	resultKey := cast.ToString(h.cmd[`result_key`])
 	parseConfig := _struct.CurlParseConfig{}
-	err := gstool.JsonDecode(cast.ToString(h.cmd[`options`]), &parseConfig)
+	//options
+	options := cast.ToString(h.cmd[`options`])
+	//将提示词中的换行\n换为\\n
+	options = strings.ReplaceAll(options, `\n`, `\\n`)
+	err := gstool.JsonDecode(options, &parseConfig)
 	if err != nil {
-		h.Sse.Send(`解析失败 ` + cast.ToString(h.cmd[`options`]) + "\n")
+		h.Sse.Send(`解析失败 ` + options + "\n")
 		return ``, err
 	}
-	parseConfig.Uri = p_common.Replace(parseConfig.Uri, h.replaceList)
+	parseConfig.Url = p_common.Replace(parseConfig.Url, h.replaceList)
+	if strings.Contains(parseConfig.Body, `temperature`) && strings.Contains(options, `model`) && strings.Contains(options, `messages`) {
+		openAiBody := StructOpenAiBody{}
+		err = gstool.JsonDecode(parseConfig.Body, &openAiBody)
+		if err != nil {
+			h.Sse.Send(`解析失败 ` + options + "\n")
+			return ``, err
+		}
+		for messageIndex, message := range openAiBody.Messages {
+			openAiBody.Messages[messageIndex].Content = p_common.Replace(message.Content, h.replaceList)
+		}
+		parseConfig.Body = gstool.JsonEncode(openAiBody)
+	}
+	h.Sse.Send(`请求结构 ` + gstool.JsonEncode(parseConfig))
 	pCurl := p_curl.CurlRun{
 		ParseConfig: parseConfig,
 		CurlEvents: _struct.CurlEvents{

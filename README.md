@@ -1,7 +1,18 @@
 ### 新环境安装
+
 go env -w GOPROXY=https://goproxy.cn,direct
 
+### gs扩展安装
+
+```sh
+go env -w GOPRIVATE=gitee.com
+# 更新到最新tag
+go get -u gitee.com/Sxiaobai/gs/v2@latest
+
+```
+
 ### 更新计划
+
 1. 数据库变更：文件支持按年按月目录分类执行 ok
 2. 接口开发：执行后保存最后一次的结果 ok
 3. 接口开发：执行时需要等待保存完后再执行，且自动切换到结果 ok
@@ -16,14 +27,16 @@ go env -w GOPROXY=https://goproxy.cn,direct
 12. redis：增加10个最近搜索的key显示 ok
 
 ### go run 启动
+
 ConfigFile设置为config/dtool下面的某个文件
 ```shell
-export CGO_ENABLED=1
-go run -ldflags " -s -w" cmd/dtool/main.go --ConfigFile=company
+export CGO_ENABLED=1 && go run -ldflags " -s -w" cmd/dtool/main.go --ConfigFile=company
 ```
 
 ### bat启动
+
 将下面的内容保存为xxx.bat放到build目录即可双击运行，ctrl + c结束
+
 ```bat
 @echo off
 REM 打开网页（异步）
@@ -34,4 +47,5 @@ dtool.exe --ConfigFile=xxx
 
 REM 可选：运行结束后暂停（方便看最后日志）
 pause
+
 ```
