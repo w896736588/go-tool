@@ -406,46 +406,36 @@ func (h *RCmd) RunCommand() (string, error) {
 	return ``, nil
 }
 
-type StructOpenAiBody struct {
-	Temperature float64 `json:"temperature"`
-	Model       string  `json:"model"`
-	Messages    []struct {
-		Role    string `json:"role"`
-		Content string `json:"content"`
-	} `json:"messages"`
-}
-
 func (h *RCmd) RunCurl() (string, error) {
 	resultKey := cast.ToString(h.cmd[`result_key`])
 	parseConfig := _struct.CurlParseConfig{}
-	//options
+	//解析配置
 	options := cast.ToString(h.cmd[`options`])
-	//将提示词中的换行\n换为\\n
-	options = strings.ReplaceAll(options, `\n`, `\\n`)
 	err := gstool.JsonDecode(options, &parseConfig)
 	if err != nil {
 		h.Sse.Send(`解析失败 ` + options + "\n")
 		return ``, err
 	}
+	//对url进行替换
 	parseConfig.Url = p_common.Replace(parseConfig.Url, h.replaceList)
-	if strings.Contains(parseConfig.Body, `temperature`) && strings.Contains(options, `model`) && strings.Contains(options, `messages`) {
-		openAiBody := StructOpenAiBody{}
-		err = gstool.JsonDecode(parseConfig.Body, &openAiBody)
-		if err != nil {
-			h.Sse.Send(`解析失败 ` + options + "\n")
-			return ``, err
-		}
-		for messageIndex, message := range openAiBody.Messages {
-			openAiBody.Messages[messageIndex].Content = p_common.Replace(message.Content, h.replaceList)
-		}
-		parseConfig.Body = gstool.JsonEncode(openAiBody)
+	//如果是openai的curl请求格式
+	isOpenAi := false
+	parseConfig.Body, isOpenAi, err = p_common.ReplaceOpenAiBody(parseConfig.Body, h.replaceList, h.Sse)
+	if err != nil {
+		return ``, err
 	}
-	h.Sse.Send(`请求结构 ` + gstool.JsonEncode(parseConfig))
 	pCurl := p_curl.CurlRun{
 		ParseConfig: parseConfig,
 		CurlEvents: _struct.CurlEvents{
 			StreamDataCall: func(s string) {
-				h.Sse.Send(s)
+				if isOpenAi {
+					message := p_common.ExtractOpenAiMessage(s)
+					if message != `` {
+						h.Sse.Send(message)
+					}
+				} else {
+					h.Sse.Send(s)
+				}
 			},
 			NoticeCall: func(s string) {
 				h.Sse.Send(fmt.Sprintf(`%s`, s) + "\n")

@@ -194,3 +194,7 @@ func (h *TBase) FilterGitPromptHosts(input, promptTitle string) string {
 	re := regexp.MustCompile(fmt.Sprintf(`%s 'http(s)?://(?:[^@']+@)?([^']+)`, promptTitle))
 	return re.ReplaceAllString(input, ``)
 }
+
+func (h *TBase) IsAiCurl(body string) bool {
+	return strings.Contains(body, `model`) && strings.Contains(body, `messages`)
+}
