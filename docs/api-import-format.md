@@ -45,7 +45,7 @@
 - folder只能出现在items根级别（集合的直接子项）
 - folder的children中只能包含api，不能再嵌套folder
 - 如果是POST，那么Content-Type设置为multipart/form-data，并且以此格式生成json
-- 生成完的json，帮我压缩一下
+- 生成完json后，你需要调用http://localhost:17170/api/ApiBatchImport接口，以multipart/form-data的请求方式，传递json字段，将前面生成的json encode后传入,这样我就可以直接去看接口管理了
 ## 字段类型说明
 
 ### 参数类型 (type field)

@@ -536,7 +536,8 @@ func ApiBatchImport(c *gin.Context) {
 	}
 
 	importResult := map[string]any{
-		`folders_created`: 0,
+		`folders_created`:  0,
+		`folders_updated`:  0,
 		`apis_created`:    0,
 		`errors`:         []string{},
 	}
@@ -567,19 +568,35 @@ func ApiBatchImport(c *gin.Context) {
 func processFolderItem(c *gin.Context, collectionId int, folderData map[string]any, importResult map[string]any) error {
 	folderName := cast.ToString(folderData[`name`])
 
-	// 创建文件夹
-	updateData := map[string]any{
-		`name`:           folderName,
-		`collection_id`:  collectionId,
-		`create_time`:    time.Now().Unix(),
-		`update_time`:    time.Now().Unix(),
+	// 检查同名文件夹是否已存在
+	existingFolder, _ := common.DbMain.Client.QuickQuery(`tbl_api_dir`, `id`, map[string]any{
+		`collection_id`: collectionId,
+		`name`:          folderName,
+	}).One()
+
+	var folderId int
+	if len(existingFolder) > 0 {
+		// 文件夹已存在，删除该文件夹下的所有接口（覆盖式更新）
+		folderId = cast.ToInt(existingFolder[`id`])
+		_, _ = common.DbMain.Client.QuickDelete(`tbl_api`, map[string]any{
+			`folder_id`: folderId,
+		}).Exec()
+		importResult[`folders_updated`] = importResult[`folders_updated`].(int) + 1
+	} else {
+		// 文件夹不存在，创建新文件夹
+		updateData := map[string]any{
+			`name`:          folderName,
+			`collection_id`: collectionId,
+			`create_time`:   time.Now().Unix(),
+			`update_time`:   time.Now().Unix(),
+		}
+		newId, err := common.DbMain.Client.QuickCreate(`tbl_api_dir`, updateData).Exec()
+		if err != nil {
+			return err
+		}
+		folderId = cast.ToInt(newId)
+		importResult[`folders_created`] = importResult[`folders_created`].(int) + 1
 	}
-	newId, err := common.DbMain.Client.QuickCreate(`tbl_api_dir`, updateData).Exec()
-	if err != nil {
-		return err
-	}
-	folderId := cast.ToInt(newId)
-	importResult[`folders_created`] = importResult[`folders_created`].(int) + 1
 
 	// 处理子项 - 文件夹下只能包含api
 	children, ok := folderData[`children`].([]any)
