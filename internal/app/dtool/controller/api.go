@@ -511,9 +511,12 @@ func ApiBatchImport(c *gin.Context) {
 		gsgin.GinResponseError(c, `json格式错误: `+err.Error(), nil)
 		return
 	}
-
+	collectionId := cast.ToInt(c.PostForm(`collection_id`))
 	// 只接受collection_id，必须已存在
-	collectionId := cast.ToInt(importData[`collection_id`])
+	importCollectionId := cast.ToInt(importData[`collection_id`])
+	if collectionId == 0 {
+		collectionId = importCollectionId
+	}
 	if collectionId == 0 {
 		gsgin.GinResponseError(c, `collection_id必须提供`, nil)
 		return
@@ -536,10 +539,10 @@ func ApiBatchImport(c *gin.Context) {
 	}
 
 	importResult := map[string]any{
-		`folders_created`:  0,
-		`folders_updated`:  0,
+		`folders_created`: 0,
+		`folders_updated`: 0,
 		`apis_created`:    0,
-		`errors`:         []string{},
+		`errors`:          []string{},
 	}
 
 	for _, item := range items {
@@ -638,17 +641,17 @@ func processApiItem(c *gin.Context, collectionId, folderId int, apiData map[stri
 		updateData = map[string]any{
 			`folder_id`:     folderId,
 			`collection_id`: collectionId,
-			`name`:         cast.ToString(apiData[`name`]),
-			`method`:       parsed.CurlStruct.Method,
+			`name`:          cast.ToString(apiData[`name`]),
+			`method`:        parsed.CurlStruct.Method,
 			`query_params`:  parsed.CurlStruct.QueryParams,
 			`protocol`:      parsed.CurlStruct.Protocol,
-			`url`:          parsed.CurlStruct.Url,
+			`url`:           parsed.CurlStruct.Url,
 			`headers`:       parsed.CurlStruct.Headers,
 			`content_type`:  parsed.CurlStruct.ContentType,
 			`body_form`:     parsed.CurlStruct.BodyForm,
 			`body_json`:     parsed.CurlStruct.BodyJson,
 			`env_id`:        cast.ToInt(apiData[`env_id`]),
-			`desc`:         cast.ToString(apiData[`desc`]),
+			`desc`:          cast.ToString(apiData[`desc`]),
 		}
 		if strings.ToLower(parsed.CurlStruct.Protocol) == `http` {
 			updateData[`url`] = `http://` + parsed.CurlStruct.Url
@@ -731,4 +734,30 @@ func processApiItem(c *gin.Context, collectionId, folderId int, apiData map[stri
 
 	importResult[`apis_created`] = importResult[`apis_created`].(int) + 1
 	return nil
+}
+
+func ApiFolderDetail(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	dir, _ := common.DbMain.Client.QuickQuery(`tbl_api_dir`, `*`, map[string]any{
+		`id`: dataMap[`dir_id`],
+	}).One()
+	if len(dir) == 0 {
+		gsgin.GinResponseError(c, "目录不存在", nil)
+		return
+	}
+	dir[`type`] = `folder`
+	dir[`uniqueid`] = fmt.Sprintf(`folder%d`, dir[`id`])
+	//查找接口
+	apis, _ := common.DbMain.Client.QuickQuery(`tbl_api`, `*`, map[string]any{
+		`folder_id`: dir[`id`],
+	}).Order(`weight,id asc`).All()
+	for _, api := range apis {
+		api[`type`] = `api`
+		api[`uniqueid`] = fmt.Sprintf(`api%d`, api[`id`])
+	}
+	dir[`children`] = apis
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`dir`: dir,
+	})
 }

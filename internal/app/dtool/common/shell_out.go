@@ -391,6 +391,8 @@ func (h *TShellOut) RmClient(uniqueKey string) {
 	defer h.lock.Unlock()
 	if sh, ok := h.ShellOutMap[uniqueKey]; ok {
 		sh.Client.CloseTerminal()
+	} else {
+		return
 	}
 	h.ShellOutMap[uniqueKey].breakTimer.Stop()
 	delete(h.ShellOutMap, uniqueKey)
@@ -445,12 +447,12 @@ type Search struct {
 // ConnectionInfo 连接信息
 type ConnectionInfo struct {
 	ShellClientId  string `json:"shell_client_id"`
-	Status         string `json:"status"`           // active: 活跃, idle: 闲置, broken: 断开
-	ConnectTime    string `json:"connect_time"`     // 连接时间
-	ConnectSeconds int64  `json:"connect_seconds"`  // 连接时长(秒)
-	LastReceive    string `json:"last_receive"`     // 最后接收时间
+	Status         string `json:"status"`          // active: 活跃, idle: 闲置, broken: 断开
+	ConnectTime    string `json:"connect_time"`    // 连接时间
+	ConnectSeconds int64  `json:"connect_seconds"` // 连接时长(秒)
+	LastReceive    string `json:"last_receive"`    // 最后接收时间
 	IdleSeconds    int64  `json:"idle_seconds"`    // 闲置时长(秒)
-	Type           string `json:"type"`             // shell_out
+	Type           string `json:"type"`            // shell_out
 }
 
 // GetConnections 获取所有连接状态

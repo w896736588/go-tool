@@ -267,12 +267,8 @@ func ShellOutReconnect(c *gin.Context) {
 		return
 	}
 
-	err = common.ShellOutClient.Reconnect(shellClientId)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-
+	common.ShellOutClient.RmClient(shellClientId)
+	component.ShellClient.RmClient(shellClientId)
 	gsgin.GinResponseSuccess(c, `重连成功`, nil)
 	return
 }
