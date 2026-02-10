@@ -578,6 +578,7 @@ func (h *RCmd) RunCombine() (string, error) {
 	if resultKey != `` {
 		VariableClient.AddReplace(h.replaceList, resultKey, combine)
 	}
+	h.Sse.Send(p_common.TMarkDownClient.Bold(`合并内容`) + `,` + combine + "\n")
 	return ``, nil
 }
 

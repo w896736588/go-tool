@@ -755,6 +755,24 @@ func ApiFolderDetail(c *gin.Context) {
 	for _, api := range apis {
 		api[`type`] = `api`
 		api[`uniqueid`] = fmt.Sprintf(`api%d`, api[`id`])
+		// If env_id exists, fetch environment variables and replace URL
+		envId := cast.ToInt(api[`env_id`])
+		if envId > 0 {
+			// Query all environment variables for this env_id
+			envItems, _ := common.DbMain.Client.QuickQuery(`tbl_api_env_item`, `*`, map[string]any{
+				`env_id`: envId,
+			}).All()
+			// Replace variables in URL
+			url := cast.ToString(api[`url`])
+			for _, envItem := range envItems {
+				key := cast.ToString(envItem[`key`])
+				value := cast.ToString(envItem[`value`])
+				if key != `` && value != `` {
+					url = strings.ReplaceAll(url, `$`+key+`$`, value)
+				}
+			}
+			api[`url`] = url
+		}
 	}
 	dir[`children`] = apis
 	gsgin.GinResponseSuccess(c, ``, map[string]any{

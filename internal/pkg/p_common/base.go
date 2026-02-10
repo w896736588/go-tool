@@ -198,3 +198,9 @@ func (h *TBase) FilterGitPromptHosts(input, promptTitle string) string {
 func (h *TBase) IsAiCurl(body string) bool {
 	return strings.Contains(body, `model`) && strings.Contains(body, `messages`)
 }
+
+func (h *TBase) FillConst(replaces map[string]string) {
+	replaces[`{current_date_Y/m/d}`] = gstool.TimeNowUnixToString(`Y/m/d`)
+	replaces[`{current_date_Y_m_d}`] = gstool.TimeNowUnixToString(`Y_m_d`)
+	replaces[`{current_date_Ymd}`] = gstool.TimeNowUnixToString(`Ymd`)
+}

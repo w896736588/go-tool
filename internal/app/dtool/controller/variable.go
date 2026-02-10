@@ -241,6 +241,8 @@ func VariableCmdRun(c *gin.Context) {
 			return
 		}
 	}
+	//注入常量
+	p_common.TBaseClient.FillConst(replaceList)
 	//如果是预执行 那么重置任务ID为0 让前一个退出
 	if runCmdId == 0 {
 		variable.VariableClient.CreateTask(``)

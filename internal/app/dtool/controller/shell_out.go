@@ -79,9 +79,9 @@ func ShellOutErrorContext(c *gin.Context) {
 	}
 	shellClientId := cast.ToString(reqMap[`shell_client_id`])
 	errorLine := cast.ToString(reqMap[`error_line`])
-	lines, _ := common.ShellOutClient.ErrorContext(shellClientId, errorLine, 5)
+	lines, _ := common.ShellOutClient.ErrorContext(shellClientId, errorLine, 10)
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
-		`lines`: strings.Join(lines, "\n"),
+		`lines`: lines,
 	})
 	return
 }

@@ -4,10 +4,11 @@ import (
 	"context"
 	"dev_tool/internal/app/dtool/common"
 	"dev_tool/internal/app/dtool/component"
-	"dev_tool/internal/app/dtool/struct"
+	_struct "dev_tool/internal/app/dtool/struct"
 	"dev_tool/internal/pkg/p_common"
 	"errors"
 	"fmt"
+	"net"
 	"path/filepath"
 	"strings"
 
@@ -40,9 +41,59 @@ func BaseLogin(c *gin.Context) {
 		})
 	}
 	gsgin.GinResponseSuccess(c, `获取成功`, map[string]any{
-		`token`: token,
-		`ports`: strings.Split(component.ConfigViper.GetString(`run.ports`), `,`),
+		`token`:    token,
+		`ports`:    strings.Split(component.ConfigViper.GetString(`run.ports`), `,`),
+		`local_ip`: GetLANIP(),
 	})
+}
+
+func GetLANIP() string {
+	// 获取主机的所有网络接口
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		gstool.FmtPrintlnLogTime(`获取主机的所有网络接口失败:` + err.Error())
+		return ""
+	}
+
+	for _, iface := range interfaces {
+		// 添加一些过滤逻辑，例如跳过 down 掉的网卡
+		if iface.Flags&net.FlagUp == 0 {
+			continue // 接口未启用
+		}
+		// 跳过回环接口
+		if iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+
+		// 获取接口下的所有地址
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+
+			// 检查 IP 是否为 nil，且只处理 IPv4 (如果你想兼容 IPv6，可去掉 !ip.To4() 判断)
+			if ip == nil || ip.IsLoopback() {
+				continue
+			}
+
+			// 过滤 IPv6，只保留 IPv4
+			if ip = ip.To4(); ip == nil {
+				continue
+			}
+
+			return ip.String()
+		}
+	}
+	return ""
 }
 
 // BaseCheckUnikeyExist 检查是否需要登录

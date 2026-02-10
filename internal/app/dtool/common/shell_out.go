@@ -3,6 +3,7 @@ package common
 import (
 	"dev_tool/internal/app/dtool/component"
 	"dev_tool/internal/app/dtool/define"
+	"dev_tool/internal/pkg/p_common"
 	"dev_tool/internal/pkg/p_define"
 	"dev_tool/internal/pkg/p_sse"
 	"errors"
@@ -33,7 +34,7 @@ type ShellOut struct {
 	Sse                *p_sse.SseShell
 	errorList          []ErrorBlock   // 最终归档的错误块
 	remainContents     []string       // 保留的内容(替换后的)
-	sourceContents     []string       // 原本内容
+	sourceContents     []SourceLine   // 原本内容（带行号）
 	searchReadContents map[string]any //已经搜索过的内容
 	regexFiltersTips   map[string]int //过滤正则数量统计
 	startTime          int64          //启动时间
@@ -44,9 +45,21 @@ type ShellOut struct {
 
 // ErrorBlock 错误块
 type ErrorBlock struct {
-	Lines     []string `json:"lines"`
-	ErrorLine string   `json:"error_line"`
-	Time      string   `json:"time"`
+	ErrorLine  string `json:"error_line"`
+	LineNumber int64  `json:"line_number"` // 错误行的行号
+	Time       string `json:"time"`
+}
+
+// LineContext 行上下文（带行号）
+type LineContext struct {
+	LineNumber int64  `json:"line_number"` // 行号
+	Content    string `json:"content"`     // 内容
+}
+
+// SourceLine 原始内容行（带行号）
+type SourceLine struct {
+	LineNumber int64  // 行号
+	Content    string // 内容
 }
 
 // TShellOut 管理多个 ShellOut
@@ -143,7 +156,7 @@ func (h *TShellOut) GetClient(sshConfig map[string]any, shellClientId string, ss
 		groupId:            groupId,
 		errorList:          make([]ErrorBlock, 0),
 		remainContents:     make([]string, 0),
-		sourceContents:     make([]string, 0),
+		sourceContents:     make([]SourceLine, 0),
 		searchReadContents: map[string]any{},
 		breakTimer:         time.NewTicker(time.Second * 30),
 		lastReceiveTime:    time.Now().Unix(),
@@ -251,12 +264,17 @@ func (h *TShellOut) SetReceiveMsg(shellOut *ShellOut, formatStream func(string) 
 		msg = gstool.StringFilterANSI(msg)
 		msg = strings.Replace(msg, "\u001B", "", -1)
 		//原内容处理
-		shellOut.sourceContents = append(shellOut.sourceContents, gstool.TimeNowUnixToString(``)+` `+msg)
+		lineNumberStr := p_common.TBaseClient.GetUnique(`line`)
+		lineNumber := cast.ToInt64(lineNumberStr[4:]) // 去掉前缀 "line"，保留数字部分
+		shellOut.sourceContents = append(shellOut.sourceContents, SourceLine{
+			LineNumber: lineNumber,
+			Content:    gstool.TimeNowUnixToString(``) + ` ` + msg,
+		})
 		if len(shellOut.sourceContents) > MaxSourceLength {
 			shellOut.sourceContents = shellOut.sourceContents[MaxSourceLength:]
 		}
 		//错误检测
-		h.RegexError(shellOut, msg)
+		h.RegexError(shellOut, msg, lineNumber)
 		//过滤内容处理
 		boolFilter := h.RegexFilter(shellOut, msg)
 		if boolFilter {
@@ -296,7 +314,7 @@ func (h *TShellOut) timeBreakSsh(shellOut *ShellOut) {
 	}
 }
 
-func (h *TShellOut) RegexError(shellOut *ShellOut, msg string) {
+func (h *TShellOut) RegexError(shellOut *ShellOut, msg string, lineNumber int64) {
 	noErrors := h.GetNoErrors(shellOut)
 	for _, regexError := range h.GetRegexErrors(shellOut) {
 		if regexError == `` {
@@ -318,9 +336,9 @@ func (h *TShellOut) RegexError(shellOut *ShellOut, msg string) {
 				}
 			}
 			block := ErrorBlock{
-				Lines:     []string{},
-				ErrorLine: msg,
-				Time:      gstool.TimeNowUnixToString(``),
+				ErrorLine:  msg,
+				LineNumber: lineNumber,
+				Time:       gstool.TimeNowUnixToString(``),
 			}
 			shellOut.errorList = append(shellOut.errorList, block)
 			h.SendErr(shellOut, block)
@@ -407,17 +425,25 @@ func (h *TShellOut) WalkShellList(businessFunc func(uniqueKey string, gsShell *g
 }
 
 // ErrorContext 返回 错误行的上下文
-func (h *TShellOut) ErrorContext(shellClientId string, errorLine string, n int) (lines []string, firstLineNo int) {
+func (h *TShellOut) ErrorContext(shellClientId string, errorLine string, n int) ([]LineContext, int) {
 	h.lock.Lock()
 	defer h.lock.Unlock()
 
 	shellOut, ok := h.ShellOutMap[shellClientId]
 	if !ok || n < 0 {
-		return []string{}, 0
+		return []LineContext{}, 0
 	}
+
+	// 将传入的errorLine（行号）转换为int64
+	targetLineNumber := cast.ToInt64(errorLine)
+	if targetLineNumber == 0 {
+		return []LineContext{}, 0
+	}
+
 	src := shellOut.sourceContents
-	for i, line := range src {
-		if !strings.Contains(line, errorLine) {
+	// 按行号匹配
+	for i, sourceLine := range src {
+		if sourceLine.LineNumber != targetLineNumber {
 			continue
 		}
 
@@ -431,17 +457,24 @@ func (h *TShellOut) ErrorContext(shellClientId string, errorLine string, n int) 
 			end = len(src)
 		}
 
-		lines = make([]string, end-start)
-		copy(lines, src[start:end])
-		firstLineNo = start + 1 // 行号从 1 开始
-		return
+		// 提取上下文内容（带行号）
+		lines := make([]LineContext, end-start)
+		for j := start; j < end; j++ {
+			lines[j-start] = LineContext{
+				LineNumber: src[j].LineNumber,
+				Content:    src[j].Content,
+			}
+		}
+		firstLineNo := int(src[start].LineNumber) // 使用实际行号
+		return lines, firstLineNo
 	}
-	return []string{}, 0
+	return []LineContext{}, 0
 }
 
 type Search struct {
-	Content string //匹配的内容
-	IsRead  bool   //true 已经搜索过
+	LineNumber int64  // 行号
+	Content    string // 匹配的内容
+	IsRead     bool   // true 已经搜索过
 }
 
 // ConnectionInfo 连接信息
@@ -545,21 +578,23 @@ func (h *TShellOut) ShellOutSearchContent(shellClientId string, searchContent st
 		return []Search{}, 0
 	}
 	searchs := make([]Search, 0)
-	gstool.ArrayWalkDesc(shellOut.sourceContents, func(line string) bool {
-		if !strings.Contains(line, searchContent) {
+	gstool.ArrayWalkDesc(shellOut.sourceContents, func(line SourceLine) bool {
+		if !strings.Contains(line.Content, searchContent) {
 			return true
 		}
-		if _, ok := shellOut.searchReadContents[line]; ok {
+		if _, ok := shellOut.searchReadContents[line.Content]; ok {
 			searchs = append(searchs, Search{
-				Content: line,
-				IsRead:  true,
+				LineNumber: line.LineNumber,
+				Content:    line.Content,
+				IsRead:     true,
 			})
 		} else {
 			searchs = append(searchs, Search{
-				Content: line,
-				IsRead:  false,
+				LineNumber: line.LineNumber,
+				Content:    line.Content,
+				IsRead:     false,
 			})
-			shellOut.searchReadContents[line] = nil
+			shellOut.searchReadContents[line.Content] = nil
 		}
 		if len(searchs) > maxNum {
 			return false
