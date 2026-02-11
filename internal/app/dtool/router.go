@@ -304,6 +304,7 @@ func api(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/ApiTakeJsonResult`, controller.ApiTakeJsonResult)
 	tGin.GinPost(`/api/ApiBatchImport`, controller.ApiBatchImport)
 	tGin.GinPost(`/api/FolderDetail`, controller.ApiFolderDetail)
+	tGin.GinPost(`/api/ApiMove`, controller.ApiMoveApi)
 }
 
 func apiUse(tGin *p_gin.Gin) {

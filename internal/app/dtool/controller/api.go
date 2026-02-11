@@ -736,6 +736,64 @@ func processApiItem(c *gin.Context, collectionId, folderId int, apiData map[stri
 	return nil
 }
 
+func ApiMoveApi(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	apiId := cast.ToInt(dataMap[`api_id`])
+	newFolderId := cast.ToInt(dataMap[`folder_id`])
+
+	if apiId == 0 {
+		gsgin.GinResponseError(c, `请选择要移动的接口`, nil)
+		return
+	}
+
+	if newFolderId == 0 {
+		gsgin.GinResponseError(c, `请选择目标文件夹`, nil)
+		return
+	}
+
+	// Check if api exists
+	apiInfo, _ := common.DbMain.Client.QuickQuery(`tbl_api`, `*`, map[string]any{
+		`id`: apiId,
+	}).One()
+	if len(apiInfo) == 0 {
+		gsgin.GinResponseError(c, `接口不存在`, nil)
+		return
+	}
+
+	// Check if target folder exists
+	folderInfo, _ := common.DbMain.Client.QuickQuery(`tbl_api_dir`, `*`, map[string]any{
+		`id`: newFolderId,
+	}).One()
+	if len(folderInfo) == 0 {
+		gsgin.GinResponseError(c, `目标文件夹不存在`, nil)
+		return
+	}
+
+	// Check if target folder belongs to the same collection
+	apiCollectionId := cast.ToInt(apiInfo[`collection_id`])
+	folderCollectionId := cast.ToInt(folderInfo[`collection_id`])
+	if apiCollectionId != folderCollectionId {
+		gsgin.GinResponseError(c, `不能移动到不同集合的文件夹`, nil)
+		return
+	}
+
+	// Update api folder_id
+	_, err := common.DbMain.Client.QuickUpdate(`tbl_api`, map[string]any{
+		`id`: apiId,
+	}, map[string]any{
+		`folder_id`:   newFolderId,
+		`update_time`: time.Now().Unix(),
+	}).Exec()
+
+	if err != nil {
+		gsgin.GinResponseError(c, `移动失败: `+err.Error(), nil)
+		return
+	}
+
+	gsgin.GinResponseSuccess(c, `移动成功`, nil)
+}
+
 func ApiFolderDetail(c *gin.Context) {
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
