@@ -41,6 +41,7 @@ type ShellOut struct {
 	groupId            int            //分组id
 	breakTimer         *time.Ticker
 	lastReceiveTime    int64
+	pendingMsg         string // Buffer for incomplete log lines
 }
 
 // ErrorBlock 错误块
@@ -160,6 +161,7 @@ func (h *TShellOut) GetClient(sshConfig map[string]any, shellClientId string, ss
 		searchReadContents: map[string]any{},
 		breakTimer:         time.NewTicker(time.Second * 30),
 		lastReceiveTime:    time.Now().Unix(),
+		pendingMsg:         ``,
 	}
 	h.SetReceiveMsg(shellOut, formatStream)
 	h.ShellOutMap[shellClientId] = shellOut
@@ -247,6 +249,7 @@ func (h *TShellOut) CleanLog(shellClientId string) {
 		return
 	}
 	shellOut.remainContents = []string{}
+	shellOut.pendingMsg = ``
 }
 
 func (h *TShellOut) SetReceiveMsg(shellOut *ShellOut, formatStream func(string) []string) {
@@ -263,37 +266,58 @@ func (h *TShellOut) SetReceiveMsg(shellOut *ShellOut, formatStream func(string) 
 		}
 		msg = gstool.StringFilterANSI(msg)
 		msg = strings.Replace(msg, "\u001B", "", -1)
-		//原内容处理
-		lineNumberStr := p_common.TBaseClient.GetUnique(`line`)
-		lineNumber := cast.ToInt64(lineNumberStr[4:]) // 去掉前缀 "line"，保留数字部分
-		shellOut.sourceContents = append(shellOut.sourceContents, SourceLine{
-			LineNumber: lineNumber,
-			Content:    gstool.TimeNowUnixToString(``) + ` ` + msg,
-		})
-		if len(shellOut.sourceContents) > MaxSourceLength {
-			shellOut.sourceContents = shellOut.sourceContents[MaxSourceLength:]
-		}
-		//错误检测
-		h.RegexError(shellOut, msg, lineNumber)
-		//过滤内容处理
-		boolFilter := h.RegexFilter(shellOut, msg)
-		if boolFilter {
-			return msg
-		}
-		//保留内容处理
-		shellOut.remainContents = append(shellOut.remainContents, msg)
-		if len(shellOut.remainContents) > MaxRemainLength {
-			shellOut.remainContents = shellOut.remainContents[MaxRemainLength:]
+
+		// Combine with pending message and split by newlines
+		fullMsg := shellOut.pendingMsg + msg
+		lines := strings.Split(fullMsg, "\n")
+
+		// The last part is incomplete (no trailing newline), save it for next message
+		if len(lines) > 0 {
+			shellOut.pendingMsg = lines[len(lines)-1]
+			lines = lines[:len(lines)-1]
 		}
 
-		//推送
-		if formatStream != nil {
-			msgList := formatStream(msg)
-			for _, msg := range msgList {
-				h.SendMsg(shellOut, msg)
+		// Process each complete line
+		for _, line := range lines {
+			if line == "" {
+				continue
 			}
-		} else {
-			h.SendMsg(shellOut, msg)
+
+			// Store original content with line number
+			lineNumberStr := p_common.TBaseClient.GetUnique(`line`)
+			lineNumber := cast.ToInt64(lineNumberStr[4:]) // Remove "line" prefix, keep number
+			shellOut.sourceContents = append(shellOut.sourceContents, SourceLine{
+				LineNumber: lineNumber,
+				Content:    gstool.TimeNowUnixToString(``) + ` ` + line,
+			})
+			if len(shellOut.sourceContents) > MaxSourceLength {
+				shellOut.sourceContents = shellOut.sourceContents[MaxSourceLength:]
+			}
+
+			// Error detection
+			h.RegexError(shellOut, line, lineNumber)
+
+			// Filter processing
+			boolFilter := h.RegexFilter(shellOut, line)
+			if boolFilter {
+				continue
+			}
+
+			// Store filtered content
+			shellOut.remainContents = append(shellOut.remainContents, line)
+			if len(shellOut.remainContents) > MaxRemainLength {
+				shellOut.remainContents = shellOut.remainContents[MaxRemainLength:]
+			}
+
+			// Push to frontend
+			if formatStream != nil {
+				msgList := formatStream(line)
+				for _, formattedMsg := range msgList {
+					h.SendMsg(shellOut, formattedMsg)
+				}
+			} else {
+				h.SendMsg(shellOut, line)
+			}
 		}
 		return msg
 	})
@@ -303,7 +327,6 @@ func (h *TShellOut) timeBreakSsh(shellOut *ShellOut) {
 	for {
 		select {
 		case <-shellOut.breakTimer.C:
-			gstool.FmtPrintlnLogTime(`开始检测 %d %d`, time.Now().Unix(), shellOut.lastReceiveTime)
 			second := time.Now().Unix() - shellOut.lastReceiveTime
 			if second > 30 {
 				if shellOut.Sse != nil {
