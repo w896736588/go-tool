@@ -1,72 +1,101 @@
 <template>
-  <el-drawer v-model="state.drawerHistoryShow" direction="rtl" size="60%">
+  <el-drawer v-model="state.drawerHistoryShow" direction="rtl" size="50%" class="star-drawer">
     <template #header>
-      <h4>收藏key列表</h4>
+      <div class="drawer-header">
+        <el-icon class="header-icon"><Star /></el-icon>
+        <span>收藏 Key 列表</span>
+      </div>
     </template>
     <template #default>
-      <div>
-        <el-input
+      <div class="drawer-content">
+        <div class="search-bar">
+          <el-input
             type="text"
             v-model="state.filterValue"
-            style="width: 91%"
-            placeholder="输入搜索过滤,空格多个条件"
+            placeholder="搜索收藏,空格多个条件"
             @input="filterList"
-        ></el-input>
-        <el-table :data="state.filterStarList" stripe style="width: 100%;">
-          <el-table-column prop="name" label="name" width="300" style="font-size:12px;"/>
-          <el-table-column label="key" >
+            clearable
+            class="search-input"
+          >
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
+        </div>
+        <el-table :data="state.filterStarList" stripe style="width: 100%;" class="star-table">
+          <el-table-column prop="name" label="名称" width="200">
             <template #default="scope">
-              <el-button link type="primary" size="small" @click="CallStarListSearch(scope.row)">
-                {{scope.row.key}}
+              <div class="name-cell">
+                <el-icon class="star-icon"><StarFilled /></el-icon>
+                <span class="name-text">{{ scope.row.name }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="Key" min-width="300">
+            <template #default="scope">
+              <el-button link type="primary" size="small" @click="CallStarListSearch(scope.row)" class="key-link">
+                <el-icon><Key /></el-icon>
+                {{ scope.row.key }}
               </el-button>
             </template>
           </el-table-column>
-          <el-table-column label="op" width="150">
+          <el-table-column label="操作" width="180" fixed="right">
             <template #default="scope">
-              <el-button link type="primary" size="small" @click="copyKey(scope.row.key)">
-                复制
-              </el-button>
-              <el-popconfirm
+              <div class="action-cell">
+                <el-button link type="primary" size="small" @click="copyKey(scope.row.key)">
+                  <el-icon><DocumentCopy /></el-icon>复制
+                </el-button>
+                <el-popconfirm
                   cancel-button-text="取消"
                   confirm-button-text="删除"
                   icon-color="#626AEF"
                   title="确定删除吗?"
                   @confirm="starDelete(scope.row)"
-              >
-                <template #reference>
-                <el-button link type="danger" size="small" >
-                  删除
+                >
+                  <template #reference>
+                    <el-button link type="danger" size="small">
+                      <el-icon><Delete /></el-icon>删除
+                    </el-button>
+                  </template>
+                </el-popconfirm>
+                <el-button link type="primary" size="small" @click="starEdit(scope.row)">
+                  <el-icon><Edit /></el-icon>编辑
                 </el-button>
-                </template>
-              </el-popconfirm>
-              <el-button link type="primary" size="small" @click="starEdit(scope.row)">
-                编辑
-              </el-button>
+              </div>
             </template>
           </el-table-column>
         </el-table>
       </div>
     </template>
     <template #footer>
-      <div style="flex: auto">
+      <div class="drawer-footer">
+        <span class="footer-count">共 {{ state.filterStarList.length }} 条收藏</span>
       </div>
     </template>
   </el-drawer>
 
-  <el-dialog v-model="state.dialogStarCache" title="收藏缓存key" width="500">
-    <el-form :model="state.starForm">
-      <el-form-item label="name" :label-width="80">
-        <el-input v-model="state.starForm.name" autocomplete="off" />
+  <el-dialog v-model="state.dialogStarCache" title="收藏缓存Key" width="450px" class="star-dialog">
+    <el-form :model="state.starForm" label-width="60px" class="star-form">
+      <el-form-item label="名称">
+        <el-input v-model="state.starForm.name" autocomplete="off" placeholder="为收藏命名">
+          <template #prefix>
+            <el-icon><CollectionTag /></el-icon>
+          </template>
+        </el-input>
       </el-form-item>
-      <el-form-item label="key" :label-width="80">
-        <el-input v-model="state.starForm.key" autocomplete="off" />
+      <el-form-item label="Key">
+        <el-input v-model="state.starForm.key" autocomplete="off" placeholder="Redis Key">
+          <template #prefix>
+            <el-icon><Key /></el-icon>
+          </template>
+        </el-input>
       </el-form-item>
     </el-form>
     <template #footer>
       <div class="dialog-footer">
         <el-button @click="state.dialogStarCache = false">取消</el-button>
         <el-button type="primary" @click="starSave">
-          保存
+          <el-icon><Check /></el-icon>保存
         </el-button>
       </div>
     </template>
@@ -74,10 +103,12 @@
 </template>
 <script>
 import {defineExpose , defineComponent , inject , defineEmits , getCurrentInstance , reactive} from 'vue';
+import { Star, StarFilled, Search, Key, DocumentCopy, Delete, Edit, CollectionTag, Check } from '@element-plus/icons-vue';
 import list from '../../utils/base/list'
 import star_api from '../../utils/base/star'
 import copy from '@/utils/base/copy'
 export default defineComponent({
+  components: { Star, StarFilled, Search, Key, DocumentCopy, Delete, Edit, CollectionTag, Check },
   props: {
   },
   data() {
@@ -192,5 +223,117 @@ export default defineComponent({
 })
 </script>
 
-<style >
+<style scoped>
+/* 抽屉样式 */
+.star-drawer :deep(.el-drawer__header) {
+  margin-bottom: 0;
+  padding: 20px;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.drawer-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.header-icon {
+  color: #f59e0b;
+  font-size: 22px;
+}
+
+.drawer-content {
+  padding: 20px;
+}
+
+.search-bar {
+  margin-bottom: 16px;
+}
+
+.search-input {
+  width: 100%;
+}
+
+.search-input :deep(.el-input__wrapper) {
+  border-radius: 10px;
+}
+
+/* 表格样式 */
+.star-table {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.star-table :deep(.el-table__header th) {
+  background: #f5f7fa;
+  color: #606266;
+  font-weight: 600;
+}
+
+.star-table :deep(.el-table__row:hover > td) {
+  background-color: #fffbeb !important;
+}
+
+.name-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.star-icon {
+  color: #f59e0b;
+  font-size: 16px;
+}
+
+.name-text {
+  font-weight: 500;
+  color: #303133;
+}
+
+.key-link {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+}
+
+.action-cell {
+  display: flex;
+  gap: 4px;
+}
+
+/* 抽屉底部 */
+.drawer-footer {
+  padding: 0 20px;
+}
+
+.footer-count {
+  color: #909399;
+  font-size: 13px;
+}
+
+/* 弹窗样式 */
+.star-dialog :deep(.el-dialog) {
+  border-radius: 16px;
+}
+
+.star-dialog :deep(.el-dialog__header) {
+  border-bottom: 1px solid #ebeef5;
+  padding: 16px 20px;
+  margin: 0;
+}
+
+.star-dialog :deep(.el-dialog__body) {
+  padding: 20px;
+}
+
+.star-dialog :deep(.el-dialog__footer) {
+  border-top: 1px solid #ebeef5;
+  padding: 12px 20px;
+}
+
+.star-form :deep(.el-input__wrapper) {
+  border-radius: 8px;
+}
 </style>
