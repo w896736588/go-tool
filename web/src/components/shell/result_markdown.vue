@@ -3,47 +3,49 @@
 </template>
 
 <style scoped>
-
+/* 护眼配色方案 */
 .sticky-textarea-div {
-  background-color: #545c64;
-  color: #fff;
+  background: #282c34;
+  color: #abb2bf;
   white-space: pre-wrap;
   word-break: break-all;
-  padding: 3px;
-  border-radius: 6px;
-  border-left: 3px solid #6a8d73;
-  font-family: 'SF Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
-  font-size: 14px;
-  line-height: 1.6;
+  padding: 16px;
+  border-radius: 8px;
+  border-left: 3px solid #5c6370;
+  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.7;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  font-weight: 300;
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
-  /* 强制显示滚动条 */
-  overflow-y: auto; /* 改为 scroll 强制显示 */
+  -moz-osx-font-smoothing: grayscale;
+  font-weight: 400;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow-y: auto;
   overflow-x: hidden;
   display: block;
-  height:100%;
+  height: 100%;
+  transition: all 0.2s ease;
 }
 
 #showShellResult{
   height : 100%;
 }
 
-/* 更具体的滚动条样式 - 修改为深绿色并去除透明度 */
-:deep(.el-scrollbar__thumb) {
-  background-color: #2e7d32 !important;
+::deep(.el-scrollbar__thumb) {
+  background: #5c6370 !important;
   border-radius: 4px !important;
-  opacity: 1 !important; /* 关键：去除透明度 */
+  opacity: 0.7 !important;
+  transition: opacity 0.2s ease;
 }
 
-:deep(.el-scrollbar__thumb:hover) {
-  background-color: #388e3c !important;
-  opacity: 1 !important; /* 悬停时也保持不透明 */
+::deep(.el-scrollbar__thumb:hover) {
+  background: #6c7280 !important;
+  opacity: 1 !important;
 }
 
-:deep(.el-scrollbar__bar) {
-  background-color: #cccccc !important;
+::deep(.el-scrollbar__bar) {
+  background: #21252b !important;
+  border-radius: 4px;
 }
 
 @keyframes gentle-blink {
@@ -54,8 +56,6 @@
     opacity: 0.3;
   }
 }
-
-
 </style>
 
 <script>

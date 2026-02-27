@@ -26,12 +26,23 @@
             <el-icon><DataLine /></el-icon>运行总览
           </el-button>
         </div>
+        <!-- 本地搜索框 -->
+        <el-input
+          v-model="localSearchKey"
+          placeholder="搜索名称/命令，空格多条件"
+          class="search-input"
+          clearable
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
       </div>
     </div>
 
     <!-- 执行卡片列表 -->
     <template v-for="tab in tabConfigList" :key="tab.id">
-      <div v-if="getExecutionInfo(tab.id) && (!chooseGroupId || parseInt(chooseGroupId) === -1 || Number(tab.group_id) === Number(chooseGroupId))" class="execution-card">
+      <div v-if="getExecutionInfo(tab.id) && (!chooseGroupId || parseInt(chooseGroupId) === -1 || Number(tab.group_id) === Number(chooseGroupId)) && matchSearch(tab)" class="execution-card">
         <div class="card-header">
           <div class="card-info">
             <el-tag class="tab-id-tag">#{{ tab.id }}</el-tag>
@@ -110,7 +121,7 @@
 
 <script>
 /* 以下 import 保持你原来的即可 */
-import { Plus, FolderOpened, DataLine, Edit, CopyDocument, Delete, Position, CollectionTag, Check, Terminal } from '@element-plus/icons-vue';
+import { Plus, FolderOpened, DataLine, Edit, CopyDocument, Delete, Position, CollectionTag, Check, Terminal, Search } from '@element-plus/icons-vue';
 import base from '@/utils/base.js'
 import sse from '@/utils/base/sse'
 import shell from '@/utils/base/shell'
@@ -146,6 +157,7 @@ export default {
     CollectionTag,
     Check,
     Terminal,
+    Search,
   },
   data() {
     return {
@@ -173,6 +185,8 @@ export default {
       groupList: [], //分组列表
       groupType: `6`,
       urlParams: {},
+      // local search
+      localSearchKey: '',
     }
   },
   mounted() {
@@ -196,6 +210,23 @@ export default {
 
   },
   methods: {
+    // Local search filter
+    matchSearch: function (tab) {
+      let _that = this
+      if (!_that.localSearchKey || _that.localSearchKey.trim() === '') {
+        return true
+      }
+      let keywords = _that.localSearchKey.trim().split(/\s+/)
+      for (let keyword of keywords) {
+        if (keyword === '') continue
+        let lowerKeyword = keyword.toLowerCase()
+        if ((tab.name && tab.name.toLowerCase().indexOf(lowerKeyword) !== -1) ||
+            (tab.command && tab.command.toLowerCase().indexOf(lowerKeyword) !== -1)) {
+          return true
+        }
+      }
+      return false
+    },
     openNewTab : function(tab){
       let url = window.location.origin +'/#/fullpage?group_id=' +this.chooseGroupId+'&id='+tab.id+'&title=' + tab.name
       window.open(url, '_blank');
@@ -553,6 +584,18 @@ export default {
 
 .action-buttons .el-button--success:hover {
   background: linear-gradient(135deg, #85ce61 0%, #67c23a 100%);
+}
+
+.search-input {
+  flex: 1;
+  max-width: 300px;
+  min-width: 200px;
+}
+
+.search-input :deep(.el-input__wrapper) {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 /* 执行卡片 */
