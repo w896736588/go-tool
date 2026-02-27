@@ -59,8 +59,7 @@
 </template>
 
 <script>
-import { ref, computed, nextTick, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import module from '@/utils/module'
 import commandConfig from '@/config/commandConfig.js'
 import ssh from '@/utils/base/ssh_set'
@@ -69,11 +68,12 @@ import compose from '@/utils/base/compose'
 import supervisor from '@/utils/base/supervisor'
 import shellOut from '@/utils/base/shell_out'
 import store from '@/utils/base/store'
+import sseDistribute from '@/utils/base/sse_distribute'
+import { Throttle_string } from '@/utils/base/throttle_string'
 
 export default {
   name: 'Dashboard',
   setup() {
-    const router = useRouter()
     const inputText = ref('')
     const messages = ref([])
     const showCommands = ref(false)
@@ -87,6 +87,11 @@ export default {
     const selectedTarget = ref(null) // 已选择的目标
     const dynamicDataCache = ref({}) // 动态数据缓存
     const isLoadingDynamic = ref(false) // 是否正在加载动态数据
+    
+    // SSE 相关状态
+    const sseDistributeId = ref('') // SSE 分发 ID
+    const isExecuting = ref(false) // 是否正在执行命令
+    const currentOutputMessage = ref(null) // 当前输出消息的引用
 
     // 开放的模块列表
     const openModules = module.GetOpenModuleList()
@@ -496,6 +501,9 @@ export default {
 
     // 选择命令
     const selectCommand = (cmd) => {
+      console.log('selectCommand called:', cmd)
+      console.log('commandStack before push:', JSON.stringify(commandStack.value.map(c => c.name || c.command)))
+      
       // 构建新的输入文本
       const parts = inputText.value.split(' ')
       parts[parts.length - 1] = cmd.command || cmd.name
@@ -504,6 +512,8 @@ export default {
       const parentCmd = commandStack.value.length > 0 
         ? commandStack.value[commandStack.value.length - 1] 
         : null
+      
+      console.log('parentCmd:', parentCmd ? parentCmd.name || parentCmd.command : null)
       
       // 添加到命令栈
       commandStack.value.push(cmd)
@@ -521,40 +531,56 @@ export default {
       
       // 检查是否需要继续
       if (cmd.children && cmd.children.length > 0) {
+        // 有子命令，显示子命令列表
         currentChildren.value = cmd.children
         activeCommandIndex.value = 0
-      } else if (cmd.dynamicChildren) {
+        return
+      }
+      
+      if (cmd.dynamicChildren) {
+        // 需要加载动态数据
         loadDynamicChildren(cmd.dynamicChildren, cmd)
         activeCommandIndex.value = 0
-      } else if (cmd.needTarget) {
-        // 需要选择目标，保持下拉框打开
+        return
+      }
+      
+      if (cmd.needTarget) {
+        // 需要选择目标，保持下拉框打开（等待动态数据加载）
         activeCommandIndex.value = 0
-      } else if (cmd.needInput) {
+        return
+      }
+      
+      if (cmd.needInput) {
         // 需要输入，等待用户输入
         showCommands.value = false
-      } else if (cmd.path) {
-        // 有路径，直接跳转
-        inputText.value = ''
-        showCommands.value = false
-        commandStack.value = []
-        currentChildren.value = []
-        router.push(cmd.path)
-      } else if (cmd.action) {
-        // 有动作，执行动作
-        executeAction(cmd)
-      } else {
-        // 默认行为：如果有父命令的路径，跳转
-        const grandParentCmd = commandStack.value.length > 2 
-          ? commandStack.value[commandStack.value.length - 3] 
-          : null
-        if (grandParentCmd && grandParentCmd.path) {
-          inputText.value = ''
-          showCommands.value = false
-          commandStack.value = []
-          currentChildren.value = []
-          router.push(grandParentCmd.path)
-        }
+        return
       }
+      
+      if (cmd.action) {
+        // 有动作，执行动作
+        console.log('executing action:', cmd.action)
+        executeAction(cmd)
+        return
+      }
+      
+      // 选择的是目标（项目/环境等），检查父命令是否有 action
+      if (cmd.data && parentCmd && parentCmd.action) {
+        console.log('executing parent action:', parentCmd.action)
+        executeAction(parentCmd)
+        return
+      }
+      
+      // 没有可执行的操作，提示用户
+      console.log('no action found, showing message')
+      messages.value.push({
+        type: 'system',
+        content: `命令 "${cmd.name}" 暂不支持快捷操作\n`
+      })
+      inputText.value = ''
+      showCommands.value = false
+      commandStack.value = []
+      currentChildren.value = []
+      scrollToBottom()
     }
 
     // 执行命令
@@ -568,14 +594,17 @@ export default {
           executeAction(lastCmd)
           return
         }
-        if (lastCmd.path) {
-          router.push(lastCmd.path)
-          inputText.value = ''
-          showCommands.value = false
-          commandStack.value = []
-          currentChildren.value = []
-          return
-        }
+        // 没有可执行的动作
+        messages.value.push({
+          type: 'system',
+          content: `命令 "${lastCmd.name}" 暂不支持快捷操作\n`
+        })
+        inputText.value = ''
+        showCommands.value = false
+        commandStack.value = []
+        currentChildren.value = []
+        scrollToBottom()
+        return
       }
 
       // 普通消息
@@ -587,7 +616,7 @@ export default {
       setTimeout(() => {
         messages.value.push({
           type: 'system',
-          content: `已收到命令: ${inputText.value}`
+          content: `未知命令，请使用 / 开头访问快捷操作`
         })
         scrollToBottom()
       }, 300)
@@ -601,22 +630,145 @@ export default {
 
     // 执行动作
     const executeAction = (cmd) => {
-      messages.value.push({
-        type: 'system',
-        content: `执行操作: ${cmd.name}`
-      })
-      
-      // 这里可以根据 cmd.action 执行具体操作
-      // 目前简化处理，跳转到对应页面
-      const parentCmd = commandStack.value.find(c => c.path)
-      if (parentCmd) {
-        router.push(parentCmd.path)
+      if (isExecuting.value) {
+        messages.value.push({
+          type: 'system',
+          content: '正在执行其他命令，请稍候...'
+        })
+        return
       }
       
+      // 创建输出消息
+      const outputMsg = {
+        type: 'system',
+        content: `执行操作: ${cmd.name}\n\n`
+      }
+      messages.value.push(outputMsg)
+      currentOutputMessage.value = outputMsg
+      isExecuting.value = true
+      
+      // 清理输入状态
       inputText.value = ''
       showCommands.value = false
+      const currentStack = [...commandStack.value]
       commandStack.value = []
       currentChildren.value = []
+      scrollToBottom()
+      
+      // 根据 action 执行具体操作
+      switch (cmd.action) {
+        case 'gitPull':
+          executeGitAction('pull', cmd, currentStack)
+          break
+        case 'gitStatus':
+          executeGitAction('status', cmd, currentStack)
+          break
+        case 'gitBranch':
+          executeGitAction('branch', cmd, currentStack)
+          break
+        case 'gitLog':
+          executeGitAction('log', cmd, currentStack)
+          break
+        case 'gitCheckout':
+          executeGitAction('checkout', cmd, currentStack)
+          break
+        default:
+          // 未实现的操作
+          currentOutputMessage.value.content += '该操作暂未实现\n'
+          finishExecution()
+      }
+    }
+    
+    // 执行 Git 相关操作
+    const executeGitAction = (action, cmd, stack) => {
+      // 获取选中的 git 项目配置
+      const projectCmd = stack.find(c => c.data && c.data.id)
+      if (!projectCmd || !projectCmd.data) {
+        currentOutputMessage.value.content += '错误：未找到 Git 项目配置\n'
+        finishExecution()
+        return
+      }
+      
+      // 每次操作生成新的 SSE 分发 ID，确保使用新的连接
+      const newSseDistributeId = sseDistribute.GetSseDistributeId('dashboard_git_' + Date.now())
+      
+      // 注册当前操作的 SSE 回调
+      const throttleStringFunc = new Throttle_string(50, (text) => {
+        if (currentOutputMessage.value) {
+          currentOutputMessage.value.content += text
+          if (currentOutputMessage.value.content.length > 50000) {
+            currentOutputMessage.value.content = currentOutputMessage.value.content.slice(-50000)
+          }
+          scrollToBottom()
+        }
+      })
+      
+      sseDistribute.RegisterReceive(newSseDistributeId, (msg, msgType, sseDistributeId) => {
+        throttleStringFunc.update(msg)
+      })
+      
+      const gitConfig = {
+        ...projectCmd.data,
+        sse_distribute_id: newSseDistributeId
+      }
+      
+      // 处理 HTTP 响应的回调
+      const callback = (response) => {
+        // 取消注册 SSE 回调
+        sseDistribute.UnRegisterReceive(newSseDistributeId)
+        
+        if (response.ErrCode !== 0) {
+          currentOutputMessage.value.content += `错误: ${response.ErrMsg || '未知错误'}\n`
+        } else if (response.Data) {
+          // 显示返回的数据
+          currentOutputMessage.value.content += response.Data
+        }
+        setTimeout(() => {
+          finishExecution()
+        }, 500)
+      }
+      
+      switch (action) {
+        case 'pull':
+          currentOutputMessage.value.content += '正在拉取代码...\n\n'
+          git.GitPullBranchOrigin(gitConfig, callback)
+          break
+        case 'status':
+          currentOutputMessage.value.content += '正在查询状态...\n\n'
+          git.GitQueryStatus(gitConfig, callback)
+          break
+        case 'branch':
+          currentOutputMessage.value.content += '正在查询分支...\n\n'
+          git.GitCurrentBranch(gitConfig, callback)
+          break
+        case 'log':
+          currentOutputMessage.value.content += '正在查询日志...\n\n'
+          git.GitCommitLog(gitConfig, callback)
+          break
+        case 'checkout':
+          // 需要分支名
+          const branchName = stack.find(c => c.needInput)?.inputValue || ''
+          if (!branchName) {
+            currentOutputMessage.value.content += '错误：请输入分支名\n'
+            finishExecution()
+            return
+          }
+          currentOutputMessage.value.content += `正在切换到分支 ${branchName}...\n\n`
+          git.GitChangeBranch(gitConfig, branchName, callback)
+          break
+        default:
+          sseDistribute.UnRegisterReceive(newSseDistributeId)
+          finishExecution()
+      }
+    }
+    
+    // 完成执行
+    const finishExecution = () => {
+      isExecuting.value = false
+      if (currentOutputMessage.value) {
+        currentOutputMessage.value.content += '\n[完成]\n'
+      }
+      currentOutputMessage.value = null
       scrollToBottom()
     }
 
@@ -629,8 +781,51 @@ export default {
       })
     }
 
+    // 初始化 SSE 连接
+    const initSseConnection = () => {
+      sseDistributeId.value = sseDistribute.GetSseDistributeId('dashboard')
+      
+      // 检查是否已存在 SSE 连接，如果不存在则创建
+      const existingClientId = sseDistribute.GetSseClientId()
+      if (!existingClientId) {
+        // 创建 SSE 连接
+        sseDistribute.Create()
+        sseDistribute.ReceiveMessage()
+        
+        sseDistribute.OpenFunc(() => {
+          console.log('SSE 连接已建立')
+        })
+        
+        sseDistribute.ErrorFunc((err) => {
+          console.log('SSE 连接错误', err)
+        })
+      }
+      
+      // 注册消息回调（用于通用的 dashboard 消息）
+      const throttleStringFunc = new Throttle_string(50, (text) => {
+        if (currentOutputMessage.value) {
+          currentOutputMessage.value.content += text
+          // 限制最大长度
+          if (currentOutputMessage.value.content.length > 50000) {
+            currentOutputMessage.value.content = currentOutputMessage.value.content.slice(-50000)
+          }
+          scrollToBottom()
+        }
+      })
+      
+      sseDistribute.RegisterReceive(sseDistributeId.value, (msg, msgType, sseDistributeId) => {
+        throttleStringFunc.update(msg)
+      })
+    }
+
     onMounted(() => {
       inputRef.value?.focus()
+      initSseConnection()
+    })
+    
+    onUnmounted(() => {
+      // 只取消注册回调，不关闭 SSE 连接（其他页面可能还在使用）
+      sseDistribute.UnRegisterReceive(sseDistributeId.value)
     })
 
     return {
