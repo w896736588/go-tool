@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="dashboard-container">
     <div class="chat-container">
       <!-- 消息列表区域 -->
@@ -17,7 +17,7 @@
             <div v-if="msg.resultText" class="message-content">{{ msg.resultText }}</div>
             <div v-if="msg.processText" class="process-window">
               <div class="process-title">执行过程 (SSE)</div>
-              <pre class="process-text">{{ msg.processText }}</pre>
+              <div class="process-text markdown-body" v-html="renderProcessMarkdown(msg.processText)"></div>
             </div>
           </template>
           <div v-else class="message-content">{{ msg.content }}</div>
@@ -38,12 +38,9 @@
         >
           <span class="command-icon">{{ cmd.icon }}</span>
           <span class="command-name">{{ cmd.name }}</span>
-          <div class="command-meta">
-            <span class="command-desc">{{ cmd.desc }}</span>
-            <span v-if="getCommandMatchHint(cmd)" class="command-match-hint">
-              匹配: {{ getCommandMatchHint(cmd) }}
-            </span>
-          </div>
+          <span class="command-desc">
+            {{ cmd.desc }}<template v-if="getCommandMatchHint(cmd)"> | 匹配: {{ getCommandMatchHint(cmd) }}</template>
+          </span>
           <span v-if="cmd.children || cmd.needTarget" class="command-arrow">→</span>
         </div>
       </div>
@@ -80,6 +77,8 @@
 
 <script>
 import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import module from '@/utils/module'
 import commandConfig from '@/config/commandConfig.js'
 import ssh from '@/utils/base/ssh_set'
@@ -94,6 +93,11 @@ import { Throttle_string } from '@/utils/base/throttle_string'
 export default {
   name: 'DashboardPage',
   setup() {
+    marked.setOptions({
+      gfm: true,
+      breaks: true
+    })
+
     const inputText = ref('')
     const messages = ref([])
     const showCommands = ref(false)
@@ -165,6 +169,20 @@ export default {
       return `idx:${index}`
     }
 
+    const isSameCommandItem = (a, b) => {
+      if (!a || !b) return false
+      const aId = normalizeCommandPart(a.id)
+      const bId = normalizeCommandPart(b.id)
+      if (aId && bId) {
+        return aId === bId
+      }
+      const aCmd = normalizeCommandPart(a.command || a.name).toLowerCase()
+      const bCmd = normalizeCommandPart(b.command || b.name).toLowerCase()
+      const aPath = normalizeCommandPart(a.path).toLowerCase()
+      const bPath = normalizeCommandPart(b.path).toLowerCase()
+      return aCmd !== '' && aCmd === bCmd && aPath === bPath
+    }
+
     const parseTokens = (rawText) => {
       const text = String(rawText || '')
       const leftTrimmed = text.trimStart()
@@ -181,6 +199,12 @@ export default {
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
+    }
+
+    const renderProcessMarkdown = (text) => {
+      const raw = String(text || '')
+      const html = marked.parse(raw)
+      return DOMPurify.sanitize(html)
     }
 
     const hasCommandLayout = (msg) => {
@@ -484,13 +508,26 @@ export default {
             const targetToken = parts[i + 1]
             if (targetToken) {
               const targetFound = findCommandByToken(dynamicList, targetToken)
-              if (targetFound) {
+              // 仅在“已确认目标”的场景进入下一层：
+              // 1) 有尾随空格；2) 目标后还有其他 token（例如继续输入参数）
+              const targetIsConfirmed = hasTrailingSpace || (parts.length > i + 2)
+              if (targetFound && targetIsConfirmed) {
                 commandStack.value.push(targetFound)
                 i += 1
-                currentChildren.value = []
+                if (found.nextDynamicChildren) {
+                  // 例如 docker quick-restart/quick-stop：选完项目后继续选择服务
+                  loadDynamicChildren(found.nextDynamicChildren)
+                  currentChildren.value = dynamicDataCache.value[found.nextDynamicChildren] || []
+                  showCommands.value = true
+                } else {
+                  currentChildren.value = []
+                }
                 if (found.needInput) {
                   currentInputValue.value = parts.slice(i + 1).join(' ')
                 }
+              } else if (targetFound && !targetIsConfirmed) {
+                // 未确认选择时，保持在目标候选列表，允许继续匹配（如 chatwiki_dev -> chatwiki_dev12）
+                currentChildren.value = dynamicList
               } else if (found.needInput && parts.length > i + 1) {
                 currentInputValue.value = parts.slice(i + 1).join(' ')
               }
@@ -595,6 +632,19 @@ export default {
       compose.DockerComposeList({ ssh_id: sshId }, (response) => {
         isLoadingDynamic.value = false
         if (response.ErrCode === 0) {
+          const normalizeDockerDefaultServices = (item) => {
+            if (Array.isArray(item?.default_service_list) && item.default_service_list.length > 0) {
+              return item.default_service_list
+                .map(s => normalizeCommandPart(s))
+                .filter(Boolean)
+            }
+            const raw = normalizeCommandPart(item?.default_service)
+            if (!raw) return []
+            return raw
+              .split(',')
+              .map(s => normalizeCommandPart(s))
+              .filter(Boolean)
+          }
           const list = response.Data.list.map(item => ({
             command: item.name,
             name: item.name,
@@ -602,10 +652,11 @@ export default {
             id: item.id,
             data: item,
             // 保存 default_service_list 用于快速重启/停止
-            default_service_list: item.default_service_list || []
+            default_service_list: normalizeDockerDefaultServices(item)
           }))
           dynamicDataCache.value['dockerComposeList'] = list
           currentChildren.value = list
+          refreshCommandDropdownVisibility()
         }
       })
     }
@@ -626,6 +677,7 @@ export default {
         dynamicDataCache.value['dockerServiceList'] = list
         currentChildren.value = list
         isLoadingDynamic.value = false
+        refreshCommandDropdownVisibility()
       } else {
         // 如果没有找到项目信息，尝试从缓存的 dockerComposeList 中查找
         const cachedList = dynamicDataCache.value['dockerComposeList']
@@ -648,6 +700,7 @@ export default {
           }
         }
         isLoadingDynamic.value = false
+        refreshCommandDropdownVisibility()
       }
     }
 
@@ -892,8 +945,13 @@ export default {
         ? commandStack.value[commandStack.value.length - 1] 
         : null
 
-      // 添加到命令栈
-      commandStack.value.push(cmd)
+      // 添加到命令栈（避免重复追加同一个候选，防止出现 "dev8 dev8"）
+      const stackLast = commandStack.value.length > 0
+        ? commandStack.value[commandStack.value.length - 1]
+        : null
+      if (!isSameCommandItem(stackLast, cmd)) {
+        commandStack.value.push(cmd)
+      }
       
       // 更新输入文本
       const tokenInfo = parseTokens(inputText.value)
@@ -1079,6 +1137,33 @@ export default {
       
       // 根据 action 执行具体操作
       switch (cmd.action) {
+        case 'dockerServices':
+          executeDockerAction('services', currentStack)
+          break
+        case 'dockerStatus':
+          executeDockerAction('status', currentStack)
+          break
+        case 'dockerUp':
+          executeDockerAction('up', currentStack)
+          break
+        case 'dockerRestart':
+          executeDockerAction('restart', currentStack)
+          break
+        case 'dockerStop':
+          executeDockerAction('stop', currentStack)
+          break
+        case 'dockerConfig':
+          executeDockerAction('config', currentStack)
+          break
+        case 'dockerEnv':
+          executeDockerAction('env', currentStack)
+          break
+        case 'dockerQuickRestart':
+          executeDockerAction('quickRestart', currentStack)
+          break
+        case 'dockerQuickStop':
+          executeDockerAction('quickStop', currentStack)
+          break
         case 'gitPull':
           executeGitAction('pull', currentStack, options.inputValue || '')
           break
@@ -1119,6 +1204,187 @@ export default {
           appendOutputResult('该操作暂未实现\n')
           finishExecution()
       }
+    }
+
+    const getDockerSshId = (callback) => {
+      const cachedSshId = normalizeCommandPart(store.getStore('dockerChooseSshId'))
+      if (cachedSshId) {
+        callback(cachedSshId)
+        return
+      }
+      ssh.SshList((response) => {
+        if (response.ErrCode === 0 && Array.isArray(response.Data) && response.Data.length > 0) {
+          const firstSshId = normalizeCommandPart(response.Data[0].id)
+          if (firstSshId) {
+            store.setStore('dockerChooseSshId', firstSshId)
+            callback(firstSshId)
+            return
+          }
+        }
+        callback('')
+      })
+    }
+
+    const toMarkdownTable = (headers, rows) => {
+      const safeCell = (v) => String(v === undefined || v === null ? '' : v).replace(/\|/g, '\\|').replace(/\n/g, ' ')
+      const headerLine = `| ${headers.join(' | ')} |`
+      const splitLine = `| ${headers.map(() => '---').join(' | ')} |`
+      const bodyLines = rows.map(row => `| ${row.map(safeCell).join(' | ')} |`)
+      return [headerLine, splitLine, ...bodyLines].join('\n')
+    }
+
+    const executeDockerAction = (action, stack) => {
+      const actionCmd = stack.find(item => item.action && String(item.action).startsWith('docker'))
+      const actionIndex = stack.findIndex(item => item.action && String(item.action).startsWith('docker'))
+      const composeCmd = actionIndex >= 0 ? stack[actionIndex + 1] : null
+      const serviceCmd = actionIndex >= 0 ? stack[actionIndex + 2] : null
+
+      if (!composeCmd || !composeCmd.data) {
+        appendOutputResult('错误：未找到 Docker 项目配置\n')
+        finishExecution()
+        return
+      }
+
+      getDockerSshId((sshId) => {
+        if (!sshId) {
+          appendOutputResult('错误：未找到可用 SSH 环境，请先在 /Docker 页面选择环境\n')
+          finishExecution()
+          return
+        }
+
+        const newSseDistributeId = sseDistribute.GetSseDistributeId('dashboard_docker_' + Date.now())
+        const throttleStringFunc = new Throttle_string(50, (text) => {
+          if (currentOutputMessage.value) {
+            appendOutputProcess(text)
+          }
+        })
+        sseDistribute.RegisterReceive(newSseDistributeId, (msg) => {
+          throttleStringFunc.update(msg)
+        })
+
+        const composeData = composeCmd.data || {}
+        const basePayload = {
+          ssh_id: sshId,
+          id: composeData.id,
+          sse_distribute_id: newSseDistributeId
+        }
+
+        const done = (response, renderer) => {
+          if (response.ErrCode !== 0) {
+            appendOutputResult(`错误: ${response.ErrMsg || '未知错误'}\n`)
+          } else {
+            renderer(response)
+          }
+          setTimeout(() => {
+            sseDistribute.UnRegisterReceive(newSseDistributeId)
+            finishExecution()
+          }, 1200)
+        }
+
+        switch (action) {
+          case 'up':
+            appendOutputResult(`正在启动项目 ${composeCmd.name}...\n\n`)
+            compose.DockerComposeStart(basePayload, (response) => done(response, () => appendOutputResult('启动完成\n')))
+            break
+          case 'restart':
+            appendOutputResult(`正在重启项目 ${composeCmd.name}...\n\n`)
+            compose.DockerComposeRestart(basePayload, (response) => done(response, () => appendOutputResult('重启完成\n')))
+            break
+          case 'stop':
+            appendOutputResult(`正在停止项目 ${composeCmd.name}...\n\n`)
+            compose.DockerComposeStop(basePayload, (response) => done(response, () => appendOutputResult('停止完成\n')))
+            break
+          case 'config':
+            appendOutputResult(`正在查看 ${composeCmd.name} 的 compose 配置...\n\n`)
+            compose.DockerComposeConfigShow({
+              ssh_id: sshId,
+              config_path: composeData.compose_yml_path,
+              sse_distribute_id: newSseDistributeId
+            }, (response) => done(response, (res) => appendOutputResult(`${res.Data || ''}\n`)))
+            break
+          case 'env':
+            {
+              const envFile = normalizeCommandPart(composeData.env_file) || String(composeData.compose_yml_path || '').replace(/\/[^/]+\.yml$/, '/.env')
+              if (!envFile) {
+                appendOutputResult('错误：未找到 .env 路径\n')
+                sseDistribute.UnRegisterReceive(newSseDistributeId)
+                finishExecution()
+                return
+              }
+              appendOutputResult(`正在查看 ${composeCmd.name} 的 env 配置...\n\n`)
+              compose.DockerComposeConfigShow({
+                ssh_id: sshId,
+                config_path: envFile,
+                sse_distribute_id: newSseDistributeId
+              }, (response) => done(response, (res) => appendOutputResult(`${res.Data || ''}\n`)))
+            }
+            break
+          case 'services':
+            appendOutputResult(`正在查询 ${composeCmd.name} 的服务列表...\n\n`)
+            compose.DockerComposeServices(basePayload, (response) => done(response, (res) => {
+              const services = (res.Data && Array.isArray(res.Data.services)) ? res.Data.services : []
+              if (services.length === 0) {
+                appendOutputResult('暂无服务\n')
+                return
+              }
+              const table = toMarkdownTable(['服务名'], services.map(s => [s]))
+              appendOutputResult(`${table}\n`)
+            }))
+            break
+          case 'status':
+            appendOutputResult(`正在查询 ${composeCmd.name} 的运行状态...\n\n`)
+            compose.DockerComposeStatus(basePayload, (response) => done(response, (res) => {
+              const statusList = (res.Data && Array.isArray(res.Data.status)) ? res.Data.status : []
+              if (statusList.length === 0) {
+                appendOutputResult('暂无状态数据\n')
+                return
+              }
+              const table = toMarkdownTable(
+                ['名称', 'CPU', '内存', '内存%', '网络IO', '磁盘IO'],
+                statusList.map(item => [
+                  item.NAME || '',
+                  item['CPU %'] || '',
+                  item['MEM USAGE / LIMIT'] || '',
+                  item['MEM %'] || '',
+                  item['NET I/O'] || '',
+                  item['BLOCK I/O'] || ''
+                ])
+              )
+              appendOutputResult(`${table}\n`)
+            }))
+            break
+          case 'quickRestart':
+            {
+              const service = serviceCmd && serviceCmd.data ? serviceCmd.data.service : ''
+              if (!service) {
+                appendOutputResult('错误：请先选择要重启的服务\n')
+                sseDistribute.UnRegisterReceive(newSseDistributeId)
+                finishExecution()
+                return
+              }
+              appendOutputResult(`正在快速重启服务 ${service}...\n\n`)
+              compose.DockerComposeRestart({ ...basePayload, service }, (response) => done(response, () => appendOutputResult('快速重启完成\n')))
+            }
+            break
+          case 'quickStop':
+            {
+              const serviceStop = serviceCmd && serviceCmd.data ? serviceCmd.data.service : ''
+              if (!serviceStop) {
+                appendOutputResult('错误：请先选择要停止的服务\n')
+                sseDistribute.UnRegisterReceive(newSseDistributeId)
+                finishExecution()
+                return
+              }
+              appendOutputResult(`正在快速停止服务 ${serviceStop}...\n\n`)
+              compose.DockerComposeStop({ ...basePayload, service: serviceStop }, (response) => done(response, () => appendOutputResult('快速停止完成\n')))
+            }
+            break
+          default:
+            sseDistribute.UnRegisterReceive(newSseDistributeId)
+            appendOutputResult('该 Docker 操作暂未实现\n')
+            finishExecution()
+        }
+      })
     }
 
     const executeGitGroupBranchAction = (stack) => {
@@ -1357,6 +1623,7 @@ export default {
       executeCommand,
       getCommandKey,
       getCommandMatchHint,
+      renderProcessMarkdown,
       hasCommandLayout,
     }
   }
@@ -1375,7 +1642,6 @@ export default {
 
 .chat-container {
   width: 100%;
-  max-width: 800px;
   height: 70vh;
   background: #fff;
   border-radius: 12px;
@@ -1446,14 +1712,14 @@ export default {
 }
 
 .message-command {
-  font-size: 13px;
+  font-size: 12px;
   color: #5a8a5a;
   margin-bottom: 8px;
   padding: 0 4px;
 }
 
 .message-content {
-  padding: 12px 16px;
+  padding: 6px 12px;
   border-radius: 12px;
   line-height: 1.5;
   white-space: pre-wrap;
@@ -1489,6 +1755,54 @@ export default {
   font-family: Consolas, Monaco, 'Courier New', monospace;
 }
 
+.process-text.markdown-body {
+  color: #d8e0d2;
+  background: transparent;
+}
+
+.process-text.markdown-body :deep(*) {
+  color: #d8e0d2;
+}
+
+.process-text.markdown-body :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  background: transparent;
+}
+
+.process-text.markdown-body :deep(th),
+.process-text.markdown-body :deep(td) {
+  border: 1px solid #3a3a34;
+  padding: 4px 6px;
+}
+
+.process-text.markdown-body :deep(th) {
+  background: #2a2a25;
+}
+
+.process-text.markdown-body :deep(td) {
+  background: transparent;
+}
+
+.process-text.markdown-body :deep(hr) {
+  background-color: #3a3a34;
+  border: 0;
+  height: 1px;
+}
+
+.process-text.markdown-body :deep(code) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.process-text.markdown-body :deep(pre) {
+  background: #2a2a25;
+  border: 1px solid #3a3a34;
+}
+
+.process-text.markdown-body :deep(a) {
+  color: #9cc5ff;
+}
+
 .message.user .message-content {
   background: linear-gradient(135deg, #7cb87c 0%, #8fc88f 100%);
   color: #fff;
@@ -1508,7 +1822,7 @@ export default {
   background: #fff;
   border: 1px solid #e0e0d8;
   border-radius: 10px;
-  max-height: 300px;
+  max-height: 450px;
   overflow-y: auto;
   z-index: 100;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
@@ -1517,10 +1831,12 @@ export default {
 .command-item {
   display: flex;
   align-items: center;
-  padding: 12px 16px;
+  padding: 6px 12px;
   cursor: pointer;
   transition: background 0.15s;
   border-bottom: 1px solid #f0f0e8;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .command-item:last-child {
@@ -1533,34 +1849,27 @@ export default {
 }
 
 .command-icon {
-  font-size: 18px;
-  margin-right: 12px;
-  width: 24px;
+  font-size: 16px;
+  margin-right: 8px;
+  width: 20px;
   text-align: center;
 }
 
 .command-name {
   font-weight: 500;
   color: #4a4a4a;
-  margin-right: 12px;
-  min-width: 80px;
-}
-
-.command-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  flex: 1;
+  margin-right: 8px;
+  min-width: 70px;
+  flex-shrink: 0;
 }
 
 .command-desc {
   color: #8a8a7a;
-  font-size: 13px;
-}
-
-.command-match-hint {
-  color: #6a7f6a;
   font-size: 12px;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .command-arrow {
@@ -1577,7 +1886,7 @@ export default {
 }
 
 .breadcrumb-text {
-  font-size: 13px;
+  font-size: 12px;
   color: #5a8a5a;
   font-weight: 500;
 }
@@ -1606,6 +1915,7 @@ export default {
 .input-overlay-box {
   position: relative;
   flex: 1;
+  overflow: hidden;
 }
 
 .input-highlight-layer {
@@ -1613,7 +1923,7 @@ export default {
   inset: 0;
   pointer-events: none;
   display: block;
-  padding: 12px 16px;
+  padding: 6px 12px;
   font-size: 15px;
   line-height: normal;
   font-family: inherit;
@@ -1628,7 +1938,7 @@ export default {
   flex: 1;
   background: transparent;
   border: none;
-  padding: 12px 16px;
+  padding: 6px 12px;
   font-size: 15px;
   line-height: normal;
   font-family: inherit;

@@ -28,13 +28,17 @@ const commandConfig = [
         command: 'ps',
         name: '服务列表',
         desc: '查看服务列表',
-        action: 'dockerServices'
+        action: 'dockerServices',
+        needTarget: true,
+        dynamicChildren: 'dockerComposeList'
       },
       {
         command: 'status',
         name: '运行状态',
         desc: '查看运行状态',
-        action: 'dockerStatus'
+        action: 'dockerStatus',
+        needTarget: true,
+        dynamicChildren: 'dockerComposeList'
       },
       {
         command: 'up',

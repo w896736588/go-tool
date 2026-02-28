@@ -328,14 +328,34 @@ func GitGroupBranchList(c *gin.Context) {
 
 			if itemPath == `` || sshId == `` {
 				itemResult[`error`] = `缺少 code_path 或 ssh_id 配置`
-				resultChan <- gitItemResult{Index: i, Data: itemResult, Line: fmt.Sprintf("%s | %s | 失败: %s", itemName, itemPath, itemResult[`error`])}
+				resultChan <- gitItemResult{
+					Index: i,
+					Data:  itemResult,
+					Line: fmt.Sprintf(
+						"| %s | %s | %s | %s |",
+						escapeMarkdownTableCell(itemName),
+						escapeMarkdownTableCell(itemPath),
+						escapeMarkdownTableCell(`N/A`),
+						escapeMarkdownTableCell(`失败: `+cast.ToString(itemResult[`error`])),
+					),
+				}
 				return
 			}
 
 			sshConfig, sshErr := common.DbMain.GetSshConfig(sshId)
 			if sshErr != nil || len(sshConfig) == 0 {
 				itemResult[`error`] = `SSH配置不存在`
-				resultChan <- gitItemResult{Index: i, Data: itemResult, Line: fmt.Sprintf("%s | %s | 失败: %s", itemName, itemPath, itemResult[`error`])}
+				resultChan <- gitItemResult{
+					Index: i,
+					Data:  itemResult,
+					Line: fmt.Sprintf(
+						"| %s | %s | %s | %s |",
+						escapeMarkdownTableCell(itemName),
+						escapeMarkdownTableCell(itemPath),
+						escapeMarkdownTableCell(`N/A`),
+						escapeMarkdownTableCell(`失败: `+cast.ToString(itemResult[`error`])),
+					),
+				}
 				return
 			}
 
@@ -343,19 +363,39 @@ func GitGroupBranchList(c *gin.Context) {
 				sshId,
 				`group_branch_`+gitGroupId+`_`+cast.ToString(item[`id`])+`_`+cast.ToString(time.Now().UnixNano()),
 			)
-			sshClient, clientErr := component.ShellClient.GetClient(sshConfig, uniqueKey, sse, func(s string) []string {
-				return []string{p_common.TBaseClient.FilterTerminalChars(s)}
-			}, nil, nil)
+			// 组内批量查询只保留汇总结果，避免每个项目的原始shell输出刷屏
+			silentSse := &p_sse.SseShell{}
+			sshClient, clientErr := component.ShellClient.GetClient(sshConfig, uniqueKey, silentSse, nil, nil, nil)
 			if clientErr != nil {
 				itemResult[`error`] = clientErr.Error()
-				resultChan <- gitItemResult{Index: i, Data: itemResult, Line: fmt.Sprintf("%s | %s | 失败: %s", itemName, itemPath, itemResult[`error`])}
+				resultChan <- gitItemResult{
+					Index: i,
+					Data:  itemResult,
+					Line: fmt.Sprintf(
+						"| %s | %s | %s | %s |",
+						escapeMarkdownTableCell(itemName),
+						escapeMarkdownTableCell(itemPath),
+						escapeMarkdownTableCell(`N/A`),
+						escapeMarkdownTableCell(`失败: `+cast.ToString(itemResult[`error`])),
+					),
+				}
 				return
 			}
 
 			branchInfo, queryErr := queryCurrentBranchInfo(sshClient, itemPath, 5*time.Second)
 			if queryErr != nil {
 				itemResult[`error`] = queryErr.Error()
-				resultChan <- gitItemResult{Index: i, Data: itemResult, Line: fmt.Sprintf("%s | %s | 失败: %s", itemName, itemPath, itemResult[`error`])}
+				resultChan <- gitItemResult{
+					Index: i,
+					Data:  itemResult,
+					Line: fmt.Sprintf(
+						"| %s | %s | %s | %s |",
+						escapeMarkdownTableCell(itemName),
+						escapeMarkdownTableCell(itemPath),
+						escapeMarkdownTableCell(`N/A`),
+						escapeMarkdownTableCell(`失败: `+cast.ToString(itemResult[`error`])),
+					),
+				}
 				return
 			}
 
@@ -365,7 +405,13 @@ func GitGroupBranchList(c *gin.Context) {
 			resultChan <- gitItemResult{
 				Index: i,
 				Data:  itemResult,
-				Line:  fmt.Sprintf("%s | %s | 当前:%s | 远程:%s", itemName, itemPath, branchInfo.LocalBranch, branchInfo.RemoteBranch),
+				Line: fmt.Sprintf(
+					"| %s | %s | %s | %s |",
+					escapeMarkdownTableCell(itemName),
+					escapeMarkdownTableCell(itemPath),
+					escapeMarkdownTableCell(branchInfo.LocalBranch),
+					escapeMarkdownTableCell(branchInfo.RemoteBranch),
+				),
 			}
 		}(idx, gitConfig)
 	}
@@ -382,15 +428,17 @@ func GitGroupBranchList(c *gin.Context) {
 	})
 
 	resultList := make([]map[string]any, 0, len(collected))
-	summaryLines := make([]string, 0, len(collected)+2)
-	summaryLines = append(summaryLines, fmt.Sprintf("Git分组 [%s] 分支总览（每行一个项目）", cast.ToString(groupInfo[`name`])))
-	summaryLines = append(summaryLines, "名称 | 路径 | 当前分支 | 远程分支/错误")
+	summaryLines := make([]string, 0, len(collected)+4)
+	summaryLines = append(summaryLines, fmt.Sprintf("### Git分组 `%s` 分支总览", cast.ToString(groupInfo[`name`])))
+	summaryLines = append(summaryLines, "")
+	summaryLines = append(summaryLines, "| 名称 | 路径 | 当前分支 | 远程分支/错误 |")
+	summaryLines = append(summaryLines, "| --- | --- | --- | --- |")
 	for _, item := range collected {
 		resultList = append(resultList, item.Data)
 		summaryLines = append(summaryLines, item.Line)
 	}
 	summaryText := strings.Join(summaryLines, "\n")
-	writeSummary("\n" + summaryText)
+	writeSummary("\n" + summaryText + "\n")
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`git_group_id`:  gitGroupId,
 		`group_name`:    cast.ToString(groupInfo[`name`]),
@@ -424,6 +472,7 @@ func queryCurrentBranchInfo(sshClient *gsssh.SshTerminal, codePath string, timeo
 	if remoteBranch == `` {
 		remoteBranch = `N/A`
 	}
+	remoteBranch = normalizeRemoteBranchDisplay(remoteBranch)
 	return &GitCurrentBranchInfo{
 		LocalBranch:  localBranch,
 		RemoteBranch: remoteBranch,
@@ -463,6 +512,36 @@ func parseBranchFromCurrentBranchOutput(output string) (string, string) {
 		}
 	}
 	return localBranch, remoteBranch
+}
+
+func escapeMarkdownTableCell(value string) string {
+	v := strings.TrimSpace(value)
+	v = strings.ReplaceAll(v, "|", "\\|")
+	v = strings.ReplaceAll(v, "\n", " ")
+	v = strings.ReplaceAll(v, "\r", " ")
+	if v == "" {
+		return " "
+	}
+	return v
+}
+
+func normalizeRemoteBranchDisplay(value string) string {
+	v := strings.TrimSpace(value)
+	if v == "" || v == "N/A" {
+		return "N/A"
+	}
+	if strings.HasPrefix(v, "refs/heads/") {
+		return strings.TrimPrefix(v, "refs/heads/")
+	}
+	fields := strings.Fields(v)
+	if len(fields) >= 2 {
+		last := fields[len(fields)-1]
+		if strings.HasPrefix(last, "refs/heads/") {
+			return strings.TrimPrefix(last, "refs/heads/")
+		}
+		return last
+	}
+	return v
 }
 
 func CreateMerge(c *gin.Context) {
