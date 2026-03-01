@@ -1043,22 +1043,26 @@ export default {
 <style scoped>
 .collection-container {
   display: flex;
-  height: calc(100vh - 100px);
-  min-height: 500px;
-  background-color: #f5f7fa;
+  height: 100%;
+  min-height: 100%;
+  background-color: transparent;
   width: 100%;
   box-sizing: border-box;
+  gap: 12px;
+  color: #4a4a4a;
 }
 
-/* 左侧样式 */
 .left-sidebar {
-  background: white;
-  border-right: 1px solid #e4e7ed;
+  background: #fff;
+  border: 1px solid #e8e8e0;
+  border-radius: 12px;
   flex-direction: column;
   width: 280px;
   min-width: 250px;
   max-width: 350px;
   flex-shrink: 0;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(54, 74, 54, 0.05);
 }
 
 .section-header {
@@ -1066,46 +1070,46 @@ export default {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  border-bottom: 1px solid #e4e7ed;
+  border-bottom: 1px solid #ecece4;
+  background: #f7f7f2;
   font-weight: 600;
   cursor: pointer;
   user-select: none;
+  color: #4a4a4a;
 }
 
 .collection-list {
   flex: 1;
   overflow-y: auto;
-  overflow-x: auto; /* 添加横向滚动条 */
+  overflow-x: auto;
   padding: 8px;
-  padding-bottom: 0; /* 避免底部被滚动条遮挡 */
+  padding-bottom: 0;
 }
 
-/* 为el-tree添加一个包装容器来实现横向滚动 */
 .tree-wrapper {
-  min-width: 100%; /* 改为100%以适应容器 */
-  display: block; /* 改为block以适应容器 */
+  min-width: 100%;
+  display: block;
 }
 
-/* 为el-tree容器添加横向滚动支持 */
 .collection-list .el-tree {
   min-width: 100%;
-  white-space: nowrap; /* 防止内容换行 */
+  white-space: nowrap;
+  color: #4a4a4a;
 }
 
-/* 树节点样式 */
 .tree-node {
   display: flex;
   align-items: center;
   width: 100%;
   padding: 4px 0;
-  white-space: nowrap; /* 确保内容不换行 */
+  white-space: nowrap;
   position: relative;
 }
 
 .node-icon {
   margin-right: 6px;
-  color: #409eff;
-  flex-shrink: 0; /* 防止图标被压缩 */
+  color: #5a8a5a;
+  flex-shrink: 0;
 }
 
 .node-label {
@@ -1113,43 +1117,46 @@ export default {
   font-size: 14px;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis; /* 超出显示省略号 */
-  min-width: 0; /* 允许收缩 */
-  cursor: default; /* 显示为默认光标，表示可悬停查看 */
-  max-width: calc(100% - 40px); /* 确保为右侧操作按钮预留足够空间 */
-  margin-right: 10px; /* 与操作按钮之间的小间隙 */
+  text-overflow: ellipsis;
+  min-width: 0;
+  cursor: default;
+  max-width: calc(100% - 40px);
+  margin-right: 10px;
 }
 
 .node-actions {
   opacity: 0;
   transition: opacity 0.3s;
-  white-space: nowrap; /* 确保按钮不换行 */
+  white-space: nowrap;
   position: absolute;
   right: 0;
-  background: white; /* 确保背景色覆盖其他内容 */
-  z-index: 1; /* 确保在最上层 */
-  padding-left: 10px; /* 与标签内容分离 */
-  padding-right: 5px; /* 右侧留白 */
+  background: #fff;
+  z-index: 1;
+  padding-left: 10px;
+  padding-right: 5px;
 }
 
 .tree-node:hover .node-actions {
   opacity: 1;
 }
 
-/* 修正el-tree节点的宽度问题 */
 .collection-list .el-tree-node__content {
   position: relative;
   height: auto;
   min-height: 32px;
   line-height: 24px;
-  padding-right: 0; /* 移除默认的右边距 */
+  padding-right: 0;
   white-space: nowrap;
-  overflow: visible; /* 确保操作按钮可见 */
+  overflow: visible;
+  border-radius: 8px;
 }
 
-/* 归档列表区域 */
+.collection-list :deep(.el-tree-node__content:hover) {
+  background: #f3f7ef;
+}
+
 .archive-section {
-  border-top: 1px solid #e4e7ed;
+  border-top: 1px solid #ecece4;
 }
 
 .archive-list {
@@ -1168,12 +1175,12 @@ export default {
 }
 
 .archive-item:hover {
-  background-color: #f5f7fa;
+  background-color: #f3f7ef;
 }
 
 .archive-item .el-icon {
   margin-right: 8px;
-  color: #909399;
+  color: #7a8773;
 }
 
 .collapse-icon {
@@ -1189,9 +1196,12 @@ export default {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: white;
+  background: #fff;
+  border: 1px solid #e8e8e0;
+  border-radius: 12px;
   min-width: 0;
   overflow: hidden;
+  box-shadow: 0 4px 12px rgba(54, 74, 54, 0.05);
 }
 
 .panel-header {
@@ -1199,7 +1209,8 @@ export default {
   justify-content: space-between;
   align-items: center;
   padding: 16px 24px;
-  border-bottom: 1px solid #e4e7ed;
+  border-bottom: 1px solid #ecece4;
+  background: #f7f7f2;
 }
 
 .header-left {
@@ -1214,7 +1225,7 @@ export default {
 
 .info-icon {
   font-size: 24px;
-  color: #409eff;
+  color: #5a8a5a;
   margin-right: 12px;
 }
 
@@ -1226,17 +1237,17 @@ export default {
 .info-name {
   font-size: 16px;
   font-weight: 600;
-  color: #303133;
+  color: #4a4a4a;
 }
 
 .info-desc {
   font-size: 12px;
-  color: #909399;
+  color: #7a8773;
   margin-top: 4px;
 }
 
 .no-selection {
-  color: #909399;
+  color: #7a8773;
   font-style: italic;
 }
 
@@ -1248,9 +1259,9 @@ export default {
 
 .panel-content {
   flex: 1;
-  padding-left: 20px;
-  padding-top: -15px;
+  padding: 12px 16px;
   overflow-y: auto;
+  background: #fff;
 }
 
 .empty-state {
@@ -1258,6 +1269,57 @@ export default {
   justify-content: center;
   align-items: center;
   height: 100%;
+}
+
+.panel-content :deep(.el-tabs--card > .el-tabs__header) {
+  border-bottom-color: #ecece4;
+}
+
+.panel-content :deep(.el-tabs--card > .el-tabs__header .el-tabs__item) {
+  border-color: #ecece4;
+  color: #5e6b57;
+}
+
+.panel-content :deep(.el-tabs--card > .el-tabs__header .el-tabs__item.is-active) {
+  color: #4f804f;
+  background: #f6f8f3;
+}
+
+.panel-content :deep(.el-button--primary) {
+  --el-button-bg-color: #5a8a5a;
+  --el-button-border-color: #5a8a5a;
+  --el-button-hover-bg-color: #4f804f;
+  --el-button-hover-border-color: #4f804f;
+}
+
+.panel-content :deep(.el-tag--success) {
+  --el-tag-bg-color: #eef7ea;
+  --el-tag-border-color: #cfe0c8;
+  --el-tag-text-color: #4f804f;
+}
+
+.panel-content :deep(.el-tag--primary) {
+  --el-tag-bg-color: #eef4ea;
+  --el-tag-border-color: #cfe0c8;
+  --el-tag-text-color: #4f804f;
+}
+
+@media (max-width: 1200px) {
+  .collection-container {
+    flex-direction: column;
+    height: auto;
+    min-height: 0;
+  }
+
+  .left-sidebar {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .right-panel {
+    min-height: 500px;
+  }
 }
 
 </style>

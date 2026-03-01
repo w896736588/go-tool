@@ -1,15 +1,17 @@
 <template>
-  <div id="mainCard" ref="mainCard" class="box-card" style="height: 100%;">
-    <div style="margin-bottom: 10px;">
-      <el-button type="primary" @click="createVariableDirectory">
-        创建脚本
+  <div id="mainCard" ref="mainCard" class="box-card variable-page">
+    <div class="variable-toolbar">
+      <el-button class="toolbar-btn" type="primary" plain @click="createVariableDirectory">
+        <el-icon><Plus /></el-icon>创建脚本
       </el-button>
-      <el-button type="primary" @click="drawerVisibleMarkdown = true">帮助文档</el-button>&nbsp;
+      <el-button class="toolbar-btn" type="primary" plain @click="drawerVisibleMarkdown = true">
+        <el-icon><QuestionFilled /></el-icon>帮助文档
+      </el-button>&nbsp;
     </div>
-    <el-tabs v-model="chooseVariableId" class="demo-tabs" tab-position="left" @tabChange="changeVariableTab">
+    <el-tabs v-model="chooseVariableId" class="demo-tabs variable-tabs" tab-position="left" @tabChange="changeVariableTab">
       <template v-for="(variableVal, key) in variableList" :key="key" class="scrollbar-demo-item">
         <el-tab-pane :label="variableVal.name" :name="variableVal.id">
-          <el-row>
+          <el-row class="variable-main-row">
             <el-col :span="12">
               <div class="grid-content bg-purple">
                 <el-tabs v-model="chooseVariable.activeCmdTab" class="demo-tabs1" :style="{ height: shellController.divHeight - 10 + 'px' }" >
@@ -42,11 +44,11 @@
                         <!--                        </template>-->
                       </template>
                       <div class="button-container">
-                        <el-button v-loading="chooseVariable.isRunning" :disabled="is_run === 0 || is_finish === 1" type="primary" @click="cmdRun">
-                          执 行
+                        <el-button class="toolbar-btn" v-loading="chooseVariable.isRunning" :disabled="is_run === 0 || is_finish === 1" type="primary" plain @click="cmdRun">
+                          <el-icon><VideoPlay /></el-icon>执 行
                         </el-button>
-                        <el-button type="primary" @click="refreshRun">
-                          重 置
+                        <el-button class="toolbar-btn" type="primary" plain @click="refreshRun">
+                          <el-icon><RefreshRight /></el-icon>重 置
                         </el-button>
                       </div>
                     </el-form>
@@ -82,7 +84,7 @@
                     </el-form>
                     <div class="demo-collapse" style="height:100%;font-size:14px;">
                       <div class="flex flex-wrap gap-4">
-                        <el-card v-for="(variable_cmd,key) in chooseVariable.variable_cmd_list" :key="key" shadow="hover" style="">
+                        <el-card v-for="(variable_cmd,key) in chooseVariable.variable_cmd_list" :key="key" shadow="hover" class="variable-cmd-card">
                           <el-tag type="primary">{{ typeNameMap['type' + variable_cmd.type] }}</el-tag>&nbsp;
                           <el-tag type="warning">{{runTypeName[variable_cmd.run_type]}}</el-tag>
                           {{ variable_cmd.name }}
@@ -117,8 +119,6 @@
                     </div>
                   </el-tab-pane>
                 </el-tabs>
-                <p></p>
-                <p></p>
               </div>
             </el-col>
             <el-col :span="12">
@@ -130,7 +130,7 @@
     </el-tabs>
 
     <!--新增命令弹窗-->
-    <el-dialog v-model="dialogVariableCmd" :append-to-body="true" title="命令" width="1000">
+    <el-dialog v-model="dialogVariableCmd" :append-to-body="true" class="variable-dialog" title="命令" width="1000">
       <el-form label-width="auto" style="max-width: 1000px">
         <el-form-item label="名称">
           <el-input v-model="variable_cmd.name"/>
@@ -248,7 +248,7 @@
     </el-dialog>
 
     <!--新增脚本弹窗-->
-    <el-dialog v-model="dialogVariable" :append-to-body="true" title="创建合集" width="600">
+    <el-dialog v-model="dialogVariable" :append-to-body="true" class="variable-dialog" title="创建合集" width="600">
       <el-form label-width="auto" style="max-width: 600px">
         <el-form-item label="名称">
           <el-input v-model="variable_add.name"/>
@@ -261,7 +261,7 @@
     </el-dialog>
 
     <!--新增脚本弹窗-->
-    <el-dialog v-model="dialogLoginUserName" :append-to-body="true" title="输入账号密码" width="600">
+    <el-dialog v-model="dialogLoginUserName" :append-to-body="true" class="variable-dialog" title="输入账号密码" width="600">
       <el-form label-width="auto" style="max-width: 600px">
         <el-form-item label="账号">
           <el-input v-model="LoginUsername"/>
@@ -286,10 +286,113 @@
   </el-drawer>
 </template>
 <style scoped>
+.variable-page {
+  height: 100%;
+  padding: 10px;
+  background: #fafaf7;
+  border: 1px solid #e6e8de;
+  border-radius: 12px;
+  box-sizing: border-box;
+  --el-color-primary: #6fa56f;
+}
+
+.variable-toolbar {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: #f5f5f0;
+  border: 1px solid #e6e8de;
+  border-radius: 10px;
+}
+
+.variable-main-row {
+  padding: 2px;
+}
+
+.variable-tabs {
+  background: #fff;
+  border: 1px solid #e6e8de;
+  border-radius: 10px;
+  padding: 8px;
+}
+
+.variable-tabs :deep(.el-tabs__header) {
+  background: #f7f8f2;
+  border-radius: 8px;
+  padding: 6px 4px;
+}
+
+.variable-tabs :deep(.el-tabs__item.is-active) {
+  color: #3a7a3a !important;
+}
+
+.variable-tabs :deep(.el-tabs__active-bar) {
+  background-color: #7cb87c;
+}
+
+.variable-tabs :deep(.el-tab-pane) {
+  padding: 8px 10px;
+}
+
+.variable-cmd-card {
+  margin-bottom: 10px;
+  border: 1px solid #e6e8de;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.variable-cmd-card :deep(.el-card__body) {
+  padding: 12px;
+}
+
 .button-container {
+  display: flex;
   justify-content: center; /* 将按钮水平居中 */
   gap: 8px; /* 可选：调整按钮之间的间距 */
+  margin-top: 12px;
+}
+
+.demo-collapse {
   margin-top: 10px;
+  padding: 8px;
+  background: #f9faf6;
+  border: 1px solid #ecefe3;
+  border-radius: 10px;
+}
+
+.variable-page :deep(.el-alert) {
+  margin-bottom: 10px;
+}
+
+.toolbar-btn {
+  border-radius: 8px;
+  border: 1px solid #d8ded2 !important;
+  background: #f6f8f3 !important;
+  color: #4f804f !important;
+}
+
+.toolbar-btn:hover {
+  background: #eef4ea !important;
+  border-color: #bfd1bf !important;
+  color: #3f6f3f !important;
+}
+
+.variable-page :deep(.el-button--primary),
+.variable-page :deep(.el-button--primary.is-plain),
+:deep(.variable-dialog .el-button--primary),
+:deep(.variable-dialog .el-button--primary.is-plain) {
+  border-radius: 8px;
+  border-color: #d8ded2 !important;
+  background: #f6f8f3 !important;
+  color: #4f804f !important;
+}
+
+.variable-page :deep(.el-button--primary:hover),
+.variable-page :deep(.el-button--primary.is-plain:hover),
+:deep(.variable-dialog .el-button--primary:hover),
+:deep(.variable-dialog .el-button--primary.is-plain:hover) {
+  background: #eef4ea !important;
+  border-color: #bfd1bf !important;
+  color: #3f6f3f !important;
 }
 
 </style>
@@ -312,6 +415,7 @@ import t from "@/utils/base/type";
 import JsonEditCombine from "@/components/base/json_edit_combine.vue"
 import Markdown from "@/components/Markdown.vue";
 import sseDistribute from "@/utils/base/sse_distribute";
+import { Plus, QuestionFilled, VideoPlay, RefreshRight } from '@element-plus/icons-vue'
 
 export default {
   props: {},
@@ -319,6 +423,10 @@ export default {
     Markdown,
     shellResult,
     JsonEditCombine,
+    Plus,
+    QuestionFilled,
+    VideoPlay,
+    RefreshRight,
   },
   data() {
     return {

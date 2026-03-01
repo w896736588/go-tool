@@ -495,8 +495,7 @@ export default {
 }
 </script>
 
-<style>
-/* 页面容器 */
+<style scoped>
 .git-page-container {
   padding: 0;
   width: 100%;
@@ -504,40 +503,40 @@ export default {
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+  color: #4a4a4a;
 }
 
-/* 顶部卡片样式 - 蓝色渐变 */
 .git-header-card {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 16px;
-  padding: 20px 24px;
-  margin-bottom: 16px;
-  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.25);
+  background: #ffffff;
+  border: 1px solid #e8e8e0;
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 12px;
   flex-shrink: 0;
 }
 
 .header-title {
   display: flex;
   align-items: center;
-  gap: 12px;
-  color: #fff;
-  font-size: 20px;
+  gap: 10px;
+  color: #4a4a4a;
+  font-size: 18px;
   font-weight: 600;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .header-icon {
-  width: 28px;
-  height: 28px;
-  color: #fff;
+  width: 20px;
+  height: 20px;
+  color: #5a8a5a;
 }
 
-/* 项目选择 */
 .project-select-row {
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 12px;
-  padding: 12px 16px;
-  margin-bottom: 16px;
+  background: #fafaf7;
+  border: 1px solid #edede6;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
 }
 
 .git-tabs :deep(.el-tabs__header) {
@@ -546,135 +545,102 @@ export default {
 
 .git-tabs :deep(.el-tabs__item) {
   font-size: 14px;
-  color: #606266;
+  color: #707060;
 }
 
 .git-tabs :deep(.el-tabs__item.is-active) {
-  color: #667eea;
+  color: #4f804f;
   font-weight: 600;
 }
 
+.git-tabs :deep(.el-tabs__active-bar) {
+  background-color: #7cb87c;
+}
+
 .git-tabs :deep(.el-tabs__nav-wrap::after) {
-  background-color: #ebeef5;
+  background-color: #ecece4;
 }
 
 .git-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 12px 18px;
+}
+
+.git-list :deep(.el-radio) {
+  margin-right: 0;
 }
 
 .git-list :deep(.el-radio__label) {
-  color: #303133;
+  color: #4a4a4a;
 }
 
 .git-list :deep(.el-radio__input.is-checked .el-radio__inner) {
-  border-color: #667eea;
-  background: #667eea;
+  border-color: #6fa56f;
+  background: #6fa56f;
 }
 
 .git-list :deep(.el-radio__input.is-checked + .el-radio__label) {
-  color: #667eea;
+  color: #4f804f;
 }
 
-/* 控制行 */
 .control-row {
   display: flex;
-  gap: 16px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.action-buttons .el-button {
-  background: rgba(255, 255, 255, 0.9);
-  border: none;
-}
-
-.action-buttons .el-button:hover {
-  background: #fff;
-}
-
-.action-buttons .el-button--primary {
-  color: #667eea;
-}
-
-.action-buttons .el-button--primary:hover {
-  color: #764ba2;
-}
-
-.branch-input-group {
-  display: flex;
-  align-items: center;
   gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
-.branch-input {
-  width: 180px;
-}
-
-.branch-input :deep(.el-input__wrapper) {
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 10px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.branch-input-group .el-button--warning {
-  background: rgba(255, 255, 255, 0.9);
-  border: none;
-  color: #e6a23c;
-}
-
-.branch-input-group .el-button--warning:hover {
-  background: #fff;
-  color: #667eea;
-}
-
+.action-buttons,
+.branch-input-group,
 .more-actions-group {
   display: flex;
   gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
+.action-buttons .el-button,
+.branch-input-group .el-button,
 .more-actions-group .el-button {
-  background: rgba(255, 255, 255, 0.9);
-  border: none;
+  border-radius: 8px;
+  border: 1px solid #d8ded2;
+  background: #f6f8f3;
+  color: #4f804f;
 }
 
+.action-buttons .el-button:hover,
+.branch-input-group .el-button:hover,
 .more-actions-group .el-button:hover {
-  background: #fff;
+  background: #eef4ea;
+  border-color: #bfd1bf;
+  color: #3f6f3f;
 }
 
-.more-actions-group .el-button--primary {
-  color: #667eea;
-}
-
-.more-actions-group .el-button--info {
-  color: #909399;
-}
-
+.branch-input,
 .remote-input {
   width: 180px;
 }
 
+.branch-input :deep(.el-input__wrapper),
 .remote-input :deep(.el-input__wrapper) {
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 10px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 0 0 1px #dde3d8 inset;
 }
 
-/* 输出窗口 */
+.branch-input :deep(.el-input__wrapper.is-focus),
+.remote-input :deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 1px #93b793 inset;
+}
+
 .output-card {
   flex: 1;
   min-height: 0;
   height: 100%;
   background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e8e8e0;
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -683,57 +649,46 @@ export default {
 .output-header {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 16px 20px;
-  background: linear-gradient(135deg, #434343 0%, #000000 100%);
-  color: #fff;
-  font-size: 16px;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e8e8e0;
+  background: #f7f7f2;
+  color: #4a4a4a;
+  font-size: 14px;
   font-weight: 600;
   flex-shrink: 0;
 }
 
 .output-icon {
-  width: 22px;
-  height: 22px;
-  color: #fff;
+  width: 18px;
+  height: 18px;
+  color: #5a8a5a;
 }
 
 .output-content {
   flex: 1;
   overflow: hidden;
-  background: #f8f9fa;
+  background: #fbfbf8;
 }
 
-/* 响应式 */
 @media (max-width: 1200px) {
   .control-row {
-    flex-direction: column;
     align-items: stretch;
-  }
-  
-  .action-buttons,
-  .branch-input-group,
-  .more-actions-group {
-    flex-wrap: wrap;
-  }
-  
-  .branch-input {
-    width: 100%;
-    max-width: 200px;
   }
 }
 
 @media (max-width: 768px) {
   .git-header-card {
-    padding: 16px;
+    padding: 12px;
   }
-  
+
   .header-title {
-    font-size: 18px;
+    font-size: 16px;
   }
-  
-  .action-buttons {
-    justify-content: center;
+
+  .branch-input,
+  .remote-input {
+    width: 100%;
   }
 }
 </style>

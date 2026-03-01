@@ -237,73 +237,70 @@ export default defineComponent({
 
 <style scoped>
 .redis-config-page {
-  padding: 20px;
+  padding: 16px;
 }
 
 .page-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 16px;
-  padding: 24px;
-  margin-bottom: 20px;
-  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.25);
+  background: #fff;
+  border: 1px solid #e8e8e0;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
 }
 
 .header-content {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .header-icon {
-  width: 32px;
-  height: 32px;
-  color: #fff;
+  width: 22px;
+  height: 22px;
+  color: #5a8a5a;
 }
 
 .header-left h3 {
-  color: #fff;
+  color: #4a4a4a;
   margin: 0;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
 }
 
 .header-desc {
-  color: rgba(255, 255, 255, 0.8);
+  color: #7a7a6a;
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .config-table-card {
   background: #fff;
-  border-radius: 16px;
-  padding: 20px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e8e8e0;
+  border-radius: 12px;
+  padding: 12px;
 }
 
 .config-table {
-  border-radius: 12px;
+  border-radius: 10px;
   overflow: hidden;
 }
 
-.config-table :deep(.el-table__header-wrapper) {
-  background: #f5f7fa;
-}
-
+.config-table :deep(.el-table__header-wrapper),
 .config-table :deep(.el-table__header th) {
-  background: #f5f7fa;
-  color: #606266;
+  background: #f7f7f2;
+  color: #606050;
   font-weight: 600;
 }
 
 .config-table :deep(.el-table__row:hover > td) {
-  background-color: #f5f7ff !important;
+  background-color: #f3f7ef !important;
 }
 
 .name-cell {
@@ -318,16 +315,16 @@ export default defineComponent({
 }
 
 .host-code {
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: Consolas, Monaco, monospace;
   font-size: 13px;
-  color: #667eea;
-  background: #f5f7ff;
+  color: #4f804f;
+  background: #f3f8ef;
   padding: 2px 8px;
   border-radius: 4px;
 }
 
 .username-text {
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: Consolas, Monaco, monospace;
   font-size: 13px;
   color: #606266;
 }
@@ -337,30 +334,26 @@ export default defineComponent({
   gap: 4px;
 }
 
-/* 弹窗样式 */
 .edit-dialog :deep(.el-dialog) {
-  border-radius: 16px;
+  border-radius: 12px;
 }
 
 .edit-dialog :deep(.el-dialog__header) {
-  border-bottom: 1px solid #ebeef5;
-  padding: 16px 20px;
+  border-bottom: 1px solid #ecece4;
+  padding: 14px 18px;
   margin: 0;
 }
 
 .edit-dialog :deep(.el-dialog__body) {
-  padding: 20px;
+  padding: 18px;
 }
 
 .edit-dialog :deep(.el-dialog__footer) {
-  border-top: 1px solid #ebeef5;
-  padding: 12px 20px;
+  border-top: 1px solid #ecece4;
+  padding: 10px 18px;
 }
 
-.edit-form :deep(.el-input__wrapper) {
-  border-radius: 8px;
-}
-
+.edit-form :deep(.el-input__wrapper),
 .edit-form :deep(.el-select .el-input__wrapper) {
   border-radius: 8px;
 }

@@ -26,6 +26,10 @@ go get -u gitee.com/Sxiaobai/gs/v2@latest
 11. nginx：增加nginx配置文件一览 wait
 12. redis：增加10个最近搜索的key显示 ok
 
+### 开发约定
+
+1. 开发索引见 `AGENTS.md`；页面与弹窗风格细则见 `docs/frontend-style-guide.md`
+
 ### go run 启动
 
 ConfigFile设置为config/dtool下面的某个文件

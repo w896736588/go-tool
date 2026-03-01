@@ -554,102 +554,105 @@ export default {
 }
 </script>
 
-<style>
-/* 页面容器 */
+<style scoped>
 .supervisor-page-container {
   padding: 0;
   width: 100%;
+  color: #4a4a4a;
 }
 
-/* 顶部卡片样式 */
 .supervisor-header-card {
-  background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-  border-radius: 16px;
-  padding: 20px 24px;
-  margin-bottom: 20px;
-  box-shadow: 0 4px 20px rgba(17, 153, 142, 0.25);
+  background: #fff;
+  border: 1px solid #e8e8e0;
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 12px;
 }
 
 .header-title {
   display: flex;
   align-items: center;
-  gap: 12px;
-  color: #fff;
-  font-size: 20px;
+  gap: 8px;
+  color: #4a4a4a;
+  font-size: 18px;
   font-weight: 600;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .header-icon {
-  width: 28px;
-  height: 28px;
-  color: #fff;
+  width: 20px;
+  height: 20px;
+  color: #5a8a5a;
 }
 
 .control-row {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   align-items: center;
   flex-wrap: wrap;
 }
 
 .env-select {
-  width: 200px;
+  width: 220px;
 }
 
-.env-select :deep(.el-input__wrapper) {
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 10px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+.env-select :deep(.el-input__wrapper),
+.search-input :deep(.el-input__wrapper) {
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 0 0 1px #dde3d8 inset;
+}
+
+.env-select :deep(.el-input__wrapper.is-focus),
+.search-input :deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 1px #93b793 inset;
 }
 
 .action-buttons {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .action-buttons .el-button {
-  background: rgba(255, 255, 255, 0.9);
-  border: none;
+  border-radius: 8px;
+  border: 1px solid #d8ded2;
+  background: #f6f8f3;
+  color: #4f804f;
 }
 
 .action-buttons .el-button:hover {
-  background: #fff;
+  background: #eef4ea;
+  border-color: #bfd1bf;
+  color: #3f6f3f;
 }
 
 .search-input {
   flex: 1;
-  max-width: 400px;
-  min-width: 200px;
+  max-width: 420px;
+  min-width: 220px;
 }
 
-.search-input :deep(.el-input__wrapper) {
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 10px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-/* 进程表格卡片 */
 .process-table-card {
   background: #fff;
-  border-radius: 16px;
-  padding: 20px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e8e8e0;
+  border-radius: 12px;
+  padding: 12px;
 }
 
 .process-table {
-  border-radius: 12px;
+  border-radius: 10px;
   overflow: hidden;
 }
 
 .process-table :deep(.el-table__header th) {
-  background: #f5f7fa;
-  color: #606266;
+  background: #f7f7f2;
+  color: #606050;
   font-weight: 600;
 }
 
 .process-table :deep(.el-table__row:hover > td) {
-  background-color: #f0fdf4 !important;
+  background-color: #f3f7ef !important;
 }
 
 .name-cell {
@@ -664,21 +667,19 @@ export default {
 }
 
 .edit-icon {
-  color: #11998e;
+  color: #5a8a5a;
   cursor: pointer;
-  transition: all 0.3s;
 }
 
 .edit-icon:hover {
-  color: #38ef7d;
-  transform: scale(1.2);
+  color: #3f6f3f;
 }
 
 .process-name {
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: Consolas, Monaco, monospace;
   font-size: 13px;
-  color: #11998e;
-  background: #f0fdf4;
+  color: #4f804f;
+  background: #f3f8ef;
   padding: 2px 8px;
   border-radius: 4px;
 }
@@ -695,56 +696,49 @@ export default {
 .action-cell {
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
-/* 表格行状态 */
 .el-table .warning-row {
-  --el-table-tr-bg-color: #fef3cd;
+  --el-table-tr-bg-color: #fdf6e6;
 }
 
 .el-table .success-row {
-  --el-table-tr-bg-color: #d4edda;
+  --el-table-tr-bg-color: #eef7ea;
 }
 
 .el-table .error-row {
-  --el-table-tr-bg-color: #f8d7da;
+  --el-table-tr-bg-color: #fbeeee;
 }
 
 .row-hide {
   display: none;
 }
 
-/* 弹窗样式 */
 .edit-name-dialog :deep(.el-dialog) {
-  border-radius: 16px;
+  border-radius: 12px;
 }
 
 .edit-name-dialog :deep(.el-dialog__header) {
-  border-bottom: 1px solid #ebeef5;
-  padding: 16px 20px;
+  border-bottom: 1px solid #ecece4;
+  padding: 14px 18px;
   margin: 0;
 }
 
 .edit-name-dialog :deep(.el-dialog__body) {
-  padding: 20px;
+  padding: 18px;
 }
 
 .edit-name-dialog :deep(.el-dialog__footer) {
-  border-top: 1px solid #ebeef5;
-  padding: 12px 20px;
+  border-top: 1px solid #ecece4;
+  padding: 10px 18px;
 }
 
-/* 响应式 */
 @media (max-width: 1200px) {
   .control-row {
-    flex-direction: column;
     align-items: stretch;
   }
-  
-  .action-buttons {
-    flex-wrap: wrap;
-  }
-  
+
   .search-input {
     max-width: 100%;
   }

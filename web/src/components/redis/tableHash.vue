@@ -585,46 +585,42 @@ export default defineComponent({
 </script>
 
 <style scoped>
-/* Key信息头部 */
 .key-info-header {
-  padding: 16px;
-  background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%);
-  border-radius: 12px;
-  margin-bottom: 16px;
+  padding: 14px;
+  background: #f7f7f2;
+  border: 1px solid #e8e8e0;
+  border-radius: 10px;
+  margin-bottom: 12px;
 }
 
 .key-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
 }
 
 .type-tag {
   font-weight: 600;
-  padding: 8px 16px;
   border-radius: 8px;
 }
 
 .ttl-tag {
   cursor: pointer;
-  padding: 8px 16px;
   border-radius: 8px;
   background: #fff;
-  border: 1px solid #e4e7ed;
+  border: 1px solid #dde3d8;
   display: flex;
   align-items: center;
   gap: 6px;
-  transition: all 0.3s;
 }
 
 .ttl-tag:hover {
-  border-color: #667eea;
-  color: #667eea;
+  border-color: #93b793;
+  color: #3f6f3f;
 }
 
 .ttl-edit-tag {
-  padding: 6px 12px;
   border-radius: 8px;
   display: flex;
   align-items: center;
@@ -641,36 +637,33 @@ export default defineComponent({
 
 .key-name-tag {
   cursor: copy;
-  padding: 8px 16px;
   border-radius: 8px;
   background: #fff;
-  border: 1px solid #e4e7ed;
-  max-width: 500px;
+  border: 1px solid #dde3d8;
+  max-width: 520px;
   display: flex;
   align-items: center;
   gap: 6px;
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: Consolas, Monaco, monospace;
   font-size: 13px;
-  transition: all 0.3s;
 }
 
 .key-name-tag:hover {
-  border-color: #667eea;
-  background: #f5f7ff;
+  border-color: #93b793;
+  background: #f2f7ee;
 }
 
-/* 操作按钮栏 */
 .action-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
+  padding: 10px 12px;
   background: #fff;
   border-radius: 10px;
-  margin-bottom: 12px;
-  border: 1px solid #ebeef5;
+  margin-bottom: 10px;
+  border: 1px solid #e8e8e0;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
 }
 
 .action-left, .action-right {
@@ -684,45 +677,44 @@ export default defineComponent({
   width: 200px;
 }
 
-/* 数据统计 */
 .data-stats {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 16px;
-  background: #f0f9ff;
+  padding: 8px 12px;
+  background: #f2f7ee;
+  border: 1px solid #e0eadb;
   border-radius: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   font-size: 13px;
-  color: #606266;
+  color: #606050;
 }
 
 .data-stats strong {
-  color: #667eea;
+  color: #3f6f3f;
 }
 
-/* 数据表格 */
 .data-table {
-  border-radius: 12px;
+  border-radius: 10px;
   overflow: hidden;
 }
 
 .data-table :deep(.el-table__header-wrapper) {
-  background: #f5f7fa;
+  background: #f7f7f2;
 }
 
 .data-table :deep(.el-table__header th) {
-  background: #f5f7fa;
-  color: #606266;
+  background: #f7f7f2;
+  color: #606050;
   font-weight: 600;
 }
 
 .data-table :deep(.el-table__row:hover > td) {
-  background-color: #f5f7ff !important;
+  background-color: #f3f7ef !important;
 }
 
 .field-value, .member-value {
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: Consolas, Monaco, monospace;
   font-size: 13px;
 }
 
@@ -730,76 +722,72 @@ export default defineComponent({
   cursor: pointer;
   padding: 4px 8px;
   border-radius: 6px;
-  transition: all 0.2s;
 }
 
 .value-cell:hover {
-  background: #eef1fc;
+  background: #eef4ea;
 }
 
 .value-text {
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: Consolas, Monaco, monospace;
   font-size: 13px;
-  color: #667eea;
+  color: #4f804f;
 }
 
-/* String编辑区 */
 .string-editor {
   margin-top: 10px;
 }
 
 .string-textarea {
-  border-radius: 12px;
+  border-radius: 10px;
 }
 
 .string-textarea :deep(.el-textarea__inner) {
-  border-radius: 12px;
-  font-family: 'Consolas', 'Monaco', monospace;
+  border-radius: 10px;
+  font-family: Consolas, Monaco, monospace;
   font-size: 13px;
   line-height: 1.6;
-  background: #fafbfc;
-  border: 1px solid #e4e7ed;
+  background: #fafbf8;
+  border: 1px solid #dde3d8;
 }
 
 .string-textarea.readonly :deep(.el-textarea__inner) {
-  background: #f5f7fa;
+  background: #f4f7f2;
 }
 
-/* JSON查看器 */
 .json-viewer {
   position: relative;
-  background: #1e1e1e;
-  border-radius: 12px;
-  padding: 16px;
-  min-height: 400px;
+  background: #1f221d;
+  border-radius: 10px;
+  padding: 14px;
+  min-height: 320px;
 }
 
 .copy-btn {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: 10px;
+  right: 10px;
   background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   color: #fff;
-  padding: 6px 12px;
+  padding: 5px 10px;
   border-radius: 6px;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  transition: all 0.3s;
 }
 
 .copy-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .json-content {
-  color: #d4d4d4;
-  font-family: 'Consolas', 'Monaco', monospace;
+  color: #d7dfd1;
+  font-family: Consolas, Monaco, monospace;
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-all;
   margin: 0;
@@ -807,11 +795,10 @@ export default defineComponent({
   overflow: auto;
 }
 
-/* 弹窗样式 */
 :deep(.edit-dialog .el-dialog__body),
 :deep(.add-dialog .el-dialog__body),
 :deep(.deep-parse-dialog .el-dialog__body) {
-  padding: 20px;
+  padding: 18px;
 }
 
 :deep(.el-dialog) {
@@ -819,13 +806,13 @@ export default defineComponent({
 }
 
 :deep(.el-dialog__header) {
-  border-bottom: 1px solid #ebeef5;
-  padding: 16px 20px;
+  border-bottom: 1px solid #ecece4;
+  padding: 14px 18px;
   margin: 0;
 }
 
 :deep(.el-dialog__footer) {
-  border-top: 1px solid #ebeef5;
-  padding: 12px 20px;
+  border-top: 1px solid #ecece4;
+  padding: 10px 18px;
 }
 </style>
