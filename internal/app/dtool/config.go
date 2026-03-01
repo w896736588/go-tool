@@ -130,6 +130,13 @@ func InitEnv(appName, ConfigFile string, viper *viper.Viper) {
 	} else {
 		component.EnvClient.WebConfig.WebPath = component.EnvClient.ConfigBase.WebPath
 	}
+	// webPath不存在时，优先兜底到当前项目的web/dist，避免桌面端无法加载页面
+	if _, webPathErr := os.Stat(component.EnvClient.WebConfig.WebPath); webPathErr != nil {
+		fallbackWebPath := filepath.Join(component.EnvClient.RootPath, `web`, `dist`)
+		if _, fallbackErr := os.Stat(fallbackWebPath); fallbackErr == nil {
+			component.EnvClient.WebConfig.WebPath = fallbackWebPath
+		}
+	}
 	//数据库配置
 	component.EnvClient.DbConfig = &define.DbConfig{
 		DbName: ``,

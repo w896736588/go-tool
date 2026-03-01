@@ -37,6 +37,25 @@ ConfigFile设置为config/dtool下面的某个文件
 export CGO_ENABLED=1 && go run -ldflags " -s -w" cmd/dtool/main.go --ConfigFile=company
 ```
 
+### Wails 桌面版启动（保留浏览器模式）
+
+先安装 Wails CLI（仅首次）：
+```shell
+go install github.com/wailsapp/wails/v2/cmd/wails@latest
+```
+
+直接运行桌面版：
+```shell
+go run -tags dev ./cmd/dtool_wails --ConfigFile=company
+```
+
+说明：
+1. 浏览器模式入口仍为 `cmd/dtool/main.go`，不受影响。
+2. 桌面版会在窗口内启动并自动跳转到本地服务地址。
+3. 当配置 `base.webPath` 不存在时，会自动兜底到项目内 `web/dist`。
+4. Wails 直接用 `go run/go build` 时必须带 tags，手动构建建议使用 `production`。
+5. 若不能传命令行参数，可用环境变量 `DTOOL_CONFIG_FILE` 指定配置文件名。
+
 ### bat启动
 
 将下面的内容保存为xxx.bat放到build目录即可双击运行，ctrl + c结束
