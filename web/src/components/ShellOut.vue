@@ -506,6 +506,8 @@ export default {
 .shell-page-container {
   padding: 0;
   width: 100%;
+  height: 100%;
+  min-height: 100%;
   color: #4a4a4a;
 }
 
@@ -651,29 +653,6 @@ export default {
   color: #5a5a5a;
   word-break: break-all;
   line-height: 1.45;
-}
-
-.create-dialog :deep(.el-dialog),
-.group-dialog :deep(.el-dialog) {
-  border-radius: 12px;
-}
-
-.create-dialog :deep(.el-dialog__header),
-.group-dialog :deep(.el-dialog__header) {
-  border-bottom: 1px solid #ecece4;
-  padding: 14px 18px;
-  margin: 0;
-}
-
-.create-dialog :deep(.el-dialog__body),
-.group-dialog :deep(.el-dialog__body) {
-  padding: 18px;
-}
-
-.create-dialog :deep(.el-dialog__footer),
-.group-dialog :deep(.el-dialog__footer) {
-  border-top: 1px solid #ecece4;
-  padding: 10px 18px;
 }
 
 .create-form :deep(.el-input__wrapper),

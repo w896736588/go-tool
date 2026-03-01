@@ -409,6 +409,7 @@ export default {
 /* 样式保持不变，与之前相同 */
 .history-detail {
   padding: 0;
+  color: #4a4a4a;
 }
 
 .detail-tabs {
@@ -422,7 +423,7 @@ export default {
 .url-text {
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   font-size: 14px;
-  color: #409eff;
+  color: #4f7d4f;
   word-break: break-all;
 }
 
@@ -472,9 +473,10 @@ export default {
 
 .request-body,
 .response-body-section {
-  border: 1px solid #e4e7ed;
-  border-radius: 4px;
+  border: 1px solid #e6ece0;
+  border-radius: 10px;
   overflow: hidden;
+  background: #fff;
 }
 
 .body-toolbar {
@@ -482,8 +484,8 @@ export default {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  background: #f5f7fa;
-  border-bottom: 1px solid #e4e7ed;
+  background: #f7f9f5;
+  border-bottom: 1px solid #e6ece0;
 }
 
 .toolbar-actions {
@@ -505,26 +507,28 @@ export default {
   line-height: 1.4;
   white-space: pre-wrap;
   word-wrap: break-word;
-  background: #f8f9fa;
+  background: #f7f9f5;
 }
 
 .raw-body {
   background: #2d2d2d;
   color: #f8f8f2;
+  border: 1px solid #2f3a2f;
+  border-radius: 8px;
 }
 
 .json-preview {
   padding: 16px;
-  background: #f8f9fa;
+  background: #f7f9f5;
 }
 
 .console-log {
   max-height: 400px;
   overflow-y: auto;
-  border: 1px solid #e4e7ed;
-  border-radius: 4px;
+  border: 1px solid #e6ece0;
+  border-radius: 10px;
   padding: 12px;
-  background: #f8f9fa;
+  background: #f7f9f5;
 }
 
 .log-entry {
@@ -532,7 +536,7 @@ export default {
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   font-size: 13px;
   line-height: 1.4;
-  border-bottom: 1px solid #e4e7ed;
+  border-bottom: 1px solid #e6ece0;
 }
 
 .log-entry:last-child {
@@ -575,7 +579,7 @@ export default {
   gap: 12px;
   margin-top: 20px;
   padding-top: 20px;
-  border-top: 1px solid #e4e7ed;
+  border-top: 1px solid #e6ece0;
 }
 
 /* 滚动条样式 */

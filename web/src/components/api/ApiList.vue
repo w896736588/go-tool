@@ -301,6 +301,11 @@ export default {
 <style scoped>
 .api-list {
   padding: 0;
+  border: 1px solid #e8eee5;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(80, 110, 80, 0.08);
+  padding: 12px;
 }
 
 .list-header {
@@ -308,6 +313,10 @@ export default {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 16px;
+  padding: 10px 12px;
+  border: 1px solid #e6ece0;
+  border-radius: 10px;
+  background: #f7f9f5;
 }
 
 .header-actions {
@@ -346,7 +355,18 @@ export default {
 }
 
 .selected-info {
-  color: #409eff;
+  color: #4f7d4f;
   font-size: 14px;
+}
+
+:deep(.el-table) {
+  border: 1px solid #e6ece0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+:deep(.el-table__header-wrapper th) {
+  background: #f7f9f5 !important;
+  color: #4e594a;
 }
 </style>

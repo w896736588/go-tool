@@ -517,8 +517,20 @@ export default {
                 if (found.nextDynamicChildren) {
                   // 例如 docker quick-restart/quick-stop：选完项目后继续选择服务
                   loadDynamicChildren(found.nextDynamicChildren)
-                  currentChildren.value = dynamicDataCache.value[found.nextDynamicChildren] || []
+                  const nextDynamicList = dynamicDataCache.value[found.nextDynamicChildren] || []
+                  currentChildren.value = nextDynamicList
                   showCommands.value = true
+                  // 支持一次性输入完整命令：docker quick-restart <项目> <服务>
+                  const serviceToken = normalizeCommandPart(parts[i + 1]).toLowerCase()
+                  if (serviceToken) {
+                    const serviceFound = findCommandByToken(nextDynamicList, serviceToken)
+                    if (serviceFound) {
+                      commandStack.value.push(serviceFound)
+                      i += 1
+                      currentChildren.value = []
+                      showCommands.value = false
+                    }
+                  }
                 } else {
                   currentChildren.value = []
                 }
@@ -664,10 +676,14 @@ export default {
     // 加载 Docker 服务列表（用于快速重启/停止）
     const loadDockerServiceList = () => {
       // 从命令栈中找到已选择的项目
-      const projectCmd = commandStack.value.find(cmd => cmd.data && cmd.data.default_service_list)
-      
-      if (projectCmd && projectCmd.data.default_service_list) {
-        const services = projectCmd.data.default_service_list
+      const projectCmd = commandStack.value.find(cmd =>
+        Array.isArray(cmd?.default_service_list) || Array.isArray(cmd?.data?.default_service_list)
+      )
+      const services = Array.isArray(projectCmd?.default_service_list)
+        ? projectCmd.default_service_list
+        : (Array.isArray(projectCmd?.data?.default_service_list) ? projectCmd.data.default_service_list : [])
+
+      if (projectCmd && services.length > 0) {
         const list = services.map(service => ({
           command: service,
           name: service,

@@ -334,25 +334,6 @@ export default defineComponent({
   gap: 4px;
 }
 
-.edit-dialog :deep(.el-dialog) {
-  border-radius: 12px;
-}
-
-.edit-dialog :deep(.el-dialog__header) {
-  border-bottom: 1px solid #ecece4;
-  padding: 14px 18px;
-  margin: 0;
-}
-
-.edit-dialog :deep(.el-dialog__body) {
-  padding: 18px;
-}
-
-.edit-dialog :deep(.el-dialog__footer) {
-  border-top: 1px solid #ecece4;
-  padding: 10px 18px;
-}
-
 .edit-form :deep(.el-input__wrapper),
 .edit-form :deep(.el-select .el-input__wrapper) {
   border-radius: 8px;

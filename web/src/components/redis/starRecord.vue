@@ -313,26 +313,6 @@ export default defineComponent({
   font-size: 13px;
 }
 
-/* 弹窗样式 */
-.star-dialog :deep(.el-dialog) {
-  border-radius: 16px;
-}
-
-.star-dialog :deep(.el-dialog__header) {
-  border-bottom: 1px solid #ebeef5;
-  padding: 16px 20px;
-  margin: 0;
-}
-
-.star-dialog :deep(.el-dialog__body) {
-  padding: 20px;
-}
-
-.star-dialog :deep(.el-dialog__footer) {
-  border-top: 1px solid #ebeef5;
-  padding: 12px 20px;
-}
-
 .star-form :deep(.el-input__wrapper) {
   border-radius: 8px;
 }

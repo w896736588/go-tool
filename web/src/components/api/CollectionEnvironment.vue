@@ -245,11 +245,19 @@ export default {
 
 <style scoped>
 .collection-environment {
-  padding: 20px 0;
+  padding: 12px;
+  border: 1px solid #e8eee5;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(80, 110, 80, 0.08);
 }
 
 .environment-header {
   margin-bottom: 20px;
+  padding: 10px 12px;
+  border: 1px solid #e6ece0;
+  border-radius: 10px;
+  background: #f7f9f5;
 }
 
 /* 为编辑状态下的输入框设置字体大小 */
@@ -261,6 +269,12 @@ export default {
   font-size: 14px;
   height: 32px;
   line-height: 32px;
+}
+
+.collection-environment :deep(.el-table) {
+  border: 1px solid #e6ece0;
+  border-radius: 10px;
+  overflow: hidden;
 }
 </style>
 

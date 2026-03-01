@@ -30,8 +30,9 @@
       <div class="actions">
         <el-button
             type="danger"
-            link
+            plain
             size="small"
+            class="delete-rule-btn"
             @click="removeItem(index)"
         >删除
         </el-button>
@@ -39,13 +40,11 @@
     </div>
 
     <div class="footer-actions">
-      <el-button type="primary" link @click="addItem">
-        <el-icon><Plus /></el-icon>
+      <el-button type="primary" plain size="small" class="add-rule-btn" @click="addItem">
         添加参数
       </el-button>
 
-      <el-button link @click="handleBulkEdit">
-        <el-icon><Edit /></el-icon>
+      <el-button plain size="small" class="bulk-edit-btn" @click="handleBulkEdit">
         批量编辑
       </el-button>
     </div>
@@ -71,16 +70,10 @@
 </template>
 
 <script>
-import { Delete, Plus, Edit } from '@element-plus/icons-vue'
 import { nextTick } from 'vue'
 
 export default {
   name: 'KeyValueEditor',
-  components: {
-    Delete,
-    Plus,
-    Edit
-  },
   props: {
     modelValue: {
       type: Object,
@@ -208,9 +201,10 @@ export default {
 
 <style scoped>
 .key-value-editor {
-  border: 1px solid #e4e7ed;
-  border-radius: 4px;
+  border: 1px solid #e6ece0;
+  border-radius: 10px;
   background: #fff;
+  overflow: hidden;
 }
 
 .header-row {
@@ -218,11 +212,11 @@ export default {
   grid-template-columns: 2fr 3fr 80px;
   align-items: center;
   padding: 8px 12px;
-  background: #f5f7fa;
-  border-bottom: 1px solid #e4e7ed;
+  background: #f7f9f5;
+  border-bottom: 1px solid #e6ece0;
   font-weight: 600;
   font-size: 14px;
-  color: #606266;
+  color: #4e594a;
   gap: 8px;
 }
 
@@ -231,7 +225,7 @@ export default {
   grid-template-columns: 2fr 3fr 80px;
   align-items: center;
   padding: 8px 12px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid #eef3ec;
   gap: 8px;
 }
 
@@ -240,7 +234,7 @@ export default {
 }
 
 .data-row:hover {
-  background: #f8f9fa;
+  background: #f4faf2;
 }
 
 .key-input,
@@ -255,12 +249,24 @@ export default {
 
 .footer-actions {
   padding: 12px;
-  border-top: 1px solid #e4e7ed;
-  background: #fafafa;
+  border-top: 1px solid #e6ece0;
+  background: #f7f9f5;
 }
 
 .footer-actions .el-button {
   margin-right: 16px;
+}
+
+.add-rule-btn {
+  border-radius: 8px;
+}
+
+.bulk-edit-btn {
+  border-radius: 8px;
+}
+
+.delete-rule-btn {
+  border-radius: 8px;
 }
 
 /* 确保子组件宽度正确 */

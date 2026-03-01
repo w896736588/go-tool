@@ -279,11 +279,19 @@ export default {
 
 <style scoped>
 .collection-permission {
-  padding: 20px 0;
+  padding: 12px;
+  border: 1px solid #e8eee5;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(80, 110, 80, 0.08);
 }
 
 .permission-header {
   margin-bottom: 20px;
+  padding: 10px 12px;
+  border: 1px solid #e6ece0;
+  border-radius: 10px;
+  background: #f7f9f5;
 }
 
 .user-info {
@@ -298,6 +306,7 @@ export default {
 
 .user-name {
   font-weight: 500;
+  color: #4f5f4b;
 }
 
 .user-email {

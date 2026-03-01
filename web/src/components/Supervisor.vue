@@ -715,25 +715,6 @@ export default {
   display: none;
 }
 
-.edit-name-dialog :deep(.el-dialog) {
-  border-radius: 12px;
-}
-
-.edit-name-dialog :deep(.el-dialog__header) {
-  border-bottom: 1px solid #ecece4;
-  padding: 14px 18px;
-  margin: 0;
-}
-
-.edit-name-dialog :deep(.el-dialog__body) {
-  padding: 18px;
-}
-
-.edit-name-dialog :deep(.el-dialog__footer) {
-  border-top: 1px solid #ecece4;
-  padding: 10px 18px;
-}
-
 @media (max-width: 1200px) {
   .control-row {
     align-items: stretch;

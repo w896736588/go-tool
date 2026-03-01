@@ -574,21 +574,22 @@ export default {
 
 <style scoped>
 .api-detail {
-  padding: 20px 0;
+  padding: 12px 0;
   height: 100vh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  min-height: 1000px;
+  min-height: 720px;
 }
 
 .json-box {
   width: 100%;
   height: 360px;
   margin-top: 12px;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
+  border: 1px solid #dbe7d6;
+  border-radius: 10px;
   overflow: auto;
+  background: #fff;
 }
 
 .api-header {
@@ -596,7 +597,10 @@ export default {
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 10px;
-  background: #fff;
+  background: #f7f9f5;
+  border: 1px solid #e6ece0;
+  border-radius: 10px;
+  padding: 10px 12px;
   position: sticky;
   top: 0;
   z-index: 100;
@@ -644,9 +648,11 @@ export default {
 
 .config-section,
 .response-section {
-  background: #f8f9fa;
+  background: #fff;
+  border: 1px solid #e8eee5;
   padding: 20px;
-  border-radius: 8px;
+  border-radius: 12px;
+  box-shadow: 0 6px 18px rgba(80, 110, 80, 0.08);
   margin-top: 5px;
   overflow: auto;
   flex: 1;
@@ -683,6 +689,10 @@ export default {
   align-items: center;
   gap: 12px;
   margin-bottom: 16px;
+  border: 1px solid #e6ece0;
+  background: #f7f9f5;
+  border-radius: 10px;
+  padding: 10px 12px;
 }
 
 .response-time {
@@ -694,7 +704,8 @@ export default {
   background: #2d2d2d;
   color: #f8f8f2;
   padding: 16px;
-  border-radius: 4px;
+  border-radius: 8px;
+  border: 1px solid #2f3a2f;
   overflow: auto;
   flex: 1; /* 占据剩余空间 */
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
@@ -732,12 +743,9 @@ export default {
 }
 
 :deep(.el-table) {
-  background: transparent;
-}
-
-:deep(.el-table th),
-:deep(.el-table td) {
-  background: transparent;
+  border: 1px solid #e6ece0;
+  border-radius: 10px;
+  overflow: hidden;
 }
 
 :deep(.el-tabs__nav-wrap) {
@@ -800,9 +808,9 @@ export default {
 .dialog-env-name {
   margin-bottom: 15px;
   padding: 10px;
-  background-color: #f0f9ff;
-  border-left: 4px solid #409eff;
-  border-radius: 4px;
+  background-color: #f4faf2;
+  border-left: 4px solid #5a8a5a;
+  border-radius: 8px;
 }
 
 .no-variables {

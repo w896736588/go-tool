@@ -1,7 +1,7 @@
 <template>
-  <div class="collection-container">
+  <div class="collection-container" :class="{ resizing: sidebarResizing }">
     <!-- 左侧集合列表 -->
-    <div class="left-sidebar">
+    <div class="left-sidebar" :style="{ width: sidebarWidth + 'px' }">
       <!-- 集合列表区域 -->
       <div class="collection-section">
         <div class="section-header">
@@ -116,6 +116,9 @@
       <!--        </div>-->
       <!--      </div>-->
     </div>
+
+    <!-- 左右面板拖拽分隔条 -->
+    <div class="panel-resizer" @mousedown="startSidebarResize"></div>
 
     <!-- 右侧展示面板 -->
     <div class="right-panel">
@@ -443,13 +446,82 @@ export default {
         }
       },
       keyup: null,
+      // 左侧树面板宽度（支持拖拽与缓存）
+      sidebarWidth: 280,
+      // 是否正在拖拽调整左侧宽度
+      sidebarResizing: false,
+      // 拖拽起始坐标
+      resizeStartX: 0,
+      // 拖拽起始宽度
+      resizeStartWidth: 280,
+      // 拖拽事件处理器缓存（用于可靠解绑）
+      sidebarResizeMoveHandler: null,
+      sidebarResizeUpHandler: null,
     }
   },
   mounted() {
+    this.sidebarResizeMoveHandler = this.handleSidebarResize.bind(this)
+    this.sidebarResizeUpHandler = this.stopSidebarResize.bind(this)
+    // 初始化左侧面板宽度缓存
+    this.loadSidebarWidthCache()
     this.loadCollectionData()
     this.loadArchivedItems()
   },
+  beforeUnmount() {
+    // 组件销毁时兜底移除拖拽事件
+    this.stopSidebarResize()
+  },
   methods: {
+
+    // 读取并应用左侧面板宽度缓存
+    loadSidebarWidthCache() {
+      let _that = this
+      const cacheWidth = parseInt(store.getStore('api_sidebar_width') || '', 10)
+      if (!Number.isNaN(cacheWidth)) {
+        _that.sidebarWidth = _that.clampSidebarWidth(cacheWidth)
+      }
+    },
+
+    // 限制左侧面板宽度范围，避免过窄或过宽影响布局
+    clampSidebarWidth(width) {
+      const minWidth = 240
+      const maxWidth = 520
+      return Math.min(maxWidth, Math.max(minWidth, width))
+    },
+
+    // 开始拖拽调整左右分栏
+    startSidebarResize(event) {
+      let _that = this
+      if (window.innerWidth <= 1200) {
+        return
+      }
+      _that.sidebarResizing = true
+      _that.resizeStartX = event.clientX
+      _that.resizeStartWidth = _that.sidebarWidth
+      document.addEventListener('mousemove', _that.sidebarResizeMoveHandler)
+      document.addEventListener('mouseup', _that.sidebarResizeUpHandler)
+    },
+
+    // 拖拽过程中实时更新左侧宽度
+    handleSidebarResize(event) {
+      let _that = this
+      if (!_that.sidebarResizing) {
+        return
+      }
+      const deltaX = event.clientX - _that.resizeStartX
+      _that.sidebarWidth = _that.clampSidebarWidth(_that.resizeStartWidth + deltaX)
+    },
+
+    // 结束拖拽并写入缓存
+    stopSidebarResize() {
+      let _that = this
+      if (_that.sidebarResizing) {
+        store.setStore('api_sidebar_width', _that.sidebarWidth)
+      }
+      _that.sidebarResizing = false
+      document.removeEventListener('mousemove', _that.sidebarResizeMoveHandler)
+      document.removeEventListener('mouseup', _that.sidebarResizeUpHandler)
+    },
 
 
     // 加载集合数据
@@ -1052,6 +1124,10 @@ export default {
   color: #4a4a4a;
 }
 
+.collection-container.resizing {
+  user-select: none;
+}
+
 .left-sidebar {
   background: #fff;
   border: 1px solid #e8e8e0;
@@ -1063,6 +1139,30 @@ export default {
   flex-shrink: 0;
   overflow: hidden;
   box-shadow: 0 4px 12px rgba(54, 74, 54, 0.05);
+}
+
+.panel-resizer {
+  width: 8px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  position: relative;
+  border-radius: 6px;
+  transition: background-color 0.2s ease;
+}
+
+.panel-resizer::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 10px;
+  bottom: 10px;
+  width: 2px;
+  border-radius: 2px;
+  background: #d6dfd2;
+}
+
+.panel-resizer:hover::before {
+  background: #9fb59a;
 }
 
 .section-header {
@@ -1312,9 +1412,13 @@ export default {
   }
 
   .left-sidebar {
-    width: 100%;
+    width: 100% !important;
     max-width: 100%;
     min-width: 0;
+  }
+
+  .panel-resizer {
+    display: none;
   }
 
   .right-panel {

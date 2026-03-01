@@ -22,6 +22,7 @@
 }
 
 .el-dialog {
+  max-width: calc(100vw - 32px);
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid #e8e8e0;
@@ -52,6 +53,39 @@
   background: #fff;
 }
 
+.el-dialog__headerbtn {
+  top: 14px;
+  right: 14px;
+}
+
+.el-dialog__headerbtn .el-dialog__close {
+  color: #7b8575;
+}
+
+.el-dialog__headerbtn:hover .el-dialog__close {
+  color: #5a8a5a;
+}
+
+@media (max-width: 768px) {
+  .el-dialog {
+    width: calc(100vw - 20px) !important;
+    margin-top: 8vh !important;
+    border-radius: 10px;
+  }
+
+  .el-dialog__header {
+    padding: 12px 14px;
+  }
+
+  .el-dialog__body {
+    padding: 14px;
+  }
+
+  .el-dialog__footer {
+    padding: 10px 14px;
+  }
+}
+
 .el-alert {
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 10px;
@@ -78,4 +112,98 @@
   font-weight: 500;
   line-height: 1.45;
   color: var(--el-text-color-regular);
+}
+
+/* 全站按钮风格统一：对齐 Supervisor / Docker 绿色系视觉 */
+:root {
+  --app-btn-primary: #5a8a5a;
+  --app-btn-primary-hover: #4f7d4f;
+  --app-btn-primary-active: #456e45;
+  --app-btn-border: #cddcc8;
+  --app-btn-text: #4a4a4a;
+}
+
+.el-button {
+  border-radius: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1px;
+  border-color: var(--app-btn-border);
+  color: var(--app-btn-text);
+  transition: all 0.2s ease;
+}
+
+.el-button:hover {
+  border-color: #a9c3a4;
+  color: #3f5f3f;
+  background-color: #f4faf2;
+}
+
+.el-button:focus-visible {
+  outline: 2px solid rgba(90, 138, 90, 0.28);
+  outline-offset: 1px;
+}
+
+.el-button .el-icon {
+  margin-right: 4px;
+}
+
+.el-button--primary {
+  background-color: var(--app-btn-primary);
+  border-color: var(--app-btn-primary);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(90, 138, 90, 0.28);
+}
+
+.el-button--primary:hover,
+.el-button--primary:focus {
+  background-color: var(--app-btn-primary-hover);
+  border-color: var(--app-btn-primary-hover);
+  color: #fff;
+}
+
+.el-button--primary:active {
+  background-color: var(--app-btn-primary-active);
+  border-color: var(--app-btn-primary-active);
+  color: #fff;
+}
+
+.el-button.is-plain {
+  background-color: #f5faf4;
+}
+
+/* 避免 type + plain 组合出现白底白字 */
+.el-button--primary.is-plain {
+  color: var(--app-btn-primary);
+  background-color: #f0f7ee;
+  border-color: #a9c3a4;
+}
+
+.el-button--primary.is-plain:hover,
+.el-button--primary.is-plain:focus {
+  color: #3f5f3f;
+  background-color: #e8f2e5;
+  border-color: #91b48b;
+}
+
+.el-button--success.is-plain {
+  color: var(--el-color-success);
+}
+
+.el-button--warning.is-plain {
+  color: var(--el-color-warning);
+}
+
+.el-button--danger.is-plain {
+  color: var(--el-color-danger);
+}
+
+.el-button--info.is-plain {
+  color: var(--el-color-info);
+}
+
+.el-button.is-link,
+.el-button.is-text {
+  border-color: transparent;
+  box-shadow: none;
+  border-radius: 8px;
 }

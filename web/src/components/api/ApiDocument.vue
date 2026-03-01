@@ -497,12 +497,13 @@ export default {
   display: flex;
   height: 100vh;
   overflow: hidden;
+  background: #f3f6f2;
 }
 
 .sidebar {
-  width: 220px; /* 略微收窄 */
+  width: 240px;
   background: #fff;
-  border-right: 1px solid #e4e7ed;
+  border-right: 1px solid #e6ece0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -510,7 +511,8 @@ export default {
 
 .sidebar-header {
   padding: 16px 12px;
-  border-bottom: 1px solid #e4e7ed;
+  border-bottom: 1px solid #e6ece0;
+  background: #f7f9f5;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -554,20 +556,20 @@ export default {
 }
 
 .api-menu li:hover {
-  background-color: #f5f7fa;
+  background-color: #f4faf2;
 }
 
 .api-menu li.active {
-  background-color: #ecf5ff;
-  border-left: 2px solid #409eff;
-  color: #409eff;
+  background-color: #edf6ea;
+  border-left: 2px solid #5a8a5a;
+  color: #4f7d4f;
   font-weight: 500;
 }
 
 .api-content {
   flex: 1;
   overflow-y: auto;
-  background: #fafafa;
+  background: #f3f6f2;
 }
 
 /* 其余样式保持不变... */
@@ -579,8 +581,9 @@ export default {
   background: #fff;
   margin-bottom: 20px;
   padding: 20px;
-  border-radius: 4px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e8eee5;
+  border-radius: 12px;
+  box-shadow: 0 6px 18px rgba(80, 110, 80, 0.08);
 }
 
 .api-header {
@@ -589,7 +592,7 @@ export default {
   gap: 12px;
   margin-bottom: 20px;
   padding-bottom: 10px;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid #e6ece0;
 }
 
 .method-tag {
@@ -611,8 +614,8 @@ export default {
 .section-content h4 {
   margin-top: 0;
   margin-bottom: 10px;
-  color: #303133;
-  border-bottom: 1px solid #ebeef5;
+  color: #4f5f4b;
+  border-bottom: 1px solid #e6ece0;
   padding-bottom: 5px;
 }
 
@@ -620,7 +623,8 @@ export default {
   background: #2d2d2d;
   color: #f8f8f2;
   padding: 16px;
-  border-radius: 4px;
+  border-radius: 8px;
+  border: 1px solid #2f3a2f;
   overflow: auto;
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   font-size: 14px;
@@ -628,9 +632,10 @@ export default {
 }
 
 .raw-body {
-  background: #f5f7fa;
+  background: #f7f9f5;
+  border: 1px solid #e6ece0;
   padding: 16px;
-  border-radius: 4px;
+  border-radius: 8px;
   overflow: auto;
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   font-size: 14px;
@@ -644,9 +649,10 @@ export default {
 }
 
 .response-take-item {
-  background: #f5f7fa;
+  background: #f7f9f5;
+  border: 1px solid #e6ece0;
   padding: 10px;
-  border-radius: 4px;
+  border-radius: 8px;
   margin-bottom: 8px;
 }
 
@@ -660,7 +666,7 @@ export default {
 
 .section-divider {
   height: 1px;
-  background: #ebeef5;
+  background: #e6ece0;
   margin: 30px 0;
 }
 

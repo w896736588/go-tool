@@ -288,6 +288,9 @@
 <style scoped>
 .variable-page {
   height: 100%;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
   padding: 10px;
   background: #fafaf7;
   border: 1px solid #e6e8de;
@@ -309,10 +312,17 @@
 }
 
 .variable-tabs {
+  flex: 1;
+  min-height: 0;
   background: #fff;
   border: 1px solid #e6e8de;
   border-radius: 10px;
   padding: 8px;
+}
+
+.variable-tabs :deep(.el-tabs__content) {
+  height: 100%;
+  min-height: 0;
 }
 
 .variable-tabs :deep(.el-tabs__header) {

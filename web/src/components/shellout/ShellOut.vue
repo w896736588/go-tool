@@ -192,6 +192,7 @@
         v-model="searchDialogVisible"
         :title="`搜索列表 - ${searchContent} - 搜索到${searchNumber}条`"
         width="80%"
+        class="search-dialog"
     >
       <div class="error-list">
         <div
@@ -953,6 +954,9 @@ export default {
 .shell-console {
   padding: 16px;
   background: #f0f2f5;
+  height: 100%;
+  min-height: 100%;
+  box-sizing: border-box;
 }
 
 .toolbar {
@@ -1437,8 +1441,8 @@ pre {
   font-weight: bold !important;
 }
 
-// Search dialog specific styles
-:deep(.el-dialog__body) {
+/* 搜索弹窗内容区样式（仅作用于搜索弹窗） */
+:deep(.search-dialog .el-dialog__body) {
   padding: 20px !important;
   background: #f5f7fa;
 }
