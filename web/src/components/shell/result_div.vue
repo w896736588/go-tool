@@ -78,15 +78,14 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-/* 护眼配色方案 */
 .sticky-textarea-div {
-  background: #282c34;
-  color: #abb2bf;
+  background: #eef3ea;
+  color: #435244;
   white-space: pre-wrap;
   word-break: break-all;
   padding: 16px;
   border-radius: 8px;
-  border-left: 3px solid #5c6370;
+  border-left: 3px solid #8fae92;
   font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 13px;
   line-height: 1.7;
@@ -94,7 +93,7 @@ onBeforeUnmount(() => {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   font-weight: 400;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 6px rgba(62, 86, 62, 0.08);
   overflow-y: auto;
   overflow-x: hidden;
   display: block;
@@ -107,19 +106,19 @@ onBeforeUnmount(() => {
 }
 
 ::deep(.el-scrollbar__thumb) {
-  background: #5c6370 !important;
+  background: #a4b7a3 !important;
   border-radius: 4px !important;
   opacity: 0.7 !important;
   transition: opacity 0.2s ease;
 }
 
 ::deep(.el-scrollbar__thumb:hover) {
-  background: #6c7280 !important;
+  background: #8fa48f !important;
   opacity: 1 !important;
 }
 
 ::deep(.el-scrollbar__bar) {
-  background: #21252b !important;
+  background: #dfe8da !important;
   border-radius: 4px;
 }
 </style>

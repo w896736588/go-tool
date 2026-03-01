@@ -85,7 +85,9 @@ import ssh from '@/utils/base/ssh_set'
 import git from '@/utils/base/git'
 import compose from '@/utils/base/compose'
 import supervisor from '@/utils/base/supervisor'
+import shell from '@/utils/base/shell'
 import shellOut from '@/utils/base/shell_out'
+import group from '@/utils/base/group'
 import store from '@/utils/base/store'
 import sseDistribute from '@/utils/base/sse_distribute'
 import { Throttle_string } from '@/utils/base/throttle_string'
@@ -510,7 +512,7 @@ export default {
               const targetFound = findCommandByToken(dynamicList, targetToken)
               // 仅在“已确认目标”的场景进入下一层：
               // 1) 有尾随空格；2) 目标后还有其他 token（例如继续输入参数）
-              const targetIsConfirmed = hasTrailingSpace || (parts.length > i + 2)
+              const targetIsConfirmed = hasTrailingSpace || (parts.length > i + 2) || (targetFound && parts.length === i + 2)
               if (targetFound && targetIsConfirmed) {
                 commandStack.value.push(targetFound)
                 i += 1
@@ -1080,7 +1082,11 @@ export default {
               return
             }
           }
-          executeAction(actionCmd, { inputValue: currentInputValue.value })
+          executeAction(actionCmd, {
+            inputValue: currentInputValue.value,
+            // 记录本次执行时输入框中的完整命令文本，用于结果区展示
+            rawCommand: String(inputText.value || '').trim()
+          })
           return
         }
 
@@ -1132,9 +1138,10 @@ export default {
       }
       
       // 创建输出消息
+      const displayCommandText = normalizeCommandPart(options.rawCommand) || cmd.name
       const outputMsg = {
         type: 'system',
-        commandText: `执行操作: ${cmd.name}`,
+        commandText: `执行命令: ${displayCommandText}`,
         resultText: '',
         processText: ''
       }
@@ -1206,6 +1213,15 @@ export default {
           break
         case 'gitSetSafe':
           executeGitAction('setSafe', currentStack, options.inputValue || '')
+          break
+        case 'shellCreate':
+          executeShellAction('create', currentStack, options.inputValue || '')
+          break
+        case 'shellList':
+          executeShellAction('list', currentStack, options.inputValue || '')
+          break
+        case 'shellRun':
+          executeShellAction('run', currentStack, options.inputValue || '')
           break
         case 'gitViewConfig':
           appendOutputResult('已禁用页面跳转，请仅使用命令快捷操作。\n')
@@ -1424,11 +1440,7 @@ export default {
 
       const callback = (response) => {
         if (response.ErrCode !== 0) {
-          appendOutputResult(`错误: ${response.ErrMsg || '未知错误'}\n`)
-        } else if (response.Data && typeof response.Data.summary_text === 'string') {
-          appendOutputResult(response.Data.summary_text + '\n')
-        } else if (response.Data) {
-          appendOutputResult(`${JSON.stringify(response.Data, null, 2)}\n`)
+          appendOutputResult('执行失败\n')
         } else {
           appendOutputResult('执行成功\n')
         }
@@ -1438,7 +1450,6 @@ export default {
         }, 1200)
       }
 
-      appendOutputResult(`正在查询分组 [${groupCmd.name}] 全部环境分支...\n\n`)
       git.GitGroupBranchList({
         git_group_id: groupCmd.data.id,
         sse_distribute_id: newSseDistributeId
@@ -1477,14 +1488,7 @@ export default {
       // 处理 HTTP 响应的回调
       const callback = (response) => {
         if (response.ErrCode !== 0) {
-          appendOutputResult(`错误: ${response.ErrMsg || '未知错误'}\n`)
-        } else if (response.Data) {
-          // 显示返回的数据
-          if (typeof response.Data === 'string') {
-            appendOutputResult(response.Data)
-          } else {
-            appendOutputResult(`${JSON.stringify(response.Data, null, 2)}\n`)
-          }
+          appendOutputResult('执行失败\n')
         } else {
           appendOutputResult('执行成功\n')
         }
@@ -1497,19 +1501,15 @@ export default {
       
       switch (action) {
         case 'pull':
-          appendOutputResult('正在拉取代码...\n\n')
           git.GitPullBranchOrigin(gitConfig, callback)
           break
         case 'status':
-          appendOutputResult('正在查询状态...\n\n')
           git.GitQueryStatus(gitConfig, callback)
           break
         case 'branch':
-          appendOutputResult('正在查询分支...\n\n')
           git.GitCurrentBranch(gitConfig, callback)
           break
         case 'log':
-          appendOutputResult('正在查询日志...\n\n')
           git.GitCommitLog(gitConfig, callback)
           break
         case 'checkout':
@@ -1517,11 +1517,10 @@ export default {
             // 需要分支名
             const branchName = normalizeCommandPart(inputValue)
             if (!branchName) {
-              appendOutputResult('错误：请输入分支名\n')
+              appendOutputResult('执行失败\n')
               finishExecution()
               return
             }
-            appendOutputResult(`正在切换到分支 ${branchName}...\n\n`)
             git.GitChangeBranch(gitConfig, branchName, callback)
           }
           break
@@ -1529,20 +1528,17 @@ export default {
           {
             const branchNameRemote = normalizeCommandPart(inputValue)
             if (!branchNameRemote) {
-              appendOutputResult('错误：请输入远程分支名\n')
+              appendOutputResult('执行失败\n')
               finishExecution()
               return
             }
-            appendOutputResult(`正在关联并切换远程分支 ${branchNameRemote}...\n\n`)
             git.GitChangeBranchRemote(gitConfig, branchNameRemote, callback)
           }
           break
         case 'saveCredentials':
-          appendOutputResult('正在保存账号密码配置...\n\n')
           git.GitSaveCredentials(gitConfig, callback)
           break
         case 'setSafe':
-          appendOutputResult('正在设置目录安全...\n\n')
           git.SetSafe(gitConfig, callback)
           break
         default:
@@ -1550,13 +1546,198 @@ export default {
           finishExecution()
       }
     }
+
+    // 解析 shell create 输入参数：任务名 | SSH(名称或ID) | 命令
+    const parseShellCreateInput = (inputValue) => {
+      const text = String(inputValue || '')
+      const parts = text.split('|').map(item => String(item || '').trim()).filter(Boolean)
+      if (parts.length < 3) {
+        return {
+          ok: false,
+          err: '参数格式错误，请使用: 任务名 | SSH(名称或ID) | 命令'
+        }
+      }
+      const [name, sshKey, ...commandParts] = parts
+      const command = commandParts.join(' | ').trim()
+      if (!name || !sshKey || !command) {
+        return {
+          ok: false,
+          err: '参数不完整，请使用: 任务名 | SSH(名称或ID) | 命令'
+        }
+      }
+      return {
+        ok: true,
+        data: { name, sshKey, command }
+      }
+    }
+
+    // 解析 SSH 标识：支持 SSH id 或 SSH 名称
+    const resolveShellSshId = (sshKey, callback) => {
+      const target = normalizeCommandPart(sshKey)
+      if (!target) {
+        callback('')
+        return
+      }
+      ssh.SshList((response) => {
+        if (!(response && response.ErrCode === 0 && Array.isArray(response.Data))) {
+          callback('')
+          return
+        }
+        const list = response.Data || []
+        const exactId = list.find(item => String(item.id) === target)
+        if (exactId) {
+          callback(String(exactId.id))
+          return
+        }
+        const lower = target.toLowerCase()
+        const exactName = list.find(item => String(item.name || '').toLowerCase() === lower)
+        if (exactName) {
+          callback(String(exactName.id))
+          return
+        }
+        const fuzzyName = list.find(item => String(item.name || '').toLowerCase().includes(lower))
+        callback(fuzzyName ? String(fuzzyName.id) : '')
+      })
+    }
+
+    // 获取 shell_out 分组 ID（与 ShellOut 页面保持一致：groupType=6）
+    const resolveShellGroupId = (callback) => {
+      group.GroupList({ type: '6' }, (response) => {
+        if (!(response && response.ErrCode === 0 && Array.isArray(response.Data) && response.Data.length > 0)) {
+          callback('')
+          return
+        }
+        callback(String(response.Data[0].id || ''))
+      })
+    }
+
+    // 执行终端输出相关动作：create/list/run
+    const executeShellAction = (action, stack, inputValue) => {
+      if (action === 'list') {
+        const actionIndex = stack.findIndex(item => item.action === 'shellList')
+        const targetCmd = actionIndex >= 0 ? stack[actionIndex + 1] : null
+        if (!targetCmd || !targetCmd.data) {
+          appendOutputResult('错误：请先选择要打开的终端输出任务\n')
+          finishExecution()
+          return
+        }
+        const target = targetCmd.data || {}
+        const chooseGroupId = normalizeCommandPart(store.getStore('shell_out_choose_group_id'))
+        const groupId = chooseGroupId || normalizeCommandPart(target.group_id) || '0'
+        const id = normalizeCommandPart(target.id)
+        const title = encodeURIComponent(String(target.name || id || 'shellout'))
+        if (!id) {
+          appendOutputResult('错误：任务ID为空，无法打开新窗口\n')
+          finishExecution()
+          return
+        }
+        const url = `${window.location.origin}/#/fullpage?group_id=${groupId}&id=${id}&title=${title}`
+        window.open(url, '_blank')
+        appendOutputResult('执行成功\n')
+        finishExecution()
+        return
+      }
+
+      if (action === 'run') {
+        const actionIndex = stack.findIndex(item => item.action === 'shellRun')
+        const targetCmd = actionIndex >= 0 ? stack[actionIndex + 1] : null
+        if (!targetCmd || !targetCmd.data) {
+          appendOutputResult('错误：请先选择要运行的终端输出任务\n')
+          finishExecution()
+          return
+        }
+        const target = targetCmd.data
+        const groupId = Number(target.group_id || 0)
+        if (!groupId) {
+          appendOutputResult('错误：任务缺少 group_id，无法启动\n')
+          finishExecution()
+          return
+        }
+
+        const newSseDistributeId = sseDistribute.GetSseDistributeId('dashboard_shell_' + Date.now())
+        const throttleStringFunc = new Throttle_string(50, (text) => {
+          if (currentOutputMessage.value) {
+            appendOutputProcess(text)
+          }
+        })
+        sseDistribute.RegisterReceive(newSseDistributeId, (msg) => {
+          throttleStringFunc.update(msg)
+        })
+
+        appendOutputResult(`正在运行任务 [${target.name || target.id}]...\n\n`)
+        shell.ShellOutSetSeeId({
+          sse_distribute_id: newSseDistributeId,
+          shell_client_id: target.shell_client_id,
+          ssh_id: target.ssh_id,
+          command: target.command,
+          id: target.id,
+          group_id: target.group_id,
+          is_run: 1,
+        }, (response) => {
+          if (response.ErrCode !== 0) {
+            appendOutputResult('执行失败\n')
+          } else {
+            appendOutputResult('执行成功\n')
+          }
+          setTimeout(() => {
+            sseDistribute.UnRegisterReceive(newSseDistributeId)
+            finishExecution()
+          }, 1200)
+        })
+        return
+      }
+
+      if (action === 'create') {
+        const parsed = parseShellCreateInput(inputValue)
+        if (!parsed.ok) {
+          appendOutputResult(`${parsed.err}\n`)
+          appendOutputResult('示例: shell create 发布日志 | 1 | tail -f /var/log/app.log\n')
+          finishExecution()
+          return
+        }
+        const payload = parsed.data
+        resolveShellSshId(payload.sshKey, (sshId) => {
+          if (!sshId) {
+            appendOutputResult(`错误：未找到 SSH "${payload.sshKey}"\n`)
+            finishExecution()
+            return
+          }
+          resolveShellGroupId((groupId) => {
+            if (!groupId) {
+              appendOutputResult('错误：未找到 shell_out 分组，请先在“终端输出”页面创建分组\n')
+              finishExecution()
+              return
+            }
+            // 复用 shellOut 页面创建逻辑的接口
+            shell.ShellOutStart({
+              id: '',
+              command: payload.command,
+              sse_distribute_id: '',
+              shell_client_id: '',
+              ssh_id: sshId,
+              name: payload.name,
+              is_run: 1,
+              group_id: groupId,
+            }, (response) => {
+              if (response.ErrCode !== 0) {
+                appendOutputResult('执行失败\n')
+              } else {
+                appendOutputResult('执行成功\n')
+              }
+              finishExecution()
+            })
+          })
+        })
+        return
+      }
+
+      appendOutputResult('该终端输出操作暂未实现\n')
+      finishExecution()
+    }
     
     // 完成执行
     const finishExecution = () => {
       isExecuting.value = false
-      if (currentOutputMessage.value) {
-        appendOutputResult('\n[完成]\n')
-      }
       currentOutputMessage.value = null
       scrollToBottom()
     }
@@ -1725,6 +1906,8 @@ export default {
 
 .message.system {
   align-self: flex-start;
+  /* 执行过程(SSE)卡片在首页保持更宽的可读区域 */
+  width: 72%;
 }
 
 .message-command {
@@ -1744,19 +1927,19 @@ export default {
 
 .process-window {
   margin-top: 8px;
-  border: 1px solid #d9d9cf;
+  border: 1px solid #d8e3d2;
   border-radius: 10px;
-  background: #1f1f1b;
-  color: #d8e0d2;
+  background: #edf3e9;
+  color: #435244;
   overflow: hidden;
 }
 
 .process-title {
   font-size: 12px;
-  color: #cdd5c8;
-  background: #2a2a25;
+  color: #5a6d5a;
+  background: #e4ecdf;
   padding: 6px 10px;
-  border-bottom: 1px solid #3a3a34;
+  border-bottom: 1px solid #d3dfcd;
 }
 
 .process-text {
@@ -1766,18 +1949,18 @@ export default {
   overflow-y: auto;
   white-space: pre-wrap;
   word-break: break-word;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.45;
   font-family: Consolas, Monaco, 'Courier New', monospace;
 }
 
 .process-text.markdown-body {
-  color: #d8e0d2;
+  color: #435244;
   background: transparent;
 }
 
 .process-text.markdown-body :deep(*) {
-  color: #d8e0d2;
+  color: #435244;
 }
 
 .process-text.markdown-body :deep(table) {
@@ -1788,12 +1971,12 @@ export default {
 
 .process-text.markdown-body :deep(th),
 .process-text.markdown-body :deep(td) {
-  border: 1px solid #3a3a34;
+  border: 1px solid #d3dfcd;
   padding: 4px 6px;
 }
 
 .process-text.markdown-body :deep(th) {
-  background: #2a2a25;
+  background: #e4ecdf;
 }
 
 .process-text.markdown-body :deep(td) {
@@ -1801,22 +1984,22 @@ export default {
 }
 
 .process-text.markdown-body :deep(hr) {
-  background-color: #3a3a34;
+  background-color: #d3dfcd;
   border: 0;
   height: 1px;
 }
 
 .process-text.markdown-body :deep(code) {
-  background: rgba(255, 255, 255, 0.08);
+  background: #e4ecdf;
 }
 
 .process-text.markdown-body :deep(pre) {
-  background: #2a2a25;
-  border: 1px solid #3a3a34;
+  background: #e4ecdf;
+  border: 1px solid #d3dfcd;
 }
 
 .process-text.markdown-body :deep(a) {
-  color: #9cc5ff;
+  color: #4f7d5f;
 }
 
 .message.user .message-content {
@@ -1828,6 +2011,16 @@ export default {
   background: #f5f5f0;
   color: #5a5a5a;
   border: 1px solid #e0e0d8;
+}
+
+@media (max-width: 768px) {
+  .message {
+    max-width: 100%;
+  }
+
+  .message.system {
+    width: 100%;
+  }
 }
 
 .command-dropdown {

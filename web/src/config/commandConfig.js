@@ -292,7 +292,9 @@ const commandConfig = [
         command: 'create',
         name: '创建',
         desc: '创建新的终端输出任务',
-        action: 'shellCreate'
+        action: 'shellCreate',
+        needInput: true,
+        inputPlaceholder: '请输入: 任务名 | SSH(名称或ID) | 命令'
       },
       {
         command: 'list',

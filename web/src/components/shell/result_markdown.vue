@@ -3,58 +3,40 @@
 </template>
 
 <style scoped>
-/* 护眼配色方案 */
-.sticky-textarea-div {
-  background: #282c34;
-  color: #abb2bf;
-  white-space: pre-wrap;
-  word-break: break-all;
-  padding: 16px;
-  border-radius: 8px;
-  border-left: 3px solid #5c6370;
-  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
-  font-size: 13px;
-  line-height: 1.7;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  font-weight: 400;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  overflow-y: auto;
-  overflow-x: hidden;
-  display: block;
-  height: 100%;
-  transition: all 0.2s ease;
-}
-
 #showShellResult{
-  height : 100%;
+  height: 100%;
+  background: #eef3ea;
+  color: #435244;
+  border-radius: 8px;
+  border-left: 3px solid #8fae92;
+  box-shadow: 0 1px 6px rgba(62, 86, 62, 0.08);
 }
 
 ::deep(.el-scrollbar__thumb) {
-  background: #5c6370 !important;
+  background: #a4b7a3 !important;
   border-radius: 4px !important;
   opacity: 0.7 !important;
   transition: opacity 0.2s ease;
 }
 
 ::deep(.el-scrollbar__thumb:hover) {
-  background: #6c7280 !important;
+  background: #8fa48f !important;
   opacity: 1 !important;
 }
 
 ::deep(.el-scrollbar__bar) {
-  background: #21252b !important;
+  background: #dfe8da !important;
   border-radius: 4px;
 }
 
-@keyframes gentle-blink {
-  0%, 100% {
-    opacity: 0.7;
-  }
-  50% {
-    opacity: 0.3;
-  }
+::deep(#showShellResult pre),
+::deep(#showShellResult code) {
+  background: #e4ecdf !important;
+  color: #3f4f40 !important;
+}
+
+::deep(#showShellResult a) {
+  color: #4f7d5f !important;
 }
 </style>
 

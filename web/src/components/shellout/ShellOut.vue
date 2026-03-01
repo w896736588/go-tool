@@ -1037,17 +1037,17 @@ export default {
   }
 
   .full-command {
-    background: #282c34;
+    background: #edf3e9;
     padding: 12px 16px;
     border-radius: 8px;
     font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
     font-size: 13px;
     line-height: 1.7;
-    color: #abb2bf;
+    color: #435244;
     margin: 0 0 12px 0;
     max-height: 200px;
     overflow-y: auto;
-    border: 1px solid #3e4452;
+    border: 1px solid #d6e1d1;
   }
 
   .command-actions {
@@ -1070,16 +1070,16 @@ export default {
   }
 
   &::-webkit-scrollbar-track {
-    background: #e1e4e8;
+    background: #e2ebdc;
     border-radius: 4px;
   }
 
   &::-webkit-scrollbar-thumb {
-    background: #5c6370;
+    background: #a4b7a3;
     border-radius: 4px;
 
     &:hover {
-      background: #6c7280;
+      background: #8fa48f;
     }
   }
 }
@@ -1222,12 +1222,12 @@ export default {
 .error-content {
   margin-bottom: 8px;
   font-size: 13px;
-  color: #abb2bf;
+  color: #435244;
   line-height: 1.7;
   word-break: break-all;
   white-space: pre-wrap;
   font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
-  background: #282c34;
+  background: #edf3e9;
   padding: 14px 16px;
   border-radius: 8px;
   border-left: 3px solid #c96269;
@@ -1260,7 +1260,7 @@ export default {
 
 // Context list styles
 .context-list {
-  background: #f0f2f5;
+  background: #eef3ea;
   border-radius: 8px;
   padding: 12px;
 }
@@ -1293,8 +1293,8 @@ export default {
 .line-number {
   flex-shrink: 0;
   display: inline-block;
-  background: #5c6370;
-  color: #abb2bf;
+  background: #dbe7d5;
+  color: #4f6350;
   padding: 2px 8px;
   border-radius: 4px;
   font-size: 11px;
@@ -1308,15 +1308,15 @@ export default {
 .line-content {
   flex: 1;
   font-size: 13px;
-  color: #abb2bf;
+  color: #435244;
   line-height: 1.7;
   word-break: break-all;
   white-space: pre-wrap;
   font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
-  background: #282c34;
+  background: #edf3e9;
   padding: 12px 14px;
   border-radius: 6px;
-  border-left: 3px solid #5c6370;
+  border-left: 3px solid #8fae92;
 }
 
 @keyframes highlight-pulse {
