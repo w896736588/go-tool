@@ -90,7 +90,7 @@ go build -ldflags "-s -w" -o build/dtool.exe ./cmd/dtool
 ### 构建桌面端 exe
 
 ```bash
-go build -tags production -ldflags "-s -w" -o build/dtool_wails.exe ./cmd/dtool_wails
+go build -tags production -ldflags "-s -w -H=windowsgui" -o build/dtool_wails.exe ./cmd/dtool_wails
 ```
 
 ## 配置项说明（`config/dtool/*.ini`）

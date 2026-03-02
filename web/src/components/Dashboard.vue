@@ -20,6 +20,20 @@
                 <span class="fixed-command-desc">{{ cmd.desc }}</span>
               </button>
             </div>
+            <div v-if="recentHistoryCommands.length > 0" class="history-command-section">
+              <div class="fixed-command-title">历史操作命令</div>
+              <div class="history-command-list">
+                <button
+                  v-for="(historyCmd, historyIndex) in recentHistoryCommands"
+                  :key="`history_${historyIndex}_${historyCmd}`"
+                  type="button"
+                  class="history-command-item"
+                  @click="quickSelectHistoryCommand(historyCmd)"
+                >
+                  {{ historyCmd }}
+                </button>
+              </div>
+            </div>
           </div>
           <p class="hint">输入 <kbd>/</kbd> 或直接输入命令（如 <kbd>g</kbd>），<kbd>Tab</kbd> 补全，<kbd>Space</kbd> 继续</p>
         </div>
@@ -375,6 +389,14 @@ export default {
         if (cmd.module === null) return true
         return openModules.includes(cmd.module)
       })
+    })
+
+    // recentHistoryCommands 首页展示最近使用的历史命令（倒序）
+    const recentHistoryCommands = computed(() => {
+      if (!Array.isArray(commandHistory.value) || commandHistory.value.length === 0) {
+        return []
+      }
+      return commandHistory.value.slice(-12).reverse()
     })
 
     // 命令面包屑导航
@@ -1377,6 +1399,19 @@ export default {
       inputText.value = `/${commandText} `
       parseInput()
       showCommands.value = true
+      activeCommandIndex.value = 0
+      nextTick(() => {
+        inputRef.value?.focus()
+      })
+    }
+
+    // quickSelectHistoryCommand 点击历史命令后回填到输入框
+    const quickSelectHistoryCommand = (historyCommand) => {
+      const commandText = normalizeCommandPart(historyCommand)
+      if (!commandText) return
+      inputText.value = commandText
+      parseInput()
+      showCommands.value = isCommandModeByText(inputText.value)
       activeCommandIndex.value = 0
       nextTick(() => {
         inputRef.value?.focus()
@@ -2698,11 +2733,13 @@ export default {
       canExecuteCommand,
       highlightedInputHtml,
       availableCommands,
+      recentHistoryCommands,
       handleInput,
       handleKeydown,
       handleFocus,
       handleBlur,
       quickSelectTopCommand,
+      quickSelectHistoryCommand,
       selectCommand,
       executeCommand,
       getCommandKey,
@@ -2718,15 +2755,16 @@ export default {
 .dashboard-container {
   height: 100%;
   display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 20px;
+  justify-content: stretch;
+  align-items: stretch;
+  padding: 0;
   background: #fafaf7;
+  box-sizing: border-box;
 }
 
 .chat-container {
   width: 100%;
-  height: 78vh;
+  height: 100%;
   background: #fff;
   border-radius: 12px;
   display: flex;
@@ -2787,6 +2825,38 @@ export default {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
   gap: 8px;
+}
+
+.history-command-section {
+  margin-top: 14px;
+}
+
+.history-command-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.history-command-item {
+  border: 1px solid #d6e3d2;
+  background: #f6fbf4;
+  color: #3f6f3f;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  line-height: 1.2;
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: all 0.18s ease;
+}
+
+.history-command-item:hover {
+  border-color: #a9c3a4;
+  background: #eaf4e7;
+  color: #2f5c2f;
 }
 
 .fixed-command-item {
@@ -2959,6 +3029,15 @@ export default {
 @media (max-width: 768px) {
   .fixed-command-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .history-command-list {
+    gap: 6px;
+  }
+
+  .history-command-item {
+    padding: 5px 10px;
+    font-size: 11px;
   }
 
   .fixed-command-desc {

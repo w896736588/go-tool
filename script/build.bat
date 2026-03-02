@@ -60,7 +60,7 @@ echo [3/6] Build desktop exe
 set CGO_ENABLED=1
 set GOOS=windows
 set GOARCH=amd64
-go build -tags production -ldflags "-s -w" -o "%PKG_DIR%\dtool_wails.exe" ./cmd/dtool_wails || goto :error
+go build -tags production -ldflags "-s -w -H=windowsgui" -o "%PKG_DIR%\dtool_wails.exe" ./cmd/dtool_wails || goto :error
 
 echo [4/6] Copy runtime resources
 copy /Y "%ROOT_DIR%\go.mod" "%PKG_DIR%\go.mod" >nul || goto :error

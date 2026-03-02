@@ -5,10 +5,41 @@
       <!-- 集合列表区域 -->
       <div class="collection-section">
         <div class="section-header">
-          <span>集合列表</span>
-          <div>
-            <el-button link type="primary" @click="createNewCollection">新建集合</el-button>
-            <el-button link type="primary" @click="drawerVisibleMarkdown = true">文档</el-button>
+          <span class="section-header-title">集合列表</span>
+          <div class="section-header-actions">
+            <el-button class="toolbar-btn toolbar-btn-small" size="small" type="primary" plain @click="openCreateCollectionDialog">
+              <el-icon><Plus /></el-icon>新建集合
+            </el-button>
+            <el-button class="toolbar-btn toolbar-btn-small" size="small" type="primary" plain @click="drawerVisibleMarkdown = true">
+              <el-icon><QuestionFilled /></el-icon>文档
+            </el-button>
+            <el-popover placement="bottom-end" :width="360" trigger="click">
+              <template #reference>
+                <el-button class="toolbar-btn toolbar-btn-mini" size="small" type="info" plain>
+                  <el-icon><Tools /></el-icon>Skills安装
+                </el-button>
+              </template>
+              <div class="skill-install-popover">
+                <div class="skill-install-title">dtool-api-import-update 安装</div>
+                <div class="skill-install-text">把下面 ZIP 地址发给编辑器 AI，让它按 ZIP 安装 skills。</div>
+                <div class="skill-install-feature">
+                  功能说明：安装后可通过 AI 直接在此工具中生成接口（支持集合/文件夹选择、按 URI 导入或更新）。
+                </div>
+                <el-input :model-value="skillInstallZipUrl" readonly class="skill-install-url" />
+                <div class="skill-install-actions">
+                  <el-button size="small" type="primary" plain @click="copyText(skillInstallZipUrl, 'ZIP 地址已复制')">复制 ZIP 地址</el-button>
+                  <el-button size="small" type="primary" plain @click="copyText(skillInstallPrompt, 'AI 安装提示已复制')">复制安装提示</el-button>
+                  <el-link :href="skillInstallZipUrl" target="_blank" type="primary">打开链接</el-link>
+                </div>
+                <el-input
+                  type="textarea"
+                  :rows="2"
+                  readonly
+                  class="skill-install-url"
+                  :model-value="'请先安装这个 skills zip：' + skillInstallZipUrl + '。'"
+                />
+              </div>
+            </el-popover>
           </div>
         </div>
         <div class="collection-list">
@@ -331,7 +362,7 @@
 </template>
 
 <script>
-import {FolderOpened, Folder, Document, ArrowDown, ArrowUp, More} from '@element-plus/icons-vue'
+import {FolderOpened, Folder, Document, ArrowDown, ArrowUp, More, Plus, QuestionFilled, Tools} from '@element-plus/icons-vue'
 import CollectionBasicInfo from './api/CollectionBasicInfo'
 import CollectionEnvironment from './api/CollectionEnvironment'
 import CollectionPermission from './api/CollectionPermission'
@@ -352,6 +383,9 @@ export default {
     ArrowDown,
     ArrowUp,
     More,
+    Plus,
+    QuestionFilled,
+    Tools,
     CollectionBasicInfo,
     CollectionEnvironment,
     CollectionPermission,
@@ -380,6 +414,8 @@ export default {
       // 文档drawer
       drawerVisibleMarkdown: false,
       markdownType: 'api',
+      skillInstallZipUrl: 'https://gitee.com/Sxiaobai/skills/raw/master/dtool-api-import-update.zip',
+      skillInstallPrompt: '请安装这个 skills zip： https://gitee.com/Sxiaobai/skills/raw/master/dtool-api-import-update.zip',
 
       // 环境相关
       currentEnvironment: 'dev',
@@ -707,6 +743,38 @@ export default {
     keydownCreateNewCollection(e){
       if(e.key === 'Enter'){
         this.createNewCollection()
+      }
+    },
+    openCreateCollectionDialog() {
+      this.dialogData.createCollection = { uniqueid: '', name: '' }
+      this.dialogShow.createCollection = true
+    },
+    copyText(text, successMsg) {
+      let _that = this
+      const val = (text || '').trim()
+      if (!val) {
+        _that.$message.error('无可复制内容')
+        return
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(val).then(() => {
+          _that.$message.success(successMsg)
+        }).catch(() => {
+          _that.$message.error('复制失败，请手动复制')
+        })
+        return
+      }
+      const input = document.createElement('textarea')
+      input.value = val
+      document.body.appendChild(input)
+      input.select()
+      try {
+        document.execCommand('copy')
+        _that.$message.success(successMsg)
+      } catch (e) {
+        _that.$message.error('复制失败，请手动复制')
+      } finally {
+        document.body.removeChild(input)
       }
     },
     // 创建新集合
@@ -1165,10 +1233,73 @@ export default {
   background: #9fb59a;
 }
 
+.section-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.section-header-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
+.toolbar-btn {
+  padding: 6px 10px;
+}
+
+.toolbar-btn-small {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.toolbar-btn-mini {
+  padding: 4px 7px;
+  font-size: 12px;
+}
+
+.skill-install-popover {
+  padding: 2px;
+}
+
+.skill-install-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #4f804f;
+  margin-bottom: 6px;
+}
+
+.skill-install-text {
+  font-size: 13px;
+  color: #5e6b57;
+  margin-bottom: 8px;
+}
+
+.skill-install-feature {
+  font-size: 12px;
+  color: #4f804f;
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.skill-install-url {
+  margin-bottom: 8px;
+}
+
+.skill-install-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
 .section-header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
   padding: 12px 16px;
   border-bottom: 1px solid #ecece4;
   background: #f7f7f2;
@@ -1176,6 +1307,10 @@ export default {
   cursor: pointer;
   user-select: none;
   color: #4a4a4a;
+}
+
+.section-header-title {
+  line-height: 1.2;
 }
 
 .collection-list {
