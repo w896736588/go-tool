@@ -104,6 +104,7 @@ import supervisor from '@/utils/base/supervisor'
 import shell from '@/utils/base/shell'
 import shellOut from '@/utils/base/shell_out'
 import smartLinkSet from '@/utils/base/smart_link_set'
+import variableSet from '@/utils/base/variable_set'
 import group from '@/utils/base/group'
 import store from '@/utils/base/store'
 import sseDistribute from '@/utils/base/sse_distribute'
@@ -135,6 +136,17 @@ export default {
     const sseDistributeId = ref('') // SSE 分发 ID
     const isExecuting = ref(false) // 是否正在执行命令
     const currentOutputMessage = ref(null) // 当前输出消息的引用
+    // variable 会话状态（用于首页快捷命令多步交互）
+    const variableSession = ref({
+      active: false,
+      variableId: 0,
+      variableName: '',
+      runCmdId: 0,
+      replaceList: {},
+      isRun: 0,
+      isFinish: 0,
+      currentForm: null,
+    })
 
     // 开放的模块列表
     const openModules = module.GetOpenModuleList()
@@ -734,6 +746,7 @@ export default {
         type !== 'supervisorProcessList' &&
         type !== 'linkEnvList' &&
         type !== 'linkAccountList' &&
+        type !== 'variableOptionList' &&
         dynamicDataCache.value[type]
       ) {
         currentChildren.value = dynamicDataCache.value[type]
@@ -776,6 +789,12 @@ export default {
           break
         case 'linkAccountList':
           loadLinkAccountList()
+          break
+        case 'variableScriptList':
+          loadVariableScriptList()
+          break
+        case 'variableOptionList':
+          loadVariableOptionList()
           break
         default:
           isLoadingDynamic.value = false
@@ -1127,6 +1146,64 @@ export default {
         }
       })
       dynamicDataCache.value['linkAccountList'] = list
+      currentChildren.value = list
+      isLoadingDynamic.value = false
+      refreshCommandDropdownVisibility()
+    }
+
+    // 加载 variable 脚本列表
+    const loadVariableScriptList = () => {
+      variableSet.VariableList((response) => {
+        isLoadingDynamic.value = false
+        if (!(response && response.ErrCode === 0)) {
+          dynamicDataCache.value['variableScriptList'] = []
+          currentChildren.value = []
+          refreshCommandDropdownVisibility()
+          return
+        }
+        const variableList = Array.isArray(response.Data?.variable_list) ? response.Data.variable_list : []
+        const list = variableList.map(item => ({
+          command: normalizeCommandPart(item?.name) || `脚本${item?.id || ''}`,
+          name: normalizeCommandPart(item?.name) || `脚本${item?.id || ''}`,
+          aliases: [String(item?.id || '')].filter(Boolean),
+          desc: normalizeCommandPart(item?.desc) || '自定义脚本',
+          id: item?.id,
+          data: item
+        }))
+        dynamicDataCache.value['variableScriptList'] = list
+        currentChildren.value = list
+        refreshCommandDropdownVisibility()
+      })
+    }
+
+    // 加载 variable 当前步骤可选项
+    const loadVariableOptionList = () => {
+      const currentForm = variableSession.value.currentForm
+      const cmdType = normalizeCommandPart(currentForm?.CmdType)
+      const optionList = Array.isArray(currentForm?.Select?.OptionList) ? currentForm.Select.OptionList : []
+      if (!['9', '12', '14'].includes(cmdType) || optionList.length === 0) {
+        dynamicDataCache.value['variableOptionList'] = []
+        currentChildren.value = []
+        isLoadingDynamic.value = false
+        refreshCommandDropdownVisibility()
+        return
+      }
+      const list = optionList.map((item, index) => {
+        const label = normalizeCommandPart(item?.Label) || `选项${index + 1}`
+        const optionValue = normalizeCommandPart(item?.Value)
+        return {
+          command: label,
+          name: label,
+          aliases: [optionValue].filter(Boolean),
+          desc: optionValue ? `值: ${optionValue}` : '选项',
+          id: `${variableSession.value.runCmdId || 'cmd'}_${index}`,
+          data: {
+            optionValue,
+            optionLabel: label
+          }
+        }
+      })
+      dynamicDataCache.value['variableOptionList'] = list
       currentChildren.value = list
       isLoadingDynamic.value = false
       refreshCommandDropdownVisibility()
@@ -1541,6 +1618,24 @@ export default {
           break
         case 'linkRun':
           executeLinkAction(currentStack)
+          break
+        case 'variableRun':
+          executeVariableRunAction(currentStack)
+          break
+        case 'variableSet':
+          executeVariableSessionAction('set', currentStack, options.inputValue || '')
+          break
+        case 'variableChoose':
+          executeVariableSessionAction('choose', currentStack, options.inputValue || '')
+          break
+        case 'variableExec':
+          executeVariableSessionAction('exec', currentStack, options.inputValue || '')
+          break
+        case 'variableReset':
+          executeVariableSessionAction('reset', currentStack, options.inputValue || '')
+          break
+        case 'variableCancel':
+          executeVariableSessionAction('cancel', currentStack, options.inputValue || '')
           break
         case 'gitViewConfig':
           appendOutputResult('已禁用页面跳转，请仅使用命令快捷操作。\n')
@@ -2168,6 +2263,202 @@ export default {
         }
         finishExecution()
       })
+    }
+
+    // 重置 variable 会话
+    const resetVariableSession = () => {
+      variableSession.value = {
+        active: false,
+        variableId: 0,
+        variableName: '',
+        runCmdId: 0,
+        replaceList: {},
+        isRun: 0,
+        isFinish: 0,
+        currentForm: null,
+      }
+      dynamicDataCache.value['variableOptionList'] = []
+    }
+
+    // 处理 variable API 返回，更新会话与下一步提示
+    const handleVariableFlowResponse = (response) => {
+      if (!(response && response.ErrCode === 0)) {
+        appendOutputResult(`执行失败: ${normalizeCommandPart(response?.ErrMsg) || '未知错误'}\n`)
+        finishExecution()
+        return
+      }
+      const data = response.Data || {}
+      const runStatus = Number(data.RunStatus)
+      const currentForm = data.Form || null
+      if (data.ReplaceList && typeof data.ReplaceList === 'object') {
+        variableSession.value.replaceList = data.ReplaceList
+      }
+      if (currentForm && currentForm.Id !== undefined && currentForm.Id !== null) {
+        variableSession.value.runCmdId = Number(currentForm.Id) || 0
+      }
+      variableSession.value.currentForm = currentForm
+      variableSession.value.active = true
+      variableSession.value.isFinish = runStatus === 2 ? 1 : 0
+      variableSession.value.isRun = runStatus === 1 ? 1 : 0
+
+      if (runStatus === 0) {
+        const cmdType = normalizeCommandPart(currentForm?.CmdType)
+        if (['3', '17'].includes(cmdType)) {
+          const label = normalizeCommandPart(currentForm?.Input?.Label) || '输入参数'
+          appendOutputResult(`当前步骤: ${label}\n下一步: variable set <值>\n`)
+        } else if (['9', '12', '14'].includes(cmdType)) {
+          const options = Array.isArray(currentForm?.Select?.OptionList) ? currentForm.Select.OptionList : []
+          const optionText = options.map(item => normalizeCommandPart(item?.Label) || normalizeCommandPart(item?.Value)).filter(Boolean).join('、')
+          appendOutputResult(`当前步骤: ${normalizeCommandPart(currentForm?.Select?.Label) || '选择选项'}\n可选项: ${optionText || '无'}\n下一步: variable choose <选项>\n`)
+        } else {
+          appendOutputResult('脚本返回了未适配的步骤类型，请到 Variable 页面执行。\n')
+        }
+        finishExecution()
+        return
+      }
+      if (runStatus === 1) {
+        appendOutputResult('当前脚本已就绪，下一步: variable exec\n')
+        finishExecution()
+        return
+      }
+      if (runStatus === 2) {
+        appendOutputResult('执行完成\n')
+        resetVariableSession()
+        finishExecution()
+        return
+      }
+      appendOutputResult('收到未知状态，已保留当前会话\n')
+      finishExecution()
+    }
+
+    // 执行 variable run：选择脚本并启动
+    const executeVariableRunAction = (stack) => {
+      const actionIndex = stack.findIndex(item => item.action === 'variableRun')
+      const targetCmd = actionIndex >= 0 ? stack[actionIndex + 1] : null
+      if (!(targetCmd && targetCmd.data && targetCmd.data.id)) {
+        appendOutputResult('错误：请先选择要执行的脚本\n')
+        finishExecution()
+        return
+      }
+      resetVariableSession()
+      variableSession.value.active = true
+      variableSession.value.variableId = Number(targetCmd.data.id) || 0
+      variableSession.value.variableName = normalizeCommandPart(targetCmd.data.name) || normalizeCommandPart(targetCmd.name)
+      appendOutputResult(`已启动脚本会话: ${variableSession.value.variableName || variableSession.value.variableId}\n`)
+      variableSet.VariableRun(
+        sseDistributeId.value,
+        variableSession.value.variableId,
+        0,
+        0,
+        JSON.stringify({}),
+        (response) => {
+          handleVariableFlowResponse(response)
+        }
+      )
+    }
+
+    // 执行 variable 会话动作：set/choose/exec/reset/cancel
+    const executeVariableSessionAction = (action, stack, inputValue) => {
+      const session = variableSession.value
+      if (action === 'reset') {
+        resetVariableSession()
+        appendOutputResult('已重置 variable 会话，可重新执行 variable run <脚本名>\n')
+        finishExecution()
+        return
+      }
+      if (action === 'cancel') {
+        resetVariableSession()
+        appendOutputResult('已取消 variable 会话\n')
+        finishExecution()
+        return
+      }
+      if (!session.active || !session.variableId) {
+        appendOutputResult('当前没有进行中的 variable 会话，请先执行 variable run <脚本名>\n')
+        finishExecution()
+        return
+      }
+
+      const currentForm = session.currentForm || {}
+      const cmdType = normalizeCommandPart(currentForm?.CmdType)
+
+      if (action === 'set') {
+        if (!['3', '17'].includes(cmdType)) {
+          appendOutputResult('当前步骤不是输入步骤，请使用 variable choose <选项>\n')
+          finishExecution()
+          return
+        }
+        const editValue = normalizeCommandPart(inputValue)
+        if (!editValue) {
+          appendOutputResult('请输入参数值，例如: variable set 123\n')
+          finishExecution()
+          return
+        }
+        variableSet.VariableSet(
+          session.variableId,
+          Number(currentForm.Id) || Number(session.runCmdId) || 0,
+          JSON.stringify(session.replaceList || {}),
+          editValue,
+          (response) => {
+            handleVariableFlowResponse(response)
+          }
+        )
+        return
+      }
+
+      if (action === 'choose') {
+        if (!['9', '12', '14'].includes(cmdType)) {
+          appendOutputResult('当前步骤不是选项步骤，请使用 variable set <值>\n')
+          finishExecution()
+          return
+        }
+        const actionIndex = stack.findIndex(item => item.action === 'variableChoose')
+        const targetCmd = actionIndex >= 0 ? stack[actionIndex + 1] : null
+        const selectedValue = normalizeCommandPart(targetCmd?.data?.optionValue) || normalizeCommandPart(inputValue)
+        const options = Array.isArray(currentForm?.Select?.OptionList) ? currentForm.Select.OptionList : []
+        const matched = options.find(item => {
+          const label = normalizeCommandPart(item?.Label)
+          const value = normalizeCommandPart(item?.Value)
+          return selectedValue && (selectedValue === label || selectedValue === value)
+        })
+        if (!matched) {
+          const optionText = options.map(item => normalizeCommandPart(item?.Label) || normalizeCommandPart(item?.Value)).filter(Boolean).join('、')
+          appendOutputResult(`选项不存在，可选项: ${optionText || '无'}\n`)
+          finishExecution()
+          return
+        }
+        variableSet.VariableSet(
+          session.variableId,
+          Number(currentForm.Id) || Number(session.runCmdId) || 0,
+          JSON.stringify(session.replaceList || {}),
+          normalizeCommandPart(matched?.Value),
+          (response) => {
+            handleVariableFlowResponse(response)
+          }
+        )
+        return
+      }
+
+      if (action === 'exec') {
+        if (Number(session.isRun) !== 1) {
+          appendOutputResult('当前步骤尚未就绪，不能最终执行\n')
+          finishExecution()
+          return
+        }
+        variableSet.VariableRun(
+          sseDistributeId.value,
+          session.variableId,
+          Number(session.runCmdId) || Number(currentForm.Id) || 0,
+          1,
+          JSON.stringify(session.replaceList || {}),
+          (response) => {
+            handleVariableFlowResponse(response)
+          }
+        )
+        return
+      }
+
+      appendOutputResult('未知 variable 操作\n')
+      finishExecution()
     }
     
     // 完成执行

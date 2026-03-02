@@ -239,9 +239,23 @@ export default {
         })
       }
       sseDistribute.RegisterReceive(_that.sse_distribute_id, function (msg) {
-        _that.sseThrottleStringFunc.update(msg)
+        // 过滤内部解析与尾包噪声，避免在 Git 界面展示实现细节日志
+        const cleanedMsg = _that.sanitizeGitSseOutput(msg)
+        if (!cleanedMsg) {
+          return
+        }
+        _that.sseThrottleStringFunc.update(cleanedMsg)
       })
       return _that.sse_distribute_id
+    },
+    // sanitizeGitSseOutput 清理后端内部标记与命令拼接噪声
+    sanitizeGitSseOutput: function (msg) {
+      let text = msg || ''
+      text = text.replace(/__DT_(LOCAL|REMOTE)_BRANCH_(BEGIN|END)__/g, '')
+      text = text.replace(/;?\s*printf\s+'__GS_CMD_DONE_[^']*'\s+"\$\\?"\s*/g, '')
+      text = text.replace(/__GS_CMD_DONE_[^:\s]+:\d+\s*/g, '')
+      text = text.replace(/\n{3,}/g, '\n\n')
+      return text.trim() === '' ? '' : text
     },
     calculateOutputDivHeight: function () {
       let _that = this

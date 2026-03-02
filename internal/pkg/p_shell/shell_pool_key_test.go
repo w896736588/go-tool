@@ -2,6 +2,12 @@ package p_shell
 
 import "testing"
 
+func TestMaxShellPoolSizeIsTwenty(t *testing.T) {
+	if maxShellPoolSize != 20 {
+		t.Fatalf("maxShellPoolSize = %d, want 20", maxShellPoolSize)
+	}
+}
+
 func TestResolvePoolKeyBySshConfigId(t *testing.T) {
 	sshConfig := map[string]any{
 		"id": "7",
@@ -25,4 +31,3 @@ func TestResolvePoolKeyByShellClientPrefix(t *testing.T) {
 		t.Fatalf("resolvePoolKey() = %q, want %q", got, want)
 	}
 }
-

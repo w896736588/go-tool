@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unsafe"
 
 	"gitee.com/Sxiaobai/gs/v2/gsssh"
 	"gitee.com/Sxiaobai/gs/v2/gstool"
@@ -27,9 +28,13 @@ type Shell struct {
 	log                 *gstool.GsSlog
 }
 
-const maxShellPoolSize = 10
+const maxShellPoolSize = 20
 const shellIdleTimeout = 3 * time.Minute
 const shellIdleCleanTicker = 30 * time.Second
+const getClientBusyWaitTimeout = 5 * time.Second
+const getClientBusyWaitInterval = 100 * time.Millisecond
+
+var terminalBusyInspector = isTerminalBusy
 
 func canSendSse(sse *p_sse.SseShell) bool {
 	return sse != nil && sse.Sse != nil
@@ -262,54 +267,113 @@ func (h *Shell) GetClient(sshConfig map[string]any, shellClientId string, sse *p
 	gstool.FmtPrintlnLogTime(`[Shell.GetClient] enter ssh_id=%s shell_client_id=%s pool_key=%s`,
 		sshId, shellClientId, poolKey)
 
-	h.lock.Lock()
-	pool := h.ShellClientPoolMap[poolKey]
-	needCreate := len(pool) < maxShellPoolSize
-	poolSize := len(pool)
-	h.lock.Unlock()
-	gstool.FmtPrintlnLogTime(`[Shell.GetClient] pool status ssh_id=%s pool_key=%s pool_size=%d need_create=%v`,
-		sshId, poolKey, poolSize, needCreate)
-
-	if needCreate {
-		gstool.FmtPrintlnLogTime(`[Shell.GetClient] create begin ssh_id=%s pool_key=%s`, sshId, poolKey)
-		createStart := time.Now()
-		newClient, err := h.createShellClient(sshConfig, poolKey, sse, formatStream, promptKeywords, promptFunc)
-		gstool.FmtPrintlnLogTime(`[Shell.GetClient] create end ssh_id=%s pool_key=%s cost_ms=%d err=%v`,
-			sshId, poolKey, time.Since(createStart).Milliseconds(), err)
-		if err != nil {
-			return nil, err
-		}
+	for {
 		h.lock.Lock()
-		h.ShellClientPoolMap[poolKey] = append(h.ShellClientPoolMap[poolKey], newClient)
-		h.ShellClientStartMap[newClient] = time.Now().Unix()
-		h.ShellClientLastUsed[newClient] = time.Now().Unix()
-		pool = h.ShellClientPoolMap[poolKey]
-		if h.ShellClientPoolNext[poolKey] >= len(pool) {
-			h.ShellClientPoolNext[poolKey] = 0
+		pool := h.ShellClientPoolMap[poolKey]
+		if len(pool) > 0 {
+			next := h.ShellClientPoolNext[poolKey]
+			idleIndex := findIdleClientIndex(pool, next)
+			if idleIndex >= 0 {
+				chooseClient := pool[idleIndex]
+				h.ShellClientPoolNext[poolKey] = (idleIndex + 1) % len(pool)
+				h.ShellClientLastUsed[chooseClient] = time.Now().Unix()
+				// pooled client may be reused by a new request; always rebind SSE receiver
+				bindReceiveHandler(chooseClient, sse, formatStream)
+				h.lock.Unlock()
+				gstool.FmtPrintlnLogTime(`[Shell.GetClient] return success ssh_id=%s pool_key=%s choose_index=%d pool_size=%d total_cost_ms=%d`,
+					sshId, poolKey, idleIndex, len(pool), time.Since(start).Milliseconds())
+				return chooseClient, nil
+			}
 		}
+		needCreate := len(pool) < maxShellPoolSize
+		poolSize := len(pool)
 		h.lock.Unlock()
-	}
 
-	h.lock.Lock()
-	defer h.lock.Unlock()
-	pool = h.ShellClientPoolMap[poolKey]
-	if len(pool) == 0 {
-		gstool.FmtPrintlnLogTime(`[Shell.GetClient] return error ssh_id=%s pool_key=%s err=ssh pool is empty total_cost_ms=%d`,
-			sshId, poolKey, time.Since(start).Milliseconds())
-		return nil, errors.New("ssh pool is empty")
+		gstool.FmtPrintlnLogTime(`[Shell.GetClient] pool status ssh_id=%s pool_key=%s pool_size=%d need_create=%v`,
+			sshId, poolKey, poolSize, needCreate)
+
+		if needCreate {
+			gstool.FmtPrintlnLogTime(`[Shell.GetClient] create begin ssh_id=%s pool_key=%s`, sshId, poolKey)
+			createStart := time.Now()
+			newClient, err := h.createShellClient(sshConfig, poolKey, sse, formatStream, promptKeywords, promptFunc)
+			gstool.FmtPrintlnLogTime(`[Shell.GetClient] create end ssh_id=%s pool_key=%s cost_ms=%d err=%v`,
+				sshId, poolKey, time.Since(createStart).Milliseconds(), err)
+			if err != nil {
+				return nil, err
+			}
+			h.lock.Lock()
+			pool = h.ShellClientPoolMap[poolKey]
+			if len(pool) < maxShellPoolSize {
+				h.ShellClientPoolMap[poolKey] = append(pool, newClient)
+				h.ShellClientStartMap[newClient] = time.Now().Unix()
+				h.ShellClientLastUsed[newClient] = time.Now().Unix()
+				if h.ShellClientPoolNext[poolKey] >= len(h.ShellClientPoolMap[poolKey]) {
+					h.ShellClientPoolNext[poolKey] = 0
+				}
+				h.lock.Unlock()
+			} else {
+				h.lock.Unlock()
+				newClient.CloseTerminal()
+			}
+			continue
+		}
+
+		if time.Since(start) >= getClientBusyWaitTimeout {
+			gstool.FmtPrintlnLogTime(`[Shell.GetClient] return error ssh_id=%s pool_key=%s err=all ssh clients are busy total_cost_ms=%d`,
+				sshId, poolKey, time.Since(start).Milliseconds())
+			return nil, errors.New("all ssh clients are busy")
+		}
+		time.Sleep(getClientBusyWaitInterval)
 	}
-	next := h.ShellClientPoolNext[poolKey]
-	if next >= len(pool) {
+}
+
+func findIdleClientIndex(pool []*gsssh.SshTerminal, next int) int {
+	if len(pool) == 0 {
+		return -1
+	}
+	if next < 0 || next >= len(pool) {
 		next = 0
 	}
-	chooseClient := pool[next]
-	h.ShellClientPoolNext[poolKey] = (next + 1) % len(pool)
-	h.ShellClientLastUsed[chooseClient] = time.Now().Unix()
-	// pooled client may be reused by a new request; always rebind SSE receiver
-	bindReceiveHandler(chooseClient, sse, formatStream)
-	gstool.FmtPrintlnLogTime(`[Shell.GetClient] return success ssh_id=%s pool_key=%s choose_index=%d pool_size=%d total_cost_ms=%d`,
-		sshId, poolKey, next, len(pool), time.Since(start).Milliseconds())
-	return chooseClient, nil
+	for i := 0; i < len(pool); i++ {
+		idx := (next + i) % len(pool)
+		client := pool[idx]
+		if client == nil {
+			continue
+		}
+		if !terminalBusyInspector(client) {
+			return idx
+		}
+	}
+	return -1
+}
+
+// isTerminalBusy 根据 gsssh.SshTerminal 内部互斥锁判断是否正在执行命令。
+// command 字段不会在每次执行后清空，不能用于 busy 判定。
+func isTerminalBusy(gsShell *gsssh.SshTerminal) bool {
+	if gsShell == nil {
+		return true
+	}
+	defer func() {
+		_ = recover()
+	}()
+	val := reflect.ValueOf(gsShell)
+	if !val.IsValid() || val.Kind() != reflect.Ptr || val.IsNil() {
+		return true
+	}
+	elem := val.Elem()
+	if !elem.IsValid() || elem.Kind() != reflect.Struct {
+		return true
+	}
+	field := elem.FieldByName("lockCommand")
+	if !field.IsValid() || field.Type() != reflect.TypeOf(sync.Mutex{}) || !field.CanAddr() {
+		return false
+	}
+	mtx := (*sync.Mutex)(unsafe.Pointer(field.UnsafeAddr()))
+	if mtx.TryLock() {
+		mtx.Unlock()
+		return false
+	}
+	return true
 }
 
 // GetClientMarkdown keeps old one-to-one key behavior for markdown/sftp paths.

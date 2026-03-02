@@ -343,7 +343,51 @@ const commandConfig = [
     icon: '📝',
     desc: '自定义脚本管理',
     module: 'variable',
-    path: '/Variable'
+    path: '/Variable',
+    children: [
+      {
+        command: 'run',
+        name: '启动脚本',
+        desc: '选择脚本并启动多步执行',
+        action: 'variableRun',
+        needTarget: true,
+        dynamicChildren: 'variableScriptList'
+      },
+      {
+        command: 'set',
+        name: '输入参数',
+        desc: '给当前步骤输入值',
+        action: 'variableSet',
+        needInput: true,
+        inputPlaceholder: '请输入当前步骤的值'
+      },
+      {
+        command: 'choose',
+        name: '选择选项',
+        desc: '从当前步骤候选项中选择',
+        action: 'variableChoose',
+        needTarget: true,
+        dynamicChildren: 'variableOptionList'
+      },
+      {
+        command: 'exec',
+        name: '执行最终步骤',
+        desc: '当脚本可执行时触发最终执行',
+        action: 'variableExec'
+      },
+      {
+        command: 'reset',
+        name: '重置会话',
+        desc: '重置当前 variable 会话',
+        action: 'variableReset'
+      },
+      {
+        command: 'cancel',
+        name: '取消会话',
+        desc: '取消当前 variable 会话',
+        action: 'variableCancel'
+      }
+    ]
   }
 ]
 

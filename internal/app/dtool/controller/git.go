@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"gitee.com/Sxiaobai/gs/v2/gsgin"
@@ -287,8 +288,11 @@ func GitGroupBranchList(c *gin.Context) {
 		SseDistributeId: sseDistributeId,
 	}
 
+	var summaryMu sync.Mutex
 	writeSummary := func(msg string) {
 		if sse != nil && sse.Sse != nil {
+			summaryMu.Lock()
+			defer summaryMu.Unlock()
 			sse.Send(msg)
 		}
 	}
@@ -304,6 +308,8 @@ func GitGroupBranchList(c *gin.Context) {
 	resultChan := make(chan gitItemResult, len(gitList))
 	var wg sync.WaitGroup
 	semaphore := make(chan struct{}, 8)
+	totalCount := int32(len(gitList))
+	var doneCount int32
 
 	for idx, gitConfig := range gitList {
 		wg.Add(1)
@@ -315,6 +321,19 @@ func GitGroupBranchList(c *gin.Context) {
 			itemName := cast.ToString(item[`name`])
 			itemPath := cast.ToString(item[`code_path`])
 			sshId := cast.ToString(item[`ssh_id`])
+			writeSummary(fmt.Sprintf("开始查询 [%s] (%s)\n", itemName, itemPath))
+			reportFinish := func(ok bool, detail string) {
+				done := atomic.AddInt32(&doneCount, 1)
+				status := "成功"
+				if !ok {
+					status = "失败"
+				}
+				if detail != `` {
+					writeSummary(fmt.Sprintf("[进度 %d/%d] [%s] %s: %s\n", done, totalCount, itemName, status, detail))
+					return
+				}
+				writeSummary(fmt.Sprintf("[进度 %d/%d] [%s] %s\n", done, totalCount, itemName, status))
+			}
 			itemResult := map[string]any{
 				`id`:            cast.ToString(item[`id`]),
 				`name`:          itemName,
@@ -325,6 +344,13 @@ func GitGroupBranchList(c *gin.Context) {
 				`ok`:            false,
 				`error`:         ``,
 			}
+			defer func() {
+				if cast.ToBool(itemResult[`ok`]) {
+					reportFinish(true, cast.ToString(itemResult[`local_branch`])+` -> `+cast.ToString(itemResult[`remote_branch`]))
+					return
+				}
+				reportFinish(false, cast.ToString(itemResult[`error`]))
+			}()
 
 			if itemPath == `` || sshId == `` {
 				itemResult[`error`] = `缺少 code_path 或 ssh_id 配置`
@@ -363,11 +389,27 @@ func GitGroupBranchList(c *gin.Context) {
 				sshId,
 				`group_branch_`+gitGroupId+`_`+cast.ToString(item[`id`])+`_`+cast.ToString(time.Now().UnixNano()),
 			)
-			// 组内批量查询只保留汇总结果，避免每个项目的原始shell输出刷屏
+			// 组内批量查询只保留汇总结果，避免每个项目的原始 shell 输出刷屏
 			silentSse := &p_sse.SseShell{}
 			sshClient, clientErr := component.ShellClient.GetClient(sshConfig, uniqueKey, silentSse, nil, nil, nil)
 			if clientErr != nil {
 				itemResult[`error`] = clientErr.Error()
+				resultChan <- gitItemResult{
+					Index: i,
+					Data:  itemResult,
+					Line: fmt.Sprintf(
+						"| %s | %s | %s | %s |",
+						escapeMarkdownTableCell(itemName),
+						escapeMarkdownTableCell(itemPath),
+						escapeMarkdownTableCell(`N/A`),
+						escapeMarkdownTableCell(`失败: `+cast.ToString(itemResult[`error`])),
+					),
+				}
+				return
+			}
+			// 复用“设置目录安全 + 保存账号密码配置”的逻辑，避免分组查询单独实现认证方案。
+			if prepareErr := prepareGitBranchQueryEnv(sshClient, itemPath); prepareErr != nil {
+				itemResult[`error`] = prepareErr.Error()
 				resultChan <- gitItemResult{
 					Index: i,
 					Data:  itemResult,
@@ -454,30 +496,59 @@ type GitCurrentBranchInfo struct {
 	RawOutput    string
 }
 
+const (
+	gitRemoteBranchTimeout      = 10 * time.Second
+	gitRemoteBranchRetryTimeout = 3 * time.Second
+)
+
 func queryCurrentBranchInfo(sshClient *gsssh.SshTerminal, codePath string, timeout time.Duration) (*GitCurrentBranchInfo, error) {
-	command := p_shell.NewCommand()
-	command.Cd(codePath)
-	command.Echo(`当前分支：`)
-	command.GitShowBranch()
-	command.Echo(`远程分支：`)
-	command.GitShowOriginBranch()
-	output, err := sshClient.RunCommandWait(command.GetCommand().ToStr(), timeout)
-	if err != nil {
-		return nil, err
+	localCommand := p_shell.NewCommand()
+	localCommand.Cd(codePath)
+	localCommand.Echo(`当前分支：`)
+	localCommand.GitShowBranch()
+	localOutput, localErr := sshClient.RunCommandWait(localCommand.GetCommand().ToStr(), timeout)
+	if localErr != nil {
+		return nil, localErr
 	}
-	localBranch, remoteBranch := parseBranchFromCurrentBranchOutput(output)
+	localBranch, _ := parseBranchFromCurrentBranchOutput(localOutput)
 	if localBranch == `` {
 		localBranch = `N/A`
+	}
+
+	remoteBranch := `N/A`
+	remoteOutput, remoteErr := runRemoteBranchQuery(sshClient, codePath, gitRemoteBranchTimeout)
+	if remoteErr != nil {
+		retryOutput, retryErr := runRemoteBranchQuery(sshClient, codePath, gitRemoteBranchRetryTimeout)
+		if retryErr == nil {
+			_, parsedRemote := parseBranchFromCurrentBranchOutput(retryOutput)
+			if parsedRemote != `` {
+				remoteBranch = normalizeRemoteBranchDisplay(parsedRemote)
+			}
+		}
+	} else {
+		_, parsedRemote := parseBranchFromCurrentBranchOutput(remoteOutput)
+		if parsedRemote != `` {
+			remoteBranch = normalizeRemoteBranchDisplay(parsedRemote)
+		}
 	}
 	if remoteBranch == `` {
 		remoteBranch = `N/A`
 	}
-	remoteBranch = normalizeRemoteBranchDisplay(remoteBranch)
+
 	return &GitCurrentBranchInfo{
 		LocalBranch:  localBranch,
 		RemoteBranch: remoteBranch,
-		RawOutput:    output,
+		// 返回给前端时使用展示文本，避免暴露内部解析分隔标记
+		RawOutput: buildCurrentBranchDisplayOutput(localBranch, remoteBranch),
 	}, nil
+}
+
+func runRemoteBranchQuery(sshClient *gsssh.SshTerminal, codePath string, timeout time.Duration) (string, error) {
+	remoteCommand := p_shell.NewCommand()
+	remoteCommand.Cd(codePath)
+	remoteCommand.Echo(`远程分支：`)
+	remoteCommand.GitShowOriginBranch()
+	return sshClient.RunCommandWait(remoteCommand.GetCommand().ToStr(), timeout)
 }
 
 func parseBranchFromCurrentBranchOutput(output string) (string, string) {
@@ -485,11 +556,18 @@ func parseBranchFromCurrentBranchOutput(output string) (string, string) {
 	lines := strings.Split(text, "\n")
 	localBranch := ``
 	remoteBranch := ``
+	localBegin := false
+	localEnd := false
+	remoteBegin := false
+	remoteEnd := false
 
 	findNextValue := func(start int) string {
 		for i := start; i < len(lines); i++ {
 			line := strings.TrimSpace(lines[i])
 			if line == `` {
+				continue
+			}
+			if isBranchParseNoise(line) {
 				continue
 			}
 			if strings.Contains(line, `当前分支：`) || strings.Contains(line, `远程分支：`) {
@@ -502,6 +580,36 @@ func parseBranchFromCurrentBranchOutput(output string) (string, string) {
 
 	for idx, line := range lines {
 		trimmed := strings.TrimSpace(line)
+		if strings.Contains(trimmed, `__DT_LOCAL_BRANCH_BEGIN__`) {
+			localBegin = true
+			continue
+		}
+		if strings.Contains(trimmed, `__DT_LOCAL_BRANCH_END__`) {
+			localEnd = true
+			continue
+		}
+		if strings.Contains(trimmed, `__DT_REMOTE_BRANCH_BEGIN__`) {
+			remoteBegin = true
+			continue
+		}
+		if strings.Contains(trimmed, `__DT_REMOTE_BRANCH_END__`) {
+			remoteEnd = true
+			continue
+		}
+
+		if localBegin && !localEnd && localBranch == `` {
+			if isLikelyLocalBranch(trimmed) {
+				localBranch = trimmed
+				continue
+			}
+		}
+		if remoteBegin && !remoteEnd && remoteBranch == `` {
+			if isLikelyRemoteBranch(trimmed) {
+				remoteBranch = trimmed
+				continue
+			}
+		}
+
 		if strings.Contains(trimmed, `当前分支：`) && localBranch == `` {
 			localBranch = findNextValue(idx + 1)
 			continue
@@ -512,6 +620,55 @@ func parseBranchFromCurrentBranchOutput(output string) (string, string) {
 		}
 	}
 	return localBranch, remoteBranch
+}
+
+func isBranchParseNoise(line string) bool {
+	if line == `` {
+		return true
+	}
+	if strings.Contains(line, `%d\n`) || strings.Contains(line, `%d\\n`) || strings.Contains(line, `"$?"`) || strings.Contains(line, `$?"`) {
+		return true
+	}
+	if strings.Contains(line, `__GS_CMD_DONE_`) {
+		return true
+	}
+	if strings.HasPrefix(line, `cd `) {
+		return true
+	}
+	if isLikelyShellPrompt(line) {
+		return true
+	}
+	return false
+}
+
+func isLikelyShellPrompt(line string) bool {
+	if !(strings.HasSuffix(line, `$`) || strings.HasSuffix(line, `#`) || strings.HasSuffix(line, `%`)) {
+		return false
+	}
+	if !strings.Contains(line, `@`) || !strings.Contains(line, `:`) {
+		return false
+	}
+	return true
+}
+
+func isLikelyLocalBranch(line string) bool {
+	if isBranchParseNoise(line) {
+		return false
+	}
+	if strings.Contains(line, " ") || strings.Contains(line, "\t") {
+		return false
+	}
+	return true
+}
+
+func isLikelyRemoteBranch(line string) bool {
+	if isBranchParseNoise(line) {
+		return false
+	}
+	if strings.Contains(line, `refs/heads/`) {
+		return true
+	}
+	return false
 }
 
 func escapeMarkdownTableCell(value string) string {
@@ -542,6 +699,24 @@ func normalizeRemoteBranchDisplay(value string) string {
 		return last
 	}
 	return v
+}
+
+// buildCurrentBranchDisplayOutput 组装“当前分支”接口的展示输出
+func buildCurrentBranchDisplayOutput(localBranch, remoteBranch string) string {
+	local := strings.TrimSpace(localBranch)
+	remote := strings.TrimSpace(remoteBranch)
+	if local == `` {
+		local = `N/A`
+	}
+	if remote == `` {
+		remote = `N/A`
+	}
+	return strings.Join([]string{
+		`当前分支：`,
+		local,
+		`远程分支：`,
+		remote,
+	}, "\n")
 }
 
 func CreateMerge(c *gin.Context) {
@@ -692,4 +867,39 @@ func GitSaveCredentials(c *gin.Context) {
 		sse.Send(`写入成功` + "\n")
 	}
 	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
+// prepareGitBranchQueryEnv 复用 GitSetSafeLog + GitSaveCredentials 的命令逻辑。
+// 先设置 safe.directory，再确保 .git/config 存在 credential.store，避免并发查询时进入交互认证。
+func prepareGitBranchQueryEnv(sshClient *gsssh.SshTerminal, codePath string) error {
+	if sshClient == nil {
+		return errors.New(`ssh client 为空`)
+	}
+	if codePath == `` {
+		return errors.New(`git未配置目录`)
+	}
+
+	setSafeCmd := p_shell.NewCommand()
+	setSafeCmd.Cd(codePath)
+	setSafeCmd.GitSetSafe(codePath)
+	if _, err := sshClient.RunCommandWait(setSafeCmd.GetCommand().ToStr(), 4*time.Second); err != nil {
+		return err
+	}
+
+	checkCmd := p_shell.NewCommand()
+	checkCmd.Cd(codePath)
+	checkCmd.Cat(`.git/config`)
+	configRet, err := sshClient.RunCommandWait(checkCmd.GetCommand().ToStr(), 4*time.Second)
+	if err != nil {
+		return err
+	}
+	if strings.Contains(configRet, `store`) && strings.Contains(configRet, `credential`) {
+		return nil
+	}
+
+	appendCmd := p_shell.NewCommand()
+	appendCmd.Cd(codePath)
+	appendCmd.Append(`.git/config`, "[credential]\nhelper = store\n")
+	_, err = sshClient.RunCommandWait(appendCmd.GetCommand().ToStr(), 4*time.Second)
+	return err
 }
