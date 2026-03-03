@@ -110,6 +110,7 @@
             <span class="send-icon">→</span>
           </button>
         </div>
+        <div class="next-step-tip">{{ nextStepHint }}</div>
       </div>
     </div>
   </div>
@@ -640,6 +641,75 @@ export default {
         }
         return `<span>${safe}</span>`
       }).join('')
+    })
+
+    // 获取 variable 会话的下一步提示语（首页多步命令）
+    const getVariableSessionStepHint = () => {
+      const session = variableSession.value || {}
+      if (!session.active || !session.variableId) {
+        return ''
+      }
+      if (Number(session.isFinish) === 1) {
+        return '下一步：输入 variable run <脚本名> 开始新会话'
+      }
+      if (Number(session.isRun) === 1) {
+        return '下一步：输入 variable exec 并回车执行'
+      }
+      const cmdType = normalizeCommandPart(session.currentForm?.CmdType)
+      if (['3', '17'].includes(cmdType)) {
+        return '下一步：输入 variable set <值> 并回车'
+      }
+      if (['9', '12', '14'].includes(cmdType)) {
+        return '下一步：输入 variable choose <选项> 并回车'
+      }
+      return '下一步：继续 variable 会话，或输入 variable cancel 取消'
+    }
+
+    // 计算首页命令行的下一步浅色提示文案
+    const nextStepHint = computed(() => {
+      if (isExecuting.value) {
+        return '正在执行命令，请稍候...'
+      }
+
+      const variableHint = getVariableSessionStepHint()
+      if (variableHint) {
+        return variableHint
+      }
+
+      if (commandStack.value.length === 0) {
+        const currentText = normalizeCommandPart(inputText.value)
+        if (!currentText) {
+          return '下一步：输入 / 查看可用命令'
+        }
+        if (isCommandModeByText(inputText.value)) {
+          return '下一步：从下拉列表选择命令，或继续输入补全'
+        }
+        return '下一步：输入 / 进入命令模式'
+      }
+
+      const actionCmd = commandStack.value.find(item => item.action)
+      if (actionCmd) {
+        if (isActionReady(actionCmd, commandStack.value, currentInputValue.value)) {
+          return '下一步：按 Enter 执行命令'
+        }
+        const incompleteMessage = normalizeCommandPart(getActionIncompleteMessage(actionCmd, commandStack.value, currentInputValue.value))
+        if (incompleteMessage) {
+          return `下一步：${incompleteMessage.replace(/^命令未完成[:：]?/, '').trim()}`
+        }
+        return '下一步：继续补全当前命令'
+      }
+
+      const lastCmd = commandStack.value[commandStack.value.length - 1]
+      if (lastCmd?.needTarget) {
+        return '下一步：请选择目标'
+      }
+      if (lastCmd?.children?.length > 0 || (lastCmd?.dynamicChildren && currentChildren.value.length > 0)) {
+        return '下一步：请选择下一级命令'
+      }
+      if (lastCmd?.needInput) {
+        return `下一步：${lastCmd.inputPlaceholder || '请输入参数'}`
+      }
+      return '下一步：继续输入，完成后按 Enter 执行'
     })
 
     // 解析输入文本，获取当前命令层级
@@ -2778,6 +2848,7 @@ export default {
       inputPlaceholder,
       canExecuteCommand,
       highlightedInputHtml,
+      nextStepHint,
       availableCommands,
       recentHistoryCommands,
       handleInput,
@@ -3249,6 +3320,15 @@ export default {
 
 .input-wrapper:focus-within {
   border-color: #8fc88f;
+}
+
+.next-step-tip {
+  min-height: 18px;
+  margin-top: 8px;
+  padding: 0 4px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #9aa79a;
 }
 
 .input-overlay-box {
