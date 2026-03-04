@@ -125,13 +125,23 @@ func SupervisorRestart(c *gin.Context) {
 	retMsgList := make([]string, 0)
 	dockerName := cast.ToString(reqMap[`docker_name`])
 	supervisorName := cast.ToString(reqMap[`supervisor_name`])
+	// only_current_status=true 时，仅查询当前重启服务状态；默认查询全部服务状态（兼容其他页面刷新列表）。
+	onlyCurrentStatus := cast.ToBool(reqMap[`only_current_status`])
 	if supervisorName == `` {
 		gsgin.GinResponseError(c, `消费者name不能为空`, nil)
 		return
 	}
 	restartCommand := p_shell.NewCommand().Sudo()
 	restartCommand.ConsumerRestart(dockerName, supervisorName)
-	restartCommand.ConsumerStatusGrep(dockerName, supervisorName)
+	if onlyCurrentStatus {
+		restartCommand.ConsumerStatusGrep(dockerName, supervisorName)
+	} else {
+		if dockerName == `` {
+			restartCommand.ConsumerStatus()
+		} else {
+			restartCommand.DockerExecConsumerStatus(dockerName)
+		}
+	}
 	ret, _ := sshClient.RunCommandWait(restartCommand.GetCommand().ToStr(), 40*time.Second)
 	retMsgList = append(retMsgList, ret)
 	gsgin.GinResponseSuccess(c, ``, strings.Join(retMsgList, gsdefine.Enter))

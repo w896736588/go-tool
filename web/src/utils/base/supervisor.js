@@ -19,8 +19,12 @@ function SupervisorConfigShow(supervisorConfig,configDir, callBack) {
     base.BasePost('/api/SupervisorConfigShow', supervisorConfig , callBack)
 }
 
-function SupervisorRestart(supervisorConfig, SupervisorName, callBack) {
+// SupervisorRestart 重启指定进程，支持通过 only_current_status 控制返回状态范围。
+function SupervisorRestart(supervisorConfig, SupervisorName, callBack, options = {}) {
     supervisorConfig.supervisor_name = SupervisorName
+    if (Object.prototype.hasOwnProperty.call(options, 'only_current_status')) {
+      supervisorConfig.only_current_status = options.only_current_status
+    }
     base.BasePost('/api/SupervisorRestart', supervisorConfig , callBack)
 }
 

@@ -69,6 +69,12 @@
         <div class="command-breadcrumb" v-if="commandBreadcrumb">
           <span class="breadcrumb-text">{{ commandBreadcrumb }}</span>
         </div>
+        <div v-if="isLoadingDynamic" class="command-loading">
+          <span class="command-status command-status-running">
+            <span class="command-status-spinner"></span>
+          </span>
+          <span class="command-loading-text">列表加载中...</span>
+        </div>
         <div
           v-for="(cmd, index) in filteredCommands"
           :key="getCommandKey(cmd, index)"
@@ -438,7 +444,7 @@ export default {
 
     const refreshCommandDropdownVisibility = () => {
       showCommands.value = isCommandModeByText(inputText.value) &&
-        currentChildren.value.length > 0 &&
+        (currentChildren.value.length > 0 || isLoadingDynamic.value) &&
         !isCommandReadyToExecute()
     }
 
@@ -476,7 +482,8 @@ export default {
         updateCurrentCommandStatus(parsed.status)
       }
       const current = String(currentOutputMessage.value.resultText || '')
-      const merged = current + sanitizeCommandOutput(parsed.text)
+      // 先拼接再整体清洗，避免 GS_CMD_DONE 片段被 SSE 分段后漏过滤。
+      const merged = sanitizeCommandOutput(current + parsed.text)
       currentOutputMessage.value.resultText = merged.length > 50000 ? merged.slice(-50000) : merged
       scrollToBottom()
     }
@@ -484,23 +491,15 @@ export default {
     const appendOutputProcess = (text) => {
       if (!currentOutputMessage.value) return
       const current = String(currentOutputMessage.value.processText || '')
-      const merged = current + sanitizeCommandOutput(String(text || ''))
+      // 先拼接再整体清洗，避免 GS_CMD_DONE 片段被 SSE 分段后漏过滤。
+      const merged = sanitizeCommandOutput(current + String(text || ''))
       currentOutputMessage.value.processText = merged.length > 50000 ? merged.slice(-50000) : merged
       scrollToBottom()
     }
 
-    // 清理终端输出中的收尾标记与回显噪音
+    // 清理终端输出：GS_CMD_DONE 等内部标记已在后端统一过滤，这里仅做字符串兜底。
     const sanitizeCommandOutput = (rawText) => {
-      let text = String(rawText || '')
-      // 去掉尾包标记：__GS_CMD_DONE_xxx__:0
-      text = text.replace(/__GS_CMD_DONE_\d+__:\d+\s*/g, '')
-      // 去掉尾包标记：GS_CMD_DONE_xxx:0
-      text = text.replace(/GS_CMD_DONE_\d+:\d+\s*/g, '')
-      // 去掉命令中用于打印尾包标记的 printf 片段
-      text = text.replace(/;?\s*printf\s+'__GS_CMD_DONE_[^']*'\s+"\$\\?"\s*/g, '')
-      // 去掉命令中用于打印尾包标记的 printf 片段（无双下划线版本）
-      text = text.replace(/;?\s*printf\s+'GS_CMD_DONE_[^']*'\s+"\$\\?"\s*/g, '')
-      return text
+      return String(rawText || '')
     }
 
     // 根据模块配置过滤可用命令
@@ -565,6 +564,18 @@ export default {
     })
 
     // 过滤后的命令列表
+    // compareCommandByNaturalAsc 命令自然升序：前缀短词优先（如 restart 在 restart-all 前）。
+    const compareCommandByNaturalAsc = (a, b) => {
+      const aText = normalizeCommandPart(a?.command || a?.name).toLowerCase()
+      const bText = normalizeCommandPart(b?.command || b?.name).toLowerCase()
+      if (aText === bText) return 0
+      if (!aText) return 1
+      if (!bText) return -1
+      if (aText.startsWith(bText)) return 1
+      if (bText.startsWith(aText)) return -1
+      return aText.localeCompare(bText, 'zh-Hans-CN', { numeric: true, sensitivity: 'base' })
+    }
+
     const filteredCommands = computed(() => {
       let commands = currentChildren.value.length > 0 
         ? currentChildren.value
@@ -591,11 +602,13 @@ export default {
         }
       }
       
+      const sortedCommands = [...commands].sort(compareCommandByNaturalAsc)
+
       if (!searchText) {
-        return commands
+        return sortedCommands
       }
       
-      return commands.filter(cmd => {
+      return sortedCommands.filter(cmd => {
         const keywords = getCommandKeywords(cmd)
         return keywords.some(keyword => keyword.includes(searchText))
       })
@@ -889,7 +902,8 @@ export default {
               const targetFound = findCommandByToken(dynamicList, targetToken)
               // 仅在“已确认目标”的场景进入下一层：
               // 1) 有尾随空格；2) 目标后还有其他 token（例如继续输入参数）
-              const targetIsConfirmed = hasTrailingSpace || (parts.length > i + 2) || (targetFound && parts.length === i + 2)
+              // 注意：仅精确命中但未按空格/Tab，不视为已确认，避免 common 被提前选中。
+              const targetIsConfirmed = hasTrailingSpace || (parts.length > i + 2)
               if (targetFound && targetIsConfirmed) {
                 commandStack.value.push(targetFound)
                 i += 1
@@ -903,7 +917,8 @@ export default {
                   const serviceToken = normalizeCommandPart(parts[i + 1]).toLowerCase()
                   if (serviceToken) {
                     const serviceFound = findCommandByToken(nextDynamicList, serviceToken)
-                    if (serviceFound) {
+                    const serviceIsConfirmed = hasTrailingSpace || (parts.length > i + 2)
+                    if (serviceFound && serviceIsConfirmed) {
                       commandStack.value.push(serviceFound)
                       i += 1
                       // 支持继续向下解析第三级目标（如 link run <配置> <环境> <账号>）
@@ -915,7 +930,8 @@ export default {
                         const thirdToken = normalizeCommandPart(parts[i + 1]).toLowerCase()
                         if (thirdToken) {
                           const thirdFound = findCommandByToken(thirdDynamicList, thirdToken)
-                          if (thirdFound) {
+                          const thirdIsConfirmed = hasTrailingSpace || (parts.length > i + 2)
+                          if (thirdFound && thirdIsConfirmed) {
                             commandStack.value.push(thirdFound)
                             i += 1
                             currentChildren.value = []
@@ -979,7 +995,8 @@ export default {
       if (commandStack.value.length === 0 && parts.length > 0) {
         currentChildren.value = availableCommands.value
       }
-      showCommands.value = currentChildren.value.length > 0 && !isCommandReadyToExecute()
+      // 动态列表加载中时也展示下拉，避免慢查询时列表框闪退。
+      showCommands.value = (currentChildren.value.length > 0 || isLoadingDynamic.value) && !isCommandReadyToExecute()
     }
 
     // 加载动态子命令
@@ -994,12 +1011,17 @@ export default {
         type !== 'historyList' &&
         dynamicDataCache.value[type]
       ) {
+        isLoadingDynamic.value = false
         currentChildren.value = dynamicDataCache.value[type]
         refreshCommandDropdownVisibility()
         return
       }
       
+      // 开始异步加载前先清空旧候选，避免展示上一次命令的残留选项。
+      currentChildren.value = []
+      activeCommandIndex.value = 0
       isLoadingDynamic.value = true
+      refreshCommandDropdownVisibility()
       
       switch (type) {
         case 'dockerComposeList':
@@ -1247,9 +1269,9 @@ export default {
         return
       }
       const supervisorConfig = {
-        ...envCmd.data,
-        sse_distribute_id: sseDistributeId.value
+        ...envCmd.data
       }
+      // 这里只是加载候选进程列表，不需要把终端回显串到首页命令执行流。
       supervisor.SupervisorConfList(supervisorConfig, (response) => {
         isLoadingDynamic.value = false
         if (!(response && response.ErrCode === 0)) {
@@ -2303,7 +2325,12 @@ export default {
             return
           }
           appendOutputResult(`正在重启服务 [${processCmd.name}]...\n\n`)
-          supervisor.SupervisorRestart({ ...supervisorConfig }, processCmd.data.supervisor_name, (response) => done(response, '执行成功'))
+          supervisor.SupervisorRestart(
+            { ...supervisorConfig },
+            processCmd.data.supervisor_name,
+            (response) => done(response, '执行成功'),
+            { only_current_status: true }
+          )
           break
         case 'stop':
           if (!(processCmd && processCmd.data && processCmd.data.supervisor_name)) {
@@ -2966,6 +2993,7 @@ export default {
       inputText,
       messages,
       showCommands,
+      isLoadingDynamic,
       filteredCommands,
       activeCommandIndex,
       inputRef,
@@ -3420,6 +3448,20 @@ export default {
   background: #f5f8f5;
   border-bottom: 1px solid #e8e8e0;
   border-radius: 10px 10px 0 0;
+}
+
+.command-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #eef2eb;
+  background: #f9fbf7;
+}
+
+.command-loading-text {
+  font-size: 12px;
+  color: #7b8b79;
 }
 
 .breadcrumb-text {
