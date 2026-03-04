@@ -71,6 +71,16 @@ function GitGroupBranchList(data, callBack) {
     base.BasePost('/api/GitGroupBranchList', data, callBack)
 }
 
+// GitRemoteBranchList 查询仓库远程分支列表
+function GitRemoteBranchList(gitConfig, callBack) {
+    base.BasePost('/api/GitRemoteBranchList', gitConfig, callBack)
+}
+
+// GitQuickCreateBranch 快捷创建并推送分支
+function GitQuickCreateBranch(data, callBack) {
+    base.BasePost('/api/GitQuickCreateBranch', data, callBack)
+}
+
 export default {
     GitCurrentBranch,
     GitPullBranchOrigin,
@@ -86,4 +96,6 @@ export default {
     SetSafe,
     GitSaveCredentials,
     GitGroupBranchList,
+    GitRemoteBranchList,
+    GitQuickCreateBranch,
 }

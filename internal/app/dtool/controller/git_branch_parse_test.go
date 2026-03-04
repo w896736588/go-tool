@@ -30,3 +30,27 @@ func TestBuildCurrentBranchDisplayOutput(t *testing.T) {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
 }
+
+func TestParseAllRemoteBranches(t *testing.T) {
+	output := `
+9a24f72f541ca945e41d6a6be44f0f2f6ee81a68	refs/heads/master
+f59500bfabf04d8f24c6eb66434c1510912d0dce	refs/heads/feature/demo_1
+f59500bfabf04d8f24c6eb66434c1510912d0dce	refs/heads/feature/demo_1
+`
+	got := parseAllRemoteBranches(output)
+	if len(got) != 2 {
+		t.Fatalf("len(got) = %d, want 2", len(got))
+	}
+	if got[0] != "feature/demo_1" || got[1] != "master" {
+		t.Fatalf("got = %#v, want [feature/demo_1 master]", got)
+	}
+}
+
+func TestBusinessEnglishValidation(t *testing.T) {
+	if !isValidBusinessEnglish("order_sync_v2") {
+		t.Fatal("expected order_sync_v2 valid")
+	}
+	if isValidBusinessEnglish("订单_sync") {
+		t.Fatal("expected non-ascii invalid")
+	}
+}

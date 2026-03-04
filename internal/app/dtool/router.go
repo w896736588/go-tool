@@ -135,6 +135,8 @@ func gitRouter(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/GitChangeBranch`, controller.GitChangeBranch)             //切换分支
 	tGin.GinPost(`/api/GitChangeBranchRemote`, controller.GitChangeBranchRemote) //切换远程分支
 	tGin.GinPost(`/api/GitPullBranchOrigin`, controller.GitPullBranchOrigin)     //拉取最新分支
+	tGin.GinPost(`/api/GitRemoteBranchList`, controller.GitRemoteBranchList)     //查询远程分支列表
+	tGin.GinPost(`/api/GitQuickCreateBranch`, controller.GitQuickCreateBranch)   //快捷创建分支
 	tGin.GinPost(`/api/GitQueryStatus`, controller.QueryStatus)                  //查询分支本地状态
 	tGin.GinPost(`/api/GitCommitLog`, controller.GitCommitLog)                   //查询提交日志
 	tGin.GinPost(`/api/GitConfigList`, controller.GitConfigList)                 //git配置

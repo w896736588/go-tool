@@ -19,6 +19,13 @@ func TestGetGitOperationTimeout_Pull(t *testing.T) {
 	}
 }
 
+func TestGetGitOperationTimeout_QuickCreate(t *testing.T) {
+	timeout := getGitOperationTimeout(gitOperationQuickCreate)
+	if timeout != 5*time.Minute {
+		t.Fatalf("timeout = %v, want %v", timeout, 5*time.Minute)
+	}
+}
+
 func TestGetGitOperationTimeout_Default(t *testing.T) {
 	timeout := getGitOperationTimeout(`unknown`)
 	if timeout != 40*time.Second {

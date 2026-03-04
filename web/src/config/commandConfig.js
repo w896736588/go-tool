@@ -205,6 +205,18 @@ const commandConfig = [
         inputPlaceholder: '请输入远程分支名'
       },
       {
+        command: 'quick-create-branch',
+        name: '快捷创建分支',
+        desc: '按仓库/基线分支/分支类型快速建分支并推送',
+        aliases: ['qcb', 'quick-branch', 'new-branch', '快捷建分支'],
+        action: 'gitQuickCreateBranch',
+        needTarget: true,
+        dynamicChildren: 'gitProjectList',
+        nextDynamicChildren: 'gitRemoteBranchList',
+        needInput: true,
+        inputPlaceholder: '请输入业务英文（仅英文、数字、下划线）'
+      },
+      {
         command: 'save-credentials',
         name: '保存账号密码配置',
         desc: '执行 git credential 配置',

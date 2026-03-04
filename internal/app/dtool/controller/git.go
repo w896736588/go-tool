@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -178,6 +179,111 @@ func GitPullBranchOrigin(c *gin.Context) {
 	command.GitShowOriginBranch()
 	result, _ := sshClient.RunCommandWait(command.GetCommand().ToStr(), getGitOperationTimeout(gitOperationPull))
 	gsgin.GinResponseSuccess(c, ``, result)
+}
+
+// GitRemoteBranchList 查询指定仓库的全部远程分支
+func GitRemoteBranchList(c *gin.Context) {
+	reqMap, sshClient, _, err := getGitComponent(c)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	codePath := cast.ToString(reqMap[`code_path`])
+	if codePath == `` {
+		gsgin.GinResponseError(c, `git未配置目录`, nil)
+		return
+	}
+
+	// 复用“目录安全 + 记住密码”预处理，减少交互输入中断。
+	if prepareErr := prepareGitBranchQueryEnv(sshClient, codePath); prepareErr != nil {
+		gsgin.GinResponseError(c, prepareErr.Error(), nil)
+		return
+	}
+
+	command := p_shell.NewCommand()
+	command.Cd(codePath)
+	command.GitFetch()
+	command.GitShowAllOriginBranches()
+	result, runErr := sshClient.RunCommandWait(command.GetCommand().ToStr(), getGitOperationTimeout(gitOperationPull))
+	if runErr != nil {
+		gsgin.GinResponseError(c, runErr.Error(), nil)
+		return
+	}
+	branchList := parseAllRemoteBranches(result)
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`list`: branchList,
+	})
+}
+
+// GitQuickCreateBranch 快捷创建并推送业务分支
+func GitQuickCreateBranch(c *gin.Context) {
+	reqMap, sshClient, _, err := getGitComponent(c)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	codePath := cast.ToString(reqMap[`code_path`])
+	baseBranch := cast.ToString(reqMap[`base_branch`])
+	branchType := strings.ToLower(cast.ToString(reqMap[`branch_type`]))
+	businessEN := cast.ToString(reqMap[`business_en`])
+	if codePath == `` {
+		gsgin.GinResponseError(c, `git未配置目录`, nil)
+		return
+	}
+	if baseBranch == `` {
+		gsgin.GinResponseError(c, `基于分支不能为空`, nil)
+		return
+	}
+	if !isSafeGitBranchInput(baseBranch) {
+		gsgin.GinResponseError(c, `基于分支格式不合法`, nil)
+		return
+	}
+	if branchType != `feature` && branchType != `hotfix` {
+		gsgin.GinResponseError(c, `分支类型仅支持 feature/hotfix`, nil)
+		return
+	}
+	if !isValidBusinessEnglish(businessEN) {
+		gsgin.GinResponseError(c, `业务英文仅允许英文、数字、下划线`, nil)
+		return
+	}
+
+	globalMap, mapErr := common.DbMain.AllGlobalMap()
+	if mapErr != nil {
+		gsgin.GinResponseError(c, mapErr.Error(), nil)
+		return
+	}
+	userName := normalizeBranchNamePart(cast.ToString(globalMap[`global_user_name`]))
+	if userName == `` {
+		gsgin.GinResponseError(c, `全局变量 global_user_name 为空或不合法`, nil)
+		return
+	}
+
+	branchDate := time.Now().Format(`20060102`)
+	newBranchName := fmt.Sprintf(`%s_%s_%s_%s`, branchType, userName, businessEN, branchDate)
+
+	command := p_shell.NewCommand()
+	command.Cd(codePath)
+	// 按约定顺序执行：pull -> fetch -> checkout . -> clean
+	command.GitPull()
+	command.GitFetch()
+	command.GitIgnoreAll()
+	command.GitCleanAll()
+	command.GitCheckout(baseBranch)
+	command.GitPullOrigin(baseBranch)
+	command.GitCheckoutNewBranch(newBranchName)
+	command.GitPushOriginSetUpstream(newBranchName)
+	command.Echo(`新分支：`)
+	command.Echo(newBranchName)
+
+	result, runErr := sshClient.RunCommandWait(command.GetCommand().ToStr(), getGitOperationTimeout(gitOperationQuickCreate))
+	if runErr != nil {
+		gsgin.GinResponseError(c, runErr.Error(), nil)
+		return
+	}
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`branch_name`: newBranchName,
+		`result`:      result,
+	})
 }
 
 func CleanBranchName(branchName string) string {
@@ -501,6 +607,7 @@ const (
 	gitBranchChangeTimeout      = 5 * time.Minute
 	gitOperationBranchChange    = `branch_change`
 	gitOperationPull            = `pull`
+	gitOperationQuickCreate     = `quick_create_branch`
 	gitRemoteBranchTimeout      = 10 * time.Second
 	gitRemoteBranchRetryTimeout = 3 * time.Second
 )
@@ -511,6 +618,8 @@ func getGitOperationTimeout(operation string) time.Duration {
 	case gitOperationBranchChange:
 		return gitBranchChangeTimeout
 	case gitOperationPull:
+		return gitBranchChangeTimeout
+	case gitOperationQuickCreate:
 		return gitBranchChangeTimeout
 	default:
 		return gitDefaultCommandTimeout
@@ -685,6 +794,69 @@ func isLikelyRemoteBranch(line string) bool {
 		return true
 	}
 	return false
+}
+
+// parseAllRemoteBranches 解析 git ls-remote --heads origin 输出
+func parseAllRemoteBranches(output string) []string {
+	text := p_common.TBaseClient.FilterTerminalChars(output)
+	lines := strings.Split(text, "\n")
+	set := make(map[string]struct{})
+	result := make([]string, 0, len(lines))
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == `` {
+			continue
+		}
+		if isBranchParseNoise(trimmed) {
+			continue
+		}
+		if !strings.Contains(trimmed, "refs/heads/") {
+			continue
+		}
+		parts := strings.Fields(trimmed)
+		if len(parts) == 0 {
+			continue
+		}
+		lastPart := parts[len(parts)-1]
+		if !strings.HasPrefix(lastPart, `refs/heads/`) {
+			continue
+		}
+		branchName := strings.TrimPrefix(lastPart, `refs/heads/`)
+		if branchName == `` {
+			continue
+		}
+		if _, exist := set[branchName]; exist {
+			continue
+		}
+		set[branchName] = struct{}{}
+		result = append(result, branchName)
+	}
+	sort.Strings(result)
+	return result
+}
+
+// isValidBusinessEnglish 校验业务英文（仅英文、数字、下划线）
+func isValidBusinessEnglish(value string) bool {
+	ok, _ := regexp.MatchString(`^[A-Za-z0-9_]+$`, strings.TrimSpace(value))
+	return ok
+}
+
+// isSafeGitBranchInput 校验用户输入的基于分支名，避免命令注入
+func isSafeGitBranchInput(value string) bool {
+	ok, _ := regexp.MatchString(`^[A-Za-z0-9._/\-]+$`, strings.TrimSpace(value))
+	return ok
+}
+
+// normalizeBranchNamePart 统一处理分支名中的人员字段，仅保留英文数字下划线
+func normalizeBranchNamePart(value string) string {
+	v := strings.TrimSpace(value)
+	if v == `` {
+		return ``
+	}
+	re := regexp.MustCompile(`[^A-Za-z0-9_]+`)
+	v = re.ReplaceAllString(v, `_`)
+	v = strings.Trim(v, `_`)
+	return v
 }
 
 func escapeMarkdownTableCell(value string) string {

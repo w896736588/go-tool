@@ -257,6 +257,24 @@ export default {
       }
     }
 
+    // getGitQuickCreateSelection 获取 git quick-create-branch 选择项（仓库/基线分支/分支类型）
+    const getGitQuickCreateSelection = (stack) => {
+      const sourceStack = Array.isArray(stack) ? stack : []
+      const actionIndex = sourceStack.findIndex(item => item?.action === 'gitQuickCreateBranch')
+      if (actionIndex < 0) {
+        return {
+          projectCmd: null,
+          baseBranchCmd: null,
+          branchTypeCmd: null
+        }
+      }
+      return {
+        projectCmd: sourceStack[actionIndex + 1] || null,
+        baseBranchCmd: sourceStack[actionIndex + 2] || null,
+        branchTypeCmd: sourceStack[actionIndex + 3] || null
+      }
+    }
+
     // 判断动作命令是否已满足执行条件（含多级目标校验）
     const isActionReady = (actionCmd, stack, inputValue) => {
       if (!actionCmd) return false
@@ -282,6 +300,12 @@ export default {
         const actionIndex = sourceStack.findIndex(item => item?.action === actionCmd.action)
         const processCmd = actionIndex >= 0 ? sourceStack[actionIndex + 2] : null
         return !!(processCmd && processCmd.data)
+      }
+      if (actionCmd.action === 'gitQuickCreateBranch') {
+        const selection = getGitQuickCreateSelection(sourceStack)
+        const businessEN = normalizeCommandPart(inputValue)
+        const businessOk = /^[A-Za-z0-9_]+$/.test(businessEN)
+        return !!(selection.projectCmd?.data && selection.baseBranchCmd?.data && selection.branchTypeCmd?.data && businessOk)
       }
       return true
     }
@@ -322,6 +346,21 @@ export default {
         const processCmd = actionIndex >= 0 ? sourceStack[actionIndex + 2] : null
         if (!(processCmd && processCmd.data)) {
           return '命令未完成：请选择服务'
+        }
+      }
+      if (actionCmd.action === 'gitQuickCreateBranch') {
+        const selection = getGitQuickCreateSelection(sourceStack)
+        if (!(selection.projectCmd && selection.projectCmd.data)) {
+          return '命令未完成：请先选择仓库'
+        }
+        if (!(selection.baseBranchCmd && selection.baseBranchCmd.data)) {
+          return '命令未完成：请选择基于分支'
+        }
+        if (!(selection.branchTypeCmd && selection.branchTypeCmd.data)) {
+          return '命令未完成：请选择分支类型'
+        }
+        if (!/^[A-Za-z0-9_]+$/.test(normalizeCommandPart(inputValue))) {
+          return '命令未完成：业务英文仅支持英文、数字、下划线'
         }
       }
       return '命令未完成'
@@ -1004,6 +1043,7 @@ export default {
       if (
         type !== 'gitProjectList' &&
         type !== 'gitGroupList' &&
+        type !== 'gitRemoteBranchList' &&
         type !== 'supervisorProcessList' &&
         type !== 'linkEnvList' &&
         type !== 'linkAccountList' &&
@@ -1032,6 +1072,12 @@ export default {
           break
         case 'gitGroupList':
           loadGitGroupList()
+          break
+        case 'gitRemoteBranchList':
+          loadGitRemoteBranchList()
+          break
+        case 'gitQuickBranchTypeList':
+          loadGitQuickBranchTypeList()
           break
         case 'supervisorEnvList':
           loadSupervisorEnvList()
@@ -1229,6 +1275,70 @@ export default {
           refreshCommandDropdownVisibility()
         }
       })
+    }
+
+    // loadGitRemoteBranchList 加载 quick-create-branch 的“基于分支”候选
+    const loadGitRemoteBranchList = () => {
+      const actionCmd = [...commandStack.value].reverse().find(item => item?.action === 'gitQuickCreateBranch')
+      if (!actionCmd) {
+        dynamicDataCache.value['gitRemoteBranchList'] = []
+        currentChildren.value = []
+        isLoadingDynamic.value = false
+        refreshCommandDropdownVisibility()
+        return
+      }
+      const actionIndex = commandStack.value.findIndex(item => item === actionCmd)
+      const projectCmd = actionIndex >= 0 ? commandStack.value[actionIndex + 1] : null
+      if (!(projectCmd && projectCmd.data)) {
+        dynamicDataCache.value['gitRemoteBranchList'] = []
+        currentChildren.value = []
+        isLoadingDynamic.value = false
+        refreshCommandDropdownVisibility()
+        return
+      }
+      git.GitRemoteBranchList({ ...projectCmd.data }, (response) => {
+        isLoadingDynamic.value = false
+        if (!(response && response.ErrCode === 0)) {
+          dynamicDataCache.value['gitRemoteBranchList'] = []
+          currentChildren.value = []
+          refreshCommandDropdownVisibility()
+          return
+        }
+        const branchList = Array.isArray(response.Data?.list) ? response.Data.list : []
+        const list = branchList.map(branchName => ({
+          command: branchName,
+          name: branchName,
+          desc: '远程分支',
+          data: { base_branch: branchName },
+          // 选择基于分支后，继续选择分支类型
+          nextDynamicChildren: 'gitQuickBranchTypeList'
+        }))
+        dynamicDataCache.value['gitRemoteBranchList'] = list
+        currentChildren.value = list
+        refreshCommandDropdownVisibility()
+      })
+    }
+
+    // loadGitQuickBranchTypeList 加载 quick-create-branch 的分支类型候选
+    const loadGitQuickBranchTypeList = () => {
+      const list = [
+        {
+          command: 'feature',
+          name: 'feature',
+          desc: '功能分支',
+          data: { branch_type: 'feature' }
+        },
+        {
+          command: 'hotfix',
+          name: 'hotfix',
+          desc: '紧急修复分支',
+          data: { branch_type: 'hotfix' }
+        }
+      ]
+      dynamicDataCache.value['gitQuickBranchTypeList'] = list
+      currentChildren.value = list
+      isLoadingDynamic.value = false
+      refreshCommandDropdownVisibility()
     }
 
     // 加载 Supervisor 环境列表
@@ -2042,6 +2152,9 @@ export default {
         case 'gitCheckoutRemote':
           executeGitAction('checkoutRemote', currentStack, options.inputValue || '')
           break
+        case 'gitQuickCreateBranch':
+          executeGitAction('quickCreateBranch', currentStack, options.inputValue || '')
+          break
         case 'gitSaveCredentials':
           executeGitAction('saveCredentials', currentStack, options.inputValue || '')
           break
@@ -2470,6 +2583,25 @@ export default {
               return
             }
             git.GitChangeBranchRemote(gitConfig, branchNameRemote, callback)
+          }
+          break
+        case 'quickCreateBranch':
+          {
+            const selection = getGitQuickCreateSelection(stack)
+            const baseBranch = normalizeCommandPart(selection.baseBranchCmd?.data?.base_branch || selection.baseBranchCmd?.command)
+            const branchType = normalizeCommandPart(selection.branchTypeCmd?.data?.branch_type || selection.branchTypeCmd?.command).toLowerCase()
+            const businessEN = normalizeCommandPart(inputValue)
+            if (!baseBranch || !branchType || !/^[A-Za-z0-9_]+$/.test(businessEN)) {
+              appendOutputResult('执行失败\n')
+              finishExecution()
+              return
+            }
+            git.GitQuickCreateBranch({
+              ...gitConfig,
+              base_branch: baseBranch,
+              branch_type: branchType,
+              business_en: businessEN
+            }, callback)
           }
           break
         case 'saveCredentials':
