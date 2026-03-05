@@ -562,6 +562,8 @@ export default {
               }
               // 初始化星标状态
               _that.initStarStatus()
+              // 重新拉取列表后保留当前本地搜索条件
+              _that.searchList()
             }
             _that.shellController.isRunning = false
           }
@@ -809,7 +811,7 @@ export default {
   --el-table-tr-bg-color: #fbeeee;
 }
 
-.row-hide {
+.compose-table :deep(.row-hide) {
   display: none;
 }
 
