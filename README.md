@@ -46,24 +46,25 @@ go env -w GOPRIVATE=gitee.com
 go env -w GOPRIVATE=gitee.com
 # 更新到最新tag
 go get -u gitee.com/Sxiaobai/gs/v2@latest
-```
-
-首次使用建议安装 Wails CLI（用于桌面端调试/构建）：
-
-```bash
+# task安装
+go install github.com/go-task/task/v3/cmd/task@latest
+# 安装 Wails CLI（用于桌面端调试/构建）：
 go install github.com/wailsapp/wails/v2/cmd/wails@latest
 ```
 
 ## 启动命令（go run）
 
-`ConfigFile` 对应 `config/dtool/*.ini` 的文件名（不带 `.ini` 后缀）。
 
 ### Web 端（浏览器模式）
 
 ```bash
-go run ./cmd/dtool --ConfigFile=company
+开发时
+# 后端
+task run-company
+# 前端
+task run-web
 ```
-
+正式运行时
 默认访问地址：`http://localhost:17170/`（以配置中的 `run.ports` 为准）。
 
 ### 桌面端（Wails）

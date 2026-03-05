@@ -1,0 +1,12 @@
+version: "3"
+
+tasks:
+  run-company:
+    desc: 启动 dtool（ConfigFile=company）
+    cmds:
+      - go run cmd/dtool/main.go --ConfigFile=company
+  
+  run-web:
+    desc: 启动 dtool（web）
+    cmds:
+      - cd web && npm run dev

@@ -3405,7 +3405,7 @@ export default {
 }
 
 .message {
-  max-width: 80%;
+  max-width: 100%;
   animation: fadeIn 0.3s ease;
 }
 
@@ -3426,8 +3426,8 @@ export default {
 
 .message.system {
   align-self: flex-start;
-  /* 执行过程(SSE)卡片在首页保持更宽的可读区域 */
-  width: 72%;
+  /* 执行过程(SSE)卡片在首页尽量占满可用宽度 */
+  width: 100%;
 }
 
 .message-command {
