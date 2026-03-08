@@ -473,7 +473,6 @@ func (h *CSqlite) MemoryFragmentSave(id int, title, content string, tags []strin
 func (h *CSqlite) MemoryFragmentSoftDelete(id int) (int64, error) {
 	now := time.Now().Unix()
 	_, _ = h.Client.ExecBySql(`delete from tbl_memory_fragment_fts where fragment_id = ?`, id).Exec()
-	_, _ = h.Client.ExecBySql(`delete from tbl_memory_fragment_vec where fragment_id = ?`, id).Exec()
 	return h.Client.QuickUpdate(`tbl_memory_fragment`, map[string]any{
 		`id`:         id,
 		`is_deleted`: 0,
@@ -521,10 +520,10 @@ order by use_count desc, t.tag_name asc`
 // MemoryFragmentSearch 搜索记忆片段。
 func (h *CSqlite) MemoryFragmentSearch(mode, query string, selectedTags []string, limit int) ([]map[string]any, error) {
 	mode = strings.TrimSpace(strings.ToLower(mode))
-	if mode == `` {
-		mode = `hybrid`
+	if mode != `keyword` {
+		mode = `keyword`
 	}
-	query = strings.TrimSpace(strings.ToLower(query))
+	query = h.memoryFragmentNormalizeSearchQuery(query)
 	selectedTags = h.memoryFragmentNormalizeTags(selectedTags)
 	sql := `
 select
@@ -599,6 +598,11 @@ group by f.id`
 	return result, nil
 }
 
+// memoryFragmentNormalizeSearchQuery 规范化搜索文本，便于多关键词搜索。
+func (h *CSqlite) memoryFragmentNormalizeSearchQuery(query string) string {
+	return strings.Join(strings.Fields(strings.ToLower(query)), ` `)
+}
+
 // memoryFragmentReplaceTags 重建片段标签。
 func (h *CSqlite) memoryFragmentReplaceTags(fragmentID int, tags []string, now int64) error {
 	if _, err := h.Client.ExecBySql(`delete from tbl_memory_fragment_tag where fragment_id = ?`, fragmentID).Exec(); err != nil {
@@ -643,9 +647,6 @@ func (h *CSqlite) memoryFragmentSyncSearchIndex(fragmentID int, title, contentTe
 	if _, err := h.Client.ExecBySql(`delete from tbl_memory_fragment_fts where fragment_id = ?`, fragmentID).Exec(); err != nil {
 		return err
 	}
-	if _, err := h.Client.ExecBySql(`delete from tbl_memory_fragment_vec where fragment_id = ?`, fragmentID).Exec(); err != nil {
-		return err
-	}
 	if _, err := h.Client.QuickCreate(`tbl_memory_fragment_fts`, map[string]any{
 		`fragment_id`:  fragmentID,
 		`title`:        title,
@@ -657,15 +658,7 @@ func (h *CSqlite) memoryFragmentSyncSearchIndex(fragmentID int, title, contentTe
 	}).Exec(); err != nil {
 		return err
 	}
-	_, err := h.Client.QuickCreate(`tbl_memory_fragment_vec`, map[string]any{
-		`fragment_id`:   fragmentID,
-		`embedding`:     ``,
-		`model_name`:    `pending`,
-		`model_version`: `pending`,
-		`create_time`:   now,
-		`update_time`:   now,
-	}).Exec()
-	return err
+	return nil
 }
 
 // memoryFragmentBuildChangeDesc 生成历史摘要。
@@ -790,7 +783,17 @@ func (h *CSqlite) memoryFragmentSearchTokens(query string) []string {
 	if query == `` {
 		return []string{}
 	}
-	return strings.Fields(strings.ToLower(query))
+	query = h.memoryFragmentNormalizeSearchQuery(query)
+	seen := make(map[string]bool)
+	result := make([]string, 0)
+	for _, token := range strings.Fields(query) {
+		if token == `` || seen[token] {
+			continue
+		}
+		seen[token] = true
+		result = append(result, token)
+	}
+	return result
 }
 
 // memoryFragmentMatchSelectedTags 判断标签筛选是否命中。
@@ -815,58 +818,47 @@ func (h *CSqlite) memoryFragmentSearchScore(mode, query string, tokens []string,
 	if query == `` {
 		return true, 1
 	}
+	searchText = strings.ToLower(searchText)
+	title = strings.ToLower(title)
 	phraseMatched := strings.Contains(searchText, query)
 	tokenMatchCount := 0
 	allMatched := len(tokens) > 0
+	titleScore := 0
+	tagScore := 0
 	for _, token := range tokens {
 		if strings.Contains(searchText, token) {
 			tokenMatchCount += 1
+			if strings.Contains(title, token) {
+				titleScore += 6
+			}
+			for _, tag := range tags {
+				if strings.Contains(strings.ToLower(tag), token) {
+					tagScore += 3
+				}
+			}
 			continue
 		}
 		allMatched = false
 	}
-	tagScore := 0
-	for _, tag := range tags {
-		if strings.Contains(strings.ToLower(tag), query) {
-			tagScore += 3
+	if phraseMatched {
+		if strings.Contains(title, query) {
+			titleScore += 6
+		}
+		for _, tag := range tags {
+			if strings.Contains(strings.ToLower(tag), query) {
+				tagScore += 3
+			}
 		}
 	}
-	titleScore := 0
-	if strings.Contains(strings.ToLower(title), query) {
-		titleScore = 6
+	if mode != `keyword` {
+		mode = `keyword`
 	}
-	switch mode {
-	case `keyword`:
-		if !allMatched && !phraseMatched {
-			return false, 0
-		}
-		score := tokenMatchCount*10 + tagScore + titleScore
-		if phraseMatched {
-			score += 8
-		}
-		return true, score
-	case `natural`:
-		if tokenMatchCount == 0 && !phraseMatched {
-			return false, 0
-		}
-		score := tokenMatchCount*6 + tagScore + titleScore
-		if phraseMatched {
-			score += 12
-		}
-		return true, score
-	default:
-		keywordMatch := allMatched || phraseMatched
-		naturalMatch := tokenMatchCount > 0 || phraseMatched
-		if !keywordMatch && !naturalMatch {
-			return false, 0
-		}
-		score := tokenMatchCount*8 + tagScore + titleScore
-		if keywordMatch {
-			score += 8
-		}
-		if phraseMatched {
-			score += 8
-		}
-		return true, score
+	if !allMatched && !phraseMatched {
+		return false, 0
 	}
+	score := tokenMatchCount*10 + tagScore + titleScore
+	if phraseMatched {
+		score += 8
+	}
+	return true, score
 }

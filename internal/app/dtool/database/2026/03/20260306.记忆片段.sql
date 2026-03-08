@@ -47,17 +47,6 @@ CREATE TABLE "tbl_memory_fragment_fts"
     "update_time"  INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE TABLE "tbl_memory_fragment_vec"
-(
-    "id"            INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-    "fragment_id"   INTEGER NOT NULL DEFAULT 0,
-    "embedding"     TEXT    NOT NULL DEFAULT '',
-    "model_name"    TEXT    NOT NULL DEFAULT '',
-    "model_version" TEXT    NOT NULL DEFAULT '',
-    "create_time"   INTEGER NOT NULL DEFAULT 0,
-    "update_time"   INTEGER NOT NULL DEFAULT 0
-);
-
 CREATE INDEX "idx_memory_fragment_deleted_update"
     ON "tbl_memory_fragment" (
                               "is_deleted" ASC,
@@ -88,10 +77,5 @@ CREATE INDEX "idx_memory_fragment_history_fragment"
 
 CREATE UNIQUE INDEX "idx_memory_fragment_fts_fragment"
     ON "tbl_memory_fragment_fts" (
-                                  "fragment_id" ASC
-        );
-
-CREATE UNIQUE INDEX "idx_memory_fragment_vec_fragment"
-    ON "tbl_memory_fragment_vec" (
                                   "fragment_id" ASC
         );

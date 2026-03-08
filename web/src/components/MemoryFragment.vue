@@ -14,7 +14,7 @@
           <el-input
             v-model="searchQuery"
             clearable
-            placeholder="搜索标题、正文或标签，回车打开结果页"
+            placeholder="搜索标题、正文或标签，空格分隔多个关键词，回车打开结果页"
             @keydown.enter.prevent="submitSearch"
             @clear="handleSearchClear"
           >
@@ -22,11 +22,6 @@
               <el-icon><Search /></el-icon>
             </template>
           </el-input>
-          <el-radio-group v-model="searchMode">
-            <el-radio-button label="hybrid">混合</el-radio-button>
-            <el-radio-button label="keyword">关键词</el-radio-button>
-            <el-radio-button label="natural">自然语言</el-radio-button>
-          </el-radio-group>
         </div>
         <div class="tag-filter-row">
           <span class="tag-filter-label">标签筛选</span>
@@ -120,7 +115,7 @@
                   <div class="search-result-desc">
                     <span v-if="submittedSearchQuery">关键词：{{ submittedSearchQuery }}</span>
                     <span v-if="submittedSelectedTags.length > 0">标签：{{ submittedSelectedTags.join('、') }}</span>
-                    <span>模式：{{ searchModeText(submittedSearchMode) }}</span>
+                    <span>模式：关键词</span>
                     <span>命中：{{ searchResults.length }}</span>
                   </div>
                 </div>
@@ -234,11 +229,11 @@ export default {
       tagList: [],
       searchResults: [],
       searchQuery: '',
-      searchMode: 'hybrid',
+      searchMode: 'keyword',
       selectedTags: [],
       searchTabVisible: false,
       submittedSearchQuery: '',
-      submittedSearchMode: 'hybrid',
+      submittedSearchMode: 'keyword',
       submittedSelectedTags: [],
       activeTab: 'home',
       fragmentTabs: [],
@@ -308,17 +303,6 @@ export default {
       this.activeTab = 'search'
       this.runSearch(this.submittedSearchQuery, this.submittedSearchMode, this.submittedSelectedTags)
     },
-    // searchModeText 返回搜索模式中文描述。
-    searchModeText(mode) {
-      switch (mode) {
-        case 'keyword':
-          return '关键词'
-        case 'natural':
-          return '自然语言'
-        default:
-          return '混合'
-      }
-    },
     // escapeHtml 对文本做 HTML 转义，避免高亮时插入原始标签。
     escapeHtml(text) {
       return String(text || '')
@@ -342,10 +326,10 @@ export default {
     // clearFilter 清空左侧搜索条件，并关闭结果 tab。
     clearFilter() {
       this.searchQuery = ''
-      this.searchMode = 'hybrid'
+      this.searchMode = 'keyword'
       this.selectedTags = []
       this.submittedSearchQuery = ''
-      this.submittedSearchMode = 'hybrid'
+      this.submittedSearchMode = 'keyword'
       this.submittedSelectedTags = []
       this.searchTabVisible = false
       this.searchResults = []
@@ -408,18 +392,20 @@ export default {
       const keywords = []
       this.submittedSearchQuery.split(/\s+/).forEach((item) => {
         const keyword = item.trim()
-        if (keyword === '' || keywordMap[keyword]) {
+        const normalizedKeyword = keyword.toLowerCase()
+        if (keyword === '' || keywordMap[normalizedKeyword]) {
           return
         }
-        keywordMap[keyword] = true
+        keywordMap[normalizedKeyword] = true
         keywords.push(keyword)
       })
       this.submittedSelectedTags.forEach((item) => {
         const keyword = item.trim()
-        if (keyword === '' || keywordMap[keyword]) {
+        const normalizedKeyword = keyword.toLowerCase()
+        if (keyword === '' || keywordMap[normalizedKeyword]) {
           return
         }
-        keywordMap[keyword] = true
+        keywordMap[normalizedKeyword] = true
         keywords.push(keyword)
       })
       return keywords
