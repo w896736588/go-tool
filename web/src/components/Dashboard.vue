@@ -190,6 +190,12 @@ export default {
     const commandUsageMap = ref({}) // 命令使用次数统计（key=命令文本，value=次数）
     const commandHistoryCacheKey = 'dashboard_command_history_v1'
     const commandUsageCacheKey = 'dashboard_command_usage_v1'
+    // 历史命令自动执行状态：选中历史项后，等待动态列表补齐并自动触发执行
+    const pendingHistoryExecution = ref({
+      active: false,
+      commandText: '',
+      reparsedTypeMap: {}
+    })
     
     // SSE 相关状态
     const sseDistributeId = ref('') // SSE 分发 ID
@@ -409,6 +415,82 @@ export default {
         ? withoutSlash.trim().split(/\s+/)
         : []
       return { useSlash, parts }
+    }
+
+    // 统一规范历史命令文本，避免因多空格导致的匹配误差。
+    const normalizeHistoryCommandText = (rawText) => {
+      return normalizeCommandPart(rawText).replace(/\s+/g, ' ')
+    }
+
+    // 清理历史命令自动执行状态。
+    const clearPendingHistoryExecution = () => {
+      pendingHistoryExecution.value = {
+        active: false,
+        commandText: '',
+        reparsedTypeMap: {}
+      }
+    }
+
+    // 历史命令选中后进入“待自动执行”状态。
+    const markPendingHistoryExecution = (rawCommandText) => {
+      pendingHistoryExecution.value = {
+        active: true,
+        commandText: normalizeHistoryCommandText(rawCommandText),
+        reparsedTypeMap: {}
+      }
+    }
+
+    // tryAutoExecutePendingHistory 当历史命令已经满足执行条件时自动执行。
+    const tryAutoExecutePendingHistory = () => {
+      if (!pendingHistoryExecution.value.active || isExecuting.value) {
+        return false
+      }
+      const currentText = normalizeHistoryCommandText(String(inputText.value || '').trim())
+      if (currentText !== pendingHistoryExecution.value.commandText) {
+        clearPendingHistoryExecution()
+        return false
+      }
+      if (!canExecuteCommand.value) {
+        return false
+      }
+      clearPendingHistoryExecution()
+      executeCommand()
+      return true
+    }
+
+    // reparseForPendingHistoryExecution 仅在历史自动执行场景重解析并尝试自动执行。
+    const reparseForPendingHistoryExecution = (dynamicType = '') => {
+      if (!pendingHistoryExecution.value.active) {
+        return
+      }
+      // 同一动态类型仅重解析一次，避免“未命中候选”时持续触发循环请求。
+      const typeKey = normalizeCommandPart(dynamicType)
+      if (typeKey) {
+        const reparsedMap = pendingHistoryExecution.value.reparsedTypeMap || {}
+        if (reparsedMap[typeKey]) {
+          return
+        }
+        reparsedMap[typeKey] = 1
+        pendingHistoryExecution.value.reparsedTypeMap = reparsedMap
+      }
+      parseInput()
+      tryAutoExecutePendingHistory()
+    }
+
+    // startHistoryCommandExecution 统一处理“选中历史命令后直接执行”流程。
+    const startHistoryCommandExecution = (historyCommand) => {
+      const commandText = normalizeHistoryCommandText(historyCommand)
+      if (!commandText) return
+      markPendingHistoryExecution(commandText)
+      // 补一个空格，确保 parseInput 将最后一个 token 视为已确认输入。
+      inputText.value = /\s$/.test(commandText) ? commandText : `${commandText} `
+      parseInput()
+      showCommands.value = isCommandModeByText(inputText.value) && !isCommandReadyToExecute()
+      activeCommandIndex.value = 0
+      nextTick(() => {
+        inputRef.value?.focus()
+      })
+      tryAutoExecutePendingHistory()
     }
 
     const escapeHtml = (value) => {
@@ -1244,6 +1326,7 @@ export default {
           // Docker 项目列表为异步加载；当用户已输入 `docker quick-restart <项目>` 时，
           // 需要在数据到达后重新解析一次输入，才能自动进入“服务列表”层级。
           parseInput()
+          tryAutoExecutePendingHistory()
           refreshCommandDropdownVisibility()
         }
       })
@@ -1269,6 +1352,7 @@ export default {
         dynamicDataCache.value['dockerServiceList'] = list
         currentChildren.value = list
         isLoadingDynamic.value = false
+        reparseForPendingHistoryExecution('dockerServiceList')
         refreshCommandDropdownVisibility()
       } else {
         // 如果没有找到项目信息，尝试从缓存的 dockerComposeList 中查找
@@ -1292,6 +1376,7 @@ export default {
           }
         }
         isLoadingDynamic.value = false
+        reparseForPendingHistoryExecution('dockerServiceList')
         refreshCommandDropdownVisibility()
       }
     }
@@ -1334,6 +1419,7 @@ export default {
           // 仅当当前仍在该动态列表上下文时，才刷新候选，避免覆盖到“下一步”列表。
           if (activeDynamicType.value === 'gitProjectList') {
             currentChildren.value = list
+            reparseForPendingHistoryExecution('gitProjectList')
             refreshCommandDropdownVisibility()
           }
         }
@@ -1403,6 +1489,7 @@ export default {
         // 仅当当前仍在该动态列表上下文时，才刷新候选，避免异步请求把列表切回上一步。
         if (activeDynamicType.value === 'gitRemoteBranchList') {
           currentChildren.value = list
+          reparseForPendingHistoryExecution('gitRemoteBranchList')
           refreshCommandDropdownVisibility()
         }
       })
@@ -1427,6 +1514,7 @@ export default {
       dynamicDataCache.value['gitQuickBranchTypeList'] = list
       currentChildren.value = list
       isLoadingDynamic.value = false
+      reparseForPendingHistoryExecution('gitQuickBranchTypeList')
       refreshCommandDropdownVisibility()
     }
 
@@ -1444,6 +1532,8 @@ export default {
           }))
           dynamicDataCache.value['supervisorEnvList'] = list
           currentChildren.value = list
+          reparseForPendingHistoryExecution('supervisorEnvList')
+          refreshCommandDropdownVisibility()
         }
       })
     }
@@ -1508,6 +1598,7 @@ export default {
         })
         dynamicDataCache.value['supervisorProcessList'] = list
         currentChildren.value = list
+        reparseForPendingHistoryExecution('supervisorProcessList')
         refreshCommandDropdownVisibility()
       })
     }
@@ -1609,6 +1700,7 @@ export default {
         })
         dynamicDataCache.value['linkEnvList'] = list
         currentChildren.value = list
+        reparseForPendingHistoryExecution('linkEnvList')
         refreshCommandDropdownVisibility()
       })
     }
@@ -1641,6 +1733,7 @@ export default {
       dynamicDataCache.value['linkAccountList'] = list
       currentChildren.value = list
       isLoadingDynamic.value = false
+      reparseForPendingHistoryExecution('linkAccountList')
       refreshCommandDropdownVisibility()
     }
 
@@ -1665,6 +1758,7 @@ export default {
         }))
         dynamicDataCache.value['variableScriptList'] = list
         currentChildren.value = list
+        reparseForPendingHistoryExecution('variableScriptList')
         refreshCommandDropdownVisibility()
       })
     }
@@ -1699,6 +1793,7 @@ export default {
       dynamicDataCache.value['variableOptionList'] = list
       currentChildren.value = list
       isLoadingDynamic.value = false
+      reparseForPendingHistoryExecution('variableOptionList')
       refreshCommandDropdownVisibility()
     }
 
@@ -1742,6 +1837,13 @@ export default {
     const handleInput = () => {
       // 输入变化后重置历史游标，保证再次按上键从最新历史开始
       commandHistoryIndex.value = commandHistory.value.length
+      // 手工输入与待执行历史命令不一致时，取消自动执行态，避免误触发。
+      if (pendingHistoryExecution.value.active) {
+        const currentText = normalizeHistoryCommandText(inputText.value)
+        if (currentText !== pendingHistoryExecution.value.commandText) {
+          clearPendingHistoryExecution()
+        }
+      }
       if (isCommandModeByText(inputText.value)) {
         parseInput()
         activeCommandIndex.value = 0
@@ -1869,16 +1971,7 @@ export default {
 
     // quickSelectHistoryCommand 点击历史命令后回填到输入框
     const quickSelectHistoryCommand = (historyCommand) => {
-      const commandText = normalizeCommandPart(historyCommand)
-      if (!commandText) return
-      // 历史命令回填后补一个空格，确保 parseInput 将最后一个 token 视为“已确认”。
-      inputText.value = /\s$/.test(commandText) ? commandText : `${commandText} `
-      parseInput()
-      showCommands.value = isCommandModeByText(inputText.value)
-      activeCommandIndex.value = 0
-      nextTick(() => {
-        inputRef.value?.focus()
-      })
+      startHistoryCommandExecution(historyCommand)
     }
 
     // 处理失焦
@@ -2014,14 +2107,7 @@ export default {
       // history 选择项：仅回填输入框，不改变命令栈
       if (cmd && cmd.insertOnly) {
         const historyText = normalizeCommandPart(cmd.insertText || cmd.command || cmd.name)
-        // history 通过 Tab 选中时也补空格，避免“还需再手动敲空格才可执行”。
-        inputText.value = /\s$/.test(historyText) ? historyText : `${historyText} `
-        showCommands.value = false
-        parseInput()
-        activeCommandIndex.value = 0
-        nextTick(() => {
-          inputRef.value?.focus()
-        })
+        startHistoryCommandExecution(historyText)
         return
       }
 
@@ -2203,6 +2289,7 @@ export default {
 
     // 执行动作
     const executeAction = (cmd, options = {}) => {
+      clearPendingHistoryExecution()
       if (isExecuting.value) {
         messages.value.push({
           type: 'system',
