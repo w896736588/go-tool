@@ -1,100 +1,143 @@
 <template>
   <template v-if="state.mainForm.cacheKey !== ''">
-    <el-tag class="el-tag-he">{{ state.mainForm.cacheType }}</el-tag>
-    <el-tag v-if="state.mainForm.startEditTTL === false" class="el-tag-he" style="cursor: pointer" @click="editTTL">
-      ttl:{{ state.mainForm.ttl }}
-    </el-tag>
-    <el-tag v-if="state.mainForm.startEditTTL === true" class="el-tag-he">
-      ttl：
-      <input v-model="state.mainForm.ttl" style="width: 100px; border: 0" type="text"/>
-      <el-button style="padding: 3px" type="primary" size="small" @click="saveTTL">保存</el-button>
-      <el-button style="padding: 3px" type="info" size="small" @click="editTTL">取消</el-button>
-    </el-tag>
-    <el-tag :data-clipboard-text="state.mainForm.cacheKey" class="copyCacheKey el-tag-he" style="cursor: copy" @click="copyResult(state.mainForm.cacheKey)">
-      <span v-if="state.mainForm.cacheKey.length > 75">{{ state.mainForm.cacheKey.substr(0, 75) }}...</span>
-      <span v-else>{{ state.mainForm.cacheKey }}</span>
-    </el-tag>
-    &nbsp;
-    <p>
-      <el-button type="primary" size="small" @click="CallRefresh">刷新</el-button>
-      <el-button v-if="state.mainForm.cacheType !== 'string'" size="small"  type="primary" @click="createSubCache">添加子项
-      </el-button>
-      <el-button  type="primary" size="small"  @click="Star">收藏</el-button>
-      <el-button  type="danger" size="small"  @click="delCache">删除</el-button>
-      <el-button v-if="state.mainForm.cacheType === 'string'"  type="primary" size="small"  @click="state.editForm.strHasSerialize = !state.editForm.strHasSerialize;editSubUnserialize();">
-        序列化
-      </el-button>
-      <el-button v-if="state.mainForm.cacheType === 'string'"  type="primary" size="small"  @click="state.editForm.strHasJson = !state.editForm.strHasJson;editSubJson();">
-        Json
-      </el-button>
-      <el-button v-if="state.mainForm.cacheType === 'string'" type="primary" size="small" @click="deepParse();">
-        深度解析
-      </el-button>
-      &nbsp;
-      <el-input type="text" size="small" placeholder="输入进行搜索" style="width:200px;" v-if="ArrayExist(state.mainForm.cacheType , ['hash' , 'set'])" v-model="state.search"/>
-      <el-button style="margin: 5px;" type="primary" size="small" v-if="ArrayExist(state.mainForm.cacheType , ['hash' , 'set'])"  @click="CallSearchList">搜索</el-button>
-      <el-button style="margin: 5px;float:right;" type="primary" size="small" v-if="state.mainForm.cacheType ==='string'"  @click="SaveString">保 存</el-button>
-      <el-button v-if="state.isMore === 1" style="margin: 5px;float:right;" type="primary" size="small"  @click="CallMoreList">加载更多</el-button>
-      <span style="font-size: 13px;" v-if="ArrayExist(state.mainForm.cacheType , ['hash' , 'list' , 'set' , 'zset'])">&nbsp;共{{state.length}}条，已加载{{state.hashList.length}}条</span>
-    </p>
+    <!-- Key信息头部 -->
+    <div class="key-info-header">
+      <div class="key-tags">
+        <el-tag class="type-tag" :type="getTypeTagType(state.mainForm.cacheType)">
+          {{ state.mainForm.cacheType.toUpperCase() }}
+        </el-tag>
+        <el-tag v-if="state.mainForm.startEditTTL === false" class="ttl-tag" @click="editTTL">
+          <el-icon><Timer /></el-icon>
+          TTL: {{ state.mainForm.ttl }}s
+        </el-tag>
+        <el-tag v-if="state.mainForm.startEditTTL === true" class="ttl-edit-tag">
+          TTL:
+          <input v-model="state.mainForm.ttl" class="ttl-input" type="text"/>
+          <el-button size="small" type="primary" @click="saveTTL">保存</el-button>
+          <el-button size="small" @click="editTTL">取消</el-button>
+        </el-tag>
+        <el-tag class="key-name-tag" @click="copyResult(state.mainForm.cacheKey)">
+          <el-icon><DocumentCopy /></el-icon>
+          <span v-if="state.mainForm.cacheKey.length > 60">{{ state.mainForm.cacheKey.substr(0, 60) }}...</span>
+          <span v-else>{{ state.mainForm.cacheKey }}</span>
+        </el-tag>
+      </div>
+    </div>
 
+    <!-- 操作按钮栏 -->
+    <div class="action-toolbar">
+      <div class="action-left">
+        <el-button type="primary" size="small" plain @click="CallRefresh">
+          <el-icon><Refresh /></el-icon>刷新
+        </el-button>
+        <el-button v-if="state.mainForm.cacheType !== 'string'" size="small" type="success" plain @click="createSubCache">
+          <el-icon><Plus /></el-icon>添加子项
+        </el-button>
+        <el-button size="small" type="warning" plain @click="Star">
+          <el-icon><Star /></el-icon>收藏
+        </el-button>
+        <el-button size="small" type="danger" plain @click="delCache">
+          <el-icon><Delete /></el-icon>删除
+        </el-button>
+        <el-divider direction="vertical" v-if="state.mainForm.cacheType === 'string'" />
+        <el-button v-if="state.mainForm.cacheType === 'string'" size="small" plain @click="state.editForm.strHasSerialize = !state.editForm.strHasSerialize;editSubUnserialize();">
+          <el-icon><Connection /></el-icon>序列化
+        </el-button>
+        <el-button v-if="state.mainForm.cacheType === 'string'" size="small" plain @click="state.editForm.strHasJson = !state.editForm.strHasJson;editSubJson();">
+          <el-icon><Document /></el-icon>Json
+        </el-button>
+        <el-button v-if="state.mainForm.cacheType === 'string'" size="small" plain @click="deepParse();">
+          <el-icon><DataAnalysis /></el-icon>深度解析
+        </el-button>
+      </div>
+      <div class="action-right">
+        <el-input v-if="ArrayExist(state.mainForm.cacheType , ['hash' , 'set'])" v-model="state.search" size="small" placeholder="搜索..." class="search-input" clearable>
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
+        <el-button v-if="ArrayExist(state.mainForm.cacheType , ['hash' , 'set'])" size="small" type="primary" @click="CallSearchList">搜索</el-button>
+        <el-button v-if="state.isMore === 1" size="small" type="primary" plain @click="CallMoreList">
+          <el-icon><Download /></el-icon>加载更多
+        </el-button>
+        <el-button v-if="state.mainForm.cacheType ==='string'" size="small" type="primary" @click="SaveString">
+          <el-icon><Check /></el-icon>保存
+        </el-button>
+      </div>
+    </div>
 
-    <el-table v-if="state.mainForm.cacheType !== 'string'" :data="state.hashList" class="cache-table" :style="{ height: (state.scrollHeight - 5) + 'px' }">
+    <!-- 数据统计 -->
+    <div class="data-stats" v-if="ArrayExist(state.mainForm.cacheType , ['hash' , 'list' , 'set' , 'zset'])">
+      <el-icon><DataLine /></el-icon>
+      共 <strong>{{ state.length }}</strong> 条，已加载 <strong>{{ state.hashList.length }}</strong> 条
+    </div>
+
+    <!-- 数据表格 -->
+    <el-table v-if="state.mainForm.cacheType !== 'string'" :data="state.hashList" class="data-table" :style="{ height: (state.scrollHeight - 5) + 'px' }" stripe>
       <el-table-column v-if="state.mainForm.cacheType === 'hash'" label="field" prop="value">
         <template #default="scope">
-<!--          <p v-if="scope.row.field.length > 50" aria-placeholder="scope.row.field">-->
-<!--            {{ scope.row.field.substr(0, 50) }}...-->
-<!--          </p>-->
-<!--          <p v-if="scope.row.field.length <= 50">-->
-            {{ scope.row.field }}
-<!--          </p>-->
-
+          <span class="field-value">{{ scope.row.field }}</span>
         </template>
       </el-table-column>
-      <el-table-column v-if="state.mainForm.cacheType === 'zset'" label="member" prop="member"></el-table-column>
-      <el-table-column v-if="state.mainForm.cacheType === 'zset'" label="score" prop="score"></el-table-column>
-      <el-table-column v-if="state.mainForm.cacheType === 'list'" label="index" prop="index" width="80"></el-table-column>
-      <el-table-column v-if="ArrayExist(state.mainForm.cacheType , ['hash' , 'list' , 'set'])" label="value" prop="value" style="cursor: pointer;">
+      <el-table-column v-if="state.mainForm.cacheType === 'zset'" label="member" prop="member">
         <template #default="scope">
-          <p v-if="scope.row.value.length > 80 && state.mainForm.cacheType === 'list'" style="cursor:pointer;color:#409eff;" @click="editSub(scope.row)">
-            {{ scope.row.value.substr(0, 80) }}...
-          </p>
-          <p v-if="scope.row.value.length > 60 && state.mainForm.cacheType !== 'list'" style="cursor:pointer;color:#409eff;" @click="editSub(scope.row)">
-            {{ scope.row.value.substr(0, 60) }}...
-          </p>
-          <p v-if="scope.row.value.length <= 60" style="cursor:pointer;color:#409eff;" @click="editSub(scope.row)">
-            {{ scope.row.value }}
-          </p>
-
+          <span class="member-value">{{ scope.row.member }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="80">
+      <el-table-column v-if="state.mainForm.cacheType === 'zset'" label="score" prop="score" width="120">
         <template #default="scope">
-          <el-button v-if="state.mainForm.cacheType === 'hash'" link type="primary" @click="delSub(scope.row.field)">
+          <el-tag size="small" type="info">{{ scope.row.score }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column v-if="state.mainForm.cacheType === 'list'" label="index" prop="index" width="80">
+        <template #default="scope">
+          <el-tag size="small" type="info">{{ scope.row.index }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column v-if="ArrayExist(state.mainForm.cacheType , ['hash' , 'list' , 'set'])" label="value" prop="value">
+        <template #default="scope">
+          <div class="value-cell" @click="editSub(scope.row)">
+            <span v-if="scope.row.value.length > 80 && state.mainForm.cacheType === 'list'" class="value-text">
+              {{ scope.row.value.substr(0, 80) }}...
+            </span>
+            <span v-else-if="scope.row.value.length > 60 && state.mainForm.cacheType !== 'list'" class="value-text">
+              {{ scope.row.value.substr(0, 60) }}...
+            </span>
+            <span v-else class="value-text">{{ scope.row.value }}</span>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="80" fixed="right">
+        <template #default="scope">
+          <el-button v-if="state.mainForm.cacheType === 'hash'" link type="danger" @click="delSub(scope.row.field)">
             删除
           </el-button>
-          <el-button v-if="state.mainForm.cacheType === 'zset'" link type="primary" @click="delSub(scope.row.member)">
+          <el-button v-if="state.mainForm.cacheType === 'zset'" link type="danger" @click="delSub(scope.row.member)">
             删除
           </el-button>
-          <el-button v-if="state.mainForm.cacheType === 'list' || state.mainForm.cacheType === 'set'" link type="primary" @click="delSub(scope.row.value)">
+          <el-button v-if="state.mainForm.cacheType === 'list' || state.mainForm.cacheType === 'set'" link type="danger" @click="delSub(scope.row.value)">
             删除
           </el-button>
         </template>
       </el-table-column>
     </el-table>
   </template>
-  <el-form v-if="state.mainForm.cacheType === 'string'" style="margin-top:10px;" >
-    <el-input v-if="state.editForm.strShowType === 1" v-model="state.editForm.value" rows="20" type="textarea" :style="{ height: state.scrollHeight + 'px' }"></el-input>
-    <el-input v-if="state.editForm.strShowType === 2" v-model="state.editForm.searchResult" readonly rows="20" style="background: #eeee" type="textarea"></el-input>
-    <div class="pretty-json-p" v-if="state.editForm.strShowType === 3">
-      <button class="copy-btn" @click="CopyJson(state.editForm.searchResult)">复制</button>
-      <pre class="pretty-json" ref="jsonPre">{{ state.editForm.searchResult }}</pre>
-    </div>
 
+  <!-- String类型编辑区 -->
+  <el-form v-if="state.mainForm.cacheType === 'string'" class="string-editor">
+    <el-input v-if="state.editForm.strShowType === 1" v-model="state.editForm.value" rows="20" type="textarea" :style="{ height: state.scrollHeight + 'px' }" class="string-textarea"></el-input>
+    <el-input v-if="state.editForm.strShowType === 2" v-model="state.editForm.searchResult" readonly rows="20" type="textarea" :style="{ height: state.scrollHeight + 'px' }" class="string-textarea readonly"></el-input>
+    <div class="json-viewer" v-if="state.editForm.strShowType === 3">
+      <button class="copy-btn" @click="CopyJson(state.editForm.searchResult)">
+        <el-icon><DocumentCopy /></el-icon> 复制
+      </button>
+      <pre class="json-content" ref="jsonPre">{{ state.editForm.searchResult }}</pre>
+    </div>
   </el-form>
 
-  <el-dialog v-model="state.dialogShow" :append-to-body="true" title="编辑缓存">
-    <el-form>
+  <!-- 编辑弹窗 -->
+  <el-dialog v-model="state.dialogShow" :append-to-body="true" title="编辑缓存" width="600px" class="edit-dialog">
+    <el-form label-width="80px">
       <el-form-item label="操作">
         <el-button link type="primary" @click="state.editForm.strHasSerialize = !state.editForm.strHasSerialize;editSubUnserialize();">
           序列化
@@ -109,17 +152,16 @@
       <el-form-item label="field">
         <el-input v-model="state.editForm.field" autocomplete="off" readonly></el-input>
       </el-form-item>
-
       <el-form-item style="margin-top: 10px">
-        <el-input v-if="state.editForm.strShowType === 1" v-model="state.editForm.value" rows="20" type="textarea" ></el-input>
-        <el-input v-if="state.editForm.strShowType === 2" v-model="state.editForm.searchResult" readonly rows="20" type="textarea" ></el-input>
-<!--        <pre class="pretty-json" v-if="state.editForm.strShowType === 3">{{ state.editForm.searchResult }}</pre>-->
-        <div class="pretty-json-p" v-if="state.editForm.strShowType === 3">
-          <button class="copy-btn" @click="CopyJson(state.editForm.searchResult)">复制</button>
-          <pre class="pretty-json" ref="jsonPre">{{ state.editForm.searchResult }}</pre>
+        <el-input v-if="state.editForm.strShowType === 1" v-model="state.editForm.value" rows="20" type="textarea"></el-input>
+        <el-input v-if="state.editForm.strShowType === 2" v-model="state.editForm.searchResult" readonly rows="20" type="textarea"></el-input>
+        <div class="json-viewer" v-if="state.editForm.strShowType === 3">
+          <button class="copy-btn" @click="CopyJson(state.editForm.searchResult)">
+            <el-icon><DocumentCopy /></el-icon> 复制
+          </button>
+          <pre class="json-content" ref="jsonPre">{{ state.editForm.searchResult }}</pre>
         </div>
       </el-form-item>
-
     </el-form>
     <template #footer>
       <el-button @click="state.dialogShow = false">取 消</el-button>
@@ -127,45 +169,41 @@
     </template>
   </el-dialog>
 
-  <!--新增弹窗-->
-  <el-dialog v-model="state.addCacheClass" :append-to-body="true" title="新增缓存" width="70%;">
-    <el-form>
-      <el-form-item :label-width="100" label="类型">
-        <el-select v-model="state.addSubCache.cacheType" placeholder="选择缓存类型">
-          <el-option label="字符串" value="string"></el-option>
-          <el-option label="哈希" value="hash"></el-option>
-          <el-option label="列表" value="list"></el-option>
-          <el-option label="集合" value="set"></el-option>
-          <el-option label="有序集合" value="zset"></el-option>
+  <!-- 新增弹窗 -->
+  <el-dialog v-model="state.addCacheClass" :append-to-body="true" title="新增缓存" width="500px" class="add-dialog">
+    <el-form label-width="80px">
+      <el-form-item label="类型">
+        <el-select v-model="state.addSubCache.cacheType" placeholder="选择缓存类型" style="width: 100%">
+          <el-option label="字符串 (String)" value="string"></el-option>
+          <el-option label="哈希 (Hash)" value="hash"></el-option>
+          <el-option label="列表 (List)" value="list"></el-option>
+          <el-option label="集合 (Set)" value="set"></el-option>
+          <el-option label="有序集合 (ZSet)" value="zset"></el-option>
         </el-select>
       </el-form-item>
-      <el-form-item :label-width="100" label="key">
-        <el-input v-model="state.addSubCache.cacheKey" autocomplete="off"></el-input>
+      <el-form-item label="key">
+        <el-input v-model="state.addSubCache.cacheKey" autocomplete="off" placeholder="输入key名称"></el-input>
       </el-form-item>
-
-      <el-form-item v-if="state.addSubCache.cacheType === 'hash'" :label-width="100" label="field">
-        <el-input v-model="state.addSubCache.cacheField" autocomplete="off"></el-input>
+      <el-form-item v-if="state.addSubCache.cacheType === 'hash'" label="field">
+        <el-input v-model="state.addSubCache.cacheField" autocomplete="off" placeholder="输入field"></el-input>
       </el-form-item>
-      <el-form-item v-if="state.addSubCache.cacheType === 'hash' || state.addSubCache.cacheType === 'string' || (state.addSubCache.cacheType === 'list' && state.addSubCache.boolCreate === 1)" :label-width="100" label="value">
-        <el-input v-model="state.addSubCache.cacheValue" autocomplete="off"></el-input>
+      <el-form-item v-if="state.addSubCache.cacheType === 'hash' || state.addSubCache.cacheType === 'string' || (state.addSubCache.cacheType === 'list' && state.addSubCache.boolCreate === 1)" label="value">
+        <el-input v-model="state.addSubCache.cacheValue" autocomplete="off" placeholder="输入value"></el-input>
       </el-form-item>
-
-      <el-form-item v-if="state.addSubCache.cacheType === 'list' && state.addSubCache.boolCreate === 2" :label-width="100" label="lPush">
-        <el-input v-model="state.addSubCache.lPushValue" autocomplete="off"></el-input>
+      <el-form-item v-if="state.addSubCache.cacheType === 'list' && state.addSubCache.boolCreate === 2" label="lPush">
+        <el-input v-model="state.addSubCache.lPushValue" autocomplete="off" placeholder="左侧插入"></el-input>
       </el-form-item>
-
-      <el-form-item v-if="state.addSubCache.cacheType === 'list' && state.addSubCache.boolCreate === 2" :label-width="100" label="rPush">
-        <el-input v-model="state.addSubCache.rPushValue" autocomplete="off"></el-input>
+      <el-form-item v-if="state.addSubCache.cacheType === 'list' && state.addSubCache.boolCreate === 2" label="rPush">
+        <el-input v-model="state.addSubCache.rPushValue" autocomplete="off" placeholder="右侧插入"></el-input>
       </el-form-item>
-
-      <el-form-item v-if="state.addSubCache.cacheType === 'set' || state.addSubCache.cacheType === 'zset'" :label-width="100" label="member">
-        <el-input v-model="state.addSubCache.cacheMember" autocomplete="off"></el-input>
+      <el-form-item v-if="state.addSubCache.cacheType === 'set' || state.addSubCache.cacheType === 'zset'" label="member">
+        <el-input v-model="state.addSubCache.cacheMember" autocomplete="off" placeholder="输入member"></el-input>
       </el-form-item>
-      <el-form-item v-if="state.addSubCache.cacheType === 'zset'" :label-width="100" label="score">
-        <el-input v-model="state.addSubCache.cacheScore" autocomplete="off"></el-input>
+      <el-form-item v-if="state.addSubCache.cacheType === 'zset'" label="score">
+        <el-input v-model="state.addSubCache.cacheScore" autocomplete="off" placeholder="输入score"></el-input>
       </el-form-item>
-      <el-form-item v-if="state.addSubCache.boolCreate === 1" :label-width="100" label="ttl/秒">
-        <el-input v-model="state.addSubCache.ttl" autocomplete="off"></el-input>
+      <el-form-item v-if="state.addSubCache.boolCreate === 1" label="TTL(秒)">
+        <el-input v-model="state.addSubCache.ttl" autocomplete="off" placeholder="-1表示永久"></el-input>
       </el-form-item>
     </el-form>
     <template #footer>
@@ -174,15 +212,14 @@
     </template>
   </el-dialog>
 
-
-  <!--深度解析-->
-  <el-dialog v-model="state.isDeepParse" :append-to-body="true" title="深度解析" width="80%">
+  <!-- 深度解析 -->
+  <el-dialog v-model="state.isDeepParse" :append-to-body="true" title="深度解析" width="80%" class="deep-parse-dialog">
     <Decode v-if="state.isDeepParse" :source="state.editForm.value"></Decode>
   </el-dialog>
-
 </template>
 <script>
 import {defineExpose, defineComponent, inject, defineEmits, getCurrentInstance, reactive} from 'vue';
+import { Timer, DocumentCopy, Refresh, Plus, Star, Delete, Connection, Document, DataAnalysis, Download, Check, DataLine, Search } from '@element-plus/icons-vue';
 import php from "@/utils/base/php";
 import redis from "@/utils/base/redis";
 import copy from "@/utils/base/copy";
@@ -190,7 +227,7 @@ import array from "@/utils/base/array";
 import Decode from "@/components/tools/Decode.vue";
 
 export default defineComponent({
-  components: {Decode},
+  components: {Decode, Timer, DocumentCopy, Refresh, Plus, Star, Delete, Connection, Document, DataAnalysis, Download, Check, DataLine, Search},
   props: {
   },
   data() {
@@ -223,6 +260,17 @@ export default defineComponent({
     };
     const ArrayExist = function (key, arrayList) {
       return array.Exist(key, arrayList)
+    };
+    // 获取类型标签样式
+    const getTypeTagType = function (cacheType) {
+      const typeMap = {
+        'string': 'success',
+        'hash': 'primary',
+        'list': 'warning',
+        'set': 'info',
+        'zset': 'danger'
+      }
+      return typeMap[cacheType] || 'info'
     };
     //加载更多
     const CallMoreList = function (){
@@ -522,6 +570,7 @@ export default defineComponent({
       CallMoreList,
       CallSearchList,
       CopyJson,
+      getTypeTagType,
     }
   },
   mounted() {
@@ -536,5 +585,214 @@ export default defineComponent({
 </script>
 
 <style scoped>
+.key-info-header {
+  padding: 14px;
+  background: #f7f7f2;
+  border: 1px solid #e8e8e0;
+  border-radius: 10px;
+  margin-bottom: 12px;
+}
+
+.key-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.type-tag {
+  font-weight: 600;
+  border-radius: 8px;
+}
+
+.ttl-tag {
+  cursor: pointer;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid #dde3d8;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ttl-tag:hover {
+  border-color: #93b793;
+  color: #3f6f3f;
+}
+
+.ttl-edit-tag {
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ttl-input {
+  width: 80px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 13px;
+}
+
+.key-name-tag {
+  cursor: copy;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid #dde3d8;
+  max-width: 520px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: Consolas, Monaco, monospace;
+  font-size: 13px;
+}
+
+.key-name-tag:hover {
+  border-color: #93b793;
+  background: #f2f7ee;
+}
+
+.action-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: #fff;
+  border-radius: 10px;
+  margin-bottom: 10px;
+  border: 1px solid #e8e8e0;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.action-left, .action-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.search-input {
+  width: 200px;
+}
+
+.data-stats {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: #f2f7ee;
+  border: 1px solid #e0eadb;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: #606050;
+}
+
+.data-stats strong {
+  color: #3f6f3f;
+}
+
+.data-table {
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.data-table :deep(.el-table__header-wrapper) {
+  background: #f7f7f2;
+}
+
+.data-table :deep(.el-table__header th) {
+  background: #f7f7f2;
+  color: #606050;
+  font-weight: 600;
+}
+
+.data-table :deep(.el-table__row:hover > td) {
+  background-color: #f3f7ef !important;
+}
+
+.field-value, .member-value {
+  font-family: Consolas, Monaco, monospace;
+  font-size: 13px;
+}
+
+.value-cell {
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.value-cell:hover {
+  background: #eef4ea;
+}
+
+.value-text {
+  font-family: Consolas, Monaco, monospace;
+  font-size: 13px;
+  color: #4f804f;
+}
+
+.string-editor {
+  margin-top: 10px;
+}
+
+.string-textarea {
+  border-radius: 10px;
+}
+
+.string-textarea :deep(.el-textarea__inner) {
+  border-radius: 10px;
+  font-family: Consolas, Monaco, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  background: #fafbf8;
+  border: 1px solid #dde3d8;
+}
+
+.string-textarea.readonly :deep(.el-textarea__inner) {
+  background: #f4f7f2;
+}
+
+.json-viewer {
+  position: relative;
+  background: #1f221d;
+  border-radius: 10px;
+  padding: 14px;
+  min-height: 320px;
+}
+
+.copy-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #fff;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.copy-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.json-content {
+  color: #d7dfd1;
+  font-family: Consolas, Monaco, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0;
+  max-height: 600px;
+  overflow: auto;
+}
 
 </style>

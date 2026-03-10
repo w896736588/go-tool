@@ -161,7 +161,7 @@ func (h *TBase) FilterTerminalChars(msg string) string {
 	multiNewlineRegex := regexp.MustCompile(`\n{3,}`)
 	msg = multiNewlineRegex.ReplaceAllString(msg, "\n")
 
-	// 可选：清理首尾多余的换行（如果需要）
+	// 5. 可选：清理首尾多余的换行（如果需要）
 	// msg = strings.Trim(msg, "\n")
 
 	return msg

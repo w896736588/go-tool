@@ -36,14 +36,14 @@
           <el-input v-model="item.description" placeholder="描述" @blur="handleDataChange" />
         </td>
         <td class="col-actions">
-          <el-button link type="danger" @click="removeItem(idx)">删除</el-button>
+          <el-button plain size="small" type="danger" class="delete-rule-btn" @click="removeItem(idx)">删除</el-button>
         </td>
       </tr>
       </tbody>
     </table>
 
     <div class="footer" style="margin: 5px;">
-      <el-button type="primary" link @click="addItem">+ 添加提取规则</el-button>
+      <el-button type="primary" plain size="small" class="add-rule-btn" @click="addItem">+ 添加提取规则</el-button>
     </div>
   </div>
 </template>
@@ -124,9 +124,10 @@ export default {
 <style scoped>
 .kv-table {
   width: 100%;
-  border: 1px solid #e4e7ed;
-  border-radius: 4px;
+  border: 1px solid #e6ece0;
+  border-radius: 10px;
   background: #fff;
+  overflow: hidden;
 }
 
 .kv-table-inner {
@@ -138,14 +139,14 @@ export default {
 .kv-table-inner th,
 .kv-table-inner td {
   padding: 8px 12px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid #eef3ec;
 }
 
 .kv-table-inner th {
-  background: #f5f7fa;
+  background: #f7f9f5;
   font-weight: 600;
   font-size: 14px;
-  color: #606266;
+  color: #4e594a;
 }
 
 .col-value { width: 35%; }
@@ -156,6 +157,14 @@ export default {
 .kv-table-inner .el-input,
 .kv-table-inner .el-select {
   width: 100%;
+}
+
+.add-rule-btn {
+  border-radius: 8px;
+}
+
+.delete-rule-btn {
+  border-radius: 8px;
 }
 </style>
 

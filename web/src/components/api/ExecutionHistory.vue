@@ -252,7 +252,11 @@ export default {
 
 <style scoped>
 .execution-history {
-  padding: 0;
+  padding: 12px;
+  border: 1px solid #e8eee5;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(80, 110, 80, 0.08);
 }
 
 .history-header {
@@ -262,6 +266,10 @@ export default {
   margin-bottom: 16px;
   flex-wrap: wrap;
   gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid #e6ece0;
+  border-radius: 10px;
+  background: #f7f9f5;
 }
 
 .filter-controls {
@@ -317,5 +325,12 @@ export default {
   justify-content: flex-end;
   margin-top: 16px;
   padding: 16px 0;
+  border-top: 1px solid #e8eee5;
+}
+
+:deep(.el-table) {
+  border: 1px solid #e6ece0;
+  border-radius: 10px;
+  overflow: hidden;
 }
 </style>

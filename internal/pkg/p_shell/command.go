@@ -55,6 +55,12 @@ func (h *Command) GitShowOriginBranch() *Command {
 	return h
 }
 
+// GitShowAllOriginBranches 查询远程所有分支
+func (h *Command) GitShowAllOriginBranches() *Command {
+	h.SetCommand(h.sudo + `git ls-remote --heads origin`)
+	return h
+}
+
 func (h *Command) GitIgnoreAll() *Command {
 	h.SetCommand(h.sudo + `git checkout .`)
 	return h
@@ -92,8 +98,20 @@ func (h *Command) GitCheckout(branch string) *Command {
 	return h
 }
 
+// GitCheckoutNewBranch 基于当前分支创建并切换新分支
+func (h *Command) GitCheckoutNewBranch(branch string) *Command {
+	h.SetCommand(fmt.Sprintf(`%sgit checkout -b %s`, h.sudo, branch))
+	return h
+}
+
 func (h *Command) GitPullOrigin(branch string) *Command {
 	h.SetCommand(fmt.Sprintf(`%sgit pull --quiet origin %s`, h.sudo, branch))
+	return h
+}
+
+// GitPushOriginSetUpstream 推送并建立上游跟踪
+func (h *Command) GitPushOriginSetUpstream(branch string) *Command {
+	h.SetCommand(fmt.Sprintf(`%sgit push -u origin %s`, h.sudo, branch))
 	return h
 }
 

@@ -1,19 +1,42 @@
-<template>
+﻿<template>
   <el-alert v-if="is_install === 1" :closable="false" show-icon title="正在安装中，看网速大约5-20分钟" type="warning"/>
-  <div>
-    <div style="margin-bottom: 10px;display: flex;justify-content: center; /* 水平居中 */">
+  <el-alert
+      v-if="node_install_tip.show"
+      :closable="false"
+      show-icon
+      type="error"
+      style="margin-bottom: 8px;"
+  >
+    <template #title>未检测到 Node.js，当前无法使用自定义网页</template>
+    <div>{{ node_install_tip.install_tip }}</div>
+    <el-link :href="node_install_tip.install_url" target="_blank" type="primary" style="margin-top: 4px;">
+      前往下载 Node.js
+    </el-link>
+  </el-alert>
+  <div class="link-run-page">
+    <div class="link-run-toolbar">
       <el-text class="mx-1">已打开Page({{ openPageNum }})</el-text>&nbsp;
-      <el-button type="primary" @click="showCreateDialog">创建</el-button>
-      <el-button type="primary" @click="install">安装核心</el-button>
-      <el-button type="primary" @click="recycle">释放内存</el-button>
-      <el-button type="primary" @click="downloadPath">下载目录</el-button>
-      <el-button type="primary" @click="drawerVisibleMarkdown = true">帮助文档</el-button>
+      <el-button class="toolbar-btn" type="primary" plain @click="showCreateDialog">
+        <el-icon><Plus /></el-icon>创建
+      </el-button>
+      <el-button class="toolbar-btn" type="primary" plain @click="install">
+        <el-icon><Tools /></el-icon>安装核心
+      </el-button>
+      <el-button class="toolbar-btn" type="primary" plain @click="recycle">
+        <el-icon><Refresh /></el-icon>释放内存
+      </el-button>
+      <el-button class="toolbar-btn" type="primary" plain @click="downloadPath">
+        <el-icon><Download /></el-icon>下载目录
+      </el-button>
+      <el-button class="toolbar-btn" type="primary" plain @click="drawerVisibleMarkdown = true">
+        <el-icon><QuestionFilled /></el-icon>帮助文档
+      </el-button>
 <!--      <el-button type="primary" @click="showDialogRunLog">运行日志({{shellController.sshResult.length}})</el-button>&nbsp;-->
-      &nbsp;<el-link type="primary" @click="changeToProcess">切换到编辑执行逻辑</el-link>&nbsp;
-      <el-link type="primary" @click="changeToFlow">切换到流程图</el-link>&nbsp;
+      &nbsp;<el-button class="toolbar-btn" type="primary" plain @click="changeToProcess"><el-icon><EditPen /></el-icon>切换到编辑执行逻辑</el-button>&nbsp;
+      <el-button class="toolbar-btn" type="primary" plain @click="changeToFlow"><el-icon><Share /></el-icon>切换到流程图</el-button>&nbsp;
       <!--      <el-link type="primary" @click="showMarkdown">使用说明</el-link>-->
     </div>
-    <div v-for="(smartValue, smartLinkIndex) in smartList" :key="smartLinkIndex" class="box-card" style="min-height: 70px;padding:5px;">
+    <div v-for="(smartValue, smartLinkIndex) in smartList" :key="smartLinkIndex" class="link-run-card">
       <a style="display: inline-block;text-decoration: underline;cursor:pointer;font-size:17px;font-weight: bold;" @click="showEditDialog(smartValue)">
         {{ smartValue.id + " " + smartValue.name }}
       </a>
@@ -42,7 +65,7 @@
           </template>
         </el-popconfirm>
       </el-tooltip>
-      <el-row :gutter="20" style="margin-top: 15px;margin-bottom:10px;">
+      <el-row :gutter="20" class="link-run-links-row">
         <el-col v-for="(linkValue, linkIndex) in smartValue.linkList" :key="linkIndex" :span="4">
           <div class="grid-content bg-purple">
             <!--            选择后内置核心打开-->
@@ -79,7 +102,7 @@
       <!--      账号列表-->
       <el-form v-if="smartValue.linkList[smartValue.chooseLinkIndex] &&
         (smartValue.linkList[smartValue.chooseLinkIndex].userList || smartValue.open_num > 0 )" :inline="true" class="demo-form-inline"
-               label-width="auto" style="margin:auto;">
+               label-width="auto" style="margin: 0 auto;">
         <el-form-item v-if="smartValue.linkList[smartValue.chooseLinkIndex].userList && smartValue.linkList[smartValue.chooseLinkIndex].userList.length > 0" label="账号列表">
           <el-select v-model="smartValue.linkList[smartValue.chooseLinkIndex].chooseUserName" placeholder="选择账号">
             <template v-for="(user,userkey) in smartValue.linkList[smartValue.chooseLinkIndex].userList" :key="userkey">
@@ -103,7 +126,6 @@
           </el-button>
         </el-form-item>
       </el-form>
-      <el-divider/>
     </div>
   </div>
   <!--新增弹窗-->
@@ -248,6 +270,7 @@ import shellResult from "@/components/shell/result_button.vue";
 import sse from "@/utils/base/sse";
 import sseDistribute from "@/utils/base/sse_distribute";
 import shell from "@/utils/base/shell"
+import { Plus, Tools, Refresh, Download, QuestionFilled, EditPen, Share, Setting, Notebook, Delete } from '@element-plus/icons-vue'
 
 export default {
   props: {
@@ -259,6 +282,16 @@ export default {
     shellResult,
     Markdown,
     JsonEditCombine,
+    Plus,
+    Tools,
+    Refresh,
+    Download,
+    QuestionFilled,
+    EditPen,
+    Share,
+    Setting,
+    Notebook,
+    Delete,
   },
   data() {
     return {
@@ -337,6 +370,12 @@ export default {
       openPageNum: 0,
       //是否在安装中
       is_install: 0,
+      // Node.js 安装提示
+      node_install_tip: {
+        show: false,
+        install_url: 'https://nodejs.org/zh-cn/download',
+        install_tip: '请先安装 Node.js（建议 LTS 版本），安装完成后刷新当前页面。',
+      },
     }
   },
   mounted: function () {
@@ -392,14 +431,29 @@ export default {
       _that.smartLinkConfig.linksNew = newData
 
     },
+    // applyNodeInstallTip 解析并展示 Node.js 安装提示
+    applyNodeInstallTip: function (response) {
+      let _that = this
+      let data = response && response.Data ? response.Data : {}
+      let needInstall = data.need_install_node === 1
+      _that.node_install_tip.show = needInstall
+      if (needInstall) {
+        _that.node_install_tip.install_url = data.install_url || 'https://nodejs.org/zh-cn/download'
+        _that.node_install_tip.install_tip = data.install_tip || '请先安装 Node.js（建议 LTS 版本），安装完成后刷新当前页面。'
+      }
+      return needInstall
+    },
     SmartLinkChromeVersion: function () {
       let _that = this
       smart_link_set.SmartLinkChromeVersion(_that.sse_distribute_id , function (response) {
         if (response.ErrCode === 0) {
           _that.versionInfo = response.Data.version
           _that.is_install = response.Data.is_install
+          _that.applyNodeInstallTip(response)
         } else {
-          _that.$helperNotify.error('失败')
+          if (!_that.applyNodeInstallTip(response)) {
+            _that.$helperNotify.error('失败')
+          }
         }
       })
     },
@@ -436,6 +490,12 @@ export default {
         sse_distribute_id : _that.sse_distribute_id,
       }
       smart_link_set.SmartLinkRun(runParams, function (response) {
+        if (response.ErrCode !== 0) {
+          if (!_that.applyNodeInstallTip(response)) {
+            _that.$helperNotify.error(response.ErrMsg || '执行失败')
+          }
+          return
+        }
         ticker_step.Active(_that.tickerKey)
       });
     },
@@ -470,6 +530,10 @@ export default {
     runList: function () {
       let _that = this
       smart_link_set.SmartLinkRunList(_that.sse_distribute_id , function (response) {
+        if (response.ErrCode !== 0) {
+          _that.applyNodeInstallTip(response)
+          return
+        }
         let runList = response.Data
         _that.openPageNum = 0
         _that.smartLinkRunList = {};
@@ -590,7 +654,9 @@ export default {
       smart_link_set.SmartLinkDownloadPath(_that.sse_distribute_id , function (response) {
         if (response.ErrCode === 0) {
         } else {
-          _that.$helperNotify.error('失败')
+          if (!_that.applyNodeInstallTip(response)) {
+            _that.$helperNotify.error('失败')
+          }
         }
       })
     },
@@ -601,7 +667,9 @@ export default {
           _that.GetConfigList()
           _that.runList()
         } else {
-          _that.$helperNotify.error('失败')
+          if (!_that.applyNodeInstallTip(response)) {
+            _that.$helperNotify.error('失败')
+          }
         }
       })
     },
@@ -612,7 +680,9 @@ export default {
           _that.GetConfigList()
           _that.runList()
         } else {
-          _that.$helperNotify.error('失败')
+          if (!_that.applyNodeInstallTip(response)) {
+            _that.$helperNotify.error('失败')
+          }
         }
       })
     },
@@ -680,4 +750,46 @@ export default {
 }
 </script>
 
-<style scoped></style>
+<style scoped>
+.link-run-page {
+  padding: 6px 4px 2px;
+}
+
+.link-run-toolbar {
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.toolbar-btn {
+  border-radius: 8px;
+  border: 1px solid #d8ded2 !important;
+  background: #f6f8f3 !important;
+  color: #4f804f !important;
+}
+
+.toolbar-btn:hover {
+  background: #eef4ea !important;
+  border-color: #bfd1bf !important;
+  color: #3f6f3f !important;
+}
+
+.link-run-card {
+  min-height: 70px;
+  padding: 14px 14px 12px;
+  margin-bottom: 12px;
+  background: #fff;
+  border: 1px solid #e6e8de;
+  border-radius: 10px;
+  box-sizing: border-box;
+}
+
+.link-run-links-row {
+  margin-top: 15px;
+  margin-bottom: 10px;
+}
+</style>
+

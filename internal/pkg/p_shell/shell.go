@@ -3,12 +3,13 @@ package p_shell
 import (
 	"dev_tool/internal/pkg/p_sse"
 	"errors"
+	"io"
+	"reflect"
 	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
-
-	"io"
+	"unsafe"
 
 	"gitee.com/Sxiaobai/gs/v2/gsssh"
 	"gitee.com/Sxiaobai/gs/v2/gstool"
@@ -17,34 +18,121 @@ import (
 )
 
 type Shell struct {
-	ShellClientMap map[string]*gsssh.SshTerminal
-	lock           sync.Mutex
-	LogPath        string
-	log            *gstool.GsSlog
+	ShellClientMap      map[string]*gsssh.SshTerminal
+	ShellClientPoolMap  map[string][]*gsssh.SshTerminal
+	ShellClientPoolNext map[string]int
+	ShellClientStartMap map[*gsssh.SshTerminal]int64
+	ShellClientLastUsed map[*gsssh.SshTerminal]int64
+	lock                sync.Mutex
+	LogPath             string
+	log                 *gstool.GsSlog
+}
+
+const maxShellPoolSize = 20
+const shellIdleTimeout = 3 * time.Minute
+const shellIdleCleanTicker = 30 * time.Second
+const getClientBusyWaitTimeout = 5 * time.Second
+const getClientBusyWaitInterval = 100 * time.Millisecond
+
+var terminalBusyInspector = isTerminalBusy
+
+func canSendSse(sse *p_sse.SseShell) bool {
+	return sse != nil && sse.Sse != nil
+}
+
+type receiveBinder interface {
+	SetFuncReceiveMsg(func(string) string)
+}
+
+func makeReceiveHandler(sse *p_sse.SseShell, formatStream func(string) []string) func(string) string {
+	return func(msg string) string {
+		if formatStream != nil {
+			msgList := formatStream(msg)
+			for _, line := range msgList {
+				if canSendSse(sse) {
+					sse.Send(line)
+				}
+			}
+		} else if canSendSse(sse) {
+			sse.Send(msg)
+		}
+		return msg
+	}
+}
+
+func bindReceiveHandler(target receiveBinder, sse *p_sse.SseShell, formatStream func(string) []string) {
+	target.SetFuncReceiveMsg(makeReceiveHandler(sse, formatStream))
+}
+
+func splitPoolKey(uniqueKey string) string {
+	if uniqueKey == "" {
+		return ""
+	}
+	keyList := strings.SplitN(uniqueKey, "#", 2)
+	return keyList[0]
+}
+
+func resolvePoolKey(sshConfig map[string]any, shellClientId string) string {
+	if sshId := cast.ToString(sshConfig["id"]); sshId != "" {
+		return sshId
+	}
+	if key := splitPoolKey(shellClientId); key != "" {
+		return key
+	}
+	return shellClientId
 }
 
 func NewShell(logPath string) *Shell {
-	log := gstool.NewSlog3(logPath, `shell`)
+	log := gstool.NewSlog3(logPath, "shell")
 	_ = log.CleanOldLogs(2)
-	return &Shell{
-		ShellClientMap: make(map[string]*gsssh.SshTerminal),
-		log:            log,
-		LogPath:        logPath,
+	shell := &Shell{
+		ShellClientMap:      make(map[string]*gsssh.SshTerminal),
+		ShellClientPoolMap:  make(map[string][]*gsssh.SshTerminal),
+		ShellClientPoolNext: make(map[string]int),
+		ShellClientStartMap: make(map[*gsssh.SshTerminal]int64),
+		ShellClientLastUsed: make(map[*gsssh.SshTerminal]int64),
+		log:                 log,
+		LogPath:             logPath,
+	}
+	// 启动连接池空闲清理协程：超过 3 分钟未使用的连接将自动断开并移除。
+	go shell.startIdleCleaner()
+	return shell
+}
+
+func (h *Shell) removeClientFromPoolLocked(poolKey string, target *gsssh.SshTerminal) {
+	pool, ok := h.ShellClientPoolMap[poolKey]
+	if !ok || len(pool) == 0 {
+		return
+	}
+	newPool := make([]*gsssh.SshTerminal, 0, len(pool))
+	for _, item := range pool {
+		if item == nil {
+			continue
+		}
+		if item == target {
+			item.CloseTerminal()
+			delete(h.ShellClientStartMap, item)
+			delete(h.ShellClientLastUsed, item)
+			continue
+		}
+		newPool = append(newPool, item)
+	}
+	if len(newPool) == 0 {
+		delete(h.ShellClientPoolMap, poolKey)
+		delete(h.ShellClientPoolNext, poolKey)
+		return
+	}
+	h.ShellClientPoolMap[poolKey] = newPool
+	if h.ShellClientPoolNext[poolKey] >= len(newPool) {
+		h.ShellClientPoolNext[poolKey] = 0
 	}
 }
 
-// GetClient 正常输出
-func (h *Shell) GetClient(sshConfig map[string]any, shellClientId string, sse *p_sse.SseShell,
+func (h *Shell) createShellClient(sshConfig map[string]any, poolKey string, sse *p_sse.SseShell,
 	formatStream func(string) []string, promptKeywords []string, promptFunc func(string, io.WriteCloser, *ssh.Session) string) (*gsssh.SshTerminal, error) {
-	defer h.lock.Unlock()
-	h.lock.Lock()
-	sshId := cast.ToString(sshConfig[`id`])
-	if sshId == `` {
-		return nil, errors.New(`ssh配置错误，GetClient ` + cast.ToString(debug.Stack()))
-	}
-	if shell, ok := h.ShellClientMap[shellClientId]; ok && shell != nil {
-		return shell, nil
-	}
+	start := time.Now()
+	sshId := cast.ToString(sshConfig["id"])
+	gstool.FmtPrintlnLogTime(`[Shell.createShellClient] enter ssh_id=%s pool_key=%s`, sshId, poolKey)
 	gsShell := gsssh.NewSshTerminal(gsssh.NewSsh(&gsssh.SshConfig{
 		Name:     "",
 		Host:     cast.ToString(sshConfig["host"]),
@@ -52,62 +140,255 @@ func (h *Shell) GetClient(sshConfig map[string]any, shellClientId string, sse *p
 		UserName: cast.ToString(sshConfig["username"]),
 		Password: cast.ToString(sshConfig["password"]),
 	}))
-	//设置关闭事件
+
 	gsShell.SetFuncBroken(func(msg string) {
-		sse.Send(` 注意：连接已中断，下次动作时进行链接,` + msg + "\n")
-		h.RmClient(shellClientId)
+		gstool.FmtPrintlnLogTime(`[Shell.createShellClient] broken ssh_id=%s pool_key=%s err=%s`, sshId, poolKey, msg)
+		if canSendSse(sse) {
+			sse.Send(" connection broken, will reconnect on next action: " + msg + "\n")
+		}
+		h.lock.Lock()
+		defer h.lock.Unlock()
+		h.removeClientFromPoolLocked(poolKey, gsShell)
 	})
-	gsShell.SetPtyConfig(gsssh.PtyConfig{
-		Echo: 1,
-	})
-	gsShell.SetMaxBufferSize(2 * 1024 * 1024) //最大允许2M的输出
-	//先执行一次确保连接正常
-	maxRunSecond := time.Second * 40
-	_, err := gsShell.RunCommandWait(`pwd`, maxRunSecond)
+
+	gsShell.SetPtyConfig(gsssh.PtyConfig{Echo: 1})
+	gsShell.SetMaxBufferSize(2 * 1024 * 1024)
+	gstool.FmtPrintlnLogTime(`[Shell.createShellClient] run pwd begin ssh_id=%s pool_key=%s`, sshId, poolKey)
+	pwdStart := time.Now()
+	_, err := gsShell.RunCommandWait("pwd", 40*time.Second)
+	gstool.FmtPrintlnLogTime(`[Shell.createShellClient] run pwd end ssh_id=%s pool_key=%s cost_ms=%d err=%v`,
+		sshId, poolKey, time.Since(pwdStart).Milliseconds(), err)
 	if err != nil {
 		return nil, err
 	}
-	//回调准备输出的内容 放到这里 就不需要链接linux出现的一大段文字
-	gsShell.SetFuncReceiveMsg(func(msg string) string {
-		if formatStream != nil {
-			msgList := formatStream(msg)
-			for _, msg := range msgList {
-				sse.Send(msg)
-			}
-		} else {
-			sse.Send(msg)
-		}
-		return msg
-	})
-	//提示验证提示
+
+	bindReceiveHandler(gsShell, sse, formatStream)
+
 	if len(promptKeywords) == 0 {
-		promptKeywords = []string{
-			"Username for",
-			"Password for",
-			"用户名：",
-			"密码：",
-			"passphrase",
-			"Passphrase",
-		}
+		promptKeywords = []string{"Username for", "Password for", "passphrase", "Passphrase"}
 	}
 	gsShell.SetAuthPromptKeywords(promptKeywords)
 	if promptFunc != nil {
 		gsShell.SetFuncAuthPrompt(promptFunc)
 	}
-	h.ShellClientMap[shellClientId] = gsShell
+	gstool.FmtPrintlnLogTime(`[Shell.createShellClient] return success ssh_id=%s pool_key=%s total_cost_ms=%d`,
+		sshId, poolKey, time.Since(start).Milliseconds())
 	return gsShell, nil
 }
 
-// GetClientMarkdown 输出markdown格式
+// startIdleCleaner 周期性扫描并清理空闲连接。
+func (h *Shell) startIdleCleaner() {
+	ticker := time.NewTicker(shellIdleCleanTicker)
+	defer ticker.Stop()
+	for range ticker.C {
+		h.cleanupIdleClients()
+	}
+}
+
+// cleanupIdleClients 断开并移除超过空闲阈值的连接。
+func (h *Shell) cleanupIdleClients() {
+	now := time.Now().Unix()
+	timeoutSeconds := int64(shellIdleTimeout / time.Second)
+	idleClients := make([]*gsssh.SshTerminal, 0)
+
+	h.lock.Lock()
+	// 清理连接池中的空闲连接
+	for poolKey, pool := range h.ShellClientPoolMap {
+		newPool := make([]*gsssh.SshTerminal, 0, len(pool))
+		for _, client := range pool {
+			if client == nil {
+				continue
+			}
+			// 正在执行命令的连接不清理，避免误断开长任务。
+			// 注意：command 字段不会可靠清空，需用互斥锁状态判断是否忙碌。
+			if terminalBusyInspector(client) {
+				newPool = append(newPool, client)
+				continue
+			}
+			lastUsed := h.ShellClientLastUsed[client]
+			if lastUsed == 0 {
+				lastUsed = h.ShellClientStartMap[client]
+			}
+			if lastUsed > 0 && now-lastUsed >= timeoutSeconds {
+				idleClients = append(idleClients, client)
+				delete(h.ShellClientStartMap, client)
+				delete(h.ShellClientLastUsed, client)
+				continue
+			}
+			newPool = append(newPool, client)
+		}
+		if len(newPool) == 0 {
+			delete(h.ShellClientPoolMap, poolKey)
+			delete(h.ShellClientPoolNext, poolKey)
+			continue
+		}
+		h.ShellClientPoolMap[poolKey] = newPool
+		if h.ShellClientPoolNext[poolKey] >= len(newPool) {
+			h.ShellClientPoolNext[poolKey] = 0
+		}
+	}
+
+	// 清理一对一缓存中的空闲连接
+	for shellClientId, client := range h.ShellClientMap {
+		if client == nil {
+			delete(h.ShellClientMap, shellClientId)
+			continue
+		}
+		// 正在执行命令的连接不清理，避免误断开长任务。
+		// 注意：command 字段不会可靠清空，需用互斥锁状态判断是否忙碌。
+		if terminalBusyInspector(client) {
+			continue
+		}
+		lastUsed := h.ShellClientLastUsed[client]
+		if lastUsed == 0 {
+			lastUsed = h.ShellClientStartMap[client]
+		}
+		if lastUsed > 0 && now-lastUsed >= timeoutSeconds {
+			idleClients = append(idleClients, client)
+			delete(h.ShellClientMap, shellClientId)
+			delete(h.ShellClientStartMap, client)
+			delete(h.ShellClientLastUsed, client)
+		}
+	}
+	h.lock.Unlock()
+
+	for _, client := range idleClients {
+		client.CloseTerminal()
+	}
+}
+
+// GetClient returns a pooled shell client. Pool size is capped per sshId.
+func (h *Shell) GetClient(sshConfig map[string]any, shellClientId string, sse *p_sse.SseShell,
+	formatStream func(string) []string, promptKeywords []string, promptFunc func(string, io.WriteCloser, *ssh.Session) string) (*gsssh.SshTerminal, error) {
+	start := time.Now()
+	sshId := cast.ToString(sshConfig["id"])
+	if sshId == "" {
+		return nil, errors.New("ssh config error, GetClient " + cast.ToString(debug.Stack()))
+	}
+	poolKey := resolvePoolKey(sshConfig, shellClientId)
+	gstool.FmtPrintlnLogTime(`[Shell.GetClient] enter ssh_id=%s shell_client_id=%s pool_key=%s`,
+		sshId, shellClientId, poolKey)
+
+	for {
+		h.lock.Lock()
+		pool := h.ShellClientPoolMap[poolKey]
+		if len(pool) > 0 {
+			next := h.ShellClientPoolNext[poolKey]
+			idleIndex := findIdleClientIndex(pool, next)
+			if idleIndex >= 0 {
+				chooseClient := pool[idleIndex]
+				h.ShellClientPoolNext[poolKey] = (idleIndex + 1) % len(pool)
+				h.ShellClientLastUsed[chooseClient] = time.Now().Unix()
+				// pooled client may be reused by a new request; always rebind SSE receiver
+				bindReceiveHandler(chooseClient, sse, formatStream)
+				h.lock.Unlock()
+				gstool.FmtPrintlnLogTime(`[Shell.GetClient] return success ssh_id=%s pool_key=%s choose_index=%d pool_size=%d total_cost_ms=%d`,
+					sshId, poolKey, idleIndex, len(pool), time.Since(start).Milliseconds())
+				return chooseClient, nil
+			}
+		}
+		needCreate := len(pool) < maxShellPoolSize
+		poolSize := len(pool)
+		h.lock.Unlock()
+
+		gstool.FmtPrintlnLogTime(`[Shell.GetClient] pool status ssh_id=%s pool_key=%s pool_size=%d need_create=%v`,
+			sshId, poolKey, poolSize, needCreate)
+
+		if needCreate {
+			gstool.FmtPrintlnLogTime(`[Shell.GetClient] create begin ssh_id=%s pool_key=%s`, sshId, poolKey)
+			createStart := time.Now()
+			newClient, err := h.createShellClient(sshConfig, poolKey, sse, formatStream, promptKeywords, promptFunc)
+			gstool.FmtPrintlnLogTime(`[Shell.GetClient] create end ssh_id=%s pool_key=%s cost_ms=%d err=%v`,
+				sshId, poolKey, time.Since(createStart).Milliseconds(), err)
+			if err != nil {
+				return nil, err
+			}
+			h.lock.Lock()
+			pool = h.ShellClientPoolMap[poolKey]
+			if len(pool) < maxShellPoolSize {
+				h.ShellClientPoolMap[poolKey] = append(pool, newClient)
+				h.ShellClientStartMap[newClient] = time.Now().Unix()
+				h.ShellClientLastUsed[newClient] = time.Now().Unix()
+				if h.ShellClientPoolNext[poolKey] >= len(h.ShellClientPoolMap[poolKey]) {
+					h.ShellClientPoolNext[poolKey] = 0
+				}
+				h.lock.Unlock()
+			} else {
+				h.lock.Unlock()
+				newClient.CloseTerminal()
+			}
+			continue
+		}
+
+		if time.Since(start) >= getClientBusyWaitTimeout {
+			gstool.FmtPrintlnLogTime(`[Shell.GetClient] return error ssh_id=%s pool_key=%s err=all ssh clients are busy total_cost_ms=%d`,
+				sshId, poolKey, time.Since(start).Milliseconds())
+			return nil, errors.New("all ssh clients are busy")
+		}
+		time.Sleep(getClientBusyWaitInterval)
+	}
+}
+
+func findIdleClientIndex(pool []*gsssh.SshTerminal, next int) int {
+	if len(pool) == 0 {
+		return -1
+	}
+	if next < 0 || next >= len(pool) {
+		next = 0
+	}
+	for i := 0; i < len(pool); i++ {
+		idx := (next + i) % len(pool)
+		client := pool[idx]
+		if client == nil {
+			continue
+		}
+		if !terminalBusyInspector(client) {
+			return idx
+		}
+	}
+	return -1
+}
+
+// isTerminalBusy 根据 gsssh.SshTerminal 内部互斥锁判断是否正在执行命令。
+// command 字段不会在每次执行后清空，不能用于 busy 判定。
+func isTerminalBusy(gsShell *gsssh.SshTerminal) bool {
+	if gsShell == nil {
+		return true
+	}
+	defer func() {
+		_ = recover()
+	}()
+	val := reflect.ValueOf(gsShell)
+	if !val.IsValid() || val.Kind() != reflect.Ptr || val.IsNil() {
+		return true
+	}
+	elem := val.Elem()
+	if !elem.IsValid() || elem.Kind() != reflect.Struct {
+		return true
+	}
+	field := elem.FieldByName("lockCommand")
+	if !field.IsValid() || field.Type() != reflect.TypeOf(sync.Mutex{}) || !field.CanAddr() {
+		return false
+	}
+	mtx := (*sync.Mutex)(unsafe.Pointer(field.UnsafeAddr()))
+	if mtx.TryLock() {
+		mtx.Unlock()
+		return false
+	}
+	return true
+}
+
+// GetClientMarkdown keeps old one-to-one key behavior for markdown/sftp paths.
 func (h *Shell) GetClientMarkdown(sshConfig map[string]any, shellClientId string, sse *p_sse.SseShell) (*gsssh.SshTerminal, error) {
 	defer h.lock.Unlock()
 	h.lock.Lock()
-	sshId := cast.ToString(sshConfig[`id`])
-	if sshId == `` {
-		return nil, errors.New(`ssh配置错误，GetClientMarkdown ` + cast.ToString(debug.Stack()))
+	sshId := cast.ToString(sshConfig["id"])
+	if sshId == "" {
+		return nil, errors.New("ssh config error, GetClientMarkdown " + cast.ToString(debug.Stack()))
 	}
 	if shell, ok := h.ShellClientMap[shellClientId]; ok && shell != nil {
 		h.SetSse(shell, sse)
+		h.ShellClientLastUsed[shell] = time.Now().Unix()
 		return shell, nil
 	}
 	gsShell := gsssh.NewSshTerminal(gsssh.NewSsh(&gsssh.SshConfig{
@@ -117,62 +398,48 @@ func (h *Shell) GetClientMarkdown(sshConfig map[string]any, shellClientId string
 		UserName: cast.ToString(sshConfig["username"]),
 		Password: cast.ToString(sshConfig["password"]),
 	}))
-	gsShell.SetPtyConfig(gsssh.PtyConfig{
-		Echo: 1,
-	})
-	//TODO 有时间研究一下 为什么sftp的链接断开后没有重连
-	//设置关闭事件
+	gsShell.SetPtyConfig(gsssh.PtyConfig{Echo: 1})
 	gsShell.SetFuncBroken(func(msg string) {
-		sse.Send(` 注意：连接已中断，下次动作时进行链接,` + msg + "\n")
+		if canSendSse(sse) {
+			sse.Send(" connection broken, will reconnect on next action: " + msg + "\n")
+		}
 		h.RmClient(shellClientId)
 	})
-	gsShell.SetMaxBufferSize(2 * 1024 * 1024) //最大允许2M的输出
-	//先执行一次确保连接正常
-	_, err := gsShell.RunCommandWait(`pwd`, time.Second*40)
+	gsShell.SetMaxBufferSize(2 * 1024 * 1024)
+	_, err := gsShell.RunCommandWait("pwd", 40*time.Second)
 	if err != nil {
 		return nil, err
 	}
-	//猪油：下面3个注册回调，放到这里的话就不会输出pwd以及连接相关信息
 	h.SetSse(gsShell, sse)
-	//提示输入账号密码登处理
-	gsShell.SetAuthPromptKeywords([]string{
-		"Username for",
-		"Password for",
-		"用户名：",
-		"密码：",
-		"passphrase",
-		"Passphrase",
-	})
+	gsShell.SetAuthPromptKeywords([]string{"Username for", "Password for", "passphrase", "Passphrase"})
 	gsShell.SetFuncAuthPrompt(func(prompt string, stdin io.WriteCloser, session *ssh.Session) string {
-		// 发送 Ctrl+C 信号（模拟终端中断）
 		if session != nil {
 			_ = session.Signal(ssh.SIGINT)
-			//清除认证缓存
-			if strings.Contains(strings.ToLower(prompt), `git`) {
+			if strings.Contains(strings.ToLower(prompt), "git") {
 				_, _ = stdin.Write([]byte("git credential-cache exit; unset GIT_ASKPASS\n"))
 			}
-			sse.Send("\n需要输入账号或密码，暂时不支持，请解决后再次执行\n")
+			if canSendSse(sse) {
+				sse.Send("\nmanual auth prompt detected, please configure credentials and retry\n")
+			}
 			return prompt
 		}
 		return prompt
 	})
 
 	h.ShellClientMap[shellClientId] = gsShell
+	h.ShellClientStartMap[gsShell] = time.Now().Unix()
+	h.ShellClientLastUsed[gsShell] = time.Now().Unix()
 	return gsShell, nil
 }
 
 func (h *Shell) SetSse(gsShell *gsssh.SshTerminal, sse *p_sse.SseShell) {
-	//回调准备输出的内容
-	gsShell.SetFuncReceiveMsg(func(msg string) string {
-		sse.Send(msg)
-		return msg
-	})
+	bindReceiveHandler(gsShell, sse, nil)
 }
 
 func (h *Shell) GetSshOnce(sshConfig map[string]any) (*gsssh.SshOnce, error) {
-	sshId := cast.ToString(sshConfig[`id`])
-	if sshId == `` {
-		return nil, errors.New(`ssh配置错误，GetClientMarkdown ` + cast.ToString(debug.Stack()))
+	sshId := cast.ToString(sshConfig["id"])
+	if sshId == "" {
+		return nil, errors.New("ssh config error, GetClientMarkdown " + cast.ToString(debug.Stack()))
 	}
 
 	return gsssh.NewSshOnce(gsssh.NewSsh(&gsssh.SshConfig{
@@ -182,55 +449,146 @@ func (h *Shell) GetSshOnce(sshConfig map[string]any) (*gsssh.SshOnce, error) {
 		UserName: cast.ToString(sshConfig["username"]),
 		Password: cast.ToString(sshConfig["password"]),
 	})), nil
-
 }
 
 func (h *Shell) Exist(uniqueKey string) bool {
 	defer h.lock.Unlock()
 	h.lock.Lock()
+	if pool, ok := h.ShellClientPoolMap[uniqueKey]; ok && len(pool) > 0 {
+		return true
+	}
+	poolKey := splitPoolKey(uniqueKey)
+	if poolKey != "" && poolKey != uniqueKey {
+		if pool, ok := h.ShellClientPoolMap[poolKey]; ok && len(pool) > 0 {
+			return true
+		}
+	}
 	if _, ok := h.ShellClientMap[uniqueKey]; ok {
 		return true
 	}
 	return false
 }
 
-// RmClient 移除连接
+// RmClient removes both pool clients and markdown client by key.
 func (h *Shell) RmClient(uniqueKey string) {
 	defer h.lock.Unlock()
 	h.lock.Lock()
-	if ssh, ok := h.ShellClientMap[uniqueKey]; ok {
-		ssh.CloseTerminal()
+	poolKey := uniqueKey
+	if _, ok := h.ShellClientPoolMap[poolKey]; !ok {
+		if k := splitPoolKey(uniqueKey); k != "" {
+			poolKey = k
+		}
 	}
-	delete(h.ShellClientMap, uniqueKey)
+	if pool, ok := h.ShellClientPoolMap[poolKey]; ok {
+		for _, sshCli := range pool {
+			if sshCli != nil {
+				sshCli.CloseTerminal()
+				delete(h.ShellClientStartMap, sshCli)
+				delete(h.ShellClientLastUsed, sshCli)
+			}
+		}
+		delete(h.ShellClientPoolMap, poolKey)
+		delete(h.ShellClientPoolNext, poolKey)
+	}
+	if sshCli, ok := h.ShellClientMap[uniqueKey]; ok {
+		sshCli.CloseTerminal()
+		delete(h.ShellClientStartMap, sshCli)
+		delete(h.ShellClientLastUsed, sshCli)
+		delete(h.ShellClientMap, uniqueKey)
+	}
 }
 
 func (h *Shell) WalkShellList(businessFunc func(uniqueKey string, gsShell *gsssh.SshTerminal)) {
 	defer h.lock.Unlock()
 	h.lock.Lock()
+	for uniqueKey, pool := range h.ShellClientPoolMap {
+		for i, gsShell := range pool {
+			if gsShell == nil {
+				continue
+			}
+			businessFunc(uniqueKey+"#pool"+cast.ToString(i), gsShell)
+		}
+	}
 	for uniqueKey, gsShell := range h.ShellClientMap {
+		if gsShell == nil {
+			continue
+		}
 		businessFunc(uniqueKey, gsShell)
 	}
 }
 
-// ConnectionInfo 连接信息（用于返回给调用方）
+// ConnectionInfo contains shell connection metadata for UI.
 type ConnectionInfo struct {
-	ShellClientId string `json:"shell_client_id"`
-	Status        string `json:"status"` // active: 活跃
-	Type          string `json:"type"`   // shell
+	ShellClientId  string `json:"shell_client_id"`
+	CurrentCommand string `json:"current_command"`
+	Status         string `json:"status"`
+	ConnectTime    string `json:"connect_time"`
+	ConnectSeconds int64  `json:"connect_seconds"`
+	Type           string `json:"type"`
 }
 
-// GetConnections 获取所有连接（p_shell.Shell类型）
-// 注意：p_shell.Shell的连接通常是临时的，这里只返回基本的存在性信息
+func getTerminalCurrentCommand(gsShell *gsssh.SshTerminal) string {
+	if gsShell == nil {
+		return ""
+	}
+	defer func() {
+		_ = recover()
+	}()
+	val := reflect.ValueOf(gsShell)
+	if !val.IsValid() || val.Kind() != reflect.Ptr || val.IsNil() {
+		return ""
+	}
+	elem := val.Elem()
+	if !elem.IsValid() || elem.Kind() != reflect.Struct {
+		return ""
+	}
+	field := elem.FieldByName("command")
+	if !field.IsValid() || field.Kind() != reflect.String {
+		return ""
+	}
+	return strings.TrimSpace(field.String())
+}
+
+func (h *Shell) getTerminalConnectMeta(gsShell *gsssh.SshTerminal, now int64) (string, int64) {
+	if gsShell == nil {
+		return "", 0
+	}
+	startTime, ok := h.ShellClientStartMap[gsShell]
+	if !ok || startTime <= 0 {
+		return "", 0
+	}
+	return gstool.TimeUnixToString(time.Unix(startTime, 0), "Y-m-d H:i:s"), now - startTime
+}
+
 func (h *Shell) GetConnections() []ConnectionInfo {
 	defer h.lock.Unlock()
 	h.lock.Lock()
 
 	connections := make([]ConnectionInfo, 0)
-	for shellClientId := range h.ShellClientMap {
+	now := time.Now().Unix()
+	for shellClientId, pool := range h.ShellClientPoolMap {
+		for i, shellClient := range pool {
+			connectTime, connectSeconds := h.getTerminalConnectMeta(shellClient, now)
+			info := ConnectionInfo{
+				ShellClientId:  shellClientId + "#pool" + cast.ToString(i),
+				CurrentCommand: getTerminalCurrentCommand(shellClient),
+				Status:         "active",
+				ConnectTime:    connectTime,
+				ConnectSeconds: connectSeconds,
+				Type:           "shell",
+			}
+			connections = append(connections, info)
+		}
+	}
+	for shellClientId, shellClient := range h.ShellClientMap {
+		connectTime, connectSeconds := h.getTerminalConnectMeta(shellClient, now)
 		info := ConnectionInfo{
-			ShellClientId: shellClientId,
-			Status:        "active",
-			Type:          "shell",
+			ShellClientId:  shellClientId,
+			CurrentCommand: getTerminalCurrentCommand(shellClient),
+			Status:         "active",
+			ConnectTime:    connectTime,
+			ConnectSeconds: connectSeconds,
+			Type:           "shell",
 		}
 		connections = append(connections, info)
 	}

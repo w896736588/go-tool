@@ -1,134 +1,436 @@
 <template>
-  <div id="mainCard" v-loading="load.redisList" style="text-align: center;">
-    <el-input v-model="keys" placeholder="请输入key" style="width: 600px" @keyup.enter="keysSearch"></el-input>
-    <el-select v-model="redisChooseId" placeholder="选择" style="margin-left:5px;width: 200px" @change="redisDbChange">
-      <el-option v-for="(value,key) in redisList" :key="value.name" :label="value.name" :value="value.id">
-      </el-option>
-    </el-select>
-    &nbsp;
-    <el-button v-loading="load.keysSearch" type="primary" @click="keysSearch">搜索</el-button>
-    <el-button v-if="keys !== ''" type="primary" @click="setCacheHistory({ cacheKey : keys})">收藏</el-button>
-    <el-button key="primary" type="primary" @click="$refs.redisStarRecord.showStarList();">
-      收藏列表
-    </el-button>
-  </div>
-  <div v-if="searchHistory.length > 0" class="search-history-container">
-      <div class="search-history-list">
-        <div v-for="(item, index) in searchHistory" :key="index" class="search-history-item">
-          <span class="search-history-text" @click="handleHistorySearch(item.key)">{{ item.key }}</span>
-          <span class="search-history-delete" @click="removeSearchHistory(index)">
-            <el-icon><Close /></el-icon>
-          </span>
+  <div class="redis-page-container">
+    <!-- 顶部搜索区域 -->
+    <div class="redis-header-card" v-loading="load.redisList">
+      <div class="header-title">
+        <svg class="header-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span>Redis 管理器</span>
+      </div>
+      <div class="search-row">
+        <el-input 
+          v-model="keys" 
+          placeholder="请输入key进行搜索..." 
+          class="search-input"
+          @keyup.enter="keysSearch"
+          clearable
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
+        <el-select v-model="redisChooseId" placeholder="选择Redis实例" class="redis-select" @change="redisDbChange">
+          <el-option v-for="(value,key) in redisList" :key="value.name" :label="value.name" :value="value.id">
+          </el-option>
+        </el-select>
+        <el-button v-loading="load.keysSearch" type="primary" class="search-btn" @click="keysSearch">
+          <el-icon><Search /></el-icon>
+          搜索
+        </el-button>
+        <el-button v-if="keys !== ''" class="action-btn star-btn" @click="setCacheHistory({ cacheKey : keys})">
+          <el-icon><Star /></el-icon>
+          收藏
+        </el-button>
+        <el-button class="action-btn list-btn" @click="$refs.redisStarRecord.showStarList();">
+          <el-icon><Collection /></el-icon>
+          收藏列表
+        </el-button>
+      </div>
+      <!-- 搜索历史 -->
+      <div v-if="searchHistory.length > 0" class="search-history-container">
+        <span class="history-label">搜索历史:</span>
+        <div class="search-history-list">
+          <div v-for="(item, index) in searchHistory" :key="index" class="search-history-item">
+            <span class="search-history-text" @click="handleHistorySearch(item.key)">{{ item.key }}</span>
+            <span class="search-history-delete" @click="removeSearchHistory(index)">
+              <el-icon><Close /></el-icon>
+            </span>
+          </div>
         </div>
       </div>
     </div>
-  <br/>
-  <el-row :gutter="24">
-    <el-col :span="8">
-      <div :style="{ height: (scrollHeight - 15) + 'px' }" class="box-card">
-        <el-button v-if="keysResult && keysResult.length > 0" size="small" type="danger" @click="delAll">
-          删除所有({{ searchNum }})
-        </el-button>
-        <el-button v-if="keysResult && keysResult.length > 0" size="small" type="primary" @click="boolSimpleShow = !boolSimpleShow;changeSimpleShow(boolSimpleShow);">
-          <template v-if="boolSimpleShow">
-            取消优化
-          </template>
-          <template v-if="!boolSimpleShow">
-            优化显示
-          </template>
-        </el-button>
-        <p></p>
-        <div :style="{ height: (scrollHeight - 65) + 'px' }" class="grid-content bg-purple">
-          <el-input v-if="keysResult.length > 0" v-model="filterValue" placeholder="输入搜索过滤,空格多个条件" size="default" style="width: 99%" type="text" @input="filterList">
-          </el-input>
-          <el-scrollbar ref="scrollbarRef" @keydown="keyUpKeys" tabindex="0">
-            <div v-if="keysResultCursor !== 0" style="text-align:center;position: relative;margin:2px;bottom:0px;background-color: #409eff;padding:5px;color:white;font-size:11px;width:100%;" @click="keysSearch(true)">
-              加载更多
-            </div>
-            <template v-for="(value, key) in filterKeysResult" :key="key" >
-              <p v-if="selectRedisKey === value.CacheKey" class="scrollbar-demo-item scrollbar-p-active" @click="callRefresh(value.CacheKey)">
-                {{ value.showName }}</p>
-              <p v-else class="scrollbar-demo-item scrollbar-p-default" @click="callRefresh(value.CacheKey)">
-                {{ value.showName }}</p>
-            </template>
-            <p v-if="!keysResult || keysResult.length === 0" class="scrollbar-demo-item" style="color:#ccc;text-align: center;">
-              暂无数据</p>
-          </el-scrollbar>
 
+    <!-- 主内容区域 -->
+    <div class="main-content-wrapper">
+      <div class="main-content">
+        <!-- 左侧Key列表 -->
+        <div class="key-list-wrapper">
+          <div class="key-list-card">
+          <div class="key-list-header">
+            <div class="header-left">
+              <span class="key-count" v-if="keysResult && keysResult.length > 0">
+                共 <strong>{{ searchNum }}</strong> 个Key
+              </span>
+            </div>
+            <div class="header-right">
+              <el-button v-if="keysResult && keysResult.length > 0" size="small" type="danger" plain @click="delAll">
+                <el-icon><Delete /></el-icon>
+                删除所有
+              </el-button>
+              <el-button v-if="keysResult && keysResult.length > 0" size="small" type="primary" plain @click="boolSimpleShow = !boolSimpleShow;changeSimpleShow(boolSimpleShow);">
+                <el-icon v-if="boolSimpleShow"><View /></el-icon>
+                <el-icon v-else><Hide /></el-icon>
+                {{ boolSimpleShow ? '取消优化' : '优化显示' }}
+              </el-button>
+            </div>
+          </div>
+          <div class="key-list-content">
+            <el-input v-if="keysResult.length > 0" v-model="filterValue" placeholder="过滤key,空格多个条件" size="small" class="filter-input" type="text" @input="filterList" clearable>
+              <template #prefix>
+                <el-icon><Filter /></el-icon>
+              </template>
+            </el-input>
+            <el-scrollbar ref="scrollbarRef" @keydown="keyUpKeys" tabindex="0" class="key-scrollbar" :style="{ height: '100%' }">
+              <div v-if="keysResultCursor !== 0" class="load-more-btn" @click="keysSearch(true)">
+                <el-icon><Download /></el-icon>
+                加载更多
+              </div>
+              <template v-for="(value, key) in filterKeysResult" :key="key" >
+                <div 
+                  :class="['key-item', selectRedisKey === value.CacheKey ? 'key-item-active' : '']" 
+                  @click="callRefresh(value.CacheKey)"
+                >
+                  <el-icon class="key-icon"><Key /></el-icon>
+                  <span class="key-text">{{ value.showName }}</span>
+                </div>
+              </template>
+              <div v-if="!keysResult || keysResult.length === 0" class="empty-state">
+                <el-icon class="empty-icon"><FolderOpened /></el-icon>
+                <span>暂无数据，请搜索</span>
+              </div>
+            </el-scrollbar>
+          </div>
+          </div>
+        </div>
+        <!-- 右侧详情区域 -->
+        <div class="detail-wrapper">
+          <div class="detail-card">
+            <el-form ref="form" v-loading="load.callRefresh">
+              <redisHashList ref="redisHashList" :callMoreList="callMoreList" :callRefresh="callRefresh" :star="setCacheHistory"></redisHashList>
+            </el-form>
+          </div>
         </div>
       </div>
-    </el-col>
-    <el-col :span="16">
-      <div class="box-card" style="text-align: left;height:500px;">
-        <el-form ref="form" v-loading="load.callRefresh">
-          <redisHashList ref="redisHashList" :callMoreList="callMoreList" :callRefresh="callRefresh" :star="setCacheHistory"></redisHashList>
-        </el-form>
-      </div>
-    </el-col>
-  </el-row>
-  <!--  收藏列表-->
-  <redisStarRecord ref="redisStarRecord" :callStarListSearch="callStarListSearch"></redisStarRecord>
+    </div>
+    <!--  收藏列表-->
+    <redisStarRecord ref="redisStarRecord" :callStarListSearch="callStarListSearch"></redisStarRecord>
+  </div>
 </template>
-<style>
-.box-card .el-tag-he {
-  margin-left: 5px;
-  font-size: 13px;
+<style scoped>
+.redis-page-container {
+  padding: 0;
+  width: 100%;
+  color: #4a4a4a;
+}
+
+.redis-header-card {
+  background: #ffffff;
+  border: 1px solid #e8e8e0;
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 12px;
+}
+
+.header-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #4a4a4a;
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.header-icon {
+  width: 20px;
+  height: 20px;
+  color: #5a8a5a;
+}
+
+.search-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.search-input {
+  flex: 1;
+  min-width: 280px;
+}
+
+.search-input :deep(.el-input__wrapper),
+.redis-select :deep(.el-input__wrapper) {
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 0 0 1px #dde3d8 inset;
+}
+
+.search-input :deep(.el-input__wrapper.is-focus),
+.redis-select :deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 1px #93b793 inset;
+}
+
+.redis-select {
+  width: 220px;
+}
+
+.search-btn,
+.action-btn {
+  border-radius: 8px;
+  height: 36px;
+  border: 1px solid #d8ded2;
+  background: #f6f8f3;
+  color: #4f804f;
+  font-weight: 500;
+}
+
+.search-btn:hover,
+.action-btn:hover {
+  background: #eef4ea;
+  border-color: #bfd1bf;
+  color: #3f6f3f;
+}
+
+.star-btn,
+.list-btn {
+  background: #f6f8f3;
+  border-color: #d8ded2;
+  color: #4f804f;
 }
 
 .search-history-container {
-  margin-top: 10px;
-  padding: 10px;
-  background-color: #f5f7fa;
-  border-radius: 4px;
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
-.search-history-title {
-  font-size: 14px;
-  font-weight: bold;
-  color: #606266;
-  margin-bottom: 8px;
+.history-label {
+  color: #7a7a6a;
+  font-size: 13px;
 }
 
 .search-history-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
 .search-history-item {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  padding: 5px 10px;
-  background-color: #fff;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  font-size: 13px;
-  color: #606266;
-  transition: all 0.3s;
+  padding: 4px 10px;
+  background: #f5f8f0;
+  border: 1px solid #dfe8d8;
+  border-radius: 14px;
+  font-size: 12px;
+  color: #5f705f;
 }
 
 .search-history-item:hover {
-  border-color: #409eff;
-  color: #409eff;
+  background: #edf4e8;
+  border-color: #cbdcc8;
 }
 
 .search-history-text {
   cursor: pointer;
-  margin-right: 8px;
+  margin-right: 6px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .search-history-delete {
   cursor: pointer;
-  color: #909399;
+  color: #8b9a8b;
   font-size: 12px;
-  padding: 2px;
-  border-radius: 50%;
-  transition: all 0.3s;
+  display: inline-flex;
+  align-items: center;
 }
 
 .search-history-delete:hover {
-  color: #f56c6c;
-  background-color: #fef0f0;
+  color: #c44b4b;
+}
+
+.main-content-wrapper {
+  width: 100%;
+  overflow: hidden;
+}
+
+.main-content {
+  display: flex;
+  gap: 12px;
+  height: calc(100vh - 208px);
+  min-height: 380px;
+}
+
+.key-list-wrapper {
+  flex: 0 0 33.333%;
+  max-width: 33.333%;
+}
+
+.detail-wrapper {
+  flex: 0 0 66.666%;
+  max-width: 66.666%;
+}
+
+.key-list-card,
+.detail-card {
+  background: #fff;
+  border: 1px solid #e8e8e0;
+  border-radius: 12px;
+  overflow: hidden;
+  height: 100%;
+}
+
+.key-list-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.key-list-header {
+  padding: 12px;
+  border-bottom: 1px solid #ecece4;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f7f7f2;
+}
+
+.key-count {
+  font-size: 13px;
+  color: #606050;
+}
+
+.key-count strong {
+  color: #4f804f;
+  font-size: 15px;
+}
+
+.header-right {
+  display: flex;
+  gap: 8px;
+}
+
+.key-list-content {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.filter-input {
+  margin: 10px 12px;
+  width: calc(100% - 24px);
+  flex-shrink: 0;
+}
+
+.filter-input :deep(.el-input__wrapper) {
+  border-radius: 8px;
+}
+
+.key-scrollbar {
+  flex: 1;
+  padding: 0 12px 12px;
+  overflow: hidden;
+}
+
+.key-scrollbar :deep(.el-scrollbar__view) {
+  min-height: 100%;
+}
+
+.load-more-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px;
+  margin-bottom: 8px;
+  background: #f6f8f3;
+  border: 1px solid #d8ded2;
+  color: #4f804f;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.load-more-btn:hover {
+  background: #eef4ea;
+  border-color: #bfd1bf;
+}
+
+.key-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  margin-bottom: 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: Consolas, Monaco, monospace;
+  background: #f8f9f5;
+  border: 1px solid transparent;
+}
+
+.key-item:hover {
+  background: #eef3ea;
+  border-color: #c9d9c7;
+}
+
+.key-item-active {
+  background: #e6f1e1;
+  color: #355f35;
+  border-color: #b6cbb3;
+}
+
+.key-icon {
+  color: #5f8f5f;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.key-item-active .key-icon {
+  color: #355f35;
+}
+
+.key-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 52px 20px;
+  color: #8a8a7a;
+  min-height: 180px;
+}
+
+.empty-icon {
+  font-size: 50px;
+  margin-bottom: 12px;
+  color: #bcc7b8;
+}
+
+.detail-card {
+  padding: 14px;
+}
+
+.box-card .el-tag-he {
+  margin-left: 5px;
+  font-size: 13px;
 }
 
 .scrollbar-demo-item {
@@ -159,7 +461,52 @@
 .cache-table {
   width: 100%;
   font-size: 14px;
-  margin-top: 10px
+  margin-top: 10px;
+}
+
+@media (max-width: 1200px) {
+  .redis-select {
+    width: 180px;
+  }
+
+  .key-list-wrapper {
+    flex: 0 0 40%;
+    max-width: 40%;
+  }
+
+  .detail-wrapper {
+    flex: 0 0 60%;
+    max-width: 60%;
+  }
+}
+
+@media (max-width: 768px) {
+  .search-input {
+    min-width: 100%;
+  }
+
+  .redis-select {
+    width: 100%;
+  }
+
+  .main-content {
+    flex-direction: column;
+    height: auto;
+    min-height: 0;
+  }
+
+  .key-list-wrapper,
+  .detail-wrapper {
+    flex: none;
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .key-list-card,
+  .detail-card {
+    height: auto;
+    min-height: 300px;
+  }
 }
 </style>
 
@@ -177,7 +524,7 @@ import shell from "@/utils/base/shell";
 import {onMounted, onUnmounted, ref} from 'vue';
 import arr from "@/utils/base/array";
 import KeyDebounceDetector from "@/utils/base/keyup";
-import { Close } from '@element-plus/icons-vue';
+import { Close, Search, Star, Collection, Delete, View, Hide, Filter, Download, Key, FolderOpened } from '@element-plus/icons-vue';
 
 export default {
   name: 'cacheIndex',
@@ -188,6 +535,16 @@ export default {
     redisStarRecord,
     redisHashList,
     Close,
+    Search,
+    Star,
+    Collection,
+    Delete,
+    View,
+    Hide,
+    Filter,
+    Download,
+    Key,
+    FolderOpened,
   },
   data() {
     return {

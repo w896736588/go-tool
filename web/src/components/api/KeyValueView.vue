@@ -140,16 +140,17 @@ export default {
 
 <style scoped>
 .key-value-view {
-  border: 1px solid #e4e7ed;
-  border-radius: 4px;
+  border: 1px solid #e6ece0;
+  border-radius: 10px;
   background: #fff;
   font-size: 14px;
+  overflow: hidden;
 }
 
 .view-header {
   padding: 8px 12px;
-  border-bottom: 1px solid #e4e7ed;
-  background: #f5f7fa;
+  border-bottom: 1px solid #e6ece0;
+  background: #f7f9f5;
 }
 
 .header-actions {
@@ -168,14 +169,14 @@ export default {
 }
 
 .key-value-table :deep(.el-table__header) {
-  background-color: #f5f7fa;
+  background-color: #f7f9f5;
 }
 
 .key-value-table :deep(.el-table__header th) {
-  background-color: #f5f7fa;
-  color: #606266;
+  background-color: #f7f9f5;
+  color: #4e594a;
   font-weight: 500;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid #e6ece0;
 }
 
 .key-value-table :deep(.el-table__row) {
@@ -184,11 +185,11 @@ export default {
 
 .key-value-table :deep(.el-table__cell) {
   padding: 8px 0;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid #eef3ec;
 }
 
 .key-value-table :deep(.el-table__body tr:hover > td) {
-  background-color: #f5f7fa;
+  background-color: #f4faf2;
 }
 
 .key-value-table :deep(.el-table__row.empty-row) {

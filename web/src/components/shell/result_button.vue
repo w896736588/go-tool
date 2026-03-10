@@ -131,7 +131,6 @@ export default defineComponent({
 </script>
 
 <style scoped>
-/* 保持你原来的样式，无需改动 */
 .shellContainer {
   position: fixed;
   width: 98%;
@@ -140,39 +139,43 @@ export default defineComponent({
   z-index: 998;
 }
 .sticky-textarea-div {
-  background-color: #545c64;
-  color: #fff;
+  background: #eef3ea;
+  color: #435244;
   white-space: pre-wrap;
   word-break: break-all;
-  padding: 3px;
-  border-radius: 6px;
-  border-left: 3px solid #6a8d73;
-  font-family: 'SF Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
-  font-size: 14px;
-  line-height: 1.6;
+  padding: 16px;
+  border-radius: 8px;
+  border-left: 3px solid #8fae92;
+  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.7;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  font-weight: 300;
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
+  -moz-osx-font-smoothing: grayscale;
+  font-weight: 400;
+  box-shadow: 0 1px 6px rgba(62, 86, 62, 0.08);
   overflow-y: auto;
   overflow-x: hidden;
   display: block;
   height: 100%;
+  transition: all 0.2s ease;
 }
 #showShellResult {
   height: 100%;
 }
-:deep(.el-scrollbar__thumb) {
-  background-color: #2e7d32 !important;
+::deep(.el-scrollbar__thumb) {
+  background: #a4b7a3 !important;
   border-radius: 4px !important;
+  opacity: 0.7 !important;
+  transition: opacity 0.2s ease;
+}
+::deep(.el-scrollbar__thumb:hover) {
+  background: #8fa48f !important;
   opacity: 1 !important;
 }
-:deep(.el-scrollbar__thumb:hover) {
-  background-color: #388e3c !important;
-  opacity: 1 !important;
-}
-:deep(.el-scrollbar__bar) {
-  background-color: #ccc !important;
+::deep(.el-scrollbar__bar) {
+  background: #dfe8da !important;
+  border-radius: 4px;
 }
 .drawer-header {
   display: flex;

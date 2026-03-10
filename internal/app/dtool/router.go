@@ -30,6 +30,7 @@ func InitRouter(tGin *p_gin.Gin) {
 	setGroupRouter(tGin)
 	setStar(tGin)
 	setMarkdown(tGin)
+	setMemoryFragment(tGin)
 	shellOut(tGin)
 	variableRouter(tGin)
 	smartLink(tGin)
@@ -135,9 +136,12 @@ func gitRouter(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/GitChangeBranch`, controller.GitChangeBranch)             //切换分支
 	tGin.GinPost(`/api/GitChangeBranchRemote`, controller.GitChangeBranchRemote) //切换远程分支
 	tGin.GinPost(`/api/GitPullBranchOrigin`, controller.GitPullBranchOrigin)     //拉取最新分支
+	tGin.GinPost(`/api/GitRemoteBranchList`, controller.GitRemoteBranchList)     //查询远程分支列表
+	tGin.GinPost(`/api/GitQuickCreateBranch`, controller.GitQuickCreateBranch)   //快捷创建分支
 	tGin.GinPost(`/api/GitQueryStatus`, controller.QueryStatus)                  //查询分支本地状态
 	tGin.GinPost(`/api/GitCommitLog`, controller.GitCommitLog)                   //查询提交日志
 	tGin.GinPost(`/api/GitConfigList`, controller.GitConfigList)                 //git配置
+	tGin.GinPost(`/api/GitGroupBranchList`, controller.GitGroupBranchList)       //查询某个git组下所有项目分支
 	tGin.GinPost(`/api/CreateMerge`, controller.CreateMerge)                     //创建合并请求
 	tGin.GinPost(`/api/GitSetSafeLog`, controller.GitSetSafeLog)                 //设置项目安全
 	tGin.GinPost(`/api/GitSaveCredentials`, controller.GitSaveCredentials)       //保存git记住密码账号
@@ -206,6 +210,12 @@ func setRouter(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/Set/AccountGroupList`, controller.SetAccountGroupList)
 	tGin.GinPost(`/api/Set/AccountGroupAdd`, controller.SetAccountGroupAdd)
 	tGin.GinPost(`/api/Set/AccountGroupDelete`, controller.SetAccountGroupDelete)
+	tGin.GinPost(`/api/Set/AiProviderList`, controller.SetAiProviderList)
+	tGin.GinPost(`/api/Set/AiProviderAdd`, controller.SetAiProviderAdd)
+	tGin.GinPost(`/api/Set/AiProviderDelete`, controller.SetAiProviderDelete)
+	tGin.GinPost(`/api/Set/AiModelList`, controller.SetAiModelList)
+	tGin.GinPost(`/api/Set/AiModelAdd`, controller.SetAiModelAdd)
+	tGin.GinPost(`/api/Set/AiModelDelete`, controller.SetAiModelDelete)
 }
 
 func setStar(tGin *p_gin.Gin) {
@@ -221,6 +231,16 @@ func setMarkdown(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/MarkdownDel`, controller.MarkdownDel)
 	tGin.GinPost(`/api/MarkdownHistoryDel`, controller.MarkdownHistoryDel)
 	tGin.GinPost(`/api/MarkdownSort`, controller.MarkdownSort)
+}
+
+func setMemoryFragment(tGin *p_gin.Gin) {
+	tGin.GinPost(`/api/MemoryFragmentList`, controller.MemoryFragmentList)
+	tGin.GinPost(`/api/MemoryFragmentInfo`, controller.MemoryFragmentInfo)
+	tGin.GinPost(`/api/MemoryFragmentSave`, controller.MemoryFragmentSave)
+	tGin.GinPost(`/api/MemoryFragmentDelete`, controller.MemoryFragmentDelete)
+	tGin.GinPost(`/api/MemoryFragmentHistoryList`, controller.MemoryFragmentHistoryList)
+	tGin.GinPost(`/api/MemoryFragmentTagList`, controller.MemoryFragmentTagList)
+	tGin.GinPost(`/api/MemoryFragmentSearch`, controller.MemoryFragmentSearch)
 }
 
 func shellOut(tGin *p_gin.Gin) {

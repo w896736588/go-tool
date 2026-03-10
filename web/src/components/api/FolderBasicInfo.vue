@@ -104,11 +104,24 @@ export default {
 
 <style scoped>
 .folder-basic-info {
-  padding: 20px 0;
+  padding: 12px;
+  border: 1px solid #e8eee5;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(80, 110, 80, 0.08);
 }
 
 .info-form {
   max-width: 600px;
+}
+
+.folder-basic-info :deep(.el-input__wrapper),
+.folder-basic-info :deep(.el-textarea__inner) {
+  border-radius: 8px;
+}
+
+.folder-basic-info :deep(.el-form-item:last-child .el-form-item__content) {
+  gap: 10px;
 }
 
 .readonly-text {
@@ -123,15 +136,15 @@ export default {
 .stat-card {
   text-align: center;
   padding: 20px;
-  background: #f8f9fa;
+  background: #f7f9f5;
   border-radius: 8px;
-  border: 1px solid #e4e7ed;
+  border: 1px solid #e6ece0;
 }
 
 .stat-value {
   font-size: 24px;
   font-weight: bold;
-  color: #409eff;
+  color: #4f7d4f;
   margin-bottom: 8px;
 }
 

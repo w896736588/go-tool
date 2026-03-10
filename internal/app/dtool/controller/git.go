@@ -10,6 +10,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -37,14 +39,19 @@ func GitCurrentBranch(c *gin.Context) {
 		gsgin.GinResponseError(c, `git未配置目录`, nil)
 		return
 	}
+	// 所有通过 SSH 的 Git 操作前，默认先执行“目录安全 + 保存账号密码”。
+	if prepareErr := prepareGitOperationEnv(sshClient, codePath); prepareErr != nil {
+		gsgin.GinResponseError(c, prepareErr.Error(), nil)
+		return
+	}
 	command := p_shell.NewCommand()
-	//command.Sudo() 不要用sudo否则服务器会提示输入密码，导致执行被卡死
+	//command.Sudo()
 	command.Cd(codePath)
 	command.Echo(`当前分支：`)
 	command.GitShowBranch()
 	command.Echo(`远程分支：`)
 	command.GitShowOriginBranch()
-	result, _ := sshClient.RunCommandWait(command.GetCommand().ToStr(), 40*time.Second)
+	result, _ := sshClient.RunCommandWait(command.GetCommand().ToStr(), time.Second*4)
 	gsgin.GinResponseSuccess(c, ``, result)
 }
 
@@ -65,12 +72,17 @@ func GitChangeBranch(c *gin.Context) {
 		gsgin.GinResponseError(c, `切换的分支不能为空`, nil)
 		return
 	}
+	// 所有通过 SSH 的 Git 操作前，默认先执行“目录安全 + 保存账号密码”。
+	if prepareErr := prepareGitOperationEnv(sshClient, codePath); prepareErr != nil {
+		gsgin.GinResponseError(c, prepareErr.Error(), nil)
+		return
+	}
 	command1 := p_shell.NewCommand()
 	command1.Init()
 	//command.Sudo()
 	command1.Cd(codePath)
 	command1.GitShowBranch()
-	currentBranch, _ := sshClient.RunCommandWait(command1.GetCommand().ToStr(), 40*time.Second)
+	currentBranch, _ := sshClient.RunCommandWait(command1.GetCommand().ToStr(), getGitOperationTimeout(gitOperationBranchChange))
 	gstool.FmtPrintlnLogTime(`获取当前分支为：%q`, currentBranch)
 	currentBranch = CleanBranchName(currentBranch)
 	gstool.FmtPrintlnLogTime(`当前分支 %#v`, currentBranch)
@@ -92,7 +104,7 @@ func GitChangeBranch(c *gin.Context) {
 	command.GitShowBranch()
 	command.Echo(`远程分支：`)
 	command.GitShowOriginBranch()
-	result, _ := sshClient.RunCommandWait(command.GetCommand().ToStr(), 40*time.Second)
+	result, _ := sshClient.RunCommandWait(command.GetCommand().ToStr(), getGitOperationTimeout(gitOperationBranchChange))
 	gsgin.GinResponseSuccess(c, ``, result)
 }
 
@@ -113,12 +125,17 @@ func GitChangeBranchRemote(c *gin.Context) {
 		gsgin.GinResponseError(c, `切换的分支不能为空`, nil)
 		return
 	}
+	// 所有通过 SSH 的 Git 操作前，默认先执行“目录安全 + 保存账号密码”。
+	if prepareErr := prepareGitOperationEnv(sshClient, codePath); prepareErr != nil {
+		gsgin.GinResponseError(c, prepareErr.Error(), nil)
+		return
+	}
 	command1 := p_shell.NewCommand()
 	command1.Init()
 	//command.Sudo() 不要用sudo否则服务器会提示输入密码，导致执行被卡死
 	command1.Cd(codePath)
 	command1.GitShowBranch()
-	currentBranch, _ := sshClient.RunCommandWait(command1.GetCommand().ToStr(), 40*time.Second)
+	currentBranch, _ := sshClient.RunCommandWait(command1.GetCommand().ToStr(), getGitOperationTimeout(gitOperationBranchChange))
 	currentBranch = CleanBranchName(currentBranch)
 
 	command := p_shell.NewCommand()
@@ -136,7 +153,7 @@ func GitChangeBranchRemote(c *gin.Context) {
 	command.GitShowBranch()
 	command.Echo(`远程分支：`)
 	command.GitShowOriginBranch()
-	result, _ := sshClient.RunCommandWait(command.GetCommand().ToStr(), 40*time.Second)
+	result, _ := sshClient.RunCommandWait(command.GetCommand().ToStr(), getGitOperationTimeout(gitOperationBranchChange))
 	gsgin.GinResponseSuccess(c, ``, result)
 }
 
@@ -152,12 +169,17 @@ func GitPullBranchOrigin(c *gin.Context) {
 		gsgin.GinResponseError(c, `git未配置目录`, nil)
 		return
 	}
+	// 所有通过 SSH 的 Git 操作前，默认先执行“目录安全 + 保存账号密码”。
+	if prepareErr := prepareGitOperationEnv(sshClient, codePath); prepareErr != nil {
+		gsgin.GinResponseError(c, prepareErr.Error(), nil)
+		return
+	}
 	command1 := p_shell.NewCommand()
 	command1.Init()
 	//command.Sudo() 不要用sudo否则服务器会提示输入密码，导致执行被卡死
 	command1.Cd(codePath)
 	command1.GitShowBranch()
-	currentBranch, _ := sshClient.RunCommandWait(command1.GetCommand().ToStr(), 40*time.Second)
+	currentBranch, _ := sshClient.RunCommandWait(command1.GetCommand().ToStr(), getGitOperationTimeout(gitOperationPull))
 	currentBranch = sshClient.FilterEndTip(currentBranch)
 	currentBranch = sshClient.FilterCommand(currentBranch)
 	currentBranch = CleanBranchName(currentBranch)
@@ -176,8 +198,119 @@ func GitPullBranchOrigin(c *gin.Context) {
 	command.GitShowBranch()
 	command.Echo(`远程分支：`)
 	command.GitShowOriginBranch()
-	result, _ := sshClient.RunCommandWait(command.GetCommand().ToStr(), 40*time.Second)
+	result, _ := sshClient.RunCommandWait(command.GetCommand().ToStr(), getGitOperationTimeout(gitOperationPull))
 	gsgin.GinResponseSuccess(c, ``, result)
+}
+
+// GitRemoteBranchList 查询指定仓库的全部远程分支
+func GitRemoteBranchList(c *gin.Context) {
+	reqMap, sshClient, _, err := getGitComponent(c)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	codePath := cast.ToString(reqMap[`code_path`])
+	if codePath == `` {
+		gsgin.GinResponseError(c, `git未配置目录`, nil)
+		return
+	}
+
+	// 所有通过 SSH 的 Git 操作前，默认先执行“目录安全 + 保存账号密码”。
+	if prepareErr := prepareGitOperationEnv(sshClient, codePath); prepareErr != nil {
+		gsgin.GinResponseError(c, prepareErr.Error(), nil)
+		return
+	}
+
+	command := p_shell.NewCommand()
+	command.Cd(codePath)
+	command.GitFetch()
+	command.GitShowAllOriginBranches()
+	result, runErr := sshClient.RunCommandWait(command.GetCommand().ToStr(), getGitOperationTimeout(gitOperationPull))
+	if runErr != nil {
+		gsgin.GinResponseError(c, runErr.Error(), nil)
+		return
+	}
+	branchList := parseAllRemoteBranches(result)
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`list`: branchList,
+	})
+}
+
+// GitQuickCreateBranch 快捷创建并推送业务分支
+func GitQuickCreateBranch(c *gin.Context) {
+	reqMap, sshClient, _, err := getGitComponent(c)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	codePath := cast.ToString(reqMap[`code_path`])
+	baseBranch := cast.ToString(reqMap[`base_branch`])
+	branchType := strings.ToLower(cast.ToString(reqMap[`branch_type`]))
+	businessEN := cast.ToString(reqMap[`business_en`])
+	if codePath == `` {
+		gsgin.GinResponseError(c, `git未配置目录`, nil)
+		return
+	}
+	if baseBranch == `` {
+		gsgin.GinResponseError(c, `基于分支不能为空`, nil)
+		return
+	}
+	if !isSafeGitBranchInput(baseBranch) {
+		gsgin.GinResponseError(c, `基于分支格式不合法`, nil)
+		return
+	}
+	if branchType != `feature` && branchType != `hotfix` {
+		gsgin.GinResponseError(c, `分支类型仅支持 feature/hotfix`, nil)
+		return
+	}
+	if !isValidBusinessEnglish(businessEN) {
+		gsgin.GinResponseError(c, `业务英文仅允许英文、数字、下划线`, nil)
+		return
+	}
+	// 所有通过 SSH 的 Git 操作前，默认先执行“目录安全 + 保存账号密码”。
+	if prepareErr := prepareGitOperationEnv(sshClient, codePath); prepareErr != nil {
+		gsgin.GinResponseError(c, prepareErr.Error(), nil)
+		return
+	}
+
+	globalMap, mapErr := common.DbMain.AllGlobalMap()
+	if mapErr != nil {
+		gsgin.GinResponseError(c, mapErr.Error(), nil)
+		return
+	}
+	// 兼容两种全局变量写法：{global_user_name}
+	userName := cast.ToString(globalMap[`{global_user_name}`])
+	if userName == `` {
+		gsgin.GinResponseError(c, `全局变量 {global_user_name}为空或不合法`, nil)
+		return
+	}
+
+	branchDate := time.Now().Format(`20060102`)
+	newBranchName := fmt.Sprintf(`%s_%s_%s_%s`, branchType, userName, businessEN, branchDate)
+
+	command := p_shell.NewCommand()
+	command.Cd(codePath)
+	// 按约定顺序执行：pull -> fetch -> checkout . -> clean
+	command.GitPull()
+	command.GitFetch()
+	command.GitIgnoreAll()
+	command.GitCleanAll()
+	command.GitCheckout(baseBranch)
+	command.GitPullOrigin(baseBranch)
+	command.GitCheckoutNewBranch(newBranchName)
+	command.GitPushOriginSetUpstream(newBranchName)
+	command.Echo(`新分支：`)
+	command.Echo(newBranchName)
+
+	result, runErr := sshClient.RunCommandWait(command.GetCommand().ToStr(), getGitOperationTimeout(gitOperationQuickCreate))
+	if runErr != nil {
+		gsgin.GinResponseError(c, runErr.Error(), nil)
+		return
+	}
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`branch_name`: newBranchName,
+		`result`:      result,
+	})
 }
 
 func CleanBranchName(branchName string) string {
@@ -195,6 +328,11 @@ func QueryStatus(c *gin.Context) {
 	codePath := cast.ToString(reqMap[`code_path`])
 	if codePath == `` {
 		gsgin.GinResponseError(c, `git未配置目录`, nil)
+		return
+	}
+	// 所有通过 SSH 的 Git 操作前，默认先执行“目录安全 + 保存账号密码”。
+	if prepareErr := prepareGitOperationEnv(sshClient, codePath); prepareErr != nil {
+		gsgin.GinResponseError(c, prepareErr.Error(), nil)
 		return
 	}
 
@@ -217,6 +355,11 @@ func GitCommitLog(c *gin.Context) {
 	codePath := cast.ToString(reqMap[`code_path`])
 	if codePath == `` {
 		gsgin.GinResponseError(c, `git未配置目录`, nil)
+		return
+	}
+	// 所有通过 SSH 的 Git 操作前，默认先执行“目录安全 + 保存账号密码”。
+	if prepareErr := prepareGitOperationEnv(sshClient, codePath); prepareErr != nil {
+		gsgin.GinResponseError(c, prepareErr.Error(), nil)
 		return
 	}
 	command := p_shell.NewCommand()
@@ -248,6 +391,500 @@ func GitConfigList(c *gin.Context) {
 	})
 }
 
+func GitGroupBranchList(c *gin.Context) {
+	reqMap := make(map[string]interface{})
+	if err := gsgin.GinPostBody(c, &reqMap); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	gitGroupId := cast.ToString(reqMap[`git_group_id`])
+	if gitGroupId == `` {
+		gsgin.GinResponseError(c, `缺少git_group_id参数`, nil)
+		return
+	}
+
+	groupInfo, _ := common.DbMain.Client.QuickQuery(`tbl_group`, `*`, map[string]any{
+		`type`: define.GroupTypeGit,
+		`id`:   gitGroupId,
+	}).One()
+	if len(groupInfo) == 0 {
+		gsgin.GinResponseError(c, `未找到对应Git分组`, nil)
+		return
+	}
+
+	gitList, _ := common.DbMain.Client.QuickQuery(`tbl_git`, `*`, map[string]any{
+		`git_group_id`: gitGroupId,
+	}).All()
+	if len(gitList) == 0 {
+		gsgin.GinResponseSuccess(c, ``, map[string]any{
+			`git_group_id`: gitGroupId,
+			`group_name`:   cast.ToString(groupInfo[`name`]),
+			`list`:         []map[string]any{},
+			`summary_text`: fmt.Sprintf("Git分组 [%s] 下暂无项目\n", cast.ToString(groupInfo[`name`])),
+		})
+		return
+	}
+
+	sseDistributeId := cast.ToString(reqMap[`sse_distribute_id`])
+	sse := &p_sse.SseShell{
+		Sse:             gsgin.SseGetByClientId(c.GetHeader(`SseClientId`)),
+		SseDistributeId: sseDistributeId,
+	}
+
+	// 统一发送汇总信息（串行流程下无需并发锁）
+	writeSummary := func(msg string) {
+		if sse != nil && sse.Sse != nil {
+			sse.Send(msg)
+		}
+	}
+
+	totalCount := len(gitList)
+	resultList := make([]map[string]any, 0, totalCount)
+	summaryLines := make([]string, 0, totalCount+4)
+	summaryLines = append(summaryLines, fmt.Sprintf("### Git分组 `%s` 分支总览", cast.ToString(groupInfo[`name`])))
+	summaryLines = append(summaryLines, "")
+	summaryLines = append(summaryLines, "| 名称 | 路径 | 当前分支 | 远程分支/错误 |")
+	summaryLines = append(summaryLines, "| --- | --- | --- | --- |")
+	// 先输出表头，后续只输出表格行，不输出其他日志文本
+	writeSummary("\n" + strings.Join(summaryLines, "\n") + "\n")
+
+	for _, item := range gitList {
+		itemName := cast.ToString(item[`name`])
+		itemPath := cast.ToString(item[`code_path`])
+		sshId := cast.ToString(item[`ssh_id`])
+
+		itemResult := map[string]any{
+			`id`:            cast.ToString(item[`id`]),
+			`name`:          itemName,
+			`code_path`:     itemPath,
+			`ssh_id`:        sshId,
+			`local_branch`:  `N/A`,
+			`remote_branch`: `N/A`,
+			`ok`:            false,
+			`error`:         ``,
+		}
+		tableLine := ``
+		if itemPath == `` || sshId == `` {
+			itemResult[`error`] = `缺少 code_path 或 ssh_id 配置`
+			tableLine = fmt.Sprintf(
+				"| %s | %s | %s | %s |",
+				escapeMarkdownTableCell(itemName),
+				escapeMarkdownTableCell(itemPath),
+				escapeMarkdownTableCell(`N/A`),
+				escapeMarkdownTableCell(`失败: `+cast.ToString(itemResult[`error`])),
+			)
+		} else {
+			sshConfig, sshErr := common.DbMain.GetSshConfig(sshId)
+			if sshErr != nil || len(sshConfig) == 0 {
+				itemResult[`error`] = `SSH配置不存在`
+				tableLine = fmt.Sprintf(
+					"| %s | %s | %s | %s |",
+					escapeMarkdownTableCell(itemName),
+					escapeMarkdownTableCell(itemPath),
+					escapeMarkdownTableCell(`N/A`),
+					escapeMarkdownTableCell(`失败: `+cast.ToString(itemResult[`error`])),
+				)
+			} else {
+				uniqueKey := p_common.TBaseClient.GetCombineKey(
+					sshId,
+					`group_branch_`+gitGroupId+`_`+cast.ToString(item[`id`])+`_`+cast.ToString(time.Now().UnixNano()),
+				)
+				// 组内批量查询只保留汇总结果，避免每个项目的原始 shell 输出刷屏
+				silentSse := &p_sse.SseShell{}
+				sshClient, clientErr := component.ShellClient.GetClient(sshConfig, uniqueKey, silentSse, nil, nil, nil)
+				if clientErr != nil {
+					itemResult[`error`] = clientErr.Error()
+					tableLine = fmt.Sprintf(
+						"| %s | %s | %s | %s |",
+						escapeMarkdownTableCell(itemName),
+						escapeMarkdownTableCell(itemPath),
+						escapeMarkdownTableCell(`N/A`),
+						escapeMarkdownTableCell(`失败: `+cast.ToString(itemResult[`error`])),
+					)
+				} else if prepareErr := prepareGitOperationEnv(sshClient, itemPath); prepareErr != nil {
+					// 复用统一预处理，避免分组查询单独实现认证方案。
+					itemResult[`error`] = prepareErr.Error()
+					tableLine = fmt.Sprintf(
+						"| %s | %s | %s | %s |",
+						escapeMarkdownTableCell(itemName),
+						escapeMarkdownTableCell(itemPath),
+						escapeMarkdownTableCell(`N/A`),
+						escapeMarkdownTableCell(`失败: `+cast.ToString(itemResult[`error`])),
+					)
+				} else {
+					branchInfo, queryErr := queryCurrentBranchInfo(sshClient, itemPath, 5*time.Second)
+					if queryErr != nil {
+						itemResult[`error`] = queryErr.Error()
+						tableLine = fmt.Sprintf(
+							"| %s | %s | %s | %s |",
+							escapeMarkdownTableCell(itemName),
+							escapeMarkdownTableCell(itemPath),
+							escapeMarkdownTableCell(`N/A`),
+							escapeMarkdownTableCell(`失败: `+cast.ToString(itemResult[`error`])),
+						)
+					} else {
+						itemResult[`local_branch`] = branchInfo.LocalBranch
+						itemResult[`remote_branch`] = branchInfo.RemoteBranch
+						itemResult[`ok`] = true
+						tableLine = fmt.Sprintf(
+							"| %s | %s | %s | %s |",
+							escapeMarkdownTableCell(itemName),
+							escapeMarkdownTableCell(itemPath),
+							escapeMarkdownTableCell(branchInfo.LocalBranch),
+							escapeMarkdownTableCell(branchInfo.RemoteBranch),
+						)
+					}
+				}
+			}
+		}
+
+		writeSummary(tableLine + "\n")
+
+		resultList = append(resultList, itemResult)
+		summaryLines = append(summaryLines, tableLine)
+	}
+	summaryText := strings.Join(summaryLines, "\n")
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`git_group_id`:  gitGroupId,
+		`group_name`:    cast.ToString(groupInfo[`name`]),
+		`list`:          resultList,
+		`summary_lines`: summaryLines,
+		`summary_text`:  summaryText,
+	})
+}
+
+type GitCurrentBranchInfo struct {
+	LocalBranch  string
+	RemoteBranch string
+	RawOutput    string
+}
+
+const (
+	gitDefaultCommandTimeout    = 40 * time.Second
+	gitBranchChangeTimeout      = 5 * time.Minute
+	gitOperationBranchChange    = `branch_change`
+	gitOperationPull            = `pull`
+	gitOperationQuickCreate     = `quick_create_branch`
+	gitRemoteBranchTimeout      = 10 * time.Second
+	gitRemoteBranchRetryTimeout = 3 * time.Second
+)
+
+// getGitOperationTimeout 根据Git操作类型返回对应的命令超时时间
+func getGitOperationTimeout(operation string) time.Duration {
+	switch operation {
+	case gitOperationBranchChange:
+		return gitBranchChangeTimeout
+	case gitOperationPull:
+		return gitBranchChangeTimeout
+	case gitOperationQuickCreate:
+		return gitBranchChangeTimeout
+	default:
+		return gitDefaultCommandTimeout
+	}
+}
+
+// queryCurrentBranchInfo 合并本地+远程分支查询为单次SSH命令，减少网络往返
+func queryCurrentBranchInfo(sshClient *gsssh.SshTerminal, codePath string, timeout time.Duration) (*GitCurrentBranchInfo, error) {
+	const branchSep = `__DT_BRANCH_SEP__`
+	combinedCmd := p_shell.NewCommand()
+	combinedCmd.Cd(codePath)
+	combinedCmd.GitShowBranch()
+	combinedCmd.SetCommand(`echo ` + branchSep)
+	combinedCmd.GitShowOriginBranch()
+
+	combinedOutput, err := sshClient.RunCommandWait(combinedCmd.GetCommand().ToStr(), timeout)
+	if err != nil {
+		return nil, err
+	}
+
+	lines := strings.Split(combinedOutput, "\n")
+	gstool.FmtPrintlnLogTime(`合并查询结果：%s`, gstool.JsonEncode(lines))
+
+	// 定位分隔符行（跳过首行命令回显）
+	sepIdx := -1
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimSpace(p_common.TBaseClient.FilterTerminalChars(lines[i])) == branchSep {
+			sepIdx = i
+			break
+		}
+	}
+
+	// 解析本地分支：命令回显之后、分隔符之前的第一行
+	localBranch := ``
+	if sepIdx > 1 {
+		candidate := strings.TrimSpace(p_common.TBaseClient.FilterTerminalChars(lines[1]))
+		// 过滤掉终端提示符等噪声，避免把控制串当成本地分支
+		if !isBranchParseNoise(candidate) {
+			localBranch = candidate
+		}
+	} else if len(lines) > 1 {
+		candidate := strings.TrimSpace(p_common.TBaseClient.FilterTerminalChars(lines[1]))
+		// 过滤掉终端提示符等噪声，避免把控制串当成本地分支
+		if !isBranchParseNoise(candidate) {
+			localBranch = candidate
+		}
+	}
+
+	// 解析远程分支：分隔符之后第一个非空行
+	remoteBranch := ``
+	if sepIdx >= 0 {
+		for i := sepIdx + 1; i < len(lines); i++ {
+			cleaned := strings.TrimSpace(p_common.TBaseClient.FilterTerminalChars(lines[i]))
+			// 仅接受合法的远程分支行（如 "<sha>\trefs/heads/xxx"），
+			// 终端提示符/控制串等噪声直接跳过
+			if cleaned == `` || isBranchParseNoise(cleaned) || !isLikelyRemoteBranch(cleaned) {
+				continue
+			}
+			if cleaned != `` {
+				remoteBranch = cleaned
+				break
+			}
+		}
+	}
+
+	return &GitCurrentBranchInfo{
+		LocalBranch:  localBranch,
+		RemoteBranch: remoteBranch,
+		RawOutput:    buildCurrentBranchDisplayOutput(localBranch, remoteBranch),
+	}, nil
+}
+
+func runRemoteBranchQuery(sshClient *gsssh.SshTerminal, codePath string, timeout time.Duration) (string, error) {
+	remoteCommand := p_shell.NewCommand()
+	remoteCommand.Cd(codePath)
+	remoteCommand.Echo(`远程分支：`)
+	remoteCommand.GitShowOriginBranch()
+	return sshClient.RunCommandWait(remoteCommand.GetCommand().ToStr(), timeout)
+}
+
+func parseBranchFromCurrentBranchOutput(output string) (string, string) {
+	text := p_common.TBaseClient.FilterTerminalChars(output)
+	lines := strings.Split(text, "\n")
+	localBranch := ``
+	remoteBranch := ``
+	localBegin := false
+	localEnd := false
+	remoteBegin := false
+	remoteEnd := false
+
+	findNextValue := func(start int) string {
+		for i := start; i < len(lines); i++ {
+			line := strings.TrimSpace(lines[i])
+			if line == `` {
+				continue
+			}
+			if isBranchParseNoise(line) {
+				continue
+			}
+			if strings.Contains(line, `当前分支：`) || strings.Contains(line, `远程分支：`) {
+				continue
+			}
+			return line
+		}
+		return ``
+	}
+
+	for idx, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.Contains(trimmed, `__DT_LOCAL_BRANCH_BEGIN__`) {
+			localBegin = true
+			continue
+		}
+		if strings.Contains(trimmed, `__DT_LOCAL_BRANCH_END__`) {
+			localEnd = true
+			continue
+		}
+		if strings.Contains(trimmed, `__DT_REMOTE_BRANCH_BEGIN__`) {
+			remoteBegin = true
+			continue
+		}
+		if strings.Contains(trimmed, `__DT_REMOTE_BRANCH_END__`) {
+			remoteEnd = true
+			continue
+		}
+
+		if localBegin && !localEnd && localBranch == `` {
+			if isLikelyLocalBranch(trimmed) {
+				localBranch = trimmed
+				continue
+			}
+		}
+		if remoteBegin && !remoteEnd && remoteBranch == `` {
+			if isLikelyRemoteBranch(trimmed) {
+				remoteBranch = trimmed
+				continue
+			}
+		}
+
+		if strings.Contains(trimmed, `当前分支：`) && localBranch == `` {
+			localBranch = findNextValue(idx + 1)
+			continue
+		}
+		if strings.Contains(trimmed, `远程分支：`) && remoteBranch == `` {
+			remoteBranch = findNextValue(idx + 1)
+			continue
+		}
+	}
+	return localBranch, remoteBranch
+}
+
+func isBranchParseNoise(line string) bool {
+	if line == `` {
+		return true
+	}
+	if strings.Contains(line, `%d\n`) || strings.Contains(line, `%d\\n`) || strings.Contains(line, `"$?"`) || strings.Contains(line, `$?"`) {
+		return true
+	}
+	if strings.HasPrefix(line, `cd `) {
+		return true
+	}
+	if isLikelyShellPrompt(line) {
+		return true
+	}
+	return false
+}
+
+func isLikelyShellPrompt(line string) bool {
+	if !(strings.HasSuffix(line, `$`) || strings.HasSuffix(line, `#`) || strings.HasSuffix(line, `%`)) {
+		return false
+	}
+	if !strings.Contains(line, `@`) || !strings.Contains(line, `:`) {
+		return false
+	}
+	return true
+}
+
+func isLikelyLocalBranch(line string) bool {
+	if isBranchParseNoise(line) {
+		return false
+	}
+	if strings.Contains(line, " ") || strings.Contains(line, "\t") {
+		return false
+	}
+	return true
+}
+
+func isLikelyRemoteBranch(line string) bool {
+	if isBranchParseNoise(line) {
+		return false
+	}
+	if strings.Contains(line, `refs/heads/`) {
+		return true
+	}
+	return false
+}
+
+// parseAllRemoteBranches 解析 git ls-remote --heads origin 输出
+func parseAllRemoteBranches(output string) []string {
+	text := p_common.TBaseClient.FilterTerminalChars(output)
+	lines := strings.Split(text, "\n")
+	set := make(map[string]struct{})
+	result := make([]string, 0, len(lines))
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == `` {
+			continue
+		}
+		if isBranchParseNoise(trimmed) {
+			continue
+		}
+		if !strings.Contains(trimmed, "refs/heads/") {
+			continue
+		}
+		parts := strings.Fields(trimmed)
+		if len(parts) == 0 {
+			continue
+		}
+		lastPart := parts[len(parts)-1]
+		if !strings.HasPrefix(lastPart, `refs/heads/`) {
+			continue
+		}
+		branchName := strings.TrimPrefix(lastPart, `refs/heads/`)
+		if branchName == `` {
+			continue
+		}
+		if _, exist := set[branchName]; exist {
+			continue
+		}
+		set[branchName] = struct{}{}
+		result = append(result, branchName)
+	}
+	sort.Strings(result)
+	return result
+}
+
+// isValidBusinessEnglish 校验业务英文（仅英文、数字、下划线）
+func isValidBusinessEnglish(value string) bool {
+	ok, _ := regexp.MatchString(`^[A-Za-z0-9_]+$`, strings.TrimSpace(value))
+	return ok
+}
+
+// isSafeGitBranchInput 校验用户输入的基于分支名，避免命令注入
+func isSafeGitBranchInput(value string) bool {
+	ok, _ := regexp.MatchString(`^[A-Za-z0-9._/\-]+$`, strings.TrimSpace(value))
+	return ok
+}
+
+// normalizeBranchNamePart 统一处理分支名中的人员字段，保留字母/数字（含中文）/下划线/中划线
+func normalizeBranchNamePart(value string) string {
+	v := strings.TrimSpace(value)
+	if v == `` {
+		return ``
+	}
+	re := regexp.MustCompile(`[^\p{L}\p{N}_-]+`)
+	v = re.ReplaceAllString(v, `_`)
+	v = strings.Trim(v, `_-`)
+	return v
+}
+
+func escapeMarkdownTableCell(value string) string {
+	v := strings.TrimSpace(value)
+	v = strings.ReplaceAll(v, "|", "\\|")
+	v = strings.ReplaceAll(v, "\n", " ")
+	v = strings.ReplaceAll(v, "\r", " ")
+	if v == "" {
+		return " "
+	}
+	return v
+}
+
+func normalizeRemoteBranchDisplay(value string) string {
+	v := strings.TrimSpace(value)
+	if v == "" || v == "N/A" {
+		return "N/A"
+	}
+	if strings.HasPrefix(v, "refs/heads/") {
+		return strings.TrimPrefix(v, "refs/heads/")
+	}
+	fields := strings.Fields(v)
+	if len(fields) >= 2 {
+		last := fields[len(fields)-1]
+		if strings.HasPrefix(last, "refs/heads/") {
+			return strings.TrimPrefix(last, "refs/heads/")
+		}
+		return last
+	}
+	return v
+}
+
+// buildCurrentBranchDisplayOutput 组装“当前分支”接口的展示输出
+func buildCurrentBranchDisplayOutput(localBranch, remoteBranch string) string {
+	local := strings.TrimSpace(localBranch)
+	remote := strings.TrimSpace(remoteBranch)
+	if local == `` {
+		local = `N/A`
+	}
+	if remote == `` {
+		remote = `N/A`
+	}
+	return strings.Join([]string{
+		`当前分支：`,
+		local,
+		`远程分支：`,
+		remote,
+	}, "\n")
+}
+
 func CreateMerge(c *gin.Context) {
 	reqMap, sshClient, _, err := getGitComponent(c)
 	if err != nil {
@@ -257,6 +894,11 @@ func CreateMerge(c *gin.Context) {
 	codePath := cast.ToString(reqMap[`code_path`])
 	if codePath == `` {
 		gsgin.GinResponseError(c, `git未配置目录`, nil)
+		return
+	}
+	// 所有通过 SSH 的 Git 操作前，默认先执行“目录安全 + 保存账号密码”。
+	if prepareErr := prepareGitOperationEnv(sshClient, codePath); prepareErr != nil {
+		gsgin.GinResponseError(c, prepareErr.Error(), nil)
 		return
 	}
 	command := p_shell.NewCommand()
@@ -383,7 +1025,7 @@ func GitSaveCredentials(c *gin.Context) {
 	command := p_shell.NewCommand()
 	//command.Sudo() 不要用sudo否则服务器会提示输入密码，导致执行被卡死
 	command.Cd(codePath)
-	command.Cat(`.git/config`)
+	command.SetCommand(`grep -i -E '^\[credential\]|^[[:space:]]*helper[[:space:]]*=[[:space:]]*store' .git/config`)
 	result, _ := sshClient.RunCommandWait(command.GetCommand().ToStr(), 4*time.Second)
 	if strings.Contains(result, `store`) && strings.Contains(result, `credential`) {
 		sse.Send(`已存在设置，不再新增` + "\n")
@@ -396,4 +1038,24 @@ func GitSaveCredentials(c *gin.Context) {
 		sse.Send(`写入成功` + "\n")
 	}
 	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
+// prepareGitOperationEnv 统一执行 Git 的 SSH 前置环境处理。
+// 先设置 safe.directory，再确保 .git/config 存在 credential.store，避免操作进入交互认证。
+// prepareGitOperationEnv 设置safe.directory并确保credential store已配置（合并为单次SSH命令）
+func prepareGitOperationEnv(sshClient *gsssh.SshTerminal, codePath string) error {
+	if sshClient == nil {
+		return errors.New(`ssh client 为空`)
+	}
+	if codePath == `` {
+		return errors.New(`git未配置目录`)
+	}
+
+	// 合并为单次SSH命令：设置safe.directory + 检查credential store，不存在则追加
+	cmd := p_shell.NewCommand()
+	cmd.Cd(codePath)
+	cmd.GitSetSafe(codePath)
+	cmd.SetCommand(`grep -qi '\[credential\]' .git/config 2>/dev/null && grep -qi 'helper.*=.*store' .git/config 2>/dev/null || printf '[credential]\nhelper = store\n' >> .git/config`)
+	_, err := sshClient.RunCommandWait(cmd.GetCommand().ToStr(), 6*time.Second)
+	return err
 }

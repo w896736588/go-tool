@@ -111,9 +111,7 @@ func InitEnv(appName, ConfigFile string, viper *viper.Viper) {
 	component.EnvClient.PkgPath = filepath.Join(component.EnvClient.RootPath, `internal`, `pkg`)
 	component.EnvClient.LogPath = filepath.Join(component.EnvClient.RootPath, `logs`)
 	//webkit
-	component.EnvClient.NodePath = gstool.SReplaces(viper.GetString(`path.webkit_node_path`), map[string]string{
-		`{PKG_PATH}`: component.EnvClient.PkgPath,
-	})
+	component.EnvClient.NodePath = `node`
 	//base配置初始化
 	component.EnvClient.ConfigBase = &define.Base{
 		DbFileName: viper.GetString(`base.dbFileName`),
@@ -124,9 +122,9 @@ func InitEnv(appName, ConfigFile string, viper *viper.Viper) {
 	component.EnvClient.WebConfig = &define.WebConfig{
 		WebPath: ``,
 	}
-	//前端目录
+	// 前端目录：未配置webPath时，默认使用当前项目根目录下的web/dist
 	if component.EnvClient.ConfigBase.WebPath == `` {
-		component.EnvClient.WebConfig.WebPath = filepath.Join(filepath.Dir(component.EnvClient.RootPath), `devtool`, `dist`)
+		component.EnvClient.WebConfig.WebPath = filepath.Join(component.EnvClient.RootPath, `web`, `dist`)
 	} else {
 		component.EnvClient.WebConfig.WebPath = component.EnvClient.ConfigBase.WebPath
 	}
@@ -178,9 +176,12 @@ func InitEnv(appName, ConfigFile string, viper *viper.Viper) {
 func initPlaywright() {
 	//初始化playwright
 	plw.PlaywrightClient = plw.NewTPlaywright()
-	plw.PlaywrightClient.SetWebkitPath()
 	plw.PlaywrightClient.LockFileFullPath = filepath.Join(component.EnvClient.RootPath, `playwright.RunLock`)
 	plw.InitPageActiveTime()
+	if !plw.PlaywrightClient.EnsureNodeRuntime() {
+		gstool.FmtPrintlnLogTime(`未检测到 Node.js，跳过 Playwright 初始化，等待用户安装后再使用自定义网页`)
+		return
+	}
 	go plw.PlaywrightClient.WitchDownload()
 	go plw.PlaywrightClient.SmartCheckAndUpdate(&p_sse.SseShell{})
 }

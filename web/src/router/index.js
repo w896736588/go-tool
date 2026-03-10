@@ -9,7 +9,16 @@ export default createRouter({
             name: 'home',
             mode: 'hash', //使用hash模式 本地路由
             component: Home,
+            redirect: '/Dashboard',
             children: [
+                {
+                    path: '/Dashboard',
+                    name: 'Dashboard',
+                    components: {
+                        home: () => import('../components/Dashboard'),
+                    },
+                    meta: {keepAlive: true},
+                },
                 {
                     path: '/Redis',
                     name: 'Redis',
@@ -79,6 +88,14 @@ export default createRouter({
                     name: 'Markdown',
                     components: {
                         home: () => import('../components/Markdown'), //指定其中的home  router view
+                    },
+                    meta: {keepAlive: true},
+                },
+                {
+                    path: '/MemoryFragment',
+                    name: 'MemoryFragment',
+                    components: {
+                        home: () => import('../components/MemoryFragment'),
                     },
                     meta: {keepAlive: true},
                 },

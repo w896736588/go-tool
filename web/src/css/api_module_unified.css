@@ -1,0 +1,232 @@
+/* Api 模块子组件统一风格（仅作用于 api 相关容器） */
+
+:is(
+  .api-detail,
+  .api-list,
+  .collection-environment,
+  .collection-basic-info,
+  .collection-permission,
+  .execution-history,
+  .folder-detail,
+  .folder-basic-info,
+  .folder-edit-form,
+  .key-value-editor,
+  .history-detail,
+  .key-value-view,
+  .variable-manager,
+  .api-documentation
+) {
+  color: #4a4a4a !important;
+}
+
+/* 统一顶部工具区/操作区视觉 */
+:is(
+  .api-list .list-header,
+  .collection-environment .environment-header,
+  .collection-permission .permission-header,
+  .execution-history .history-header,
+  .variable-manager .manager-header,
+  .folder-detail .folder-header
+) {
+  background: #f7f9f5 !important;
+  border: 1px solid #e6ece0 !important;
+  border-radius: 10px !important;
+  padding: 10px 12px !important;
+  margin-bottom: 12px !important;
+}
+
+/* 统一卡片边框与阴影 */
+:is(
+  .api-list,
+  .collection-environment,
+  .collection-permission,
+  .execution-history,
+  .folder-detail,
+  .history-detail,
+  .key-value-view,
+  .variable-manager,
+  .folder-basic-info,
+  .collection-basic-info
+) {
+  background: #fff !important;
+  border: 1px solid #e8eee5 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 6px 18px rgba(80, 110, 80, 0.08) !important;
+}
+
+/* Api 核心详情页/文档页/历史页容器统一 */
+:is(
+  .api-detail .api-header,
+  .api-detail .response-status,
+  .api-detail .response-body-container,
+  .api-documentation .sidebar,
+  .api-documentation .api-content,
+  .api-documentation .api-section,
+  .history-detail .tab-content,
+  .history-detail .response-body-section,
+  .history-detail .detail-actions
+) {
+  border-color: #e6ece0 !important;
+  border-radius: 10px !important;
+}
+
+:is(
+  .api-detail .api-header,
+  .api-documentation .sidebar-header,
+  .history-detail .body-toolbar
+) {
+  background: #f7f9f5 !important;
+}
+
+/* Element 表格统一 */
+:is(
+  .api-list .el-table,
+  .collection-environment .el-table,
+  .collection-permission .el-table,
+  .execution-history .el-table,
+  .api-detail .el-table,
+  .api-documentation .el-table,
+  .key-value-view .el-table,
+  .variable-manager .el-table,
+  .history-detail .el-table
+) {
+  border: 1px solid #e6ece0 !important;
+  border-radius: 10px !important;
+  overflow: hidden;
+}
+
+:is(
+  .api-list .el-table__header-wrapper th,
+  .collection-environment .el-table__header-wrapper th,
+  .collection-permission .el-table__header-wrapper th,
+  .execution-history .el-table__header-wrapper th,
+  .api-detail .el-table__header-wrapper th,
+  .api-documentation .el-table__header-wrapper th,
+  .key-value-view .el-table__header-wrapper th,
+  .variable-manager .el-table__header-wrapper th,
+  .history-detail .el-table__header-wrapper th
+) {
+  background: #f7f9f5 !important;
+  color: #4e594a !important;
+  font-weight: 600 !important;
+}
+
+:is(
+  .api-list .el-table__body tr:hover > td,
+  .collection-environment .el-table__body tr:hover > td,
+  .collection-permission .el-table__body tr:hover > td,
+  .execution-history .el-table__body tr:hover > td,
+  .api-detail .el-table__body tr:hover > td,
+  .api-documentation .el-table__body tr:hover > td,
+  .key-value-view .el-table__body tr:hover > td,
+  .variable-manager .el-table__body tr:hover > td,
+  .history-detail .el-table__body tr:hover > td
+) {
+  background: #f4faf2 !important;
+}
+
+/* 输入类组件统一 */
+:is(
+  .api-detail,
+  .api-list,
+  .collection-environment,
+  .collection-basic-info,
+  .collection-permission,
+  .execution-history,
+  .folder-detail,
+  .folder-basic-info,
+  .folder-edit-form,
+  .key-value-editor,
+  .history-detail,
+  .key-value-view,
+  .variable-manager,
+  .api-documentation,
+  .kv-table,
+  .variable-input-container
+) :is(.el-input__wrapper, .el-select .el-input__wrapper, .el-textarea__inner) {
+  border-radius: 8px !important;
+}
+
+:is(
+  .api-detail,
+  .api-list,
+  .collection-environment,
+  .collection-basic-info,
+  .collection-permission,
+  .execution-history,
+  .folder-detail,
+  .folder-basic-info,
+  .folder-edit-form,
+  .key-value-editor,
+  .history-detail,
+  .key-value-view,
+  .variable-manager,
+  .api-documentation,
+  .kv-table,
+  .variable-input-container
+) :is(.el-input__wrapper.is-focus, .el-select .el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 1px #7aa676 inset !important;
+}
+
+/* KeyValue/ResponseTake 编辑器表格统一 */
+.kv-table .kv-table-inner {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid #e6ece0 !important;
+  border-radius: 10px !important;
+  overflow: hidden;
+}
+
+.kv-table .kv-table-inner th {
+  background: #f7f9f5 !important;
+  color: #4e594a !important;
+  font-weight: 600 !important;
+  border-bottom: 1px solid #e6ece0 !important;
+  padding: 10px;
+}
+
+.kv-table .kv-table-inner td {
+  border-bottom: 1px solid #eef3ec !important;
+  padding: 8px;
+}
+
+.kv-table .kv-table-inner tr:last-child td {
+  border-bottom: none;
+}
+
+/* tabs / 分页 / 代码块统一 */
+:is(
+  .api-detail .el-tabs__item,
+  .history-detail .el-tabs__item,
+  .api-documentation .el-tabs__item
+) {
+  color: #5a6755 !important;
+}
+
+:is(
+  .api-detail .el-tabs__item.is-active,
+  .history-detail .el-tabs__item.is-active,
+  .api-documentation .el-tabs__item.is-active
+) {
+  color: #4f7d4f !important;
+  font-weight: 600 !important;
+}
+
+:is(
+  .api-list .list-footer,
+  .execution-history .pagination-container
+) {
+  border-top: 1px solid #e8eee5 !important;
+  padding-top: 10px !important;
+}
+
+:is(
+  .api-detail pre.response-body,
+  .api-documentation pre.json-body,
+  .history-detail pre.formatted-body,
+  .history-detail pre.raw-body
+) {
+  border: 1px solid #2f3a2f !important;
+  border-radius: 8px !important;
+}

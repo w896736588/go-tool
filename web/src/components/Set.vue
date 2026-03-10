@@ -1,27 +1,28 @@
 <template>
-    <el-tabs v-model="activeLabel" tab-position="top" style="" class="demo-tabs" @tab-click="handleTabClick">
-      <el-tab-pane label="Ssh" name="Ssh" style="padding:5px;">
+  <div class="set-page-tabs">
+    <el-tabs v-model="activeLabel" tab-position="top" class="set-tabs" @tab-click="handleTabClick">
+      <el-tab-pane label="Ssh" name="Ssh" class="set-tab-pane">
         <ssh ref="ssh"></ssh>
       </el-tab-pane>
-      <el-tab-pane label="Git" name="Git" style="padding:5px;">
+      <el-tab-pane label="Git" name="Git" class="set-tab-pane">
         <git ref="git"></git>
       </el-tab-pane>
-      <el-tab-pane label="Supervisor" name="Supervisor" style="padding:5px;">
+      <el-tab-pane label="Supervisor" name="Supervisor" class="set-tab-pane">
         <supervisor ref="supervisor"></supervisor>
       </el-tab-pane>
-      <el-tab-pane label="Redis" name="Redis" style="padding:5px;">
+      <el-tab-pane label="Redis" name="Redis" class="set-tab-pane">
         <redis ref="redis"></redis>
       </el-tab-pane>
-      <el-tab-pane label="Mysql" name="Mysql" style="padding:5px;">
+      <el-tab-pane label="Mysql" name="Mysql" class="set-tab-pane">
         <mysql ref="mysql"></mysql>
       </el-tab-pane>
 <!--      <el-tab-pane label="脚本合集组">-->
 <!--        <variable_group ref="variable_group"></variable_group>-->
 <!--      </el-tab-pane>-->
-      <el-tab-pane label="Compose" name="Compose" style="padding:5px;">
+      <el-tab-pane label="Compose" name="Compose" class="set-tab-pane">
         <compose ref="compose"></compose>
       </el-tab-pane>
-      <el-tab-pane label="账号" name="Account" style="padding:5px;">
+      <el-tab-pane label="账号" name="Account" class="set-tab-pane">
         <account ref="account"></account>
       </el-tab-pane>
 <!--      <el-tab-pane label="命令组">-->
@@ -30,11 +31,14 @@
 <!--      <el-tab-pane label="GitlabToken" name="GitlabToken" style="padding:5px;">-->
 <!--        <gitlab_token ref="gitlabToken"></gitlab_token>-->
 <!--      </el-tab-pane>-->
-      <el-tab-pane label="Global" name="Global" style="padding:5px;">
+      <el-tab-pane label="Global" name="Global" class="set-tab-pane">
         <global ref="global"></global>
       </el-tab-pane>
+      <el-tab-pane label="AI" name="AI" class="set-tab-pane">
+        <ai_provider ref="ai_provider"></ai_provider>
+      </el-tab-pane>
     </el-tabs>
-
+  </div>
 </template>
 
 <script>
@@ -53,6 +57,7 @@ import gitlab_token from "@/components/set/gitlab_token.vue"
 import store from "@/utils/base/store"
 import global from "@/components/set/global.vue"
 import account from "@/components/set/account.vue";
+import ai_provider from "@/components/set/ai_provider.vue";
 export default {
   props : {
     shellShowResult : {
@@ -70,6 +75,7 @@ export default {
     compose,
     gitlab_token ,
     global,
+    ai_provider,
   },
   data() {
     return {
@@ -106,6 +112,10 @@ export default {
           this.$refs.account.AccountList()
           this.$refs.account.AccountGroupList()
           break
+        case 'AI':
+          this.$refs.ai_provider.LoadProviderList()
+          this.$refs.ai_provider.LoadModelList()
+          break
       }
     },
     SshList : function (){
@@ -124,4 +134,43 @@ export default {
 }
 </script>
 
-<style scoped></style>
+<style scoped>
+.set-page-tabs {
+  background: #fff;
+  border: 1px solid #e8e8e0;
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.set-tabs :deep(.el-tabs__header) {
+  margin-bottom: 10px;
+}
+
+.set-tabs :deep(.el-tabs__nav-wrap::after) {
+  background-color: #e8e8e0;
+}
+
+.set-tabs :deep(.el-tabs__item) {
+  height: 36px;
+  color: #5c6856;
+  font-weight: 500;
+}
+
+.set-tabs :deep(.el-tabs__item.is-active) {
+  color: #4f804f;
+}
+
+.set-tabs :deep(.el-tabs__active-bar) {
+  background-color: #4f804f;
+}
+
+.set-tab-pane {
+  padding: 4px;
+}
+
+@media (max-width: 768px) {
+  .set-page-tabs {
+    padding: 8px;
+  }
+}
+</style>

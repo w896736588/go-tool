@@ -192,6 +192,7 @@
         v-model="searchDialogVisible"
         :title="`搜索列表 - ${searchContent} - 搜索到${searchNumber}条`"
         width="80%"
+        class="search-dialog"
     >
       <div class="error-list">
         <div
@@ -951,8 +952,11 @@ export default {
 
 <style lang="scss" scoped>
 .shell-console {
-  padding: 12px;
-  background: #fafafa;
+  padding: 16px;
+  background: #f0f2f5;
+  height: 100%;
+  min-height: 100%;
+  box-sizing: border-box;
 }
 
 .toolbar {
@@ -1002,14 +1006,23 @@ export default {
 // 执行信息区域样式
 .execution-info {
   margin-bottom: 12px;
-  padding: 12px;
-  background: #fff;
-  border-radius: 4px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: 16px;
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e1e4e8;
+
+  h4 {
+    font-size: 15px;
+    font-weight: 500;
+    color: #4a5568;
+    margin: 0;
+  }
 
   :deep(.el-descriptions) {
     .el-descriptions__label {
-      font-weight: bold;
+      font-weight: 500;
+      color: #5c6370;
     }
   }
 }
@@ -1017,19 +1030,24 @@ export default {
 // 命令弹窗样式
 .command-popover {
   h4 {
-    margin: 0 0 8px 0;
-    color: #333;
+    margin: 0 0 12px 0;
+    color: #2c3e50;
+    font-size: 15px;
+    font-weight: 600;
   }
 
   .full-command {
-    background: #f5f5f5;
-    padding: 8px;
-    border-radius: 4px;
-    font-family: 'Consolas', monospace;
-    font-size: 12px;
+    background: #edf3e9;
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.7;
+    color: #435244;
     margin: 0 0 12px 0;
     max-height: 200px;
     overflow-y: auto;
+    border: 1px solid #d6e1d1;
   }
 
   .command-actions {
@@ -1043,25 +1061,25 @@ export default {
   max-height: 60vh;
   overflow-y: auto;
   padding: 8px;
-  background: #f8f9fa;
+  background: #f0f2f5;
   border-radius: 8px;
-  
+
   // Custom scrollbar
   &::-webkit-scrollbar {
     width: 8px;
   }
-  
+
   &::-webkit-scrollbar-track {
-    background: #f1f1f1;
+    background: #e2ebdc;
     border-radius: 4px;
   }
-  
+
   &::-webkit-scrollbar-thumb {
-    background: #c1c1c1;
+    background: #a4b7a3;
     border-radius: 4px;
-    
+
     &:hover {
-      background: #a8a8a8;
+      background: #8fa48f;
     }
   }
 }
@@ -1070,39 +1088,38 @@ export default {
   margin-bottom: 12px;
   padding: 12px 16px;
   border-radius: 6px;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-  transition: all 0.3s ease;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
   border-left: 3px solid transparent;
-  
+
   &:hover {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
     transform: translateX(2px);
   }
-  
+
   &:last-child {
     margin-bottom: 0;
   }
-  
+
   // Unread state - highlight with red border
   &:not([style*="border: 0px"]) {
-    border-left-color: #f56c6c;
-    background: linear-gradient(to right, #fff5f5, #fff);
+    border-left-color: #c96269;
+    background: #fffbf7;
   }
-  
+
   // Line number styling
   &::before {
     content: "##" attr(data-line) "##";
     display: inline-block;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: #fff;
+    background: #5c6370;
+    color: #abb2bf;
     padding: 2px 8px;
     border-radius: 4px;
     font-size: 11px;
-    font-weight: 600;
+    font-weight: 500;
     margin-right: 8px;
     font-family: 'Consolas', 'Courier New', monospace;
-    box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
     vertical-align: middle;
   }
 }
@@ -1110,18 +1127,17 @@ export default {
 .search-content {
   display: inline;
   font-size: 13px;
-  color: #2c3e50;
+  color: #4a5568;
   line-height: 1.6;
   word-break: break-all;
-  
+
   // Highlight text styling
   :deep(span[style*="color:red"]) {
-    background: linear-gradient(135deg, #ff6b6b 0%, #ee5a5a 100%);
-    color: #fff !important;
+    background: rgba(201, 98, 105, 0.15);
+    color: #c96269 !important;
     padding: 2px 6px;
     border-radius: 3px;
-    font-weight: 600;
-    box-shadow: 0 1px 3px rgba(255, 107, 107, 0.4);
+    font-weight: 500;
   }
 }
 
@@ -1150,9 +1166,9 @@ export default {
 .error-item {
   margin-bottom: 6px;
   padding: 6px;
-  border: 1px solid #f56c6c;
+  border: 1px solid #c96269;
   border-radius: 1px;
-  background: #eeeeee;
+  background: #fff5f7;
 
   &:last-child {
     margin-bottom: 0;
@@ -1164,13 +1180,13 @@ export default {
   margin-bottom: 12px;
   padding: 12px 16px;
   border-radius: 6px;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-  transition: all 0.3s ease;
-  border-left: 3px solid #f56c6c;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+  border-left: 3px solid #c96269;
 
   &:hover {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
     transform: translateX(2px);
   }
 
@@ -1206,20 +1222,23 @@ export default {
 .error-content {
   margin-bottom: 8px;
   font-size: 13px;
-  color: #2c3e50;
-  line-height: 1.6;
+  color: #435244;
+  line-height: 1.7;
   word-break: break-all;
   white-space: pre-wrap;
-  font-family: 'Consolas', 'Courier New', monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
+  background: #edf3e9;
+  padding: 14px 16px;
+  border-radius: 8px;
+  border-left: 3px solid #c96269;
 
   // Highlight error styling
   :deep(span[style*="color:red"]) {
-    background: linear-gradient(135deg, #ff6b6b 0%, #ee5a5a 100%);
-    color: #fff !important;
+    background: rgba(201, 98, 105, 0.2);
+    color: #c96269 !important;
     padding: 2px 6px;
     border-radius: 3px;
-    font-weight: 600;
-    box-shadow: 0 1px 3px rgba(255, 107, 107, 0.4);
+    font-weight: 500;
   }
 }
 
@@ -1241,7 +1260,7 @@ export default {
 
 // Context list styles
 .context-list {
-  background: #f5f7fa;
+  background: #eef3ea;
   border-radius: 8px;
   padding: 12px;
 }
@@ -1250,7 +1269,7 @@ export default {
   display: flex;
   align-items: flex-start;
   padding: 8px 12px;
-  background: #fff;
+  background: #ffffff;
   border-radius: 4px;
   margin-bottom: 8px;
   transition: all 0.2s ease;
@@ -1260,13 +1279,13 @@ export default {
   }
 
   &:hover {
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
   }
 
   &.highlight-line {
-    background: linear-gradient(135deg, #fff5f5 0%, #ffe8e8 100%);
-    border-left: 4px solid #f56c6c;
-    box-shadow: 0 2px 8px rgba(245, 108, 108, 0.3);
+    background: #fff5f7;
+    border-left: 3px solid #c96269;
+    box-shadow: 0 2px 4px rgba(201, 98, 105, 0.2);
     animation: highlight-pulse 2s ease-in-out;
   }
 }
@@ -1274,15 +1293,14 @@ export default {
 .line-number {
   flex-shrink: 0;
   display: inline-block;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: #fff;
+  background: #dbe7d5;
+  color: #4f6350;
   padding: 2px 8px;
   border-radius: 4px;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   margin-right: 12px;
   font-family: 'Consolas', 'Courier New', monospace;
-  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
   min-width: 80px;
   text-align: center;
 }
@@ -1290,11 +1308,15 @@ export default {
 .line-content {
   flex: 1;
   font-size: 13px;
-  color: #2c3e50;
-  line-height: 1.6;
+  color: #435244;
+  line-height: 1.7;
   word-break: break-all;
   white-space: pre-wrap;
-  font-family: 'Consolas', 'Courier New', monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
+  background: #edf3e9;
+  padding: 12px 14px;
+  border-radius: 6px;
+  border-left: 3px solid #8fae92;
 }
 
 @keyframes highlight-pulse {
@@ -1419,8 +1441,8 @@ pre {
   font-weight: bold !important;
 }
 
-// Search dialog specific styles
-:deep(.el-dialog__body) {
+/* 搜索弹窗内容区样式（仅作用于搜索弹窗） */
+:deep(.search-dialog .el-dialog__body) {
   padding: 20px !important;
   background: #f5f7fa;
 }

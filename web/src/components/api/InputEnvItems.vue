@@ -247,6 +247,10 @@ export default {
   width: 100%;
 }
 
+.variable-input-container :deep(.el-input__wrapper) {
+  border-radius: 8px;
+}
+
 .variables-display {
   display: flex;
   flex-wrap: wrap;
@@ -258,9 +262,10 @@ export default {
   display: inline-flex;
   align-items: center;
   padding: 4px 8px;
-  background-color: #f0f0f0; /* 淡灰色背景 */
-  color: #67c23a; /* 绿色文字 */
-  border-radius: 4px;
+  background-color: #f4faf2;
+  color: #4f7d4f;
+  border: 1px solid #d9e7d4;
+  border-radius: 8px;
   font-size: 12px;
   cursor: default;
   position: relative;
@@ -295,12 +300,15 @@ export default {
 .suggestions-list {
   max-height: 200px;
   overflow-y: auto;
+  border: 1px solid #e6ece0;
+  border-radius: 10px;
+  background: #fff;
 }
 
 .suggestion-item {
   padding: 8px 12px;
   cursor: pointer;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid #eef3ec;
 }
 
 .suggestion-item:last-child {
@@ -309,12 +317,12 @@ export default {
 
 .suggestion-item:hover,
 .suggestion-item.active {
-  background-color: #f5f7fa;
+  background-color: #f4faf2;
 }
 
 .suggestion-label {
   font-weight: 500;
-  color: #303133;
+  color: #4f5f4b;
 }
 
 .suggestion-value {

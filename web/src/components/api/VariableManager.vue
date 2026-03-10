@@ -313,25 +313,34 @@ export default {
 
 <style scoped>
 .variable-manager {
-  padding: 0;
+  padding: 12px;
+  border: 1px solid #e8eee5;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(80, 110, 80, 0.08);
 }
 
 .manager-header {
   margin-bottom: 16px;
   display: flex;
   gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid #e6ece0;
+  border-radius: 10px;
+  background: #f7f9f5;
 }
 
 .variable-key {
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   font-weight: 500;
-  color: #409eff;
+  color: #4f7d4f;
   font-size: 14px;
 }
 
 .variable-value {
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-  background: #f5f7fa;
+  background: #f4faf2;
+  border: 1px solid #d9e7d4;
   padding: 2px 6px;
   border-radius: 3px;
   font-size: 14px;
@@ -367,6 +376,12 @@ export default {
 .variable-manager :deep(.import-textarea .el-textarea__inner) {
   font-size: 14px;
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.variable-manager :deep(.el-table) {
+  border: 1px solid #e6ece0;
+  border-radius: 10px;
+  overflow: hidden;
 }
 </style>
 

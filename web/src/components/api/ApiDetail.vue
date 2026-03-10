@@ -30,7 +30,7 @@
       </div>
     </div>
 
-    <el-tabs v-model="configActiveTab" style="min-height: 500px;" @tab-change="responseTabChange">
+    <el-tabs v-model="configActiveTab" class="detail-tabs" style="min-height: 500px;" @tab-change="responseTabChange">
       <el-tab-pane label="备注" name="desc">
         <MdEditor  v-model="apiForm.desc" @blur="handleSave" :onSave="handleSave" />
       </el-tab-pane>
@@ -47,7 +47,7 @@
       <el-tab-pane v-if="apiForm.method !== 'GET'" :label="'请求体(' + (isArray(apiForm.body_form_data) ? apiForm.body_form_data.length : 0) + ')'" name="body">
         <!-- 请求体内容（同原逻辑） -->
         <div style="width: 100%">
-          <el-radio-group v-model="apiForm.content_type" size="small" @change="handleSave">
+          <el-radio-group v-model="apiForm.content_type" class="detail-segmented" size="small" @change="handleSave">
             <el-radio-button value="application/json">application/json</el-radio-button>
             <el-radio-button value="application/x-www-form-urlencoded">x-www-form-urlencoded</el-radio-button>
             <el-radio-button value="multipart/form-data">multipart/form-data</el-radio-button>
@@ -91,7 +91,7 @@
       </el-tab-pane>
       <el-tab-pane label="代码" lazy name="code">
         <div style="width: 100%">
-          <el-radio-group v-model="apiForm.code_type" size="small" @change="handleCodeTypeChange">
+          <el-radio-group v-model="apiForm.code_type" class="detail-segmented" size="small" @change="handleCodeTypeChange">
             <el-radio-button value="curl bash(chrome)">curl bash(chrome)</el-radio-button>
             <el-radio-button value="curl shell(apifox)">curl shell(apifox)</el-radio-button>
           </el-radio-group>
@@ -195,7 +195,7 @@
           <div style="color:green;font-size:14px;">时间: {{ apiForm.last_result_data.request_time }}</div>
         </div>
 
-        <el-tabs v-model="responseActiveTab" @tab-change="handleSave">
+        <el-tabs v-model="responseActiveTab" class="detail-tabs" @tab-change="handleSave">
           <el-tab-pane label="返回结果" name="body">
             <div class="response-body-container">
               <button class="copy-btn" link style="margin-right:120px;" @click="copyTextToClipboard(apiForm.last_result_data.result)">
@@ -574,21 +574,22 @@ export default {
 
 <style scoped>
 .api-detail {
-  padding: 20px 0;
+  padding: 12px 0;
   height: 100vh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  min-height: 1000px;
+  min-height: 720px;
 }
 
 .json-box {
   width: 100%;
   height: 360px;
   margin-top: 12px;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
+  border: 1px solid #dbe7d6;
+  border-radius: 10px;
   overflow: auto;
+  background: #fff;
 }
 
 .api-header {
@@ -596,7 +597,10 @@ export default {
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 10px;
-  background: #fff;
+  background: #f7f9f5;
+  border: 1px solid #e6ece0;
+  border-radius: 10px;
+  padding: 10px 12px;
   position: sticky;
   top: 0;
   z-index: 100;
@@ -644,9 +648,11 @@ export default {
 
 .config-section,
 .response-section {
-  background: #f8f9fa;
+  background: #fff;
+  border: 1px solid #e8eee5;
   padding: 20px;
-  border-radius: 8px;
+  border-radius: 12px;
+  box-shadow: 0 6px 18px rgba(80, 110, 80, 0.08);
   margin-top: 5px;
   overflow: auto;
   flex: 1;
@@ -683,6 +689,10 @@ export default {
   align-items: center;
   gap: 12px;
   margin-bottom: 16px;
+  border: 1px solid #e6ece0;
+  background: #f7f9f5;
+  border-radius: 10px;
+  padding: 10px 12px;
 }
 
 .response-time {
@@ -694,7 +704,8 @@ export default {
   background: #2d2d2d;
   color: #f8f8f2;
   padding: 16px;
-  border-radius: 4px;
+  border-radius: 8px;
+  border: 1px solid #2f3a2f;
   overflow: auto;
   flex: 1; /* 占据剩余空间 */
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
@@ -731,13 +742,82 @@ export default {
   overflow: auto;
 }
 
-:deep(.el-table) {
-  background: transparent;
+:deep(.detail-tabs > .el-tabs__header) {
+  margin-bottom: 12px;
 }
 
-:deep(.el-table th),
-:deep(.el-table td) {
-  background: transparent;
+:deep(.detail-tabs > .el-tabs__header .el-tabs__nav-wrap::after) {
+  background: #e6ece0;
+}
+
+:deep(.detail-tabs > .el-tabs__header .el-tabs__item) {
+  height: 38px;
+  padding: 0 14px;
+  color: #5a6755;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+:deep(.detail-tabs > .el-tabs__header .el-tabs__item:hover) {
+  color: #4f7d4f;
+}
+
+:deep(.detail-tabs > .el-tabs__header .el-tabs__item.is-active) {
+  color: #4f7d4f;
+  font-weight: 600;
+}
+
+:deep(.detail-tabs > .el-tabs__header .el-tabs__active-bar) {
+  background: #7aa676;
+  height: 3px;
+  border-radius: 999px;
+}
+
+:deep(.detail-segmented) {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px;
+  background: #f7f9f5;
+  border: 1px solid #e6ece0;
+  border-radius: 12px;
+}
+
+:deep(.detail-segmented .el-radio-button__inner) {
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid #d7e2d2;
+  border-radius: 8px !important;
+  background: #fff;
+  color: #596655;
+  font-weight: 500;
+  line-height: 30px;
+  box-shadow: none;
+  transition: all 0.2s ease;
+}
+
+:deep(.detail-segmented .el-radio-button:first-child .el-radio-button__inner),
+:deep(.detail-segmented .el-radio-button:last-child .el-radio-button__inner) {
+  border-radius: 8px !important;
+}
+
+:deep(.detail-segmented .el-radio-button__original-radio:checked + .el-radio-button__inner) {
+  background: #5a8a5a;
+  border-color: #5a8a5a;
+  color: #fff;
+  box-shadow: 0 6px 14px rgba(90, 138, 90, 0.22);
+}
+
+:deep(.detail-segmented .el-radio-button__inner:hover) {
+  color: #456e45;
+  border-color: #afc7aa;
+  background: #f4faf2;
+}
+
+:deep(.el-table) {
+  border: 1px solid #e6ece0;
+  border-radius: 10px;
+  overflow: hidden;
 }
 
 :deep(.el-tabs__nav-wrap) {
@@ -800,9 +880,9 @@ export default {
 .dialog-env-name {
   margin-bottom: 15px;
   padding: 10px;
-  background-color: #f0f9ff;
-  border-left: 4px solid #409eff;
-  border-radius: 4px;
+  background-color: #f4faf2;
+  border-left: 4px solid #5a8a5a;
+  border-radius: 8px;
 }
 
 .no-variables {
@@ -810,6 +890,16 @@ export default {
   color: #909399;
   padding: 20px;
   font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  :deep(.detail-tabs > .el-tabs__header .el-tabs__item) {
+    padding: 0 10px;
+  }
+
+  :deep(.detail-segmented) {
+    width: 100%;
+  }
 }
 </style>
 

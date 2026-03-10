@@ -9,12 +9,10 @@ import '../src/css/reset_element.css'
 import '../src/css/el_textarea.css'
 import '../src/css/pretty_json.css'
 import '../src/css/markdown.css'
+import '../src/css/api_module_unified.css'
 app.use(ElementUI)
 import { ElMessage } from 'element-plus'
 
-//引入加载进度动画
-import NProgress from 'nprogress' // nprogress插件
-import 'nprogress/nprogress.css' // nprogress样式
 
 //自定义通用方法
 import helperStore from './utils/base/store'
@@ -46,24 +44,15 @@ Axios.defaults.headers.post['Content-Type'] = 'text/xml'
 // 添加请求拦截器
 Axios.interceptors.request.use(
   (config) => {
-    NProgress.done()
-    NProgress.start()
     //默认添加sse_client_id
     config.headers.SseClientId = SseDistribute.GetSseClientId()
     return config
   },
   (error) => {
-    NProgress.done()
     return Promise.reject(error)
   }
 )
 Axios.interceptors.response.use((response) => {
-  setTimeout(function () {
-    NProgress.set(0.6)
-  }, 400)
-  setTimeout(function () {
-    NProgress.done()
-  }, 700)
   if (response.data.ErrCode === 1) {
     ElMessage.error(response.data.ErrMsg)
   } else if (response.data.ErrCode !== 0) {

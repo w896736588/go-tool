@@ -65,9 +65,7 @@ func DockerComposeServices(c *gin.Context) {
 	command1.Cd(path.Dir(composeYmlPath))
 	command1.DockerComposeServices(cast.ToString(one[`docker_cmd`]), envFile)
 	result1, _ := sshClient.RunCommandWait(command1.GetCommand().ToStr(), 40*time.Second)
-	services := strings.Split(result1, "\n")
-	services = gstool.ArrayFilterEmpty(&services)
-	services = services[1:]
+	services := parseDockerComposeServiceNames(result1)
 	list := make([]map[string]any, 0)
 	for _, v := range services {
 		list = append(list, map[string]any{
@@ -157,7 +155,33 @@ func DockerComposeStatus(c *gin.Context) {
 var (
 	ansi  = regexp.MustCompile(`\x1b\[[0-9;?]*[a-zA-Z]`)
 	space = regexp.MustCompile(`\s{2,}`) // 2+ 空格 → \t
+	// docker compose service 名过滤规则：首字符字母/数字，后续允许字母数字._-
+	dockerComposeServiceNameReg = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`)
 )
+
+// parseDockerComposeServiceNames 清洗 ssh 命令回显，仅保留合法的 compose service 名。
+func parseDockerComposeServiceNames(raw string) []string {
+	lines := strings.Split(raw, "\n")
+	services := make([]string, 0, len(lines))
+	seen := make(map[string]struct{})
+	for _, line := range lines {
+		// 兼容优化后 ssh 输出中的提示符、回显和控制字符
+		clean := ansi.ReplaceAllString(line, "")
+		clean = strings.TrimSpace(strings.ReplaceAll(clean, "\r", ""))
+		if clean == "" {
+			continue
+		}
+		if !dockerComposeServiceNameReg.MatchString(clean) {
+			continue
+		}
+		if _, ok := seen[clean]; ok {
+			continue
+		}
+		seen[clean] = struct{}{}
+		services = append(services, clean)
+	}
+	return services
+}
 
 func ParseStats(text string) []map[string]string {
 	lines := strings.Split(strings.TrimSpace(text), "\n")

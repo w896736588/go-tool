@@ -1,85 +1,115 @@
 <template>
-  <!--  子操作选项列表-->
-  <div style="text-align: center;">
-    <!--    环境-->
-    <el-select v-model="chooseSupervisorId" placeholder="请选择环境" @change="changeSupervisor" style="width:300px;">
-      <el-option v-for="(value) in supervisorConfigList" :key="value.name" :label="value.name" :value="value.id">
-      </el-option>
-    </el-select>
-    <el-button :loading="loadingStatus['supervisor_restart_all']" style="margin-left:5px;" type="primary" @click="restartSupervisorAll">重启所有</el-button>
-    <el-button :loading="loadingStatus['supervisor_status_list']" style="margin-left:5px;" type="primary" @click="supervisorStatusList">查看所有</el-button>
+  <div class="supervisor-page-container">
+    <!-- 顶部操作区域 -->
+    <div class="supervisor-header-card">
+      <div class="header-title">
+        <svg class="header-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/>
+          <path d="M9 9H15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <path d="M9 13H15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <path d="M9 17H12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <span>Supervisor 进程管理</span>
+      </div>
+      <div class="control-row">
+        <el-select v-model="chooseSupervisorId" placeholder="选择环境" @change="changeSupervisor" class="env-select">
+          <el-option v-for="(value) in supervisorConfigList" :key="value.name" :label="value.name" :value="value.id">
+          </el-option>
+        </el-select>
+        <div class="action-buttons">
+          <el-button :loading="loadingStatus['supervisor_restart_all']" type="warning" plain @click="restartSupervisorAll">
+            <el-icon><RefreshRight /></el-icon>重启所有
+          </el-button>
+          <el-button :loading="loadingStatus['supervisor_status_list']" type="primary" plain @click="supervisorStatusList">
+            <el-icon><View /></el-icon>查看状态
+          </el-button>
+          <el-tooltip content="停止选中的进程，可降低内存占用" placement="top">
+            <el-button :loading="loadingStatus['stopListConsumer']" type="danger" plain @click="stopListSupervisor">
+              <el-icon><VideoPause /></el-icon>停止选中 ({{ searchNum }})
+            </el-button>
+          </el-tooltip>
+        </div>
+        <el-input
+          v-model="searchKey"
+          autocomplete="off"
+          placeholder="搜索名称/进程名，空格多条件"
+          class="search-input"
+          @input="searchList"
+          clearable
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
+      </div>
+    </div>
 
-    <el-tooltip class="item" content="停止,可降低docker内存占用" effect="dark" placement="top" style="margin-left:5px;">
-      <el-button :loading="loadingStatus['stopListConsumer']" type="primary" @click="stopListSupervisor">停止以下{{ searchNum }}个
-      </el-button>
-    </el-tooltip>
-    <el-input
-        v-model="searchKey"
-        autocomplete="off"
-        placeholder="搜索名称/进程名/程序名等,多条件使用空格分割"
-        style="width: 400px;margin-left:5px;"
-        @input="searchList"></el-input>
+    <!-- 进程列表 -->
+    <div class="process-table-card">
+      <el-table :data="configMap" :row-class-name="getColumnColor" class="process-table" stripe>
+        <el-table-column label="自定义名称" min-width="200">
+          <template #default="scope">
+            <div class="name-cell">
+              <span class="custom-name" v-html="scope.row.showName"></span>
+              <el-icon class="edit-icon" @click="editName(scope.row)">
+                <Edit />
+              </el-icon>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="进程名称" min-width="200">
+          <template #default="scope">
+            <code class="process-name" v-html="scope.row.name"></code>
+          </template>
+        </el-table-column>
+        <el-table-column label="运行状态" width="180" sortable>
+          <template #default="scope">
+            <div class="status-cell">
+              <span v-html="scope.row.running_status" class="status-text"></span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="进程数" prop="processNum" width="100" align="center">
+          <template #default="scope">
+            <el-tag size="small" type="info">{{ scope.row.processNum }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column fixed="right" label="操作" width="280">
+          <template #default="scope">
+            <div class="action-cell">
+              <el-button size="small" type="success" plain @click="restart(scope.row)">
+                <el-icon><RefreshRight /></el-icon>重启
+              </el-button>
+              <el-button size="small" type="warning" plain @click="stop(scope.row)">
+                <el-icon><VideoPause /></el-icon>停止
+              </el-button>
+              <el-button size="small" type="primary" plain @click="configShow(scope.row)">
+                <el-icon><Document /></el-icon>配置
+              </el-button>
+            </div>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
 
-    <br/>
-    <br/>
+    <!-- 编辑名称弹窗 -->
+    <el-dialog v-model="dialogShowEditName" title="编辑自定义名称" width="400px" class="edit-name-dialog">
+      <el-form label-width="80px">
+        <el-form-item label="名称">
+          <el-input v-model="inputNameValue" autocomplete="off" placeholder="输入自定义名称" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="dialogShowEditName = false">取消</el-button>
+        <el-button type="primary" @click="dialogShowEditName = false; editNameValueFunc()">确定</el-button>
+      </template>
+    </el-dialog>
 
+    <shellResult ref="shellRef" :shellShowResult="shellController.sshResult" :isRunning="shellController.isRunning" :show-model="shellController.showModel"></shellResult>
   </div>
-
-  <el-table :data="configMap" :row-class-name="getColumnColor" style="width: 100%;font-size:14px;margin-top: 10px;">
-    <el-table-column label="自定义名称" width="300" >
-      <template #default="scope">
-        <span v-html="scope.row.showName"></span>
-        <el-icon color="#409eff" size="small" @click="editName(scope.row)">
-          <Edit></Edit>
-        </el-icon>
-      </template>
-    </el-table-column>
-    <el-table-column label="名称" width="300">
-      <template #default="scope">
-        <span v-html="scope.row.name"></span>
-      </template>
-    </el-table-column>
-    <el-table-column label="运行状态" sortable>
-      <template #default="scope">
-        <span v-html="scope.row.running_status"></span>
-      </template>
-    </el-table-column>
-    <el-table-column label="进程数" prop="processNum" width="100"/>
-    <el-table-column fixed="right" label="操作" width="300">
-      <template #default="scope">
-        <el-button class="button" size="small"  @click="restart(scope.row)">重新启动</el-button>
-        <el-button class="button" size="small" @click="stop(scope.row)">停止
-        </el-button>
-        <el-button class="button" size="small" @click="configShow(scope.row)">查看配置</el-button>
-      </template>
-    </el-table-column>
-    <div style="height:600px;"></div>
-  </el-table>
-  <div style="height:300px;"></div>
-
-  <el-dialog v-model="dialogShowEditName" title="输入名称" width="30%">
-    <el-input
-        v-model="inputNameValue"
-        autocomplete="off"
-        placeholder="输入名称"
-        style="width: 400px"
-    ></el-input>
-    <template #footer>
-      <el-button @click="dialogShowEditName = false">取 消</el-button>
-      <el-button
-          type="primary"
-          @click="
-            dialogShowEditName = false;
-            editNameValueFunc()
-          "
-      >确 定
-      </el-button
-      >
-    </template>
-  </el-dialog>
-  <shellResult ref="shellRef" :shellShowResult="shellController.sshResult" :isRunning="shellController.isRunning" :show-model="shellController.showModel"></shellResult>
 </template>
 <script>
+import { RefreshRight, View, VideoPause, Search, Edit, Document } from '@element-plus/icons-vue';
 import store from '../utils/base/store'
 import supervisor from '../utils/base/supervisor'
 import base from '../utils/base.js'
@@ -101,6 +131,12 @@ export default {
   },
   components: {
     shellResult,
+    RefreshRight,
+    View,
+    VideoPause,
+    Search,
+    Edit,
+    Document,
   },
   activated: function () {
     this.resizeTerminal()
@@ -150,12 +186,14 @@ export default {
       showInteractionSshConfig: {},
       loadingStatus: {},
       sseId : '',
+      sse_distribute_id: '',
+      sseThrottleStringFunc: null,
     }
   },
   inject: ["showTerminal", "resizeTerminal"],
   mounted: function () {
     let _that = this
-    _that.sse_distribute_id = sseDistribute.GetSseDistributeId('supervisor')
+    _that.prepareActionSse('init')
     supervisor.SupervisorConfigList({sse_distribute_id : _that.sse_distribute_id},function (response){
       if(response.ErrCode === 0){
         _that.supervisorConfigList = response.Data.supervisor_list
@@ -165,6 +203,11 @@ export default {
       }
     })
     _that.loadingStatus = _that.$helperLoad.getExecTypeStatus()
+  },
+  beforeUnmount() {
+    if (this.sse_distribute_id) {
+      sseDistribute.UnRegisterReceive(this.sse_distribute_id)
+    }
   },
   onload: function () {
   },
@@ -177,6 +220,29 @@ export default {
     },
   },
   methods: {
+    prepareActionSse: function (action) {
+      let _that = this
+      if (_that.sse_distribute_id) {
+        sseDistribute.UnRegisterReceive(_that.sse_distribute_id)
+      }
+      _that.sse_distribute_id = sseDistribute.GetSseDistributeId(`supervisor_${action}_${Date.now()}`)
+      if (!_that.sseThrottleStringFunc) {
+        _that.sseThrottleStringFunc = new Throttle_string(50, text => {
+          _that.shellController.sshResult += text
+          const maxLen = 10000
+          if (_that.shellController.sshResult.length > maxLen) {
+            _that.shellController.sshResult = _that.shellController.sshResult.slice(-maxLen)
+          }
+          let result = format.formatResult(_that.shellController.sshResult, ['copy', 'color', 'replace'])
+          result = format.formatResult(result, ['length'])
+          _that.shellController.sshResult = result
+        })
+      }
+      sseDistribute.RegisterReceive(_that.sse_distribute_id , function (msg){
+        _that.sseThrottleStringFunc.update(msg)
+      })
+      return _that.sse_distribute_id
+    },
     getLastSupervisorId : function (){
       let _that = this
       let chooseSupervisorId = _that.$helperStore.getStore('chooseSupervisorId')
@@ -213,6 +279,7 @@ export default {
     restart: function (value) {
       let _that = this
       _that.shellController.isRunning = true
+      _that.prepareActionSse('restart')
       _that.chooseSupervisorConfig.sse_distribute_id = _that.sse_distribute_id
       supervisor.SupervisorRestart(_that.chooseSupervisorConfig, value.supervisor_name, function (response) {
             _that.$helperNotify.success('成功')
@@ -226,6 +293,7 @@ export default {
     stop: function (value) {
       let _that = this
       _that.shellController.isRunning = true
+      _that.prepareActionSse('stop')
       _that.chooseSupervisorConfig.sse_distribute_id = _that.sse_distribute_id
       supervisor.SupervisorStop(_that.chooseSupervisorConfig, value.supervisor_name, function (response) {
             _that.$helperNotify.success('成功')
@@ -240,6 +308,7 @@ export default {
       let _that = this
       _that.openShellResult()
       _that.shellController.isRunning = true
+      _that.prepareActionSse('config_show')
       _that.chooseSupervisorConfig.sse_distribute_id = _that.sse_distribute_id
       supervisor.SupervisorConfigShow(_that.chooseSupervisorConfig,value.supervisor_config, function (response) {
             _that.execResult = response.Data
@@ -274,6 +343,7 @@ export default {
         return
       }
       _that.shellController.isRunning = true
+      _that.prepareActionSse('config_list')
       _that.chooseSupervisorConfig.sse_distribute_id = _that.sse_distribute_id
       supervisor.SupervisorConfList(_that.chooseSupervisorConfig, function (response) {
             let tempList = response.Data.split(`\n`)
@@ -296,20 +366,6 @@ export default {
         }
       }
       _that.$helperStore.setStore('chooseSupervisorId' , _that.chooseSupervisorId)
-      let throttleStringFunc = new Throttle_string(50, text => {
-        _that.shellController.sshResult += text
-        // 限制长度：最多保留最后 10000 个字符
-        const maxLen = 10000;
-        if (_that.shellController.sshResult.length > maxLen) {
-          _that.shellController.sshResult = _that.shellController.sshResult.slice(-maxLen);
-        }
-        let result = format.formatResult(_that.shellController.sshResult, ['copy', 'color', 'replace'])
-        result = format.formatResult(result, ['length'])
-        _that.shellController.sshResult = result
-      })
-      sseDistribute.RegisterReceive(_that.sse_distribute_id , function (msg,msgType,sseDistributeId){
-        throttleStringFunc.update(msg)
-      })
       _that.getOriginSupervisorConf()
     },
     //搜索消费者列表
@@ -323,6 +379,7 @@ export default {
     restartSupervisorAll: function () {
       let _that = this
       _that.shellController.isRunning = true
+      _that.prepareActionSse('restart_all')
       _that.chooseSupervisorConfig.sse_distribute_id = _that.sse_distribute_id
       supervisor.SupervisorRestartAll(_that.chooseSupervisorConfig, function (response) {
             _that.execResult = response.Data
@@ -336,6 +393,7 @@ export default {
     supervisorStatusList: function () {
       let _that = this
       _that.shellController.isRunning = true
+      _that.prepareActionSse('status_list')
       _that.chooseSupervisorConfig.sse_distribute_id = _that.sse_distribute_id
       supervisor.SupervisorStatusList(_that.chooseSupervisorConfig, function (response) {
             _that.execResult = response.Data
@@ -496,43 +554,174 @@ export default {
 }
 </script>
 
-<style>
-.supervisorCommand {
-  padding: 3px;
-  font-size: 14px;
+<style scoped>
+.supervisor-page-container {
+  padding: 0;
+  width: 100%;
+  color: #4a4a4a;
 }
-.card-header {
+
+.supervisor-header-card {
+  background: #fff;
+  border: 1px solid #e8e8e0;
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 12px;
+}
+
+.header-title {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
+  gap: 8px;
+  color: #4a4a4a;
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 12px;
 }
 
-.el-table__body-wrapper {
-  /*margin-bottom: 300px;*/
+.header-icon {
+  width: 20px;
+  height: 20px;
+  color: #5a8a5a;
 }
 
-.text {
-  font-size: 14px;
+.control-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
-.item {
-  margin-bottom: 18px;
-  text-align: left;
+.env-select {
+  width: 220px;
+}
+
+.env-select :deep(.el-input__wrapper),
+.search-input :deep(.el-input__wrapper) {
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 0 0 1px #dde3d8 inset;
+}
+
+.env-select :deep(.el-input__wrapper.is-focus),
+.search-input :deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 1px #93b793 inset;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.action-buttons .el-button {
+  border-radius: 8px;
+  border: 1px solid #d8ded2;
+  background: #f6f8f3;
+  color: #4f804f;
+}
+
+.action-buttons .el-button:hover {
+  background: #eef4ea;
+  border-color: #bfd1bf;
+  color: #3f6f3f;
+}
+
+.search-input {
+  flex: 1;
+  max-width: 420px;
+  min-width: 220px;
+}
+
+.process-table-card {
+  background: #fff;
+  border: 1px solid #e8e8e0;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.process-table {
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.process-table :deep(.el-table__header th) {
+  background: #f7f7f2;
+  color: #606050;
+  font-weight: 600;
+}
+
+.process-table :deep(.el-table__row:hover > td) {
+  background-color: #f3f7ef !important;
+}
+
+.name-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.custom-name {
+  font-weight: 500;
+  color: #303133;
+}
+
+.edit-icon {
+  color: #5a8a5a;
+  cursor: pointer;
+}
+
+.edit-icon:hover {
+  color: #3f6f3f;
+}
+
+.process-name {
+  font-family: Consolas, Monaco, monospace;
+  font-size: 13px;
+  color: #4f804f;
+  background: #f3f8ef;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.status-cell {
+  display: flex;
+  align-items: center;
+}
+
+.status-text {
+  font-size: 13px;
+}
+
+.action-cell {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .el-table .warning-row {
-  --el-table-tr-bg-color: var(--el-color-warning-light-9);
+  --el-table-tr-bg-color: #fdf6e6;
 }
 
 .el-table .success-row {
-  --el-table-tr-bg-color: var(--el-color-success-light-9);
+  --el-table-tr-bg-color: #eef7ea;
 }
 
 .el-table .error-row {
-  --el-table-tr-bg-color: var(--el-color-error-light-9);
+  --el-table-tr-bg-color: #fbeeee;
 }
 
-.row-hide {
+.process-table :deep(.row-hide) {
   display: none;
+}
+
+@media (max-width: 1200px) {
+  .control-row {
+    align-items: stretch;
+  }
+
+  .search-input {
+    max-width: 100%;
+  }
 }
 </style>
