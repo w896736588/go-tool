@@ -100,6 +100,14 @@ export default createRouter({
                     meta: {keepAlive: true},
                 },
                 {
+                    path: '/InfoCrawl',
+                    name: 'InfoCrawl',
+                    components: {
+                        home: () => import('../components/InfoCrawl'),
+                    },
+                    meta: {keepAlive: true},
+                },
+                {
                     path: '/shellout',
                     name: 'shellout',
                     components: {
