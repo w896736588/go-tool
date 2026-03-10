@@ -42,7 +42,7 @@
         </el-menu-item>
         <el-menu-item v-if="checkModuleOpen('memory_fragment')" index="/MemoryFragment">
           <el-icon><Memo /></el-icon>
-          <span>记忆片段</span>
+          <span>记忆片段（wait）</span>
         </el-menu-item>
         <el-menu-item v-if="checkModuleOpen('docker')" index="/Docker">
           <el-icon><Box /></el-icon>
