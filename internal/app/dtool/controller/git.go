@@ -380,6 +380,7 @@ func GitConfigList(c *gin.Context) {
 		gitGroupList[k][`id`] = cast.ToString(v[`id`])
 	}
 	gitList, _ := common.DbMain.Client.QuickQuery(`tbl_git`, `*`, nil).All()
+	gitList = filterGitListByExistingGroups(gitGroupList, gitList)
 	//id转为字符串
 	for k, v := range gitList {
 		gitList[k][`id`] = cast.ToString(v[`id`])
@@ -389,6 +390,31 @@ func GitConfigList(c *gin.Context) {
 		`git_group_list`: gitGroupList,
 		`git_list`:       gitList,
 	})
+}
+
+// filterGitListByExistingGroups 仅保留仍然绑定到有效 Git 分组的仓库配置。
+func filterGitListByExistingGroups(gitGroupList, gitList []map[string]any) []map[string]any {
+	validGroupMap := make(map[string]struct{}, len(gitGroupList))
+	for _, gitGroup := range gitGroupList {
+		groupID := strings.TrimSpace(cast.ToString(gitGroup[`id`]))
+		if groupID == `` {
+			continue
+		}
+		validGroupMap[groupID] = struct{}{}
+	}
+
+	filteredList := make([]map[string]any, 0, len(gitList))
+	for _, gitItem := range gitList {
+		groupID := strings.TrimSpace(cast.ToString(gitItem[`git_group_id`]))
+		if groupID == `` {
+			continue
+		}
+		if _, ok := validGroupMap[groupID]; !ok {
+			continue
+		}
+		filteredList = append(filteredList, gitItem)
+	}
+	return filteredList
 }
 
 func GitGroupBranchList(c *gin.Context) {
