@@ -346,7 +346,8 @@ export default {
       _that.prepareActionSse('config_list')
       _that.chooseSupervisorConfig.sse_distribute_id = _that.sse_distribute_id
       supervisor.SupervisorConfList(_that.chooseSupervisorConfig, function (response) {
-            let tempList = response.Data.split(`\n`)
+            const responseData = typeof response.Data === 'string' ? response.Data : ''
+            let tempList = responseData.split(`\n`).filter(item => item !== '')
             let confList = []
             for (let i in tempList) {
               confList.push(tempList[i].split('---'))
