@@ -311,7 +311,7 @@ export default {
       _that.prepareActionSse('config_show')
       _that.chooseSupervisorConfig.sse_distribute_id = _that.sse_distribute_id
       supervisor.SupervisorConfigShow(_that.chooseSupervisorConfig,value.supervisor_config, function (response) {
-            _that.execResult = response.Data
+            _that.execResult = _that.getExecResultText(response && response.Data)
             _that.supervisorStopRestartExplain(value)
             _that.searchList()
             _that.shellController.isRunning = false
@@ -346,7 +346,7 @@ export default {
       _that.prepareActionSse('config_list')
       _that.chooseSupervisorConfig.sse_distribute_id = _that.sse_distribute_id
       supervisor.SupervisorConfList(_that.chooseSupervisorConfig, function (response) {
-            const responseData = typeof response.Data === 'string' ? response.Data : ''
+            const responseData = _that.getExecResultText(response && response.Data)
             let tempList = responseData.split(`\n`).filter(item => item !== '')
             let confList = []
             for (let i in tempList) {
@@ -397,7 +397,7 @@ export default {
       _that.prepareActionSse('status_list')
       _that.chooseSupervisorConfig.sse_distribute_id = _that.sse_distribute_id
       supervisor.SupervisorStatusList(_that.chooseSupervisorConfig, function (response) {
-            _that.execResult = response.Data
+            _that.execResult = _that.getExecResultText(response && response.Data)
             _that.supervisorStatusExplain()
             _that.searchList()
             _that.shellController.isRunning = false
@@ -447,9 +447,11 @@ export default {
         this.useSortSupervisorList[j].showName = showName
       }
     },
-    //分析重启或者停止后的结果
+    getExecResultText: function (value) {
+      return typeof value === 'string' ? value : ''
+    },
     supervisorStopRestartExplain: function (param) {
-      let supervisorStatusList = this.execResult.split('\n')
+      let supervisorStatusList = this.getExecResultText(this.execResult).split('\n')
       for (let i in supervisorStatusList) {
         if (supervisorStatusList[i] === '') {
           continue
@@ -484,14 +486,12 @@ export default {
         }
       }
     },
-    //分析消费者结果
     supervisorStatusExplain: function () {
-      //重置某些参数
       for (let n in this.configMap) {
         this.configMap[n].processNum = 0
       }
       //分析结果
-      let supervisorStatusList = this.execResult.split('\n')
+      let supervisorStatusList = this.getExecResultText(this.execResult).split('\n')
       for (let i in supervisorStatusList) {
         if (supervisorStatusList[i] === '') {
           continue
