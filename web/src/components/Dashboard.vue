@@ -225,16 +225,18 @@ export default {
     const sseDistributeId = ref('') // SSE 分发 ID
     const isExecuting = ref(false) // 是否正在执行命令
     const currentOutputMessage = ref(null) // 当前输出消息的引用
-    // variable 会话状态（用于首页快捷命令多步交互）
-    const variableSession = ref({
+    // script 会话状态（用于首页脚本执行多步交互）
+    const scriptSession = ref({
       active: false,
-      variableId: 0,
-      variableName: '',
+      stage: 'idle',
+      scriptId: 0,
+      scriptName: '',
       runCmdId: 0,
       replaceList: {},
-      isRun: 0,
-      isFinish: 0,
       currentForm: null,
+      pendingInputLabel: '',
+      optionList: [],
+      canExecute: false,
     })
     const browserNotificationPermissionRequested = ref(false)
 
@@ -698,7 +700,19 @@ export default {
       return !!(firstCmd && firstCmd.dynamicChildren === 'historyList')
     }
 
+    const isScriptSessionMode = () => {
+      return !!(scriptSession.value?.active && scriptSession.value?.stage && scriptSession.value.stage !== 'idle')
+    }
+
     const refreshCommandDropdownVisibility = () => {
+      if (isScriptSessionMode()) {
+        const stage = normalizeCommandPart(scriptSession.value.stage)
+        showCommands.value = (
+          stage === 'selecting_script' ||
+          stage === 'waiting_option'
+        ) && (currentChildren.value.length > 0 || isLoadingDynamic.value)
+        return
+      }
       showCommands.value = isCommandModeByText(inputText.value) &&
         (currentChildren.value.length > 0 || isLoadingDynamic.value) &&
         !isCommandReadyToExecute()
@@ -815,12 +829,36 @@ export default {
 
     // 命令面包屑导航
     const commandBreadcrumb = computed(() => {
+      if (isScriptSessionMode()) {
+        const session = scriptSession.value || {}
+        return session.scriptName
+          ? `script > ${session.scriptName}`
+          : 'script'
+      }
       if (commandStack.value.length === 0) return ''
       return commandStack.value.map(c => c.name).join(' > ')
     })
 
     // 输入框提示
     const inputPlaceholder = computed(() => {
+      if (isScriptSessionMode()) {
+        const session = scriptSession.value || {}
+        if (session.stage === 'selecting_script') {
+          return '请选择要执行的脚本'
+        }
+        if (session.stage === 'waiting_input') {
+          return normalizeCommandPart(session.pendingInputLabel) || '请在命令框输入内容并回车'
+        }
+        if (session.stage === 'waiting_option') {
+          return normalizeCommandPart(session.pendingInputLabel) || '请在命令框选择一个选项'
+        }
+        if (session.stage === 'ready_execute') {
+          return '脚本已就绪，按回车执行'
+        }
+        if (session.stage === 'executing') {
+          return '脚本执行中，请稍候...'
+        }
+      }
       if (commandStack.value.length === 0) {
         return '输入 / 或直接输入命令（如 git），Tab 补全，Space 继续...'
       }
@@ -869,6 +907,18 @@ export default {
     }
 
     const filteredCommands = computed(() => {
+      if (isScriptSessionMode()) {
+        const sourceList = Array.isArray(currentChildren.value) ? currentChildren.value : []
+        const searchText = normalizeCommandPart(inputText.value).toLowerCase()
+        const sortedList = [...sourceList].sort(compareCommandByNaturalAsc)
+        if (!searchText) {
+          return sortedList
+        }
+        return sortedList.filter(cmd => {
+          const keywords = getCommandKeywords(cmd)
+          return keywords.some(keyword => keyword.includes(searchText))
+        })
+      }
       let commands = currentChildren.value.length > 0 
         ? currentChildren.value
         : (commandStack.value.length === 0 ? availableCommands.value : [])
@@ -1032,7 +1082,22 @@ export default {
       }
     })
 
-    const canExecuteCommand = computed(() => commandAnalysis.value.canExecute)
+    const canExecuteCommand = computed(() => {
+      if (isScriptSessionMode()) {
+        const stage = normalizeCommandPart(scriptSession.value.stage)
+        if (stage === 'selecting_script' || stage === 'waiting_option') {
+          return !!filteredCommands.value[activeCommandIndex.value]
+        }
+        if (stage === 'waiting_input') {
+          return !!normalizeCommandPart(inputText.value)
+        }
+        if (stage === 'ready_execute') {
+          return !!scriptSession.value.canExecute && !isExecuting.value
+        }
+        return false
+      }
+      return commandAnalysis.value.canExecute
+    })
 
     const highlightedInputHtml = computed(() => {
       return commandAnalysis.value.highlightedTokens.map(item => {
@@ -1057,26 +1122,28 @@ export default {
       return isActionReady(actionCmd, commandStack.value, currentInputValue.value)
     }
 
-    // 获取 variable 会话的下一步提示语（首页多步命令）
-    const getVariableSessionStepHint = () => {
-      const session = variableSession.value || {}
-      if (!session.active || !session.variableId) {
+    // 获取 script 会话的下一步提示语（首页多步命令）
+    const getScriptSessionStepHint = () => {
+      const session = scriptSession.value || {}
+      if (!session.active) {
         return ''
       }
-      if (Number(session.isFinish) === 1) {
-        return '下一步：输入 variable run <脚本名> 开始新会话'
+      if (session.stage === 'selecting_script') {
+        return '下一步：请选择要执行的脚本'
       }
-      if (Number(session.isRun) === 1) {
-        return '下一步：输入 variable exec 并回车执行'
+      if (session.stage === 'waiting_input') {
+        return `下一步：${normalizeCommandPart(session.pendingInputLabel) || '请在命令框输入内容并回车'}`
       }
-      const cmdType = normalizeCommandPart(session.currentForm?.CmdType)
-      if (['3', '17'].includes(cmdType)) {
-        return '下一步：输入 variable set <值> 并回车'
+      if (session.stage === 'waiting_option') {
+        return `下一步：${normalizeCommandPart(session.pendingInputLabel) || '请在命令框选择一个选项'}`
       }
-      if (['9', '12', '14'].includes(cmdType)) {
-        return '下一步：输入 variable choose <选项> 并回车'
+      if (session.stage === 'ready_execute') {
+        return '下一步：脚本已就绪，按回车执行'
       }
-      return '下一步：继续 variable 会话，或输入 variable cancel 取消'
+      if (session.stage === 'executing') {
+        return '下一步：脚本执行中，请稍候...'
+      }
+      return ''
     }
 
     // 计算首页命令行的下一步浅色提示文案
@@ -1085,9 +1152,9 @@ export default {
         return '正在执行命令，请稍候...'
       }
 
-      const variableHint = getVariableSessionStepHint()
-      if (variableHint) {
-        return variableHint
+      const scriptHint = getScriptSessionStepHint()
+      if (scriptHint) {
+        return scriptHint
       }
 
       if (commandStack.value.length === 0) {
@@ -1154,6 +1221,11 @@ export default {
 
     // 解析输入文本，获取当前命令层级
     const parseInput = () => {
+      if (isScriptSessionMode()) {
+        activeCommandIndex.value = 0
+        refreshCommandDropdownVisibility()
+        return
+      }
       if (!isCommandModeByText(inputText.value)) {
         commandStack.value = []
         currentChildren.value = []
@@ -1357,7 +1429,7 @@ export default {
         type !== 'supervisorProcessList' &&
         type !== 'linkEnvList' &&
         type !== 'linkAccountList' &&
-        type !== 'variableOptionList' &&
+        type !== 'scriptOptionList' &&
         type !== 'historyList' &&
         dynamicDataCache.value[type]
       ) {
@@ -1413,11 +1485,11 @@ export default {
         case 'linkAccountList':
           loadLinkAccountList()
           break
-        case 'variableScriptList':
-          loadVariableScriptList()
+        case 'scriptList':
+          loadScriptList()
           break
-        case 'variableOptionList':
-          loadVariableOptionList()
+        case 'scriptOptionList':
+          loadScriptOptionList()
           break
         case 'historyList':
           loadHistoryList()
@@ -1846,18 +1918,18 @@ export default {
       refreshCommandDropdownVisibility()
     }
 
-    // 加载 variable 脚本列表
-    const loadVariableScriptList = () => {
+    // 加载 script 脚本列表
+    const loadScriptList = () => {
       variableSet.VariableList((response) => {
         isLoadingDynamic.value = false
         if (!(response && response.ErrCode === 0)) {
-          dynamicDataCache.value['variableScriptList'] = []
+          dynamicDataCache.value['scriptList'] = []
           currentChildren.value = []
           refreshCommandDropdownVisibility()
           return
         }
-        const variableList = Array.isArray(response.Data?.variable_list) ? response.Data.variable_list : []
-        const list = variableList.map(item => ({
+        const scriptList = Array.isArray(response.Data?.variable_list) ? response.Data.variable_list : []
+        const list = scriptList.map(item => ({
           command: normalizeCommandPart(item?.name) || `脚本${item?.id || ''}`,
           name: normalizeCommandPart(item?.name) || `脚本${item?.id || ''}`,
           aliases: [String(item?.id || '')].filter(Boolean),
@@ -1865,20 +1937,22 @@ export default {
           id: item?.id,
           data: item
         }))
-        dynamicDataCache.value['variableScriptList'] = list
+        dynamicDataCache.value['scriptList'] = list
         currentChildren.value = list
-        reparseForPendingHistoryExecution('variableScriptList')
+        reparseForPendingHistoryExecution('scriptList')
         refreshCommandDropdownVisibility()
       })
     }
 
-    // 加载 variable 当前步骤可选项
-    const loadVariableOptionList = () => {
-      const currentForm = variableSession.value.currentForm
+    // 加载 script 当前步骤可选项
+    const loadScriptOptionList = () => {
+      const currentForm = scriptSession.value.currentForm
       const cmdType = normalizeCommandPart(currentForm?.CmdType)
-      const optionList = Array.isArray(currentForm?.Select?.OptionList) ? currentForm.Select.OptionList : []
+      const optionList = Array.isArray(scriptSession.value.optionList) && scriptSession.value.optionList.length > 0
+        ? scriptSession.value.optionList
+        : (Array.isArray(currentForm?.Select?.OptionList) ? currentForm.Select.OptionList : [])
       if (!['9', '12', '14'].includes(cmdType) || optionList.length === 0) {
-        dynamicDataCache.value['variableOptionList'] = []
+        dynamicDataCache.value['scriptOptionList'] = []
         currentChildren.value = []
         isLoadingDynamic.value = false
         refreshCommandDropdownVisibility()
@@ -1892,17 +1966,17 @@ export default {
           name: label,
           aliases: [optionValue].filter(Boolean),
           desc: optionValue ? `值: ${optionValue}` : '选项',
-          id: `${variableSession.value.runCmdId || 'cmd'}_${index}`,
+          id: `${scriptSession.value.runCmdId || 'cmd'}_${index}`,
           data: {
             optionValue,
             optionLabel: label
           }
         }
       })
-      dynamicDataCache.value['variableOptionList'] = list
+      dynamicDataCache.value['scriptOptionList'] = list
       currentChildren.value = list
       isLoadingDynamic.value = false
-      reparseForPendingHistoryExecution('variableOptionList')
+      reparseForPendingHistoryExecution('scriptOptionList')
       refreshCommandDropdownVisibility()
     }
 
@@ -1953,6 +2027,11 @@ export default {
           clearPendingHistoryExecution()
         }
       }
+      if (isScriptSessionMode()) {
+        activeCommandIndex.value = 0
+        refreshCommandDropdownVisibility()
+        return
+      }
       if (isCommandModeByText(inputText.value)) {
         parseInput()
         activeCommandIndex.value = 0
@@ -1968,6 +2047,10 @@ export default {
     const handleFocus = () => {
       if (suppressDropdownOnNextFocus.value) {
         suppressDropdownOnNextFocus.value = false
+        return
+      }
+      if (isScriptSessionMode()) {
+        refreshCommandDropdownVisibility()
         return
       }
       if (isCommandModeByText(inputText.value)) {
@@ -2074,6 +2157,16 @@ export default {
     const quickSelectTopCommand = (cmd) => {
       const commandText = normalizeCommandPart(cmd?.command)
       if (!commandText) return
+      if (commandText === 'script') {
+        inputText.value = '/script '
+        parseInput()
+        showCommands.value = true
+        activeCommandIndex.value = 0
+        nextTick(() => {
+          inputRef.value?.focus()
+        })
+        return
+      }
       inputText.value = `/${commandText} `
       parseInput()
       showCommands.value = true
@@ -2111,7 +2204,7 @@ export default {
 
     // 处理键盘事件
     const handleKeydown = (e) => {
-      if (e.key === 'Enter' && !canExecuteCommand.value) {
+      if (e.key === 'Enter' && !canExecuteCommand.value && !showCommands.value) {
         e.preventDefault()
         return
       }
@@ -2170,6 +2263,12 @@ export default {
           break
         case 'Enter':
           e.preventDefault()
+          if (showCommands.value && filteredCommands.value[activeCommandIndex.value]) {
+            if (isScriptSessionMode()) {
+              selectCommand(filteredCommands.value[activeCommandIndex.value])
+              return
+            }
+          }
           if (canExecuteCommand.value) {
             executeCommand()
           }
@@ -2218,6 +2317,28 @@ export default {
 
     // 选择命令
     const selectCommand = (cmd) => {
+      if (isScriptSessionMode()) {
+        if (!cmd) return
+        const selectedToken = normalizeCommandPart(cmd.insertText || cmd.command || cmd.name)
+        inputText.value = selectedToken
+        if (scriptSession.value.stage === 'selecting_script') {
+          executeAction(
+            { action: 'scriptRun', name: '运行脚本' },
+            {
+              rawCommand: `script ${selectedToken}`,
+              stackOverride: [
+                { action: 'scriptRun' },
+                { ...cmd, data: cmd.data || {} }
+              ]
+            }
+          )
+          return
+        }
+        if (scriptSession.value.stage === 'waiting_option') {
+          executeScriptSessionAction(normalizeCommandPart(cmd?.data?.optionValue) || normalizeCommandPart(cmd.command || cmd.name))
+          return
+        }
+      }
       // history 选择项：仅回填输入框，不改变命令栈
       if (cmd && cmd.insertOnly) {
         const historyText = normalizeCommandPart(cmd.insertText || cmd.command || cmd.name)
@@ -2308,6 +2429,20 @@ export default {
         currentChildren.value = []
         return
       }
+
+      if (parentCmd && parentCmd.action === 'scriptRun' && cmd.data) {
+        executeAction(
+          { action: 'scriptRun', name: '运行脚本' },
+          {
+            rawCommand: `script ${normalizeCommandPart(cmd.insertText || cmd.command || cmd.name)}`,
+            stackOverride: [
+              { action: 'scriptRun' },
+              { ...cmd, data: cmd.data || {} }
+            ]
+          }
+        )
+        return
+      }
       
       // 选择的是目标（项目/环境等），检查父命令是否有 action
       if (cmd.data && parentCmd && parentCmd.action) {
@@ -2342,6 +2477,29 @@ export default {
 
     // 执行命令
     const executeCommand = () => {
+      if (isScriptSessionMode()) {
+        if (scriptSession.value.stage === 'selecting_script' || scriptSession.value.stage === 'waiting_option') {
+          const selectedCmd = filteredCommands.value[activeCommandIndex.value]
+          if (selectedCmd) {
+            selectCommand(selectedCmd)
+          }
+          return
+        }
+        if (scriptSession.value.stage === 'waiting_input') {
+          executeScriptSessionAction(inputText.value || '')
+          return
+        }
+        executeAction(
+          { action: 'scriptSession', name: '执行脚本' },
+          {
+            inputValue: inputText.value || '',
+            rawCommand: normalizeCommandPart(scriptSession.value.scriptName)
+              ? `script ${scriptSession.value.scriptName}`
+              : 'script'
+          }
+        )
+        return
+      }
       if (!canExecuteCommand.value) return
 
       if (isCommandModeByText(inputText.value)) {
@@ -2434,7 +2592,9 @@ export default {
       // 清理输入状态
       inputText.value = ''
       showCommands.value = false
-      const currentStack = [...commandStack.value]
+      const currentStack = Array.isArray(options.stackOverride)
+        ? [...options.stackOverride]
+        : [...commandStack.value]
       commandStack.value = []
       currentChildren.value = []
       currentInputValue.value = ''
@@ -2523,23 +2683,11 @@ export default {
         case 'linkRun':
           executeLinkAction(currentStack)
           break
-        case 'variableRun':
-          executeVariableRunAction(currentStack)
+        case 'scriptRun':
+          executeScriptRunAction(currentStack)
           break
-        case 'variableSet':
-          executeVariableSessionAction('set', currentStack, options.inputValue || '')
-          break
-        case 'variableChoose':
-          executeVariableSessionAction('choose', currentStack, options.inputValue || '')
-          break
-        case 'variableExec':
-          executeVariableSessionAction('exec', currentStack, options.inputValue || '')
-          break
-        case 'variableReset':
-          executeVariableSessionAction('reset', currentStack, options.inputValue || '')
-          break
-        case 'variableCancel':
-          executeVariableSessionAction('cancel', currentStack, options.inputValue || '')
+        case 'scriptSession':
+          executeScriptSessionAction(currentInputValue.value || options.inputValue || '')
           break
         case 'gitViewConfig':
           appendOutputResult('已禁用页面跳转，请仅使用命令快捷操作。\n')
@@ -3084,155 +3232,185 @@ export default {
       })
     }
 
-    // 重置 variable 会话
-    const resetVariableSession = () => {
-      variableSession.value = {
+    // 重置 script 会话
+    const resetScriptSession = () => {
+      scriptSession.value = {
         active: false,
-        variableId: 0,
-        variableName: '',
+        stage: 'idle',
+        scriptId: 0,
+        scriptName: '',
         runCmdId: 0,
         replaceList: {},
-        isRun: 0,
-        isFinish: 0,
         currentForm: null,
+        pendingInputLabel: '',
+        optionList: [],
+        canExecute: false,
       }
-      dynamicDataCache.value['variableOptionList'] = []
+      dynamicDataCache.value['scriptOptionList'] = []
+      currentChildren.value = []
+      inputText.value = ''
+      refreshCommandDropdownVisibility()
     }
 
-    // 处理 variable API 返回，更新会话与下一步提示
-    const handleVariableFlowResponse = (response) => {
+    const enterScriptSelectionStage = () => {
+      scriptSession.value.active = true
+      scriptSession.value.stage = 'selecting_script'
+      scriptSession.value.scriptId = 0
+      scriptSession.value.scriptName = ''
+      scriptSession.value.runCmdId = 0
+      scriptSession.value.replaceList = {}
+      scriptSession.value.currentForm = null
+      scriptSession.value.pendingInputLabel = ''
+      scriptSession.value.optionList = []
+      scriptSession.value.canExecute = false
+      inputText.value = ''
+      loadScriptList()
+    }
+
+    // 处理 script API 返回，更新会话与下一步提示
+    const handleScriptFlowResponse = (response, options = {}) => {
+      const { fallbackToSelectingScript = false } = options
       if (!(response && response.ErrCode === 0)) {
         appendOutputResult(`执行失败: ${normalizeCommandPart(response?.ErrMsg) || '未知错误'}\n`)
+        if (fallbackToSelectingScript) {
+          enterScriptSelectionStage()
+        }
         finishExecution()
         return
       }
       const data = response.Data || {}
       const runStatus = Number(data.RunStatus)
       const currentForm = data.Form || null
+      const optionList = Array.isArray(currentForm?.Select?.OptionList) ? currentForm.Select.OptionList : []
       if (data.ReplaceList && typeof data.ReplaceList === 'object') {
-        variableSession.value.replaceList = data.ReplaceList
+        scriptSession.value.replaceList = data.ReplaceList
       }
       if (currentForm && currentForm.Id !== undefined && currentForm.Id !== null) {
-        variableSession.value.runCmdId = Number(currentForm.Id) || 0
+        scriptSession.value.runCmdId = Number(currentForm.Id) || 0
       }
-      variableSession.value.currentForm = currentForm
-      variableSession.value.active = true
-      variableSession.value.isFinish = runStatus === 2 ? 1 : 0
-      variableSession.value.isRun = runStatus === 1 ? 1 : 0
+      scriptSession.value.currentForm = currentForm
+      scriptSession.value.active = true
 
       if (runStatus === 0) {
         const cmdType = normalizeCommandPart(currentForm?.CmdType)
         if (['3', '17'].includes(cmdType)) {
-          const label = normalizeCommandPart(currentForm?.Input?.Label) || '输入参数'
-          appendOutputResult(`当前步骤: ${label}\n下一步: variable set <值>\n`)
+          const label = normalizeCommandPart(currentForm?.Input?.Label) || '请在命令框输入内容并回车'
+          scriptSession.value.stage = 'waiting_input'
+          scriptSession.value.pendingInputLabel = label
+          scriptSession.value.optionList = []
+          scriptSession.value.canExecute = false
+          currentChildren.value = []
+          showCommands.value = false
+          inputText.value = ''
+          appendOutputResult(`当前步骤: ${label}\n请在命令框输入内容并回车\n`)
         } else if (['9', '12', '14'].includes(cmdType)) {
-          const options = Array.isArray(currentForm?.Select?.OptionList) ? currentForm.Select.OptionList : []
-          const optionText = options.map(item => normalizeCommandPart(item?.Label) || normalizeCommandPart(item?.Value)).filter(Boolean).join('、')
-          appendOutputResult(`当前步骤: ${normalizeCommandPart(currentForm?.Select?.Label) || '选择选项'}\n可选项: ${optionText || '无'}\n下一步: variable choose <选项>\n`)
+          scriptSession.value.stage = 'waiting_option'
+          scriptSession.value.pendingInputLabel = normalizeCommandPart(currentForm?.Select?.Label) || '请在命令框选择一个选项'
+          scriptSession.value.optionList = optionList
+          scriptSession.value.canExecute = false
+          inputText.value = ''
+          loadScriptOptionList()
+          appendOutputResult(`当前步骤: ${scriptSession.value.pendingInputLabel}\n请在命令框选择一个选项\n`)
         } else {
-          appendOutputResult('脚本返回了未适配的步骤类型，请到 Variable 页面执行。\n')
+          appendOutputResult('脚本返回了未适配的步骤类型，请到脚本页面执行。\n')
+          enterScriptSelectionStage()
         }
         finishExecution()
         return
       }
       if (runStatus === 1) {
-        appendOutputResult('当前脚本已就绪，下一步: variable exec\n')
+        scriptSession.value.stage = 'ready_execute'
+        scriptSession.value.pendingInputLabel = ''
+        scriptSession.value.optionList = []
+        scriptSession.value.canExecute = true
+        currentChildren.value = []
+        showCommands.value = false
+        inputText.value = ''
+        appendOutputResult('脚本已就绪，按回车执行\n')
         finishExecution()
         return
       }
       if (runStatus === 2) {
-        appendOutputResult('执行完成\n')
-        resetVariableSession()
+        appendOutputResult('脚本执行完成\n')
+        resetScriptSession()
         finishExecution()
         return
       }
-      appendOutputResult('收到未知状态，已保留当前会话\n')
+      appendOutputResult('收到未知状态，已保留当前脚本会话\n')
       finishExecution()
     }
 
-    // 执行 variable run：选择脚本并启动
-    const executeVariableRunAction = (stack) => {
-      const actionIndex = stack.findIndex(item => item.action === 'variableRun')
+    // 执行 script run：选择脚本并启动
+    const executeScriptRunAction = (stack) => {
+      const actionIndex = stack.findIndex(item => item.action === 'scriptRun')
       const targetCmd = actionIndex >= 0 ? stack[actionIndex + 1] : null
       if (!(targetCmd && targetCmd.data && targetCmd.data.id)) {
         appendOutputResult('错误：请先选择要执行的脚本\n')
+        enterScriptSelectionStage()
         finishExecution()
         return
       }
-      resetVariableSession()
-      variableSession.value.active = true
-      variableSession.value.variableId = Number(targetCmd.data.id) || 0
-      variableSession.value.variableName = normalizeCommandPart(targetCmd.data.name) || normalizeCommandPart(targetCmd.name)
-      appendOutputResult(`已启动脚本会话: ${variableSession.value.variableName || variableSession.value.variableId}\n`)
+      resetScriptSession()
+      scriptSession.value.active = true
+      scriptSession.value.stage = 'executing'
+      scriptSession.value.scriptId = Number(targetCmd.data.id) || 0
+      scriptSession.value.scriptName = normalizeCommandPart(targetCmd.data.name) || normalizeCommandPart(targetCmd.name)
+      appendOutputResult(`已启动脚本: ${scriptSession.value.scriptName || scriptSession.value.scriptId}\n`)
       variableSet.VariableRun(
         sseDistributeId.value,
-        variableSession.value.variableId,
+        scriptSession.value.scriptId,
         0,
         0,
         JSON.stringify({}),
         (response) => {
-          handleVariableFlowResponse(response)
+          handleScriptFlowResponse(response, { fallbackToSelectingScript: true })
         }
       )
     }
 
-    // 执行 variable 会话动作：set/choose/exec/reset/cancel
-    const executeVariableSessionAction = (action, stack, inputValue) => {
-      const session = variableSession.value
-      if (action === 'reset') {
-        resetVariableSession()
-        appendOutputResult('已重置 variable 会话，可重新执行 variable run <脚本名>\n')
-        finishExecution()
-        return
-      }
-      if (action === 'cancel') {
-        resetVariableSession()
-        appendOutputResult('已取消 variable 会话\n')
-        finishExecution()
-        return
-      }
-      if (!session.active || !session.variableId) {
-        appendOutputResult('当前没有进行中的 variable 会话，请先执行 variable run <脚本名>\n')
-        finishExecution()
+    // 执行 script 会话动作：按当前阶段自动解释输入/选项/执行
+    const executeScriptSessionAction = (inputValue) => {
+      const session = scriptSession.value
+      if (!session.active || !session.scriptId) {
+        enterScriptSelectionStage()
         return
       }
 
       const currentForm = session.currentForm || {}
       const cmdType = normalizeCommandPart(currentForm?.CmdType)
 
-      if (action === 'set') {
+      if (session.stage === 'waiting_input') {
         if (!['3', '17'].includes(cmdType)) {
-          appendOutputResult('当前步骤不是输入步骤，请使用 variable choose <选项>\n')
+          appendOutputResult('当前步骤不是输入步骤，请在命令框选择一个选项\n')
           finishExecution()
           return
         }
         const editValue = normalizeCommandPart(inputValue)
         if (!editValue) {
-          appendOutputResult('请输入参数值，例如: variable set 123\n')
+          appendOutputResult('请在命令框输入内容并回车\n')
           finishExecution()
           return
         }
+        session.stage = 'executing'
         variableSet.VariableSet(
-          session.variableId,
+          session.scriptId,
           Number(currentForm.Id) || Number(session.runCmdId) || 0,
           JSON.stringify(session.replaceList || {}),
           editValue,
           (response) => {
-            handleVariableFlowResponse(response)
+            handleScriptFlowResponse(response)
           }
         )
         return
       }
 
-      if (action === 'choose') {
+      if (session.stage === 'waiting_option') {
         if (!['9', '12', '14'].includes(cmdType)) {
-          appendOutputResult('当前步骤不是选项步骤，请使用 variable set <值>\n')
+          appendOutputResult('当前步骤不是选项步骤，请在命令框输入内容并回车\n')
           finishExecution()
           return
         }
-        const actionIndex = stack.findIndex(item => item.action === 'variableChoose')
-        const targetCmd = actionIndex >= 0 ? stack[actionIndex + 1] : null
-        const selectedValue = normalizeCommandPart(targetCmd?.data?.optionValue) || normalizeCommandPart(inputValue)
+        const selectedValue = normalizeCommandPart(inputValue)
         const options = Array.isArray(currentForm?.Select?.OptionList) ? currentForm.Select.OptionList : []
         const matched = options.find(item => {
           const label = normalizeCommandPart(item?.Label)
@@ -3240,43 +3418,45 @@ export default {
           return selectedValue && (selectedValue === label || selectedValue === value)
         })
         if (!matched) {
-          const optionText = options.map(item => normalizeCommandPart(item?.Label) || normalizeCommandPart(item?.Value)).filter(Boolean).join('、')
-          appendOutputResult(`选项不存在，可选项: ${optionText || '无'}\n`)
+          appendOutputResult('请在命令框选择一个选项\n')
           finishExecution()
           return
         }
+        session.stage = 'executing'
         variableSet.VariableSet(
-          session.variableId,
+          session.scriptId,
           Number(currentForm.Id) || Number(session.runCmdId) || 0,
           JSON.stringify(session.replaceList || {}),
           normalizeCommandPart(matched?.Value),
           (response) => {
-            handleVariableFlowResponse(response)
+            handleScriptFlowResponse(response)
           }
         )
         return
       }
 
-      if (action === 'exec') {
-        if (Number(session.isRun) !== 1) {
-          appendOutputResult('当前步骤尚未就绪，不能最终执行\n')
-          finishExecution()
-          return
-        }
+      if (session.stage === 'ready_execute') {
+        session.stage = 'executing'
+        session.canExecute = false
         variableSet.VariableRun(
           sseDistributeId.value,
-          session.variableId,
+          session.scriptId,
           Number(session.runCmdId) || Number(currentForm.Id) || 0,
           1,
           JSON.stringify(session.replaceList || {}),
           (response) => {
-            handleVariableFlowResponse(response)
+            handleScriptFlowResponse(response)
           }
         )
         return
       }
 
-      appendOutputResult('未知 variable 操作\n')
+      if (session.stage === 'selecting_script') {
+        enterScriptSelectionStage()
+        return
+      }
+
+      appendOutputResult('脚本执行中，请稍候\n')
       finishExecution()
     }
 
