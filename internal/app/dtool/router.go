@@ -18,6 +18,7 @@ import (
 
 func InitRouter(tGin *p_gin.Gin) {
 	baseRouter(tGin)
+	toolRouter(tGin)
 	redisRouter(tGin)
 	phpRouter(tGin)
 	supervisorRouter(tGin)
@@ -84,6 +85,11 @@ func InitRouter(tGin *p_gin.Gin) {
 		})
 		return
 	})
+}
+
+func toolRouter(tGin *p_gin.Gin) {
+	tGin.GinPost(`/api/ToolPortProcessList`, controller.ToolPortProcessList)
+	tGin.GinPost(`/api/ToolPortProcessKill`, controller.ToolPortProcessKill)
 }
 
 // 基础接口
@@ -217,6 +223,9 @@ func setRouter(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/Set/AiModelList`, controller.SetAiModelList)
 	tGin.GinPost(`/api/Set/AiModelAdd`, controller.SetAiModelAdd)
 	tGin.GinPost(`/api/Set/AiModelDelete`, controller.SetAiModelDelete)
+	tGin.GinPost(`/api/Set/AiModelTest`, controller.SetAiModelTest)
+	tGin.GinPost(`/api/Set/MemoryConfigGet`, controller.SetMemoryConfigGet)
+	tGin.GinPost(`/api/Set/MemoryConfigSave`, controller.SetMemoryConfigSave)
 }
 
 func setStar(tGin *p_gin.Gin) {
@@ -235,6 +244,7 @@ func setMarkdown(tGin *p_gin.Gin) {
 }
 
 func setMemoryFragment(tGin *p_gin.Gin) {
+	tGin.GinPost(`/api/MemoryFragmentStatus`, controller.MemoryFragmentStatus)
 	tGin.GinPost(`/api/MemoryFragmentList`, controller.MemoryFragmentList)
 	tGin.GinPost(`/api/MemoryFragmentInfo`, controller.MemoryFragmentInfo)
 	tGin.GinPost(`/api/MemoryFragmentSave`, controller.MemoryFragmentSave)

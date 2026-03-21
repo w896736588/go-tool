@@ -17,7 +17,7 @@ import (
 
 // InfoCrawlChatByModel 使用模型发起一次 AI 请求。
 func (h *CSqlite) InfoCrawlChatByModel(modelID int, systemPrompt, userPrompt string) (string, map[string]any, error) {
-	modelInfo, baseURL, apiKey, err := h.infoCrawlBuildChatRequest(modelID)
+	modelInfo, requestURL, apiKey, err := h.infoCrawlBuildChatRequest(modelID)
 	if err != nil {
 		return ``, nil, err
 	}
@@ -35,7 +35,7 @@ func (h *CSqlite) InfoCrawlChatByModel(modelID int, systemPrompt, userPrompt str
 		},
 	}
 	bodyBytes, _ := json.Marshal(bodyMap)
-	request, err := http.NewRequest(http.MethodPost, baseURL, bytes.NewReader(bodyBytes))
+	request, err := http.NewRequest(http.MethodPost, requestURL, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return ``, nil, err
 	}
@@ -63,7 +63,7 @@ func (h *CSqlite) InfoCrawlChatByModel(modelID int, systemPrompt, userPrompt str
 
 // InfoCrawlChatStreamByModel 使用模型发起流式 AI 请求。
 func (h *CSqlite) InfoCrawlChatStreamByModel(modelID int, systemPrompt, userPrompt string, onChunk func(string)) (string, map[string]any, error) {
-	modelInfo, baseURL, apiKey, err := h.infoCrawlBuildChatRequest(modelID)
+	modelInfo, requestURL, apiKey, err := h.infoCrawlBuildChatRequest(modelID)
 	if err != nil {
 		return ``, nil, err
 	}
@@ -82,7 +82,7 @@ func (h *CSqlite) InfoCrawlChatStreamByModel(modelID int, systemPrompt, userProm
 		},
 	}
 	bodyBytes, _ := json.Marshal(bodyMap)
-	request, err := http.NewRequest(http.MethodPost, baseURL, bytes.NewReader(bodyBytes))
+	request, err := http.NewRequest(http.MethodPost, requestURL, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return ``, nil, err
 	}
@@ -184,14 +184,15 @@ func (h *CSqlite) infoCrawlBuildChatRequest(modelID int) (map[string]any, string
 	if baseURL == `` {
 		return nil, ``, ``, errors.New(`AI 服务商 base_url 不能为空`)
 	}
-	if !strings.Contains(baseURL, `/chat/completions`) {
-		baseURL = strings.TrimRight(baseURL, `/`) + `/v1/chat/completions`
+	requestURI := strings.TrimSpace(cast.ToString(modelInfo[`uri`]))
+	if requestURI == `` {
+		requestURI = `/v1/chat/completions`
 	}
 	apiKey := strings.TrimSpace(cast.ToString(modelInfo[`api_key`]))
 	if apiKey == `` {
 		return nil, ``, ``, errors.New(`AI 服务商 api_key 不能为空`)
 	}
-	return modelInfo, baseURL, apiKey, nil
+	return modelInfo, joinAIRequestURL(baseURL, requestURI), apiKey, nil
 }
 
 // infoCrawlExtractStreamContent 提取流式响应文本。
@@ -222,4 +223,16 @@ func (h *CSqlite) infoCrawlExtractStreamContent(payload string) string {
 		}
 	}
 	return ``
+}
+
+func joinAIRequestURL(baseURL, requestURI string) string {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), `/`)
+	requestURI = strings.TrimSpace(requestURI)
+	if requestURI == `` {
+		return baseURL
+	}
+	if !strings.HasPrefix(requestURI, `/`) {
+		requestURI = `/` + requestURI
+	}
+	return baseURL + requestURI
 }

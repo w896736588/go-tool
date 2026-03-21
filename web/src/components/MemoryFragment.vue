@@ -1,6 +1,6 @@
 <template>
   <div class="memory-page">
-    <aside class="memory-sidebar">
+    <aside v-if="memoryConfigured" class="memory-sidebar">
       <div class="sidebar-header">
         <div class="sidebar-title">片段列表</div>
         <el-button type="primary" plain @click="createFragment">
@@ -71,6 +71,17 @@
           </div>
         </button>
       </el-scrollbar>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-footer-row">
+          <span class="sidebar-footer-label">上一次 push 记忆库</span>
+          <span class="sidebar-footer-value">{{ lastPushTimeDesc }}</span>
+        </div>
+        <div v-if="lastPushError" class="sidebar-footer-row sidebar-footer-error">
+          <span class="sidebar-footer-label">失败原因</span>
+          <span class="sidebar-footer-value">{{ lastPushError }}</span>
+        </div>
+      </div>
     </aside>
 
     <section class="memory-main">
@@ -94,10 +105,12 @@
               :selected-tags="[]"
               :query="''"
               :loading="false"
+              :configured="memoryConfigured"
               @open-fragment="openFragment"
               @create-fragment="createFragment"
               @toggle-tag="toggleTag"
               @clear-filter="clearFilter"
+              @go-memory-setting="goMemorySetting"
             />
           </el-tab-pane>
 
@@ -240,6 +253,10 @@ export default {
       searchLoading: false,
       historyDialogVisible: false,
       historyFragmentId: 0,
+      memoryConfigured: true,
+      lastPushTimeDesc: '-',
+      lastPushError: '',
+      statusPollTimer: null,
     }
   },
   computed: {
@@ -260,24 +277,77 @@ export default {
     }
   },
   mounted() {
-    this.loadFragmentList()
-    this.loadTagList()
+    this.loadMemoryStatus()
+    this.startStatusPolling()
+  },
+  activated() {
+    this.startStatusPolling()
+    this.loadMemoryStatus()
+  },
+  deactivated() {
+    this.stopStatusPolling()
+  },
+  beforeUnmount() {
+    this.stopStatusPolling()
   },
   methods: {
+    startStatusPolling() {
+      if (this.statusPollTimer) {
+        return
+      }
+      this.statusPollTimer = window.setInterval(() => {
+        this.loadMemoryStatus(false)
+      }, 10000)
+    },
+    stopStatusPolling() {
+      if (!this.statusPollTimer) {
+        return
+      }
+      window.clearInterval(this.statusPollTimer)
+      this.statusPollTimer = null
+    },
+    loadMemoryStatus(needReloadLists = true) {
+      MemoryFragmentApi.MemoryFragmentStatus((response) => {
+        this.memoryConfigured = !!(response.Data && response.Data.configured)
+        this.lastPushTimeDesc = response.Data && response.Data.last_push_time_desc ? response.Data.last_push_time_desc : '-'
+        this.lastPushError = response.Data && response.Data.last_push_error ? response.Data.last_push_error : ''
+        if (!this.memoryConfigured) {
+          this.fragmentList = []
+          this.tagList = []
+          this.searchResults = []
+          this.fragmentTabs = []
+          this.activeTab = 'home'
+          return
+        }
+        if (needReloadLists) {
+          this.loadFragmentList()
+          this.loadTagList()
+        }
+      })
+    },
     // loadFragmentList 加载左侧片段列表。
     loadFragmentList() {
+      if (!this.memoryConfigured) {
+        return
+      }
       MemoryFragmentApi.MemoryFragmentList(0, (response) => {
         this.fragmentList = Array.isArray(response.Data) ? response.Data : []
       })
     },
     // loadTagList 加载标签筛选列表。
     loadTagList() {
+      if (!this.memoryConfigured) {
+        return
+      }
       MemoryFragmentApi.MemoryFragmentTagList((response) => {
         this.tagList = Array.isArray(response.Data) ? response.Data : []
       })
     },
     // runSearch 根据指定条件执行搜索。
     runSearch(query, mode, selectedTags) {
+      if (!this.memoryConfigured) {
+        return
+      }
       this.searchLoading = true
       MemoryFragmentApi.MemoryFragmentSearch(
         query,
@@ -508,6 +578,9 @@ export default {
     },
     // createFragment 创建一个新片段并自动打开。
     createFragment() {
+      if (!this.memoryConfigured) {
+        return
+      }
       MemoryFragmentApi.MemoryFragmentSave(0, '新记忆片段', '# 新记忆片段\n\n在这里开始记录。', [], (response) => {
         if (response.ErrCode !== 0 || !response.Data) {
           return
@@ -519,6 +592,9 @@ export default {
     },
     // openFragment 打开指定片段 tab。
     openFragment(fragmentId) {
+      if (!this.memoryConfigured) {
+        return
+      }
       const existingTab = this.fragmentTabs.find(item => item.fragment.id === fragmentId)
       if (existingTab) {
         this.activeTab = existingTab.name
@@ -627,6 +703,10 @@ export default {
     // handleTabChange 切换 tab 时保持页面状态一致。
     handleTabChange(tabPane) {
       this.activeTab = tabPane.paneName
+    },
+    goMemorySetting() {
+      localStorage.setItem('set_active_label', 'Memory')
+      this.$router.push('/Set')
     }
   }
 }
@@ -670,6 +750,38 @@ export default {
 
 .sidebar-scroll {
   flex: 1;
+}
+
+.sidebar-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px 12px;
+  border-top: 1px solid #ecece4;
+  background: #f9faf6;
+  font-size: 12px;
+  color: #6c7767;
+}
+
+.sidebar-footer-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.sidebar-footer-label {
+  flex-shrink: 0;
+}
+
+.sidebar-footer-value {
+  color: #4f5f49;
+  flex: 1;
+}
+
+.sidebar-footer-error .sidebar-footer-value {
+  color: #bb5b4a;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .sidebar-item {

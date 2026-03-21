@@ -404,7 +404,7 @@ export default {
     },
     // loadAiModelList 加载 AI 模型列表。
     loadAiModelList() {
-      AiSetApi.AiModelList({}, (response) => {
+      AiSetApi.AiModelList({ model_type: 'llm' }, (response) => {
         this.aiModelList = response && response.ErrCode === 0 && Array.isArray(response.Data)
           ? response.Data
           : []

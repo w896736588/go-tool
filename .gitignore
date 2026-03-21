@@ -7,9 +7,6 @@
 /playwright.lock
 build/
 /playwright.RunLock
-/internal/pkg/p_webkit/
-/internal/pkg/p_webkit/.links/
-/internal/pkg/p_node/
 /config/*/config.ini
 /upload
 /test/*

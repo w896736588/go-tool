@@ -798,6 +798,43 @@ func SetGlobalDelete(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, ``, nil)
 }
 
+func SetMemoryConfigGet(c *gin.Context) {
+	memoryDir, err := common.DbMain.GlobalValue(define.GlobalMemoryDir)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	memoryDBName, err := common.DbMain.GlobalValue(define.GlobalMemoryDBName)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`memory_dir`:     memoryDir,
+		`memory_db_name`: memoryDBName,
+	})
+}
+
+func SetMemoryConfigSave(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	memoryDir := strings.TrimSpace(cast.ToString(dataMap[`memory_dir`]))
+	memoryDBName := strings.TrimSpace(cast.ToString(dataMap[`memory_db_name`]))
+	if err := common.DbMain.SetGlobalValue(`记忆目录`, define.GlobalMemoryDir, memoryDir, `记忆专属库目录`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	if err := common.DbMain.SetGlobalValue(`记忆数据库名`, define.GlobalMemoryDBName, memoryDBName, `记忆专属库文件名`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	if err := business.LoadMemoryStore(); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
 func SetAccountList(c *gin.Context) {
 	allAccount, allAccountErr := common.DbMain.Client.QuickQuery(`tbl_account`, `*`, nil).All()
 	if allAccountErr != nil {

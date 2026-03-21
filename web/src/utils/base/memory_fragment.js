@@ -1,6 +1,11 @@
 import base from '../base'
 
 // MemoryFragmentList 查询记忆片段列表。
+function MemoryFragmentStatus(callBack) {
+  base.BasePost('/api/MemoryFragmentStatus', {}, callBack)
+}
+
+// MemoryFragmentList 查询记忆片段列表。
 function MemoryFragmentList(limit, callBack) {
   base.BasePost('/api/MemoryFragmentList', {
     limit: limit,
@@ -54,6 +59,7 @@ function MemoryFragmentSearch(query, mode, selectedTags, limit, callBack) {
 }
 
 export default {
+  MemoryFragmentStatus,
   MemoryFragmentList,
   MemoryFragmentInfo,
   MemoryFragmentSave,

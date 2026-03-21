@@ -291,6 +291,42 @@ func (h *CSqlite) AllGlobalMap() (map[string]any, error) {
 	return h.Client.QuickQuery(`tbl_global`, `*`, map[string]any{}).ToMap(`key`, `value`)
 }
 
+func (h *CSqlite) GlobalValue(key string) (string, error) {
+	one, err := h.Client.QuickQuery(`tbl_global`, `*`, map[string]any{
+		`key`: key,
+	}).Order(`id asc`).One()
+	if err != nil {
+		return ``, err
+	}
+	return cast.ToString(one[`value`]), nil
+}
+
+func (h *CSqlite) SetGlobalValue(name, key, value, desc string) error {
+	now := time.Now().Unix()
+	one, err := h.Client.QuickQuery(`tbl_global`, `*`, map[string]any{
+		`key`: key,
+	}).Order(`id asc`).One()
+	if err != nil {
+		return err
+	}
+	updateData := map[string]any{
+		`name`:        name,
+		`key`:         key,
+		`value`:       value,
+		`desc`:        desc,
+		`update_time`: now,
+	}
+	if cast.ToInt(one[`id`]) > 0 {
+		_, err = h.Client.QuickUpdate(`tbl_global`, map[string]any{
+			`id`: one[`id`],
+		}, updateData).Exec()
+		return err
+	}
+	updateData[`create_time`] = now
+	_, err = h.Client.QuickCreate(`tbl_global`, updateData).Exec()
+	return err
+}
+
 func (h *CSqlite) CmdList(variableId any) ([]map[string]any, error) {
 	return h.Client.QuickQuery(`tbl_variable_cmd`, `*`, map[string]any{
 		`variable_id`: variableId,

@@ -13,6 +13,7 @@ import (
 	"dev_tool/internal/pkg/p_gin"
 	"dev_tool/internal/pkg/p_shell"
 	"dev_tool/internal/pkg/p_sse"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -27,10 +28,95 @@ import (
 	"gitee.com/Sxiaobai/gs/v2/gsencrypt"
 	"gitee.com/Sxiaobai/gs/v2/gstool"
 	"github.com/gin-gonic/gin"
+	inicodec "github.com/go-viper/encoding/ini"
 	"github.com/spf13/viper"
 )
 
 const AppName = `dtool`
+
+func formatEnvSummary(env *define.Env) string {
+	if env == nil {
+		return "配置摘要\n  未加载配置"
+	}
+
+	var builder strings.Builder
+	builder.WriteString("配置摘要\n")
+
+	writeSummarySection(&builder, "基础", [][2]string{
+		{"应用", env.AppName},
+		{"根目录", env.RootPath},
+		{"配置文件", env.ConfigFile},
+		{"配置目录", env.ConfigPath},
+	})
+
+	dbName := ""
+	dbPath := ""
+	dbFullPath := ""
+	if env.DbConfig != nil {
+		dbName = env.DbConfig.DbName
+		dbPath = env.DbConfig.DbPath
+	}
+	if dbName != "" && dbPath != "" {
+		dbFullPath = filepath.Join(dbPath, dbName)
+	}
+	writeSummarySection(&builder, "数据库", [][2]string{
+		{"文件名", dbName},
+		{"目录", dbPath},
+		{"完整路径", dbFullPath},
+	})
+
+	webPath := ""
+	if env.WebConfig != nil {
+		webPath = env.WebConfig.WebPath
+	}
+	writeSummarySection(&builder, "Web", [][2]string{
+		{"目录", webPath},
+	})
+
+	writeSummarySection(&builder, "Playwright", [][2]string{
+		{"Node", env.NodePath},
+		{"Driver目录", env.WebkitDriverPath},
+		{"下载目录", env.WebkitDownloadPath},
+		{"数据目录", env.WebkitDataPath},
+	})
+
+	writeSummarySection(&builder, "Crawl4AI", [][2]string{
+		{"地址", env.Crawl4AIBaseURL},
+		{"数据目录", env.Crawl4AIDataPath},
+		{"脚本", env.Crawl4AIScriptPath},
+	})
+
+	writeSummarySection(&builder, "日志", [][2]string{
+		{"目录", env.LogPath},
+	})
+
+	return strings.TrimRight(builder.String(), "\n")
+}
+
+func writeSummarySection(builder *strings.Builder, title string, lines [][2]string) {
+	filtered := make([][2]string, 0, len(lines))
+	for _, line := range lines {
+		if line[1] == "" {
+			continue
+		}
+		filtered = append(filtered, line)
+	}
+	if len(filtered) == 0 {
+		return
+	}
+
+	builder.WriteString("  [")
+	builder.WriteString(title)
+	builder.WriteString("]\n")
+	for _, line := range filtered {
+		builder.WriteString("  ")
+		builder.WriteString(line[0])
+		builder.WriteString(": ")
+		builder.WriteString(line[1])
+		builder.WriteString("\n")
+	}
+	builder.WriteString("\n")
+}
 
 func InitBase(ConfigFile string) {
 	initComponent(AppName, ConfigFile)
@@ -64,7 +150,7 @@ func initComponent(appName, ConfigFile string) {
 	component.RedisClient.PingAll(common.GetCall())
 	component.MysqlClient = &p_db.TMysql{MysqlClientMap: make(map[string]*gsdb.GsMysql)}
 
-	component.ConfigViper = viper.New()
+	component.ConfigViper = newConfigViper()
 
 	wd, _ := os.Getwd()
 	var err error
@@ -76,6 +162,7 @@ func initComponent(appName, ConfigFile string) {
 	//初始化配置
 	InitEnv(appName, ConfigFile, component.ConfigViper)
 	component.EnvClient.DatabaseUpPath = filepath.Join(component.EnvClient.RootPath, `internal`, `app`, AppName, `database`)
+	component.EnvClient.MemoryDatabaseUpPath = filepath.Join(component.EnvClient.RootPath, `internal`, `app`, AppName, `database_memory`)
 	p_common.TBaseClient = &p_common.TBase{
 		StartMillUnix: gstool.TimeNowMilliInt64(),
 		LogPath:       component.EnvClient.LogPath,
@@ -88,6 +175,15 @@ func initComponent(appName, ConfigFile string) {
 	p_common.AesGcmClient = gcm
 	component.GsLog = gstool.NewSlog3(component.EnvClient.LogPath, component.EnvClient.AppName)
 	_ = component.GsLog.CleanOldLogs(2)
+}
+
+func newConfigViper() *viper.Viper {
+	codecRegistry := viper.NewCodecRegistry()
+	if err := codecRegistry.RegisterCodec("ini", inicodec.Codec{}); err != nil {
+		panic(err)
+	}
+
+	return viper.NewWithOptions(viper.WithCodecRegistry(codecRegistry))
 }
 
 func InitEnv(appName, ConfigFile string, viper *viper.Viper) {
@@ -186,7 +282,7 @@ func InitEnv(appName, ConfigFile string, viper *viper.Viper) {
 	_ = gstool.DirCreatePath(component.EnvClient.WebkitDownloadPath)
 	_ = gstool.DirCreatePath(component.EnvClient.Crawl4AIDataPath)
 	gstool.FmtPrintlnLogTime(`输出配置：`)
-	gstool.FmtPrintlnLogTime(`%s`, gstool.JsonFormat(component.EnvClient))
+	gstool.FmtPrintlnLogTime(`%s`, formatEnvSummary(component.EnvClient))
 }
 
 func initPlaywright() {
@@ -214,6 +310,9 @@ func initSqlite() {
 	common.DbMain = &common.CSqlite{Client: component.SqliteClient, Env: component.EnvClient}
 	business.DataBaseUp = business.NewTDataBaseUp()
 	business.DataBaseUp.Run()
+	if err = business.LoadMemoryStore(); err != nil {
+		panic(err.Error())
+	}
 	common.ShellOutClient.InitGroupConfigs()
 }
 
@@ -294,6 +393,9 @@ func Stop() {
 	task.RunAll()
 	if component.Crawl4AIClient != nil {
 		component.Crawl4AIClient.Stop()
+	}
+	if err := common.MemoryRuntime.SyncNow(); err != nil && !errors.Is(err, common.ErrMemoryNotConfigured) {
+		gstool.FmtPrintlnLogTime(`记忆库关闭前同步失败 %s`, err.Error())
 	}
 	_ = plw.PlaywrightClient.Log.Close()
 	_ = variable.VariableClient.Log.Close()
