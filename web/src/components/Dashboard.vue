@@ -75,6 +75,11 @@
                     class="result-line-check"
                     aria-hidden="true"
                   >✓</span>
+                  <span
+                    v-else-if="getResultLineState(line, lineIndex, getResultLines(msg.resultText)) === 'failed'"
+                    class="result-line-failed"
+                    aria-hidden="true"
+                  >✕</span>
                 </div>
               </div>
             </div>
@@ -823,6 +828,17 @@ export default {
       currentOutputMessage.value.commandStatus = status
     }
 
+    const applyResponseCommandStatus = (response) => {
+      if (!response || response.ErrCode === undefined || response.ErrCode === null) return
+      if (Number(response?.ErrCode) === 1) {
+        updateCurrentCommandStatus('failed')
+        return
+      }
+      if (Number(response?.ErrCode) === 0) {
+        updateCurrentCommandStatus('success')
+      }
+    }
+
     // 根据输出文本推断状态，并移除独立“执行成功/执行失败”行，避免重复展示
     const parseResultTextAndStatus = (rawText) => {
       let text = String(rawText || '')
@@ -892,13 +908,16 @@ export default {
       const sourceLines = Array.isArray(lines) ? lines : []
       const hasTerminalLineAfter = sourceLines.slice(lineIndex + 1).some(item => {
         const nextText = normalizeCommandPart(item)
-        return /完成$/.test(nextText) || /成功$/.test(nextText) || /失败$/.test(nextText) || /已打开/.test(nextText)
+        return /完成$/.test(nextText) || /成功$/.test(nextText) || /失败$/.test(nextText) || /^执行失败[:：]/.test(nextText) || /^错误[:：]/.test(nextText) || /已打开/.test(nextText)
       })
       if (/^正在/.test(text)) {
         if (hasTerminalLineAfter) {
           return 'default'
         }
         return 'running'
+      }
+      if (/^执行失败[:：]/.test(text) || /^错误[:：]/.test(text) || /失败$/.test(text)) {
+        return 'failed'
       }
       if (/完成$/.test(text) || /成功$/.test(text) || /已打开/.test(text)) {
         return 'success'
@@ -3047,7 +3066,7 @@ export default {
         if (!(response && response.ErrCode === 0)) {
           appendOutputResult(`错误: ${normalizeCommandPart(response?.ErrMsg) || '未知错误'}\n`)
           setTimeout(() => {
-            finishExecution()
+            finishExecution(response)
           }, 1500)
         } else {
           if (typeof renderer === 'function') {
@@ -3057,7 +3076,7 @@ export default {
           }
           // 结果详情统一在“执行过程(SSE)”里查看，上方只保留成功提示
           setTimeout(() => {
-            finishExecution()
+            finishExecution(response)
           }, 1500)
         }
       }
@@ -3156,7 +3175,7 @@ export default {
         }
         setTimeout(() => {
           sseDistribute.UnRegisterReceive(newSseDistributeId)
-          finishExecution()
+          finishExecution(response)
         }, 1200)
       }
 
@@ -3224,14 +3243,14 @@ export default {
       // 处理 HTTP 响应的回调
       const callback = (response) => {
         if (response.ErrCode !== 0) {
-          appendOutputSummary('执行失败')
+          appendOutputResult(`执行失败: ${normalizeCommandPart(response?.ErrMsg) || '未知错误'}\n`)
         } else {
           appendOutputSummary(gitActionDoneLabelMap[action] || '执行成功')
         }
         setTimeout(() => {
           // 给 SSE 尾包一点时间，避免过程/结果末尾被截断
           sseDistribute.UnRegisterReceive(newSseDistributeId)
-          finishExecution()
+          finishExecution(response)
         }, 1200)
       }
       
@@ -3360,7 +3379,7 @@ export default {
         } else {
           appendOutputResult(`执行失败: ${normalizeCommandPart(response?.ErrMsg) || '未知错误'}\n`)
         }
-        finishExecution()
+        finishExecution(response)
       })
     }
 
@@ -3407,7 +3426,7 @@ export default {
         if (fallbackToSelectingScript) {
           enterScriptSelectionStage()
         }
-        finishExecution()
+        finishExecution(response)
         return
       }
       const data = response.Data || {}
@@ -3653,7 +3672,8 @@ export default {
     }
     
     // 完成执行
-    const finishExecution = () => {
+    const finishExecution = (response = null) => {
+      applyResponseCommandStatus(response)
       const finishedMessage = currentOutputMessage.value
       // 若未显式写入成功/失败状态，执行结束后默认标记为成功
       if (finishedMessage && finishedMessage.commandStatus === 'running') {
@@ -4165,6 +4185,12 @@ export default {
 
 .result-line-check {
   color: #4f7d5f;
+  font-weight: 700;
+  flex: 0 0 auto;
+}
+
+.result-line-failed {
+  color: #d84a4a;
   font-weight: 700;
   flex: 0 0 auto;
 }
