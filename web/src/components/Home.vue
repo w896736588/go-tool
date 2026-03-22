@@ -42,7 +42,7 @@
         </el-menu-item>
         <el-menu-item v-if="checkModuleOpen('memory_fragment')" index="/MemoryFragment">
           <el-icon><Memo /></el-icon>
-          <span>记忆片段</span>
+          <span>知识片段</span>
         </el-menu-item>
         <!-- <el-menu-item v-if="checkModuleOpen('info_crawl')" index="/InfoCrawl">
           <el-icon><Connection /></el-icon>

@@ -30,7 +30,7 @@ func MemoryFragmentStatus(c *gin.Context) {
 	})
 }
 
-// MemoryFragmentList 查询记忆片段列表。
+// MemoryFragmentList 查询知识片段列表。
 func MemoryFragmentList(c *gin.Context) {
 	memoryDB, ok := memoryDBOrResponse(c)
 	if !ok {
@@ -46,7 +46,7 @@ func MemoryFragmentList(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, ``, list)
 }
 
-// MemoryFragmentInfo 查询单个记忆片段详情。
+// MemoryFragmentInfo 查询单个知识片段详情。
 func MemoryFragmentInfo(c *gin.Context) {
 	memoryDB, ok := memoryDBOrResponse(c)
 	if !ok {
@@ -66,7 +66,7 @@ func MemoryFragmentInfo(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, ``, info)
 }
 
-// MemoryFragmentSave 保存记忆片段。
+// MemoryFragmentSave 保存知识片段。
 func MemoryFragmentSave(c *gin.Context) {
 	memoryDB, ok := memoryDBOrResponse(c)
 	if !ok {
@@ -88,7 +88,7 @@ func MemoryFragmentSave(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, ``, info)
 }
 
-// MemoryFragmentDelete 软删除记忆片段。
+// MemoryFragmentDelete 软删除知识片段。
 func MemoryFragmentDelete(c *gin.Context) {
 	memoryDB, ok := memoryDBOrResponse(c)
 	if !ok {
@@ -109,7 +109,7 @@ func MemoryFragmentDelete(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, ``, nil)
 }
 
-// MemoryFragmentHistoryList 查询记忆片段历史记录。
+// MemoryFragmentHistoryList 查询知识片段历史记录。
 func MemoryFragmentHistoryList(c *gin.Context) {
 	memoryDB, ok := memoryDBOrResponse(c)
 	if !ok {
@@ -129,7 +129,7 @@ func MemoryFragmentHistoryList(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, ``, list)
 }
 
-// MemoryFragmentTagList 查询记忆片段标签列表。
+// MemoryFragmentTagList 查询知识片段标签列表。
 func MemoryFragmentTagList(c *gin.Context) {
 	memoryDB, ok := memoryDBOrResponse(c)
 	if !ok {
@@ -143,7 +143,7 @@ func MemoryFragmentTagList(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, ``, list)
 }
 
-// MemoryFragmentSearch 搜索记忆片段。
+// MemoryFragmentSearch 搜索知识片段。
 func MemoryFragmentSearch(c *gin.Context) {
 	memoryDB, ok := memoryDBOrResponse(c)
 	if !ok {

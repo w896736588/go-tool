@@ -581,7 +581,7 @@ export default {
       if (!this.memoryConfigured) {
         return
       }
-      MemoryFragmentApi.MemoryFragmentSave(0, '新记忆片段', '# 新记忆片段\n\n在这里开始记录。', [], (response) => {
+      MemoryFragmentApi.MemoryFragmentSave(0, '新知识片段', '# 新知识片段\n\n在这里开始记录。', [], (response) => {
         if (response.ErrCode !== 0 || !response.Data) {
           return
         }
