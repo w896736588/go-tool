@@ -2,11 +2,16 @@
   <div class="common-actions">
     <div class="common-actions__header">
       <div class="common-actions__title">常用操作</div>
-      <div class="common-actions__desc">可扩展动作面板，当前提供通用命令托管与端口占用查询。</div>
+      <div class="common-actions__desc">当前操作集中到右侧菜单，左侧展示对应面板。</div>
     </div>
 
-    <el-row :gutter="16">
-      <el-col :xs="24" :lg="16">
+    <el-tabs
+      v-model="activeActionTab"
+      tab-position="right"
+      class="common-actions-tabs"
+      stretch
+    >
+      <el-tab-pane label="命令托管" name="managed">
         <el-card shadow="hover" class="action-card action-card--primary">
           <template #header>
             <div class="action-card__header">
@@ -40,7 +45,7 @@
             <el-form-item label="启动命令">
               <el-input
                 v-model.trim="managedForm.command_line"
-                placeholder='例如 cc-connect --config C:\Users\94804\.cc-connect\config.toml'
+                placeholder="例如 cc-connect --config C:\\Users\\94804\\.cc-connect\\config.toml"
                 @change="handleManagedConfigChange"
               />
             </el-form-item>
@@ -97,7 +102,9 @@
             <div ref="managedLogContent" class="managed-log__content">{{ managedLogContent || '暂无日志输出' }}</div>
           </div>
         </el-card>
+      </el-tab-pane>
 
+      <el-tab-pane label="端口进程管理" name="port-process">
         <el-card shadow="hover" class="action-card">
           <template #header>
             <div class="action-card__header">
@@ -165,23 +172,8 @@
             </el-table-column>
           </el-table>
         </el-card>
-      </el-col>
-
-      <el-col :xs="24" :lg="8">
-        <el-card shadow="never" class="action-card action-card--muted">
-          <template #header>
-            <div class="action-card__title">后续可扩展</div>
-          </template>
-          <div class="placeholder-list">
-            <div class="placeholder-item">通用命令托管</div>
-            <div class="placeholder-item">按端口查占用</div>
-            <div class="placeholder-item">结束指定 PID</div>
-            <div class="placeholder-item">打开常用目录</div>
-            <div class="placeholder-item">清理临时文件</div>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
+      </el-tab-pane>
+    </el-tabs>
   </div>
 </template>
 
@@ -191,6 +183,7 @@ import { ElMessageBox } from 'element-plus'
 import toolsApi from '@/utils/base/tools'
 
 const managedProcessStorageKey = 'tools.common_actions.managed_process'
+const defaultActionTab = 'managed'
 const defaultManagedProcessForm = Object.freeze({
   name: 'cc-connect',
   key: 'cc-connect',
@@ -202,6 +195,7 @@ export default {
   name: 'CommonActions',
   data() {
     return {
+      activeActionTab: defaultActionTab,
       portInput: '',
       processList: [],
       queryLoading: false,
@@ -492,18 +486,47 @@ export default {
   font-size: 13px;
 }
 
+.common-actions-tabs {
+  min-height: 640px;
+}
+
+.common-actions-tabs :deep(.el-tabs__content) {
+  padding-right: 16px;
+}
+
+.common-actions-tabs :deep(.el-tabs__header.is-right) {
+  margin-left: 0;
+}
+
+.common-actions-tabs :deep(.el-tabs__nav-wrap.is-right) {
+  padding: 8px 0;
+}
+
+.common-actions-tabs :deep(.el-tabs__item.is-right) {
+  justify-content: flex-start;
+  min-width: 148px;
+  padding: 14px 18px;
+  color: #5d6f61;
+  border-radius: 12px;
+  margin-bottom: 8px;
+}
+
+.common-actions-tabs :deep(.el-tabs__item.is-right.is-active) {
+  color: #264a2e;
+  background: linear-gradient(180deg, #eef7ea 0%, #e1efdb 100%);
+}
+
+.common-actions-tabs :deep(.el-tabs__active-bar) {
+  background-color: #5a875f;
+}
+
 .action-card {
   border-radius: 12px;
-  margin-bottom: 16px;
 }
 
 .action-card--primary {
   border: 1px solid #d8e8d8;
   background: linear-gradient(180deg, #f8fcf6 0%, #f2f8ef 100%);
-}
-
-.action-card--muted {
-  background: linear-gradient(180deg, #fafcf8 0%, #f4f8f1 100%);
 }
 
 .action-card__header {
@@ -603,24 +626,23 @@ export default {
   color: #e7f4e8;
 }
 
-.placeholder-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.placeholder-item {
-  padding: 12px 14px;
-  border: 1px dashed #c8d7c5;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.72);
-  color: #55715a;
-}
-
 @media (max-width: 768px) {
+  .common-actions-tabs {
+    min-height: auto;
+  }
+
+  .common-actions-tabs :deep(.el-tabs__header.is-right) {
+    margin: 0 0 12px;
+  }
+
+  .common-actions-tabs :deep(.el-tabs__content) {
+    padding-right: 0;
+  }
+
   .action-card__buttons {
     justify-content: flex-start;
     margin-bottom: 8px;
+    flex-wrap: wrap;
   }
 }
 </style>
