@@ -133,7 +133,9 @@
       <!-- 输入区域 -->
       <div class="input-container">
         <div class="input-center-box" :style="{ width: inputWrapperWidth }">
-          <div class="input-wrapper">
+          <div class="input-main-row">
+            <div class="input-main-panel">
+              <div class="input-wrapper">
             <div class="input-overlay-box">
               <div
                 v-if="inputText"
@@ -152,11 +154,33 @@
                 @focus="handleFocus"
               />
             </div>
-            <button class="send-btn" :disabled="!canExecuteCommand" @click="executeCommand">
+            <button class="send-btn" :disabled="!canSubmitCommand" @click="executeCommand">
               <span class="send-icon">→</span>
             </button>
+              </div>
+              <div class="next-step-tip">{{ nextStepHint }}</div>
+            </div>
+            <div v-if="hasPendingCommandQueue" class="pending-command-panel">
+              <div class="pending-command-header">
+                <span class="pending-command-title">{{ pendingCommandTitle }}</span>
+                <span class="pending-command-count">{{ pendingCommandQueue.length }}</span>
+              </div>
+              <div class="pending-command-list">
+                <div
+                  v-for="item in pendingCommandQueue"
+                  :key="item.id"
+                  class="pending-command-item"
+                >
+                  <span class="pending-command-text" :title="item.rawCommand">{{ item.rawCommand }}</span>
+                  <button
+                    type="button"
+                    class="pending-command-delete"
+                    @click="removePendingCommand(item.id)"
+                  >移除</button>
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="next-step-tip">{{ nextStepHint }}</div>
         </div>
       </div>
     </div>
@@ -167,6 +191,7 @@
 import { ref, computed, nextTick, onMounted, onUnmounted, onActivated, watch } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import { ElMessageBox } from 'element-plus'
 import module from '@/utils/module'
 import commandConfig from '@/config/commandConfig.js'
 import ssh from '@/utils/base/ssh_set'
@@ -180,6 +205,7 @@ import store from '@/utils/base/store'
 import sseDistribute from '@/utils/base/sse_distribute'
 import { Throttle_string } from '@/utils/base/throttle_string'
 import * as linkRunSelection from '@/utils/link_run_selection.cjs'
+import pendingCommandQueueUtils from '@/utils/dashboard_command_queue.cjs'
 
 export default {
   name: 'DashboardPage',
@@ -192,6 +218,13 @@ export default {
       hasConfiguredLinkAccounts,
       isLinkRunSelectionComplete,
     } = linkRunSelection
+    const {
+      createPendingCommandItem,
+      enqueuePendingCommand,
+      dequeuePendingCommand,
+      removePendingCommandById,
+      consumeNextPendingCommand,
+    } = pendingCommandQueueUtils
 
     marked.setOptions({
       gfm: true,
@@ -232,6 +265,7 @@ export default {
       reparsedTypeMap: {},
       autoExecute: false
     })
+    const pendingCommandQueue = ref([])
     
     // SSE 相关状态
     const sseDistributeId = ref('') // SSE 分发 ID
@@ -252,12 +286,39 @@ export default {
     })
     const browserNotificationPermissionRequested = ref(false)
 
+    // 首页命令待执行队列展示文案。
+    // 执行中的新命令采用入队提示，避免误以为已立即执行。
+    // 当前命令既不可执行也不可入队时，沿用执行中的阻塞提示。
+
     // 开放的模块列表
     const openModules = module.GetOpenModuleList()
+
+    // 首页命令待执行队列展示文案。
+    // 执行中的新命令采用入队提示，避免误以为已立即执行。
+    // 当前命令既不可执行也不可入队时，沿用执行中的阻塞提示。
+
+    // Queue labels for pending home commands.
+    const QUEUE_PANEL_TITLE_TEXT = '待执行'
+    const QUEUE_ENQUEUED_MESSAGE_TEXT = '命令已加入待执行列表，当前任务完成后自动执行\n'
+    const QUEUE_RUNNING_MESSAGE_TEXT = '正在执行其他命令，请稍候...\n'
 
     const normalizeCommandPart = (value) => {
       if (value === null || value === undefined) return ''
       return String(value).trim()
+    }
+
+    // 获取当前待入队的完整命令文本，后续按该原始文本重新解析执行。
+    const getPendingCommandText = () => {
+      return String(inputText.value || '').trim()
+    }
+
+    // 入队后清理当前输入态，避免用户误以为该命令仍在编辑中。
+    const clearCommandInputState = () => {
+      inputText.value = ''
+      showCommands.value = false
+      commandStack.value = []
+      currentChildren.value = []
+      currentInputValue.value = ''
     }
 
     const getCommandKeywords = (cmd) => {
@@ -784,6 +845,89 @@ export default {
       return !!(scriptSession.value?.active && scriptSession.value?.stage && scriptSession.value.stage !== 'idle')
     }
 
+    // 判断当前命令是否允许进入待执行队列：仅普通命令链路支持排队。
+    const canQueueCurrentCommand = () => {
+      if (!isExecuting.value || isScriptSessionMode()) {
+        return false
+      }
+      const actionCmd = commandStack.value.find(item => item.action)
+      if (!actionCmd) {
+        return false
+      }
+      return isActionReady(actionCmd, commandStack.value, currentInputValue.value)
+    }
+
+    // 当前已有命令执行中时，将新命令排到待执行队列末尾。
+    const queuePendingCommand = () => {
+      const rawCommand = getPendingCommandText()
+      if (!rawCommand) {
+        return false
+      }
+      const pendingItem = createPendingCommandItem(rawCommand)
+      pendingCommandQueue.value = enqueuePendingCommand(pendingCommandQueue.value, pendingItem)
+      messages.value.push({
+        type: 'system',
+        content: QUEUE_ENQUEUED_MESSAGE_TEXT
+      })
+      clearCommandInputState()
+      scrollToBottom()
+      return true
+    }
+
+    // 删除指定待执行命令，保留其余排队顺序不变。
+    const removePendingCommand = async (pendingCommandId) => {
+      try {
+        await ElMessageBox.confirm('确认移除这条待执行命令吗？', '提示', {
+          confirmButtonText: '移除',
+          cancelButtonText: '取消',
+          type: 'warning',
+        })
+      } catch (error) {
+        return
+      }
+      pendingCommandQueue.value = removePendingCommandById(pendingCommandQueue.value, pendingCommandId)
+    }
+
+    // 当前命令结束后，自动从队列取下一条并走原有解析执行链路。
+    const executePendingCommandText = (rawCommand) => {
+      const pendingRawCommand = normalizeCommandPart(rawCommand)
+      if (!pendingRawCommand) {
+        return false
+      }
+      inputText.value = pendingRawCommand
+      if (isCommandModeByText(pendingRawCommand)) {
+        parseInput()
+      }
+      if (!canExecuteCommand.value) {
+        messages.value.push({
+          type: 'system',
+          content: `待执行命令自动执行失败：${pendingRawCommand}\n`
+        })
+        clearCommandInputState()
+        scrollToBottom()
+        return false
+      }
+      executeCommand()
+      return true
+    }
+
+    const triggerNextPendingCommand = () => {
+      if (isExecuting.value) {
+        return false
+      }
+      const dequeueResult = consumeNextPendingCommand(
+        pendingCommandQueue.value,
+        (rawCommand) => {
+          loadHistoryCommandForExecution(rawCommand, { autoExecute: true })
+        }
+      )
+      if (!dequeueResult.item) {
+        return false
+      }
+      pendingCommandQueue.value = dequeueResult.queue
+      return true
+    }
+
     const getDefaultActiveCommandIndex = (commandList = filteredCommands.value) => {
       const normalizedList = Array.isArray(commandList) ? commandList : []
       if (normalizedList.length === 0) return 0
@@ -1235,6 +1379,21 @@ export default {
         return false
       }
       return commandAnalysis.value.canExecute
+    })
+
+    const canSubmitCommand = computed(() => {
+      if (canExecuteCommand.value) {
+        return true
+      }
+      return canQueueCurrentCommand()
+    })
+
+    const hasPendingCommandQueue = computed(() => {
+      return pendingCommandQueue.value.length > 0
+    })
+
+    const pendingCommandTitle = computed(() => {
+      return QUEUE_PANEL_TITLE_TEXT
     })
 
     const highlightedInputHtml = computed(() => {
@@ -2355,6 +2514,11 @@ export default {
     // 处理键盘事件
     const handleKeydown = (e) => {
       if (e.key === 'Enter' && !canExecuteCommand.value && !showCommands.value) {
+        if (canQueueCurrentCommand()) {
+          e.preventDefault()
+          executeCommand()
+          return
+        }
         e.preventDefault()
         return
       }
@@ -2627,6 +2791,18 @@ export default {
 
     // 执行命令
     const executeCommand = () => {
+      if (isExecuting.value) {
+        if (canQueueCurrentCommand()) {
+          queuePendingCommand()
+        } else {
+          messages.value.push({
+            type: 'system',
+            content: QUEUE_RUNNING_MESSAGE_TEXT
+          })
+          scrollToBottom()
+        }
+        return
+      }
       if (isScriptSessionMode()) {
         if (scriptSession.value.stage === 'selecting_script' || scriptSession.value.stage === 'waiting_option') {
           const selectedCmd = filteredCommands.value[activeCommandIndex.value]
@@ -3683,6 +3859,7 @@ export default {
       currentOutputMessage.value = null
       notifyCommandFinished(finishedMessage)
       scrollToBottom()
+      triggerNextPendingCommand()
     }
 
     // 滚动到底部
@@ -3826,9 +4003,13 @@ export default {
       commandBreadcrumb,
       inputPlaceholder,
       canExecuteCommand,
+      canSubmitCommand,
       highlightedInputHtml,
       inputWrapperWidth,
       nextStepHint,
+      pendingCommandQueue,
+      pendingCommandTitle,
+      hasPendingCommandQueue,
       availableCommands,
       recentHistoryCommands,
       handleInput,
@@ -3838,6 +4019,7 @@ export default {
       quickSelectTopCommand,
       quickSelectHistoryCommand,
       removeHistoryCommand,
+      removePendingCommand,
       markKeepDropdownOnBlur,
       setCommandItemRef,
       selectCommand,
@@ -4466,6 +4648,17 @@ export default {
   transition: width 0.18s ease;
 }
 
+.input-main-row {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.input-main-panel {
+  flex: 1;
+  min-width: 0;
+}
+
 .input-wrapper {
   width: 100%;
   display: flex;
@@ -4489,6 +4682,93 @@ export default {
   font-size: 12px;
   line-height: 1.4;
   color: #9aa79a;
+}
+
+.pending-command-panel {
+  width: 260px;
+  flex-shrink: 0;
+  border: 1px solid #dfe8dc;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #fbfdf8 0%, #f4f9f1 100%);
+  padding: 10px;
+}
+
+.pending-command-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.pending-command-title {
+  font-size: 12px;
+  color: #4f6d4f;
+  font-weight: 600;
+}
+
+.pending-command-count {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #dfeeda;
+  color: #3f6f3f;
+  font-size: 12px;
+  line-height: 22px;
+  text-align: center;
+}
+
+.pending-command-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.pending-command-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #dbe7d6;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 8px 8px 8px 10px;
+}
+
+.pending-command-text {
+  flex: 1;
+  min-width: 0;
+  color: #486248;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pending-command-delete {
+  min-width: 52px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid #f2b8b5;
+  border-radius: 999px;
+  background: #fff5f4;
+  color: #c45656;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.pending-command-delete:hover {
+  background: #fdeaea;
+  border-color: #e58f8f;
+  color: #b43c3c;
 }
 
 .input-overlay-box {
@@ -4587,6 +4867,16 @@ export default {
 }
 
 /* 滚动条样式 */
+@media (max-width: 900px) {
+  .input-main-row {
+    flex-direction: column;
+  }
+
+  .pending-command-panel {
+    width: 100%;
+  }
+}
+
 .message-list::-webkit-scrollbar,
 .command-dropdown::-webkit-scrollbar {
   width: 6px;

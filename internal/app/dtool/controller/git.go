@@ -609,6 +609,10 @@ const (
 	gitOperationQuickCreate     = `quick_create_branch`
 	gitRemoteBranchTimeout      = 10 * time.Second
 	gitRemoteBranchRetryTimeout = 3 * time.Second
+	// gitBranchUsageUsedDisplay 表示检测到当前分支有人使用。
+	gitBranchUsageUsedDisplay = "有人使用"
+	// gitBranchUsageNoneDisplay 统一表示无人使用，或本地分支不存在。
+	gitBranchUsageNoneDisplay = "-"
 )
 
 // getGitOperationTimeout 根据Git操作类型返回对应的命令超时时间
@@ -927,11 +931,19 @@ func normalizeRemoteBranchDisplay(value string) string {
 // queryBranchUsageInfo 先检查远程分支，再回退到最近 2 小时工作区文件属主。
 // queryBranchUsageInfo checks remote branch first, then falls back to recent workspace owners within 2 hours.
 func queryBranchUsageInfo(sshClient *gsssh.SshTerminal, codePath string, branchInfo *GitCurrentBranchInfo, timeout time.Duration) GitBranchUsageInfo {
+	// 关键判断 / Key decision: 本地分支不存在时，直接视为无人使用并返回统一占位符。
+	if strings.TrimSpace(branchInfo.LocalBranch) == "" {
+		return GitBranchUsageInfo{
+			UsageDisplay: gitBranchUsageNoneDisplay,
+			Owners:       []string{},
+		}
+	}
+
 	remoteBranch := normalizeRemoteBranchDisplay(branchInfo.RemoteBranch)
 	// 关键判断 / Key decision: 只要存在远程分支，就直接标记为“有人使用”。
 	if remoteBranch != "" && remoteBranch != "N/A" {
 		return GitBranchUsageInfo{
-			UsageDisplay: "有人使用",
+			UsageDisplay: gitBranchUsageUsedDisplay,
 			Owners:       []string{},
 		}
 	}
@@ -939,12 +951,12 @@ func queryBranchUsageInfo(sshClient *gsssh.SshTerminal, codePath string, branchI
 	owners, err := queryRecentWorkspaceOwners(sshClient, codePath, timeout)
 	if err != nil {
 		return GitBranchUsageInfo{
-			UsageDisplay: "无人使用",
+			UsageDisplay: gitBranchUsageNoneDisplay,
 			Owners:       []string{},
 		}
 	}
 	return GitBranchUsageInfo{
-		UsageDisplay: buildBranchUsageDisplay(remoteBranch, owners...),
+		UsageDisplay: buildBranchUsageDisplay(branchInfo.LocalBranch, remoteBranch, owners...),
 		Owners:       owners,
 	}
 }
@@ -1056,14 +1068,18 @@ func parseRecentUsageOwners(output string, now time.Time, recentWindow time.Dura
 
 // buildBranchUsageDisplay 生成“是否有人使用”列的显示内容。
 // buildBranchUsageDisplay builds the display text for the usage column.
-func buildBranchUsageDisplay(remoteBranch string, owners ...string) string {
+func buildBranchUsageDisplay(localBranch, remoteBranch string, owners ...string) string {
+	// 关键判断 / Key decision: 没有本地分支时，统一展示为 "-"。
+	if strings.TrimSpace(localBranch) == "" {
+		return gitBranchUsageNoneDisplay
+	}
 	if normalized := normalizeRemoteBranchDisplay(remoteBranch); normalized != "" && normalized != "N/A" {
-		return "有人使用"
+		return gitBranchUsageUsedDisplay
 	}
 	if len(owners) > 0 {
 		return strings.Join(owners, ", ")
 	}
-	return "无人使用"
+	return gitBranchUsageNoneDisplay
 }
 
 // appendMarkdownTableUsageCell 为现有 Markdown 表格行追加“是否有人使用”列。

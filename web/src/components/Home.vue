@@ -436,6 +436,7 @@ import module from "@/utils/module"
 import baseApi from '@/utils/base/base_api'
 import sshSet from '@/utils/base/ssh_set'
 import homeTaskApi from '@/utils/base/home_task'
+const { shouldBlockHomeDashboardPageSwitch } = require('@/utils/home_dashboard_wheel.cjs')
 import Tools from "@/components/Tools.vue";
 import Markdown from '@/components/Markdown.vue'
 import GitActionButton from "@/components/base/GitActionButton.vue";
@@ -704,6 +705,10 @@ export default {
       }
       const deltaY = Number(event.deltaY || 0)
       if (Math.abs(deltaY) < HOME_DASHBOARD_WHEEL_SWITCH_THRESHOLD) {
+        return
+      }
+      // 内部滚动容器或非可滚动空白区域都不触发整屏切换，避免首页误翻页。
+      if (shouldBlockHomeDashboardPageSwitch(event.target, deltaY, event.currentTarget)) {
         return
       }
       if (this.homeDashboardPageIndex === HOME_DASHBOARD_PAGE_COMMAND) {

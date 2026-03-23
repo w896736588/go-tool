@@ -36,22 +36,29 @@ func TestParseRecentUsageOwners(t *testing.T) {
 }
 
 func TestBuildBranchUsageDisplay_RemoteBranchWins(t *testing.T) {
-	got := buildBranchUsageDisplay("feature/demo")
-	if got != "有人使用" {
-		t.Fatalf("display = %q, want %q", got, "有人使用")
+	got := buildBranchUsageDisplay("feature/local", "feature/demo")
+	if got != gitBranchUsageUsedDisplay {
+		t.Fatalf("display = %q, want %q", got, gitBranchUsageUsedDisplay)
 	}
 }
 
 func TestBuildBranchUsageDisplay_OwnerFallback(t *testing.T) {
-	got := buildBranchUsageDisplay("", "alice", "bob")
+	got := buildBranchUsageDisplay("feature/local", "", "alice", "bob")
 	if got != "alice, bob" {
 		t.Fatalf("display = %q, want %q", got, "alice, bob")
 	}
 }
 
 func TestBuildBranchUsageDisplay_NoUsage(t *testing.T) {
-	got := buildBranchUsageDisplay("")
-	if got != "无人使用" {
-		t.Fatalf("display = %q, want %q", got, "无人使用")
+	got := buildBranchUsageDisplay("feature/local", "")
+	if got != gitBranchUsageNoneDisplay {
+		t.Fatalf("display = %q, want %q", got, gitBranchUsageNoneDisplay)
+	}
+}
+
+func TestBuildBranchUsageDisplay_LocalBranchMissing(t *testing.T) {
+	got := buildBranchUsageDisplay("", "feature/demo", "alice")
+	if got != gitBranchUsageNoneDisplay {
+		t.Fatalf("display = %q, want %q", got, gitBranchUsageNoneDisplay)
 	}
 }
