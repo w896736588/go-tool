@@ -55,18 +55,18 @@
                   <el-option label="全部匹配" value="all" />
                   <el-option label="仅首个" value="first" />
                 </el-select>
-                <el-button class="action-btn action-btn--danger" size="small" native-type="button" @click="removeLocatorRow(index)">删除</el-button>
+                <GitActionButton compact size="small" variant="danger" native-type="button" @click="removeLocatorRow(index)">删除</GitActionButton>
               </div>
-              <el-button class="action-btn action-btn--primary" size="small" native-type="button" @click="addLocatorRow">新增定位</el-button>
+              <GitActionButton compact size="small" native-type="button" @click="addLocatorRow">新增定位</GitActionButton>
             </template>
           </template>
 
           <template v-else>
             <div v-for="(item, index) in formMeta.locator_list" :key="item.uid" class="list-editor__row">
               <el-input v-model="item.value" :placeholder="fieldPlaceholder('locator')" />
-              <el-button class="action-btn action-btn--danger" size="small" native-type="button" @click="removeLocatorRow(index)">删除</el-button>
+              <GitActionButton compact size="small" variant="danger" native-type="button" @click="removeLocatorRow(index)">删除</GitActionButton>
             </div>
-            <el-button class="action-btn action-btn--primary" size="small" native-type="button" @click="addLocatorRow">新增定位</el-button>
+            <GitActionButton compact size="small" native-type="button" @click="addLocatorRow">新增定位</GitActionButton>
           </template>
         </div>
       </el-form-item>
@@ -139,9 +139,9 @@
           <div v-for="(item, index) in formMeta.register_response_urls" :key="item.uid" class="response-url-row">
             <el-input v-model="item.url" placeholder="等待地址" />
             <el-input-number v-model="item.wait_second" :min="1" />
-            <el-button class="action-btn action-btn--danger" size="small" native-type="button" @click="removeRegisterResponseUrl(index)">删除</el-button>
+            <GitActionButton compact size="small" variant="danger" native-type="button" @click="removeRegisterResponseUrl(index)">删除</GitActionButton>
           </div>
-          <el-button class="action-btn action-btn--primary" size="small" native-type="button" @click="addRegisterResponseUrl">新增等待地址</el-button>
+          <GitActionButton compact size="small" native-type="button" @click="addRegisterResponseUrl">新增等待地址</GitActionButton>
         </div>
       </el-form-item>
     </template>
@@ -155,9 +155,9 @@
               <el-option label="存在返回 true" :value="true" />
               <el-option label="存在返回 false" :value="false" />
             </el-select>
-            <el-button class="action-btn action-btn--danger" size="small" native-type="button" @click="removeBoolResultRule(index)">删除</el-button>
+            <GitActionButton compact size="small" variant="danger" native-type="button" @click="removeBoolResultRule(index)">删除</GitActionButton>
           </div>
-          <el-button class="action-btn action-btn--primary" size="small" native-type="button" @click="addBoolResultRule">新增定位</el-button>
+          <GitActionButton compact size="small" native-type="button" @click="addBoolResultRule">新增定位</GitActionButton>
         </div>
       </el-form-item>
     </template>
@@ -218,6 +218,8 @@
 </template>
 
 <script>
+import GitActionButton from '@/components/base/GitActionButton.vue'
+
 const createDefaultItem = () => ({
   id: 0,
   name: '',
@@ -307,6 +309,9 @@ function createBoolResultRule() {
 
 export default {
   name: 'ProcessItemEditor',
+  components: {
+    GitActionButton,
+  },
   props: {
     modelValue: {
       type: Object,
@@ -723,37 +728,6 @@ export default {
 </script>
 
 <style scoped>
-/* 统一局部操作按钮风格，避免弹窗内出现白底黑字按钮 / Keep local action buttons aligned with page visual style. */
-.action-btn {
-  border-radius: 999px;
-  font-weight: 600;
-  transition: all 0.2s ease;
-}
-
-.action-btn--primary {
-  color: #2f6b45;
-  border-color: #b8d7c1;
-  background: linear-gradient(180deg, #f4fbf6 0%, #e8f5ec 100%);
-}
-
-.action-btn--primary:hover {
-  color: #255639;
-  border-color: #97c2a5;
-  background: linear-gradient(180deg, #edf8f0 0%, #dceee2 100%);
-}
-
-.action-btn--danger {
-  color: #b44343;
-  border-color: #efc4c4;
-  background: #fff4f4;
-}
-
-.action-btn--danger:hover {
-  color: #963737;
-  border-color: #e5a7a7;
-  background: #feeaea;
-}
-
 .list-editor {
   width: 100%;
 }

@@ -10,7 +10,7 @@
         />
       </div>
       <div class="add-btn">
-        <el-button class="process-action-btn process-action-btn--primary" @click="createNewProcess">新增执行逻辑</el-button>&nbsp;
+        <GitActionButton @click="createNewProcess">新增执行逻辑</GitActionButton>&nbsp;
         <el-link type="primary" @click="changeToLinks">切换到执行</el-link>
       </div>
       <div class="process-list">
@@ -28,11 +28,12 @@
                 @confirm="deleteProcess(process.id)"
             >
               <template #reference>
-                <el-button
-                    class="process-action-btn process-action-btn--danger process-action-btn--compact"
+                <GitActionButton
+                    compact
+                    variant="danger"
                     @click.stop
                 >删除
-                </el-button>
+                </GitActionButton>
               </template>
             </el-popconfirm>
           </div>
@@ -45,12 +46,12 @@
         <div class="canvas-header">
           <h2>{{ state.activeProcess.name }}</h2>
           <div class="header-actions">
-            <el-button class="process-action-btn process-action-btn--ghost" @click="editProcessName">编辑</el-button>
-            <el-button class="process-action-btn process-action-btn--primary" @click="addNewItem">新增执行逻辑子项</el-button>
-            <el-button @click="resetView">重置视图</el-button>
-            <el-button @click="fitView">适应画布</el-button>
-            <el-button @click="zoomIn">放大</el-button>
-            <el-button @click="zoomOut">缩小</el-button>
+            <GitActionButton variant="info" @click="editProcessName">编辑</GitActionButton>
+            <GitActionButton @click="addNewItem">新增执行逻辑子项</GitActionButton>
+            <GitActionButton variant="info" @click="resetView">重置视图</GitActionButton>
+            <GitActionButton variant="info" @click="fitView">适应画布</GitActionButton>
+            <GitActionButton variant="info" @click="zoomIn">放大</GitActionButton>
+            <GitActionButton variant="info" @click="zoomOut">缩小</GitActionButton>
           </div>
         </div>
 
@@ -82,24 +83,26 @@
                     <span class="node-type">{{ nodeProps.data.item.type }}</span>
                   </div>
                   <div class="node-actions">
-                    <el-button
-                        class="process-action-btn process-action-btn--ghost process-action-btn--compact"
+                    <GitActionButton
+                        compact
+                        variant="info"
                         size="small"
                         @click.stop="editItem(nodeProps.data.item)"
                     >
                       编辑
-                    </el-button>
+                    </GitActionButton>
                     <el-popconfirm
                         title="确定删除此执行逻辑子项吗？"
                         @confirm="deleteItem(nodeProps.data.item.id)"
                     >
                       <template #reference>
-                        <el-button
-                            class="process-action-btn process-action-btn--danger process-action-btn--compact"
+                        <GitActionButton
+                            compact
+                            variant="danger"
                             size="small"
                             @click.stop
                         >删除
-                        </el-button>
+                        </GitActionButton>
                       </template>
                     </el-popconfirm>
                   </div>
@@ -163,8 +166,8 @@
     <el-dialog v-model="state.dialogProcessName" title="编辑执行逻辑名称" width="30%">
       <el-input v-model="state.editingProcessName"/>
       <template #footer>
-        <el-button @click="state.dialogProcessName = false">取消</el-button>
-        <el-button type="primary" @click="saveProcessName">保存</el-button>
+        <GitActionButton @click="state.dialogProcessName = false">取消</GitActionButton>
+        <GitActionButton @click="saveProcessName">保存</GitActionButton>
       </template>
     </el-dialog>
 
@@ -172,8 +175,8 @@
     <el-dialog v-model="state.dialogProcessItem" :title="state.editingItem.id ? '编辑执行逻辑子项' : '新增执行逻辑子项'" width="70%">
       <ProcessItemEditor v-model="state.editingItem" :process-item-options="state.processItems" />
       <template #footer>
-        <el-button @click="state.dialogProcessItem = false">取消</el-button>
-        <el-button type="primary" @click="saveProcessItem">保存</el-button>
+        <GitActionButton @click="state.dialogProcessItem = false">取消</GitActionButton>
+        <GitActionButton @click="saveProcessItem">保存</GitActionButton>
       </template>
     </el-dialog>
   </div>
@@ -190,6 +193,7 @@ import '@vue-flow/controls/dist/style.css'
 import { ElMessageBox } from 'element-plus'
 import API from '@/utils/base/smart_link_proces'
 import ProcessItemEditor from '@/components/smart_link/ProcessItemEditor.vue'
+import GitActionButton from '@/components/base/GitActionButton.vue'
 
 export default {
   components: {
@@ -198,6 +202,7 @@ export default {
     Controls,
     Handle,
     ProcessItemEditor,
+    GitActionButton,
   },
   setup(props, { emit }) {
     const state = reactive({
@@ -574,52 +579,6 @@ export default {
 
 .process-item.active {
   background-color: #e6f7ff;
-}
-
-.process-action-btn {
-  border-radius: 999px;
-  font-weight: 600;
-  transition: all 0.2s ease;
-}
-
-.process-action-btn--compact {
-  padding: 6px 12px;
-}
-
-.process-action-btn--primary {
-  color: #2f6b45;
-  border-color: #b8d7c1;
-  background: linear-gradient(180deg, #f4fbf6 0%, #e8f5ec 100%);
-}
-
-.process-action-btn--primary:hover {
-  color: #255639;
-  border-color: #97c2a5;
-  background: linear-gradient(180deg, #edf8f0 0%, #dceee2 100%);
-}
-
-.process-action-btn--ghost {
-  color: #315f8d;
-  border-color: #c9d9eb;
-  background: #f3f8fd;
-}
-
-.process-action-btn--ghost:hover {
-  color: #274c72;
-  border-color: #adc6df;
-  background: #e8f1fb;
-}
-
-.process-action-btn--danger {
-  color: #b44343;
-  border-color: #efc4c4;
-  background: #fff4f4;
-}
-
-.process-action-btn--danger:hover {
-  color: #963737;
-  border-color: #e5a7a7;
-  background: #feeaea;
 }
 
 .right-content {

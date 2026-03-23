@@ -16,24 +16,24 @@
   <div class="link-run-page">
     <div class="link-run-toolbar">
       <el-text class="mx-1">已打开Page({{ openPageNum }})</el-text>&nbsp;
-      <el-button class="toolbar-btn" type="primary" plain @click="showCreateDialog">
+      <GitActionButton @click="showCreateDialog">
         <el-icon><Plus /></el-icon>创建
-      </el-button>
-      <el-button class="toolbar-btn" type="primary" plain @click="install">
+      </GitActionButton>
+      <GitActionButton @click="install">
         <el-icon><Tools /></el-icon>安装核心
-      </el-button>
-      <el-button class="toolbar-btn" type="primary" plain @click="recycle">
+      </GitActionButton>
+      <GitActionButton variant="warning" @click="recycle">
         <el-icon><Refresh /></el-icon>释放内存
-      </el-button>
-      <el-button class="toolbar-btn" type="primary" plain @click="downloadPath">
+      </GitActionButton>
+      <GitActionButton variant="info" @click="downloadPath">
         <el-icon><Download /></el-icon>下载目录
-      </el-button>
-      <el-button class="toolbar-btn" type="primary" plain @click="drawerVisibleMarkdown = true">
+      </GitActionButton>
+      <GitActionButton variant="info" @click="drawerVisibleMarkdown = true">
         <el-icon><QuestionFilled /></el-icon>帮助文档
-      </el-button>
+      </GitActionButton>
 <!--      <el-button type="primary" @click="showDialogRunLog">运行日志({{shellController.sshResult.length}})</el-button>&nbsp;-->
-      &nbsp;<el-button class="toolbar-btn" type="primary" plain @click="changeToProcess"><el-icon><EditPen /></el-icon>切换到编辑执行逻辑</el-button>&nbsp;
-      <el-button class="toolbar-btn" type="primary" plain @click="changeToFlow"><el-icon><Share /></el-icon>切换到流程图</el-button>&nbsp;
+      &nbsp;<GitActionButton variant="info" @click="changeToProcess"><el-icon><EditPen /></el-icon>切换到编辑执行逻辑</GitActionButton>&nbsp;
+      <GitActionButton variant="info" @click="changeToFlow"><el-icon><Share /></el-icon>切换到流程图</GitActionButton>&nbsp;
       <!--      <el-link type="primary" @click="showMarkdown">使用说明</el-link>-->
     </div>
     <div v-for="(smartValue, smartLinkIndex) in smartList" :key="smartLinkIndex" class="link-run-card">
@@ -121,9 +121,9 @@
           <el-input v-model="smartValue.open_num_new" placeholder="Please input" style="width: 240px"/>
         </el-form-item>
         <el-form-item>
-          <el-button v-if="smartValue.linkList[smartValue.chooseLinkIndex].chooseUserName || smartValue.open_num > 0" type="primary" @click="smartLinkRun(smartLinkIndex,null)">
+          <GitActionButton v-if="smartValue.linkList[smartValue.chooseLinkIndex].chooseUserName || smartValue.open_num > 0" @click="smartLinkRun(smartLinkIndex,null)">
             执行
-          </el-button>
+          </GitActionButton>
         </el-form-item>
       </el-form>
     </div>
@@ -185,8 +185,8 @@
       </el-form-item>
     </el-form>
     <template class="dialog-footer">
-      <el-button @click="dialogSmartLink = false">取 消</el-button>
-      <el-button type="primary" @click="saveSmartLink">确 定</el-button>
+      <GitActionButton @click="dialogSmartLink = false">取 消</GitActionButton>
+      <GitActionButton @click="saveSmartLink">确 定</GitActionButton>
     </template>
   </el-dialog>
 
@@ -255,6 +255,7 @@ import shellResult from "@/components/shell/result_button.vue";
 import sse from "@/utils/base/sse";
 import sseDistribute from "@/utils/base/sse_distribute";
 import LinkConfigEditor from "@/components/smart_link/LinkConfigEditor.vue";
+import GitActionButton from "@/components/base/GitActionButton.vue";
 import { Plus, Tools, Refresh, Download, QuestionFilled, EditPen, Share, Setting, Notebook, Delete } from '@element-plus/icons-vue'
 
 export default {
@@ -277,6 +278,7 @@ export default {
     Notebook,
     Delete,
     LinkConfigEditor,
+    GitActionButton,
   },
   data() {
     return {
@@ -727,19 +729,6 @@ export default {
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-}
-
-.toolbar-btn {
-  border-radius: 8px;
-  border: 1px solid #d8ded2 !important;
-  background: #f6f8f3 !important;
-  color: #4f804f !important;
-}
-
-.toolbar-btn:hover {
-  background: #eef4ea !important;
-  border-color: #bfd1bf !important;
-  color: #3f6f3f !important;
 }
 
 .link-run-card {

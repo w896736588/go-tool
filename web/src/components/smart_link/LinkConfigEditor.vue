@@ -3,7 +3,7 @@
     <div class="editor-section">
       <div class="editor-section__header">
         <div class="editor-section__title">链接配置</div>
-        <el-button class="action-btn action-btn--primary" size="small" @click="openCreateLinkDialog">新增链接</el-button>
+        <GitActionButton compact size="small" @click="openCreateLinkDialog">新增链接</GitActionButton>
       </div>
 
       <div v-if="linkItems.length === 0" class="editor-empty">暂无链接，请先新增一条。</div>
@@ -22,8 +22,8 @@
             </div>
           </div>
           <div class="link-list-item__actions">
-            <el-button class="action-btn action-btn--ghost" size="small" @click="openEditLinkDialog(index)">编辑</el-button>
-            <el-button class="action-btn action-btn--danger" size="small" @click="removeLinkItem(index)">删除</el-button>
+            <GitActionButton compact size="small" @click="openEditLinkDialog(index)">编辑</GitActionButton>
+            <GitActionButton compact size="small" variant="danger" @click="removeLinkItem(index)">删除</GitActionButton>
           </div>
         </div>
       </div>
@@ -32,13 +32,13 @@
     <div class="editor-section">
       <div class="editor-section__header">
         <div class="editor-section__title">信息提取</div>
-        <el-button class="action-btn action-btn--primary" size="small" @click="addCookieItem">新增规则</el-button>
+        <GitActionButton compact size="small" @click="addCookieItem">新增规则</GitActionButton>
       </div>
       <div v-if="cookieItems.length === 0" class="editor-empty">暂无信息提取规则。</div>
       <div v-for="(item, index) in cookieItems" :key="item.uid" class="editor-card">
         <div class="editor-card__header">
           <div class="editor-card__title">规则 {{ index + 1 }}</div>
-          <el-button class="action-btn action-btn--danger" size="small" @click="removeCookieItem(index)">删除</el-button>
+          <GitActionButton compact size="small" variant="danger" @click="removeCookieItem(index)">删除</GitActionButton>
         </div>
         <el-row :gutter="12">
           <el-col :span="8">
@@ -81,12 +81,12 @@
     <div class="editor-section">
       <div class="editor-section__header">
         <div class="editor-section__title">请求拦截（半匹配）</div>
-        <el-button class="action-btn action-btn--primary" size="small" @click="addFilterItem">新增规则</el-button>
+        <GitActionButton compact size="small" @click="addFilterItem">新增规则</GitActionButton>
       </div>
       <div v-if="filterItems.length === 0" class="editor-empty">暂无请求拦截规则。</div>
       <div v-for="(item, index) in filterItems" :key="item.uid" class="filter-row">
         <el-input v-model="item.value" :placeholder="`规则 ${index + 1}`" />
-        <el-button class="action-btn action-btn--danger" size="small" @click="removeFilterItem(index)">删除</el-button>
+        <GitActionButton compact size="small" variant="danger" @click="removeFilterItem(index)">删除</GitActionButton>
       </div>
     </div>
 
@@ -157,8 +157,8 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="closeLinkDialog">取消</el-button>
-        <el-button type="primary" @click="saveLinkItem">保存</el-button>
+        <GitActionButton @click="closeLinkDialog">取消</GitActionButton>
+        <GitActionButton @click="saveLinkItem">保存</GitActionButton>
       </template>
     </el-dialog>
   </el-form>
@@ -166,6 +166,7 @@
 
 <script>
 import accountSet from '@/utils/base/account_set'
+import GitActionButton from '@/components/base/GitActionButton.vue'
 
 const createUid = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
 const createLinkItem = () => ({
@@ -201,6 +202,9 @@ function safeParseJson(text, fallback) {
 
 export default {
   name: 'LinkConfigEditor',
+  components: {
+    GitActionButton,
+  },
   props: {
     modelValue: {
       type: Object,
@@ -397,48 +401,6 @@ export default {
 .editor-card { padding: 14px; border: 1px solid #dde6d8; border-radius: 10px; background: #fff; margin-bottom: 14px; }
 .editor-empty { color: #7a8776; font-size: 13px; }
 .filter-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
-
-.action-btn {
-  border-radius: 999px;
-  font-weight: 600;
-  transition: all 0.2s ease;
-}
-
-.action-btn--primary {
-  color: #2f6b45;
-  border-color: #b8d7c1;
-  background: linear-gradient(180deg, #f4fbf6 0%, #e8f5ec 100%);
-}
-
-.action-btn--primary:hover {
-  color: #255639;
-  border-color: #97c2a5;
-  background: linear-gradient(180deg, #edf8f0 0%, #dceee2 100%);
-}
-
-.action-btn--ghost {
-  color: #315f8d;
-  border-color: #c9d9eb;
-  background: #f3f8fd;
-}
-
-.action-btn--ghost:hover {
-  color: #274c72;
-  border-color: #adc6df;
-  background: #e8f1fb;
-}
-
-.action-btn--danger {
-  color: #b44343;
-  border-color: #efc4c4;
-  background: #fff4f4;
-}
-
-.action-btn--danger:hover {
-  color: #963737;
-  border-color: #e5a7a7;
-  background: #feeaea;
-}
 
 .link-list {
   display: flex;

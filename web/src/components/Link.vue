@@ -135,21 +135,6 @@ export default {
   color: #4f5b4f;
 }
 
-.link-page-card :deep(.el-button--primary),
-.link-page-card :deep(.el-button--primary.is-plain) {
-  border-radius: 8px;
-  border-color: #d8ded2 !important;
-  background: #f6f8f3 !important;
-  color: #4f804f !important;
-}
-
-.link-page-card :deep(.el-button--primary:hover),
-.link-page-card :deep(.el-button--primary.is-plain:hover) {
-  background: #eef4ea !important;
-  border-color: #bfd1bf !important;
-  color: #3f6f3f !important;
-}
-
 .link-page-card :deep(.el-link.el-link--primary),
 .link-page-card :deep(a) {
   color: #4a8b4a;
