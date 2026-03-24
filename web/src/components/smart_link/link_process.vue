@@ -111,7 +111,7 @@
 
     <!-- 编辑执行逻辑子项对话框 -->
     <el-dialog v-model="state.dialogProcessItem" :title="state.editingItem.id ? '编辑执行逻辑子项' : '新增执行逻辑子项'" width="70%">
-      <ProcessItemEditor v-model="state.editingItem" :process-item-options="state.processItems" />
+      <ProcessItemEditor ref="processItemEditorRef" v-model="state.editingItem" :process-item-options="state.processItems" />
       <template #footer>
         <GitActionButton @click="state.dialogProcessItem = false">取消</GitActionButton>
         <GitActionButton @click="saveProcessItem">保存</GitActionButton>
@@ -121,9 +121,10 @@
 </template>
 
 <script>
-import {reactive, onMounted} from 'vue'
+import {reactive, onMounted, ref} from 'vue'
 import draggable from 'vuedraggable'
 import {Menu} from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import API from '@/utils/base/smart_link_proces'
 import ProcessItemEditor from '@/components/smart_link/ProcessItemEditor.vue'
 import GitActionButton from '@/components/base/GitActionButton.vue'
@@ -136,6 +137,7 @@ export default {
     GitActionButton,
   },
   setup(props, {emit}) {
+    const processItemEditorRef = ref(null)
     const state = reactive({
       searchQuery: '',
       processes: [],
@@ -310,6 +312,11 @@ export default {
     }
 
     const saveProcessItem = function () {
+      const isValid = processItemEditorRef.value ? processItemEditorRef.value.validateForSave() : true
+      if (!isValid) {
+        ElMessage.error('请先修正表单中的格式问题，再保存流程项。')
+        return
+      }
       API.SmartProcessItemAdd(state.editingItem, function () {
         state.dialogProcessItem = false
         fetchProcessItems(state.activeProcess.id)
@@ -341,6 +348,7 @@ export default {
     }
     return {
       state,
+      processItemEditorRef,
       searchList,
       createNewProcess,
       selectProcess,

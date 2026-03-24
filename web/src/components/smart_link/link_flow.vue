@@ -1,16 +1,16 @@
-<template>
+﻿<template>
   <div class="smart-process-canvas-container">
     <div class="left-sidebar">
       <div class="search-box">
         <el-input
             v-model="state.searchQuery"
             clearable
-            placeholder="搜索执行逻辑"
+            placeholder="鎼滅储鎵ц閫昏緫"
             @input="searchList"
         />
       </div>
       <div class="add-btn">
-        <GitActionButton @click="createNewProcess">新增执行逻辑</GitActionButton>&nbsp;
+        <GitActionButton @click="createNewProcess">鏂板鎵ц閫昏緫</GitActionButton>&nbsp;
         <el-link type="primary" @click="changeToLinks">切换到执行</el-link>
       </div>
       <div class="process-list">
@@ -24,7 +24,7 @@
           >
             <span>#{{ process.id }} {{ process.name }}</span>
             <el-popconfirm
-                title="确定删除此执行逻辑吗？"
+                title="纭畾鍒犻櫎姝ゆ墽琛岄€昏緫鍚楋紵"
                 @confirm="deleteProcess(process.id)"
             >
               <template #reference>
@@ -32,7 +32,7 @@
                     compact
                     variant="danger"
                     @click.stop
-                >删除
+                >鍒犻櫎
                 </GitActionButton>
               </template>
             </el-popconfirm>
@@ -46,12 +46,12 @@
         <div class="canvas-header">
           <h2>{{ state.activeProcess.name }}</h2>
           <div class="header-actions">
-            <GitActionButton variant="info" @click="editProcessName">编辑</GitActionButton>
-            <GitActionButton @click="addNewItem">新增执行逻辑子项</GitActionButton>
-            <GitActionButton variant="info" @click="resetView">重置视图</GitActionButton>
-            <GitActionButton variant="info" @click="fitView">适应画布</GitActionButton>
-            <GitActionButton variant="info" @click="zoomIn">放大</GitActionButton>
-            <GitActionButton variant="info" @click="zoomOut">缩小</GitActionButton>
+            <GitActionButton variant="info" @click="editProcessName">缂栬緫</GitActionButton>
+            <GitActionButton @click="addNewItem">鏂板鎵ц閫昏緫瀛愰」</GitActionButton>
+            <GitActionButton variant="info" @click="resetView">閲嶇疆瑙嗗浘</GitActionButton>
+            <GitActionButton variant="info" @click="fitView">閫傚簲鐢诲竷</GitActionButton>
+            <GitActionButton variant="info" @click="zoomIn">鏀惧ぇ</GitActionButton>
+            <GitActionButton variant="info" @click="zoomOut">缂╁皬</GitActionButton>
           </div>
         </div>
 
@@ -69,7 +69,7 @@
               :min-zoom="0.1"
               :max-zoom="3"
           >
-            <!-- 自定义节点 -->
+            <!-- 鑷畾涔夎妭鐐?-->
             <template #node-custom-node="nodeProps">
               <div
                   class="custom-node"
@@ -89,10 +89,10 @@
                         size="small"
                         @click.stop="editItem(nodeProps.data.item)"
                     >
-                      编辑
+                      缂栬緫
                     </GitActionButton>
                     <el-popconfirm
-                        title="确定删除此执行逻辑子项吗？"
+                        title="纭畾鍒犻櫎姝ゆ墽琛岄€昏緫瀛愰」鍚楋紵"
                         @confirm="deleteItem(nodeProps.data.item.id)"
                     >
                       <template #reference>
@@ -101,7 +101,7 @@
                             variant="danger"
                             size="small"
                             @click.stop
-                        >删除
+                        >鍒犻櫎
                         </GitActionButton>
                       </template>
                     </el-popconfirm>
@@ -109,19 +109,19 @@
                 </div>
                 <div class="node-details">
                   <div v-if="nodeProps.data.item.locator !== ''" class="detail-item">
-                    <span class="detail-label">定位:</span>
+                    <span class="detail-label">瀹氫綅:</span>
                     <span class="detail-value">{{ nodeProps.data.item.locator }}</span>
                   </div>
                   <div v-if="nodeProps.data.item.out_key !== ''" class="detail-item">
-                    <span class="detail-label">输出值:</span>
+                    <span class="detail-label">杈撳嚭鍊?</span>
                     <span class="detail-value">{{ nodeProps.data.item.out_key }}</span>
                   </div>
                   <div v-if="nodeProps.data.item.check_key !== ''" class="detail-item">
-                    <span class="detail-label">判断:</span>
+                    <span class="detail-label">鍒ゆ柇:</span>
                     <span class="detail-value">{{ nodeProps.data.item.check_key }}</span>
                   </div>
                   <div v-if="nodeProps.data.item.value !== ''" class="detail-item">
-                    <span class="detail-label">值:</span>
+                    <span class="detail-label">鍊?</span>
                     <span class="detail-value">{{ nodeProps.data.item.value }}</span>
                   </div>
                   <div v-if="nodeProps.data.item.out_key !== ''" class="detail-item">
@@ -129,11 +129,11 @@
                     <span class="detail-value">{{ nodeProps.data.item.append_to_replace === '0' ? '否' : '是' }}</span>
                   </div>
                   <div v-if="parseInt(nodeProps.data.item.wait_mills) > 0" class="detail-item">
-                    <span class="detail-label">等待时长:</span>
+                    <span class="detail-label">绛夊緟鏃堕暱:</span>
                     <span class="detail-value">{{ nodeProps.data.item.wait_mills }}ms</span>
                   </div>
                 </div>
-                <!-- 连接点 -->
+                <!-- 杩炴帴鐐?-->
                 <Handle
                     type="source"
                     :position="Position.Right"
@@ -149,34 +149,34 @@
               </div>
             </template>
 
-            <!-- 背景网格 -->
+            <!-- 鑳屾櫙缃戞牸 -->
             <Background :gap="15" :size="1" />
 
-            <!-- 控制按钮 -->
+            <!-- 鎺у埗鎸夐挳 -->
             <Controls :show-interactive="false" />
           </VueFlow>
         </div>
       </template>
       <div v-else class="empty-tip">
-        请选择或创建一个执行逻辑
+        璇烽€夋嫨鎴栧垱寤轰竴涓墽琛岄€昏緫
       </div>
     </div>
 
-    <!-- 编辑执行逻辑名称对话框 -->
-    <el-dialog v-model="state.dialogProcessName" title="编辑执行逻辑名称" width="30%">
+    <!-- 缂栬緫鎵ц閫昏緫鍚嶇О瀵硅瘽妗?-->
+    <el-dialog v-model="state.dialogProcessName" title="缂栬緫鎵ц閫昏緫鍚嶇О" width="30%">
       <el-input v-model="state.editingProcessName"/>
       <template #footer>
-        <GitActionButton @click="state.dialogProcessName = false">取消</GitActionButton>
-        <GitActionButton @click="saveProcessName">保存</GitActionButton>
+        <GitActionButton @click="state.dialogProcessName = false">鍙栨秷</GitActionButton>
+        <GitActionButton @click="saveProcessName">淇濆瓨</GitActionButton>
       </template>
     </el-dialog>
 
-    <!-- 编辑执行逻辑子项对话框 -->
-    <el-dialog v-model="state.dialogProcessItem" :title="state.editingItem.id ? '编辑执行逻辑子项' : '新增执行逻辑子项'" width="70%">
-      <ProcessItemEditor v-model="state.editingItem" :process-item-options="state.processItems" />
+    <!-- 缂栬緫鎵ц閫昏緫瀛愰」瀵硅瘽妗?-->
+    <el-dialog v-model="state.dialogProcessItem" :title="state.editingItem.id ? '缂栬緫鎵ц閫昏緫瀛愰」' : '鏂板鎵ц閫昏緫瀛愰」'" width="70%">
+      <ProcessItemEditor ref="processItemEditorRef" v-model="state.editingItem" :process-item-options="state.processItems" />
       <template #footer>
-        <GitActionButton @click="state.dialogProcessItem = false">取消</GitActionButton>
-        <GitActionButton @click="saveProcessItem">保存</GitActionButton>
+        <GitActionButton @click="state.dialogProcessItem = false">鍙栨秷</GitActionButton>
+        <GitActionButton @click="saveProcessItem">淇濆瓨</GitActionButton>
       </template>
     </el-dialog>
   </div>
@@ -190,7 +190,7 @@ import { Controls } from '@vue-flow/controls'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/controls/dist/style.css'
-import { ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import API from '@/utils/base/smart_link_proces'
 import ProcessItemEditor from '@/components/smart_link/ProcessItemEditor.vue'
 import GitActionButton from '@/components/base/GitActionButton.vue'
@@ -205,6 +205,7 @@ export default {
     GitActionButton,
   },
   setup(props, { emit }) {
+    const processItemEditorRef = ref(null)
     const state = reactive({
       searchQuery: '',
       processes: [],
@@ -234,7 +235,7 @@ export default {
       }
     })
 
-    // Vue Flow 相关状态
+    // Vue Flow 鐩稿叧鐘舵€?
     const { nodes, edges, setNodes, setEdges, fitView, zoomIn, zoomOut } = useVueFlow()
     const resetView = () => {
       setNodes(nodes.value.map(node => ({
@@ -243,12 +244,12 @@ export default {
       })))
     }
 
-    // 节点和边的转换函数
+    // 鑺傜偣鍜岃竟鐨勮浆鎹㈠嚱鏁?
     const convertItemsToNodesAndEdges = (items) => {
       const newNodes = []
       const newEdges = []
 
-      // 创建节点
+      // 鍒涘缓鑺傜偣
       items.forEach(item => {
         newNodes.push({
           id: item.id.toString(),
@@ -258,14 +259,14 @@ export default {
             y: item.y || (item.id * 100) || 100
           },
           data: {
-            item: { ...item }, // ✅ 只传必要字段，别传整个 item
+            item: { ...item }, // 鉁?鍙紶蹇呰瀛楁锛屽埆浼犳暣涓?item
             label: `${item.name} (${item.type})`
           },
           draggable: true
         })
       })
 
-      // 创建边（连接线）
+      // 鍒涘缓杈癸紙杩炴帴绾匡級
       items.forEach(item => {
         if (item.next_ids && item.next_ids.toString().trim() !== '') {
           const nextIds = item.next_ids.toString().split(',').map(id => id.trim()).filter(id => id)
@@ -324,7 +325,7 @@ export default {
     const createNewProcess = function () {
       const newProcess = {
         id: 0,
-        name: `新执行逻辑 ${state.processes.length + 1}`
+        name: `鏂版墽琛岄€昏緫 ${state.processes.length + 1}`
       }
       API.SmartProcessAdd(newProcess, function (response) {
         newProcess.id = response.Data.id
@@ -385,7 +386,7 @@ export default {
     }
 
     const addNewItem = function () {
-      // 计算新节点的位置（放在画布右侧）
+      // 璁＄畻鏂拌妭鐐圭殑浣嶇疆锛堟斁鍦ㄧ敾甯冨彸渚э級
       let maxX = 0
       let maxY = 0
       if (nodes.value.length > 0) {
@@ -422,7 +423,7 @@ export default {
       state.dialogProcessItem = true
     }
 
-    // 双击连线：弹出确认框
+    // 鍙屽嚮杩炵嚎锛氬脊鍑虹‘璁ゆ
     const onEdgeDoubleClick = (edge) => {
       ElMessageBox.confirm('确定要取消这条连线吗？', '提示', {
         confirmButtonText: '确定',
@@ -437,7 +438,12 @@ export default {
     }
 
     const saveProcessItem = function () {
-      // 保存节点位置
+      const isValid = processItemEditorRef.value ? processItemEditorRef.value.validateForSave() : true
+      if (!isValid) {
+        ElMessage.error('请先修正表单中的格式问题，再保存流程项。')
+        return
+      }
+      // 保存节点位置 / Persist current node position before save.
       const currentNode = nodes.value.find(n => n.id === state.editingItem.id.toString())
       if (currentNode) {
         state.editingItem.x = currentNode.position.x
@@ -456,9 +462,9 @@ export default {
       })
     }
 
-    // Vue Flow 事件处理
+    // Vue Flow 浜嬩欢澶勭悊
     const onNodeDragStop = (event) => {
-      // 节点拖拽停止时更新位置
+      // 鑺傜偣鎷栨嫿鍋滄鏃舵洿鏂颁綅缃?
       const itemId = parseInt(event.node.id)
       ProcessSetPosition(itemId, event.node.position.x, event.node.position.y)
     }
@@ -474,7 +480,7 @@ export default {
 
       setEdges([...edges.value, newEdge])
 
-      // ✅ 调用后端接口建立关系
+      // 鉁?璋冪敤鍚庣鎺ュ彛寤虹珛鍏崇郴
       ProcessSetRelation(params.source, params.target)
     }
 
@@ -490,13 +496,13 @@ export default {
           sourceItem.next_ids = nextIds.join(',')
 
           API.SmartProcessItemAdd(sourceItem, () => {
-            // ✅ 不再刷新整个图
+            // 鉁?涓嶅啀鍒锋柊鏁翠釜鍥?
           })
         }
       })
     }
 
-    // 初始化
+    // 鍒濆鍖?
     onMounted(() => {
       fetchProcesses()
     })
@@ -507,6 +513,7 @@ export default {
 
     return {
       state,
+      processItemEditorRef,
       searchList,
       createNewProcess,
       selectProcess,
@@ -617,7 +624,7 @@ export default {
   height: 100%;
 }
 
-/* 自定义节点样式 */
+/* 鑷畾涔夎妭鐐规牱寮?*/
 .custom-node {
   background: white;
   border: 2px solid #ddd;
@@ -708,7 +715,7 @@ export default {
   font-size: 14px;
 }
 
-/* 响应式设计 */
+/* 鍝嶅簲寮忚璁?*/
 @media (max-width: 768px) {
   .smart-process-canvas-container {
     flex-direction: column;

@@ -55,7 +55,7 @@
             <el-radio-button value="raw">Raw</el-radio-button>
           </el-radio-group>
 
-          <div v-if="apiForm.content_type === 'application/json'" class="body-editor">
+          <div v-if="apiForm.content_type === 'application/json'" class="body-editor body-editor-json">
             <json-editor-vue v-model="apiForm.body_json_data" class="json-box" @blur="handleBlurSave"/>
           </div>
           <div v-else-if="['application/x-www-form-urlencoded', 'multipart/form-data'].includes(apiForm.content_type)" class="body-editor">
@@ -640,11 +640,12 @@ export default {
 .json-box {
   width: 100%;
   height: 360px;
-  margin-top: 12px;
-  border: 1px solid #dbe7d6;
-  border-radius: 10px;
-  overflow: auto;
-  background: #fff;
+  margin-top: 0;
+  border: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: transparent;
+  box-shadow: none;
 }
 
 .api-header {
@@ -731,6 +732,21 @@ export default {
   margin-top: 12px;
   width: 100%;
   overflow: hidden;
+}
+
+.body-editor-json {
+  padding: 10px;
+  border: 1px solid #e6ece0;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f8fbf6 0%, #f4f8f1 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.body-editor-json:focus-within {
+  border-color: #8db28a;
+  box-shadow: 0 0 0 3px rgba(122, 166, 118, 0.16);
+  background: linear-gradient(180deg, #fbfdf9 0%, #f6faf3 100%);
 }
 
 .empty-body {
@@ -875,6 +891,90 @@ export default {
   overflow: hidden;
 }
 
+/* JSON editor skin / JSON 编辑器浅色卡片皮肤 */
+:deep(.body-editor-json .jse-theme-light),
+:deep(.body-editor-json .jse-main),
+:deep(.body-editor-json .jse-container),
+:deep(.body-editor-json .jsoneditor) {
+  border-radius: 10px !important;
+  border: 1px solid #dbe7d6 !important;
+  background: #ffffff !important;
+  box-shadow: 0 8px 18px rgba(80, 110, 80, 0.07) !important;
+  overflow: hidden !important;
+}
+
+:deep(.body-editor-json .jse-menu),
+:deep(.body-editor-json .jsoneditor-menu),
+:deep(.body-editor-json .jse-navigation-bar),
+:deep(.body-editor-json .jsoneditor-navigation-bar),
+:deep(.body-editor-json .jse-status-bar),
+:deep(.body-editor-json .jsoneditor-statusbar) {
+  background: #f7f9f5 !important;
+  border-color: #e6ece0 !important;
+  color: #5a6755 !important;
+  box-shadow: none !important;
+}
+
+:deep(.body-editor-json .jse-menu button),
+:deep(.body-editor-json .jsoneditor-menu button),
+:deep(.body-editor-json .jse-navigation-bar button),
+:deep(.body-editor-json .jsoneditor-navigation-bar button) {
+  border-radius: 8px !important;
+  color: #5b6857 !important;
+}
+
+:deep(.body-editor-json .jse-menu button:hover),
+:deep(.body-editor-json .jsoneditor-menu button:hover),
+:deep(.body-editor-json .jse-navigation-bar button:hover),
+:deep(.body-editor-json .jsoneditor-navigation-bar button:hover) {
+  background: #edf5e9 !important;
+  color: #456e45 !important;
+}
+
+:deep(.body-editor-json .jse-contents),
+:deep(.body-editor-json .jsoneditor-outer),
+:deep(.body-editor-json .jsoneditor-tree),
+:deep(.body-editor-json .jsoneditor-text),
+:deep(.body-editor-json .cm-editor),
+:deep(.body-editor-json .cm-scroller),
+:deep(.body-editor-json .cm-content),
+:deep(.body-editor-json textarea) {
+  background: #ffffff !important;
+  color: #3f4c3b !important;
+}
+
+:deep(.body-editor-json .cm-editor) {
+  min-height: 338px;
+}
+
+:deep(.body-editor-json .cm-focused),
+:deep(.body-editor-json .jsoneditor:focus-within),
+:deep(.body-editor-json .jse-main:focus-within) {
+  outline: none !important;
+  box-shadow: inset 0 0 0 1px #7aa676 !important;
+}
+
+:deep(.body-editor-json .cm-activeLine),
+:deep(.body-editor-json .cm-activeLineGutter),
+:deep(.body-editor-json .jsoneditor tr:hover) {
+  background: #f4faf2 !important;
+}
+
+:deep(.body-editor-json .cm-selectionBackground),
+:deep(.body-editor-json .cm-focused .cm-selectionBackground),
+:deep(.body-editor-json ::selection) {
+  background: rgba(122, 166, 118, 0.20) !important;
+}
+
+:deep(.body-editor-json .cm-gutters),
+:deep(.body-editor-json .jsoneditor-tree .jsoneditor-contextmenu),
+:deep(.body-editor-json .jsoneditor-tree .jsoneditor-field),
+:deep(.body-editor-json .jsoneditor-tree .jsoneditor-value) {
+  background: #fbfdf9 !important;
+  color: #61705d !important;
+  border-color: #edf2ea !important;
+}
+
 :deep(.el-tabs__nav-wrap) {
   overflow: hidden;
 }
@@ -930,6 +1030,37 @@ export default {
 .response-body-container::-webkit-scrollbar-thumb:hover,
 .body-editor::-webkit-scrollbar-thumb:hover {
   background: #888;
+}
+
+.body-editor-json::-webkit-scrollbar,
+:deep(.body-editor-json .cm-scroller::-webkit-scrollbar),
+:deep(.body-editor-json .jse-contents::-webkit-scrollbar),
+:deep(.body-editor-json .jsoneditor::-webkit-scrollbar) {
+  width: 8px;
+  height: 8px;
+}
+
+.body-editor-json::-webkit-scrollbar-track,
+:deep(.body-editor-json .cm-scroller::-webkit-scrollbar-track),
+:deep(.body-editor-json .jse-contents::-webkit-scrollbar-track),
+:deep(.body-editor-json .jsoneditor::-webkit-scrollbar-track) {
+  background: #eef4ea;
+  border-radius: 999px;
+}
+
+.body-editor-json::-webkit-scrollbar-thumb,
+:deep(.body-editor-json .cm-scroller::-webkit-scrollbar-thumb),
+:deep(.body-editor-json .jse-contents::-webkit-scrollbar-thumb),
+:deep(.body-editor-json .jsoneditor::-webkit-scrollbar-thumb) {
+  background: #bfd0b9;
+  border-radius: 999px;
+}
+
+.body-editor-json::-webkit-scrollbar-thumb:hover,
+:deep(.body-editor-json .cm-scroller::-webkit-scrollbar-thumb:hover),
+:deep(.body-editor-json .jse-contents::-webkit-scrollbar-thumb:hover),
+:deep(.body-editor-json .jsoneditor::-webkit-scrollbar-thumb:hover) {
+  background: #a9bda3;
 }
 
 .dialog-env-name {

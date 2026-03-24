@@ -39,9 +39,6 @@
         <GitActionButton variant="info" @click="changeToProcess">
           <el-icon><EditPen /></el-icon>切换到编辑执行逻辑
         </GitActionButton>
-        <GitActionButton variant="info" @click="changeToFlow">
-          <el-icon><Share /></el-icon>切换到流程图
-        </GitActionButton>
       </div>
     </div>
     <div class="link-run-content">
@@ -268,7 +265,7 @@ import sse from "@/utils/base/sse";
 import sseDistribute from "@/utils/base/sse_distribute";
 import LinkConfigEditor from "@/components/smart_link/LinkConfigEditor.vue";
 import GitActionButton from "@/components/base/GitActionButton.vue";
-import { Plus, Tools, Refresh, Download, QuestionFilled, EditPen, Share, Setting, Notebook, Delete } from '@element-plus/icons-vue'
+import { Plus, Tools, Refresh, Download, QuestionFilled, EditPen, Setting, Notebook, Delete } from '@element-plus/icons-vue'
 
 export default {
   props: {
@@ -285,7 +282,6 @@ export default {
     Download,
     QuestionFilled,
     EditPen,
-    Share,
     Setting,
     Notebook,
     Delete,
