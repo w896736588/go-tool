@@ -2,7 +2,9 @@ package controller
 
 import (
 	"dev_tool/internal/app/dtool/common"
+	"dev_tool/internal/app/dtool/define"
 	_struct "dev_tool/internal/app/dtool/struct"
+	"time"
 
 	"gitee.com/Sxiaobai/gs/v2/gsgin"
 	"github.com/gin-gonic/gin"
@@ -68,4 +70,50 @@ func HomeTaskDelete(c *gin.Context) {
 		return
 	}
 	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
+// HomeTaskDailyReportGenerate 生成首页工作日报并写入记忆库。
+func HomeTaskDailyReportGenerate(c *gin.Context) {
+	memoryDB, ok := memoryDBOrResponse(c)
+	if !ok {
+		return
+	}
+	taskList, err := common.DbMain.HomeTaskList(define.HomeTaskArchivedNo)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	modelID, prompt, err := homeTaskDailyReportConfig()
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	reportTime := time.Now()
+	userPrompt, err := buildHomeTaskDailyReportUserPrompt(prompt, taskList, reportTime)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	result, modelInfo, err := common.DbMain.InfoCrawlChatByModel(modelID, homeTaskDailyReportSystemPrompt(), userPrompt)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	memoryInfo, err := memoryDB.MemoryFragmentSave(
+		0,
+		buildHomeTaskDailyReportTitle(reportTime),
+		stripMarkdownCodeFence(result),
+		[]string{homeTaskDailyReportMemoryTag},
+	)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	common.MemoryRuntime.ScheduleSync()
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`memory_fragment`: memoryInfo,
+		`model_id`:        modelID,
+		`model`:           modelInfo[`model`],
+		`prompt`:          prompt,
+	})
 }

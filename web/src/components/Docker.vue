@@ -31,6 +31,26 @@
         <div class="header-tail-actions">
           <el-button
             :disabled="!chooseSshId"
+            :loading="spaceAnalysisLoading"
+            class="image-list-btn"
+            type="primary"
+            plain
+            @click="openSpaceAnalysisDialog"
+          >
+            Docker 空间分析
+          </el-button>
+          <el-button
+            :disabled="!chooseSshId"
+            :loading="spaceAnalysisLogCleaning"
+            class="image-list-btn"
+            type="danger"
+            plain
+            @click="confirmTruncateContainerLogs"
+          >
+            清理容器日志
+          </el-button>
+          <el-button
+            :disabled="!chooseSshId"
             :loading="imageListLoading"
             class="image-list-btn"
             type="primary"
@@ -148,6 +168,36 @@
       </el-table>
     </el-dialog>
 
+    <el-dialog v-model="dialogSpaceAnalysis" :append-to-body="true" title="Docker 空间分析" width="86%">
+      <div class="dialog-toolbar">
+        <div class="dialog-toolbar-text">当前环境下全部容器的日志占用与空间占用</div>
+        <div class="dialog-toolbar-actions">
+          <el-button type="primary" link :loading="spaceAnalysisLoading" @click="fetchSpaceAnalysis">刷新分析</el-button>
+          <el-button type="danger" link :loading="spaceAnalysisLogCleaning" @click="confirmTruncateContainerLogs">清理容器日志</el-button>
+        </div>
+      </div>
+      <div class="space-summary-grid">
+        <div v-for="item in spaceAnalysisSummaryCards" :key="item.label" class="space-summary-card">
+          <div class="space-summary-label">{{ item.label }}</div>
+          <div class="space-summary-value">{{ item.value }}</div>
+        </div>
+      </div>
+      <el-table :data="spaceAnalysisList" style="width: 100%">
+        <el-table-column label="容器名" prop="container_name" min-width="160"/>
+        <el-table-column label="镜像" prop="image" min-width="180"/>
+        <el-table-column label="状态" prop="status" width="120"/>
+        <el-table-column label="日志占用" prop="log_size" width="120" sortable/>
+        <el-table-column label="可写层占用" prop="rw_size" width="130" sortable/>
+        <el-table-column label="RootFS 占用" prop="root_fs_size" width="130" sortable/>
+        <el-table-column label="日志+可写层" prop="combined_rw_log_size" width="140" sortable/>
+        <el-table-column label="日志路径" min-width="320">
+          <template #default="scope">
+            <code class="path-text">{{ scope.row.log_path || '--' }}</code>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
+
     <el-dialog v-model="dialogImageList" :append-to-body="true" title="镜像列表" width="82%">
       <div class="dialog-toolbar">
         <div class="dialog-toolbar-text">当前环境下的全部 Docker 镜像</div>
@@ -214,6 +264,14 @@ import {Throttle_string} from "@/utils/base/throttle_string";
 import type from "@/utils/base/type";
 import composeSet from "@/utils/base/compose_set";
 import dockerDefaultService from "@/utils/docker_default_service.cjs";
+import dockerSpaceAnalysis from "@/utils/docker_space_analysis.cjs";
+
+const TRUNCATE_CONTAINER_LOG_TITLE = '确认清理容器日志'
+// TRUNCATE_CONTAINER_LOG_MESSAGE 提示本次清理会作用于当前 SSH 环境的全部 Docker 容器日志。
+const TRUNCATE_CONTAINER_LOG_MESSAGE = '确定清理当前环境下全部容器日志吗？该操作会执行 truncate -s 0 /var/lib/docker/containers/*/*-json.log。'
+const TRUNCATE_CONTAINER_LOG_SUCCESS = '容器日志已清理'
+const TRUNCATE_CONTAINER_LOG_ERROR = '容器日志清理失败'
+const DOCKER_SPACE_ANALYSIS_ERROR = '空间分析加载失败'
 
 export default {
   props: {},
@@ -233,6 +291,11 @@ export default {
       dialogStatusData: [],
       dialogShowService: false,
       dialogServiceConfig: {},
+      dialogSpaceAnalysis: false,
+      spaceAnalysisList: [],
+      spaceAnalysisSummaryCards: [],
+      spaceAnalysisLoading: false,
+      spaceAnalysisLogCleaning: false,
       dialogImageList: false,
       imageList: [],
       imageListLoading: false,
@@ -723,6 +786,47 @@ export default {
       _that.searchNum = ret[0]
       _that.composeList = ret[1]
     },
+    openSpaceAnalysisDialog: function () {
+      this.dialogSpaceAnalysis = true
+      this.fetchSpaceAnalysis()
+    },
+    fetchSpaceAnalysis: function () {
+      let _that = this
+      if (!_that.chooseSshId) {
+        return
+      }
+      _that.spaceAnalysisLoading = true
+      compose.DockerSpaceAnalysis({ssh_id: _that.chooseSshId}, function (response) {
+        _that.spaceAnalysisLoading = false
+        if (response.ErrCode === 0) {
+          _that.spaceAnalysisList = dockerSpaceAnalysis.normalizeDockerSpaceAnalysisRows(response.Data.list)
+          _that.spaceAnalysisSummaryCards = dockerSpaceAnalysis.createDockerSpaceSummary(response.Data.summary)
+          return
+        }
+        _that.$helperNotify.error(response.ErrMsg || DOCKER_SPACE_ANALYSIS_ERROR)
+      })
+    },
+    confirmTruncateContainerLogs: function () {
+      let _that = this
+      _that.$confirm(TRUNCATE_CONTAINER_LOG_MESSAGE, TRUNCATE_CONTAINER_LOG_TITLE, {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }).then(function () {
+        _that.spaceAnalysisLogCleaning = true
+        compose.DockerContainerLogTruncate({ssh_id: _that.chooseSshId}, function (response) {
+          _that.spaceAnalysisLogCleaning = false
+          if (response.ErrCode === 0) {
+            _that.$helperNotify.success(TRUNCATE_CONTAINER_LOG_SUCCESS)
+            _that.fetchSpaceAnalysis()
+            return
+          }
+          _that.$helperNotify.error(response.ErrMsg || TRUNCATE_CONTAINER_LOG_ERROR)
+        })
+      }).catch(function () {
+        return false
+      })
+    },
     getImageDisplayName: function (row) {
       if (!row) {
         return ''
@@ -1088,6 +1192,40 @@ export default {
 .dialog-toolbar-text {
   color: #606050;
   font-size: 13px;
+}
+
+.dialog-toolbar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.space-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.space-summary-card {
+  border: 1px solid #e3eadf;
+  border-radius: 10px;
+  background: #f8fbf6;
+  padding: 12px 14px;
+}
+
+.space-summary-label {
+  font-size: 12px;
+  color: #75816e;
+  margin-bottom: 6px;
+}
+
+.space-summary-value {
+  font-size: 22px;
+  line-height: 1.1;
+  font-weight: 600;
+  color: #3f6f3f;
 }
 
 .image-name-cell {

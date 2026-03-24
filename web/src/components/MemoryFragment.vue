@@ -29,8 +29,22 @@
           </el-input>
         </div>
         <div class="tag-filter-row">
-          <span class="tag-filter-label">标签筛选</span>
-          <div class="tag-filter-list">
+          <div class="tag-filter-head">
+            <span class="tag-filter-label">标签筛选</span>
+            <button
+              v-if="showTagFilterToggle"
+              class="tag-filter-toggle"
+              type="button"
+              @click="toggleTagFilterExpanded"
+            >
+              {{ tagFilterToggleText }}
+            </button>
+          </div>
+          <div
+            class="tag-filter-list"
+            :class="{ collapsed: !tagFilterExpanded }"
+            :style="tagFilterListStyle"
+          >
             <button
               v-for="tag in tagList"
               :key="tag.tag_name"
@@ -240,6 +254,17 @@ import MemoryEditor from '@/components/memory/MemoryEditor.vue'
 import MemoryHistoryDialog from '@/components/memory/MemoryHistoryDialog.vue'
 import MemorySettingPage from '@/components/set/memory.vue'
 
+// TAG_FILTER_COLLAPSED_MAX_HEIGHT 控制左侧标签筛选区收起时的最大高度。
+const TAG_FILTER_COLLAPSED_MAX_HEIGHT = 76
+// TAG_FILTER_TOGGLE_MIN_COUNT 控制多少个标签时展示展开/收起入口。
+const TAG_FILTER_TOGGLE_MIN_COUNT = 10
+// SEARCH_TAB_NAME 统一定义搜索结果标签页名称，避免散落硬编码。
+const SEARCH_TAB_NAME = 'search'
+// HOME_TAB_NAME 统一定义首页标签页名称，避免散落硬编码。
+const HOME_TAB_NAME = 'home'
+// KEYWORD_SEARCH_MODE 统一定义关键词搜索模式值，避免散落硬编码。
+const KEYWORD_SEARCH_MODE = 'keyword'
+
 export default {
   name: 'MemoryFragment',
   components: {
@@ -256,13 +281,14 @@ export default {
       tagList: [],
       searchResults: [],
       searchQuery: '',
-      searchMode: 'keyword',
+      searchMode: KEYWORD_SEARCH_MODE,
       selectedTags: [],
+      tagFilterExpanded: false,
       searchTabVisible: false,
       submittedSearchQuery: '',
-      submittedSearchMode: 'keyword',
+      submittedSearchMode: KEYWORD_SEARCH_MODE,
       submittedSelectedTags: [],
-      activeTab: 'home',
+      activeTab: HOME_TAB_NAME,
       fragmentTabs: [],
       searchLoading: false,
       historyDialogVisible: false,
@@ -288,6 +314,23 @@ export default {
         return `搜索结果: ${this.submittedSelectedTags.join('、')}`
       }
       return '搜索结果'
+    },
+    // showTagFilterToggle 判断左侧标签筛选区是否需要展示展开入口。
+    showTagFilterToggle() {
+      return this.tagList.length >= TAG_FILTER_TOGGLE_MIN_COUNT
+    },
+    // tagFilterListStyle 统一生成标签筛选区在不同状态下的高度样式。
+    tagFilterListStyle() {
+      if (this.tagFilterExpanded) {
+        return {}
+      }
+      return {
+        maxHeight: `${TAG_FILTER_COLLAPSED_MAX_HEIGHT}px`
+      }
+    },
+    // tagFilterToggleText 返回左侧标签筛选区的展开文案。
+    tagFilterToggleText() {
+      return this.tagFilterExpanded ? '收起标签' : `展开标签（${this.tagList.length}）`
     }
   },
   mounted() {
@@ -330,7 +373,7 @@ export default {
           this.tagList = []
           this.searchResults = []
           this.fragmentTabs = []
-          this.activeTab = 'home'
+          this.activeTab = HOME_TAB_NAME
           return
         }
         if (needReloadLists) {
@@ -355,6 +398,9 @@ export default {
       }
       MemoryFragmentApi.MemoryFragmentTagList((response) => {
         this.tagList = Array.isArray(response.Data) ? response.Data : []
+        if (!this.showTagFilterToggle) {
+          this.tagFilterExpanded = false
+        }
       })
     },
     // runSearch 根据指定条件执行搜索。
@@ -384,7 +430,7 @@ export default {
       this.submittedSearchMode = this.searchMode
       this.submittedSelectedTags = [...this.selectedTags]
       this.searchTabVisible = true
-      this.activeTab = 'search'
+      this.activeTab = SEARCH_TAB_NAME
       this.runSearch(this.submittedSearchQuery, this.submittedSearchMode, this.submittedSelectedTags)
     },
     // escapeHtml 对文本做 HTML 转义，避免高亮时插入原始标签。
@@ -410,15 +456,15 @@ export default {
     // clearFilter 清空左侧搜索条件，并关闭结果 tab。
     clearFilter() {
       this.searchQuery = ''
-      this.searchMode = 'keyword'
+      this.searchMode = KEYWORD_SEARCH_MODE
       this.selectedTags = []
       this.submittedSearchQuery = ''
-      this.submittedSearchMode = 'keyword'
+      this.submittedSearchMode = KEYWORD_SEARCH_MODE
       this.submittedSelectedTags = []
       this.searchTabVisible = false
       this.searchResults = []
-      if (this.activeTab === 'search') {
-        this.activeTab = 'home'
+      if (this.activeTab === SEARCH_TAB_NAME) {
+        this.activeTab = HOME_TAB_NAME
       }
     },
     // toggleTag 切换左侧待提交的标签筛选条件。
@@ -438,8 +484,12 @@ export default {
       }
       this.selectedTags = [...this.submittedSelectedTags]
       this.searchTabVisible = true
-      this.activeTab = 'search'
+      this.activeTab = SEARCH_TAB_NAME
       this.rerunSubmittedSearch()
+    },
+    // toggleTagFilterExpanded 切换左侧标签筛选区的展开状态。
+    toggleTagFilterExpanded() {
+      this.tagFilterExpanded = !this.tagFilterExpanded
     },
     // getSearchSnippet 生成搜索结果中的命中文本片段。
     getSearchSnippet(item) {
@@ -912,29 +962,55 @@ export default {
 
 .tag-filter-row {
   display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.tag-filter-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 12px;
-  align-items: flex-start;
-  margin-top: 14px;
 }
 
 .tag-filter-label {
-  min-width: 64px;
   color: #60705a;
   font-size: 13px;
-  line-height: 34px;
+  line-height: 1.4;
+}
+
+.tag-filter-toggle {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #5f7d56;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tag-filter-toggle:hover {
+  color: #45603e;
+  text-decoration: underline;
 }
 
 .tag-filter-list {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  overflow: hidden;
+  transition: max-height 0.2s ease;
+}
+
+.tag-filter-list.collapsed {
+  mask-image: linear-gradient(180deg, #000 0%, #000 78%, rgba(0, 0, 0, 0) 100%);
 }
 
 .filter-chip {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 7px 11px;
   border: 1px solid #dbe7d4;
   border-radius: 999px;
   background: #f8fbf5;
@@ -960,7 +1036,7 @@ export default {
 .search-actions {
   display: flex;
   gap: 10px;
-  margin-top: 14px;
+  margin-top: 12px;
 }
 
 .workspace-card {

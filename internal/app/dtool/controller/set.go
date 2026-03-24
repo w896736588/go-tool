@@ -819,11 +819,23 @@ func SetMemoryConfigGet(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
+	dailyReportPrompt, err := memoryConfigValue(define.GlobalHomeTaskDailyReportPrompt)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	dailyReportModelID, err := memoryConfigValue(define.GlobalHomeTaskDailyReportModelID)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
-		`memory_dir`:              memoryDir,
-		`memory_db_name`:          memoryDBName,
-		`memory_arrange_prompt`:   arrangePrompt,
-		`memory_arrange_model_id`: cast.ToInt(arrangeModelID),
+		`memory_dir`:                      memoryDir,
+		`memory_db_name`:                  memoryDBName,
+		`memory_arrange_prompt`:           arrangePrompt,
+		`memory_arrange_model_id`:         cast.ToInt(arrangeModelID),
+		`home_task_daily_report_prompt`:   dailyReportPrompt,
+		`home_task_daily_report_model_id`: cast.ToInt(dailyReportModelID),
 	})
 }
 
@@ -861,6 +873,30 @@ func SetMemoryConfigSave(c *gin.Context) {
 		return
 	}
 	if err := common.DbMain.SetGlobalValue(`记忆整理模型`, define.GlobalMemoryArrangeModelID, cast.ToString(memoryArrangeModelID), `知识片段 AI 整理所用模型 id`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskDailyReportPrompt := strings.TrimSpace(cast.ToString(dataMap[`home_task_daily_report_prompt`]))
+	if homeTaskDailyReportPrompt == `` {
+		homeTaskDailyReportPrompt = defaultHomeTaskDailyReportPrompt()
+	}
+	homeTaskDailyReportModelID := cast.ToInt(dataMap[`home_task_daily_report_model_id`])
+	if homeTaskDailyReportModelID > 0 {
+		modelInfo, err := common.DbMain.InfoCrawlAiModelInfo(homeTaskDailyReportModelID)
+		if err != nil {
+			gsgin.GinResponseError(c, `AI 模型不存在`, nil)
+			return
+		}
+		if strings.ToLower(cast.ToString(modelInfo[`model_type`])) != `llm` {
+			gsgin.GinResponseError(c, `工作日报仅支持选择 LLM 模型`, nil)
+			return
+		}
+	}
+	if err := common.DbMain.SetGlobalValue(`工作日报提示词`, define.GlobalHomeTaskDailyReportPrompt, homeTaskDailyReportPrompt, `首页任务工作日报 AI 提示词`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	if err := common.DbMain.SetGlobalValue(`工作日报模型`, define.GlobalHomeTaskDailyReportModelID, cast.ToString(homeTaskDailyReportModelID), `首页任务工作日报所用模型 id`); err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}

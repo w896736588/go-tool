@@ -1,4 +1,4 @@
-import base from "@/utils/base";
+﻿import base from "@/utils/base";
 
 function DockerComposeList(data , callBack){
     console.log(data , callBack)
@@ -38,6 +38,12 @@ function DockerContainerStop(data , callBack){
 function DockerContainerRemove(data , callBack){
     base.BasePost('/api/DockerContainerRemove', data, callBack)
 }
+function DockerSpaceAnalysis(data , callBack){
+    base.BasePost('/api/DockerSpaceAnalysis', data, callBack)
+}
+function DockerContainerLogTruncate(data , callBack){
+    base.BasePost('/api/DockerContainerLogTruncate', data, callBack)
+}
 export default {
     DockerComposeList,
     DockerComposeRestart,
@@ -51,4 +57,7 @@ export default {
     DockerImageRemove,
     DockerContainerStop,
     DockerContainerRemove,
+    DockerSpaceAnalysis,
+    DockerContainerLogTruncate,
 }
+

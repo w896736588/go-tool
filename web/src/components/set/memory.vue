@@ -41,6 +41,31 @@
             placeholder="请输入 AI 整理提示词"
           />
         </el-form-item>
+        <el-divider content-position="left">工作日报 AI</el-divider>
+        <el-form-item label="日报模型">
+          <el-select
+            v-model="form.home_task_daily_report_model_id"
+            clearable
+            filterable
+            style="width: 100%;"
+            placeholder="请选择用于生成工作日报的 LLM 模型"
+          >
+            <el-option
+              v-for="item in aiModelList"
+              :key="item.id"
+              :label="buildModelLabel(item)"
+              :value="item.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="日报提示词">
+          <el-input
+            v-model="form.home_task_daily_report_prompt"
+            type="textarea"
+            :rows="4"
+            placeholder="请输入首页任务工作日报提示词"
+          />
+        </el-form-item>
       </el-form>
       <el-alert
         :closable="false"
@@ -56,6 +81,8 @@ import set from '@/utils/base/git_set'
 import AiSetApi from '@/utils/base/ai_set'
 
 const DEFAULT_MEMORY_ARRANGE_PROMPT = '帮我把当前markdown进行整理格式，让它看起来更顺畅清晰，注意禁止修改内容'
+// DEFAULT_HOME_TASK_DAILY_REPORT_PROMPT 定义首页任务工作日报默认提示词。
+const DEFAULT_HOME_TASK_DAILY_REPORT_PROMPT = '请基于当前活跃任务生成中文工作日报，按已完成、进行中、风险与阻塞三个部分总结，输出 Markdown，禁止编造未提供的信息。'
 
 export default {
   name: 'MemorySet',
@@ -67,6 +94,8 @@ export default {
         memory_db_name: '',
         memory_arrange_model_id: null,
         memory_arrange_prompt: DEFAULT_MEMORY_ARRANGE_PROMPT,
+        home_task_daily_report_model_id: null,
+        home_task_daily_report_prompt: DEFAULT_HOME_TASK_DAILY_REPORT_PROMPT,
       }
     }
   },
@@ -97,6 +126,8 @@ export default {
         this.form.memory_db_name = response.Data.memory_db_name || ''
         this.form.memory_arrange_model_id = response.Data.memory_arrange_model_id || null
         this.form.memory_arrange_prompt = response.Data.memory_arrange_prompt || DEFAULT_MEMORY_ARRANGE_PROMPT
+        this.form.home_task_daily_report_model_id = response.Data.home_task_daily_report_model_id || null
+        this.form.home_task_daily_report_prompt = response.Data.home_task_daily_report_prompt || DEFAULT_HOME_TASK_DAILY_REPORT_PROMPT
       })
     },
     saveConfig() {

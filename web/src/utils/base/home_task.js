@@ -25,10 +25,16 @@ function HomeTaskDelete(id, callBack) {
   base.BasePost('/api/HomeTaskDelete', { id: id }, callBack)
 }
 
+// HomeTaskDailyReportGenerate 生成首页工作日报。
+function HomeTaskDailyReportGenerate(callBack) {
+  base.BasePost('/api/HomeTaskDailyReportGenerate', {}, callBack)
+}
+
 export default {
   HomeTaskList,
   HomeTaskSave,
   HomeTaskArchiveToggle,
   HomeTaskStatusQuickUpdate,
   HomeTaskDelete,
+  HomeTaskDailyReportGenerate,
 }

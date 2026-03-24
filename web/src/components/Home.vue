@@ -127,9 +127,12 @@
                   <div class="home-task-toolbar">
                     <div class="home-task-toolbar__text">
                       <div class="home-task-toolbar__title">任务管理</div>
-                      <div class="home-task-toolbar__desc">保留状态切换和归档能力，删除按钮直接放在卡片右侧</div>
+                      <div class="home-task-toolbar__desc">保留状态切换和归档能力，并支持基于活跃任务一键生成工作日报</div>
                     </div>
                     <div class="home-task-toolbar__actions">
+                      <GitActionButton compact variant="info" :loading="homeTaskGeneratingDailyReport" @click="generateHomeTaskDailyReport">
+                        {{ HOME_TASK_DAILY_REPORT_BUTTON_TEXT }}
+                      </GitActionButton>
                       <GitActionButton compact @click="openCreateHomeTaskDialog">
                         新增任务
                       </GitActionButton>
@@ -185,15 +188,20 @@
                                   >
                                     {{ status }}
                                   </el-dropdown-item>
-                                  <el-dropdown-item divided :command="HOME_TASK_ACTION_COMMAND_EDIT">
-                                    编辑任务
-                                  </el-dropdown-item>
                                   <el-dropdown-item :command="HOME_TASK_ACTION_COMMAND_ARCHIVE">
                                     归档任务
                                   </el-dropdown-item>
                                 </el-dropdown-menu>
                               </template>
                             </el-dropdown>
+                            <GitActionButton
+                              compact
+                              variant="info"
+                              :disabled="isHomeTaskBusy(task.id)"
+                              @click="editHomeTask(task)"
+                            >
+                              {{ HOME_TASK_EDIT_BUTTON_TEXT }}
+                            </GitActionButton>
                             <GitActionButton
                               compact
                               variant="danger"
@@ -255,15 +263,20 @@
                                   >
                                     {{ status }}
                                   </el-dropdown-item>
-                                  <el-dropdown-item divided :command="HOME_TASK_ACTION_COMMAND_EDIT">
-                                    编辑任务
-                                  </el-dropdown-item>
                                   <el-dropdown-item :command="HOME_TASK_ACTION_COMMAND_UNARCHIVE">
                                     取消归档
                                   </el-dropdown-item>
                                 </el-dropdown-menu>
                               </template>
                             </el-dropdown>
+                            <GitActionButton
+                              compact
+                              variant="info"
+                              :disabled="isHomeTaskBusy(task.id)"
+                              @click="editHomeTask(task)"
+                            >
+                              {{ HOME_TASK_EDIT_BUTTON_TEXT }}
+                            </GitActionButton>
                             <GitActionButton
                               compact
                               variant="danger"
@@ -513,6 +526,13 @@ const HOME_TASK_DELETE_CONFIRM_TITLE = '确认删除'
 const HOME_TASK_DELETE_CONFIRM_MESSAGE_PREFIX = '确定要删除任务“'
 const HOME_TASK_DELETE_CONFIRM_MESSAGE_SUFFIX = '”吗？该操作不可恢复。'
 const HOME_TASK_DELETE_SUCCESS_MESSAGE = '任务已删除'
+// HOME_TASK_EDIT_BUTTON_TEXT 统一定义任务编辑按钮文案。
+const HOME_TASK_EDIT_BUTTON_TEXT = '编辑任务'
+// HOME_TASK_DAILY_REPORT_BUTTON_TEXT 统一定义日报生成按钮文案。
+const HOME_TASK_DAILY_REPORT_BUTTON_TEXT = 'AI 生成工作日报'
+// HOME_TASK_DAILY_REPORT_* 统一定义日报生成提示文案。
+const HOME_TASK_DAILY_REPORT_SUCCESS_MESSAGE = '工作日报已生成并保存到记忆'
+const HOME_TASK_DAILY_REPORT_FAILED_MESSAGE = '工作日报生成失败'
 // HOME_TASK_ACTION_COMMAND_STATUS_PREFIX 标识状态切换指令前缀。
 const HOME_TASK_ACTION_COMMAND_STATUS_PREFIX = 'status:'
 // HOME_DASHBOARD_PAGE_* 标识首页双屏结构中的页索引。
@@ -590,12 +610,15 @@ export default {
       HOME_TASK_ACTION_COMMAND_EDIT,
       HOME_TASK_ACTION_COMMAND_ARCHIVE,
       HOME_TASK_ACTION_COMMAND_UNARCHIVE,
+      HOME_TASK_EDIT_BUTTON_TEXT,
+      HOME_TASK_DAILY_REPORT_BUTTON_TEXT,
       homeTaskActiveTab: HOME_TASK_TAB_ACTIVE,
       homeTaskDialogVisible: false,
       homeDashboardPageIndex: HOME_DASHBOARD_PAGE_COMMAND,
       homeDashboardAnimating: false,
       homeTaskLoadingActive: false,
       homeTaskLoadingArchived: false,
+      homeTaskGeneratingDailyReport: false,
       homeTaskSaving: false,
       homeTaskOperatingId: 0,
       homeTaskOperatingType: '',
@@ -822,6 +845,21 @@ export default {
     openCreateHomeTaskDialog() {
       this.resetHomeTaskForm()
       this.homeTaskDialogVisible = true
+    },
+    // generateHomeTaskDailyReport 调用后端基于活跃任务生成日报并写入记忆。
+    generateHomeTaskDailyReport() {
+      if (this.homeTaskGeneratingDailyReport) {
+        return
+      }
+      this.homeTaskGeneratingDailyReport = true
+      homeTaskApi.HomeTaskDailyReportGenerate((response) => {
+        this.homeTaskGeneratingDailyReport = false
+        if (!(response && response.ErrCode === 0)) {
+          this.$helperNotify.error(response?.ErrMsg || HOME_TASK_DAILY_REPORT_FAILED_MESSAGE)
+          return
+        }
+        this.$helperNotify.success(HOME_TASK_DAILY_REPORT_SUCCESS_MESSAGE)
+      })
     },
     // closeHomeTaskDialog 关闭任务弹窗，并清空临时表单内容。
     closeHomeTaskDialog() {
