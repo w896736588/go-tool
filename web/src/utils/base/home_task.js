@@ -20,9 +20,15 @@ function HomeTaskStatusQuickUpdate(id, taskStatus, callBack) {
   base.BasePost('/api/HomeTaskStatusQuickUpdate', { id: id, task_status: taskStatus }, callBack)
 }
 
+// HomeTaskDelete 删除首页任务。
+function HomeTaskDelete(id, callBack) {
+  base.BasePost('/api/HomeTaskDelete', { id: id }, callBack)
+}
+
 export default {
   HomeTaskList,
   HomeTaskSave,
   HomeTaskArchiveToggle,
   HomeTaskStatusQuickUpdate,
+  HomeTaskDelete,
 }

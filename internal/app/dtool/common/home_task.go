@@ -152,6 +152,22 @@ func (h *CSqlite) HomeTaskStatusQuickUpdate(id int, taskStatus string) (map[stri
 	return h.HomeTaskRow(id)
 }
 
+// HomeTaskDelete 真正删除首页任务，删除后不可恢复。
+func (h *CSqlite) HomeTaskDelete(id int) error {
+	if id <= 0 {
+		return errors.New(`任务id不能为空`)
+	}
+	// 先确认任务存在，避免删除不存在记录时前端误判为成功。
+	if _, err := h.HomeTaskRow(id); err != nil {
+		return err
+	}
+	_, err := h.Client.ExecBySql(`delete from tbl_home_task where id = ?`, id).Exec()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // fillHomeTaskTimeDescList 批量填充首页任务时间描述字段。
 func (h *CSqlite) fillHomeTaskTimeDescList(list []map[string]any) {
 	for _, item := range list {

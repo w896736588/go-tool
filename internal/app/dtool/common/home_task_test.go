@@ -70,6 +70,26 @@ func TestHomeTaskStatusQuickUpdateSetsStartTimeWhenRunning(t *testing.T) {
 	}
 }
 
+func TestHomeTaskDeleteRemovesTask(t *testing.T) {
+	t.Parallel()
+
+	db := newHomeTaskTestDB(t)
+
+	info, err := db.HomeTaskSave(0, `任务C`, define.HomeTaskStatusTodo, `删除后不应再能查询到`, 0)
+	if err != nil {
+		t.Fatalf("HomeTaskSave() error = %v", err)
+	}
+
+	taskID := cast.ToInt(info[`id`])
+	if err := db.HomeTaskDelete(taskID); err != nil {
+		t.Fatalf("HomeTaskDelete() error = %v", err)
+	}
+
+	if _, err := db.HomeTaskRow(taskID); err == nil {
+		t.Fatalf("HomeTaskRow() error = nil, want deleted task query to fail")
+	}
+}
+
 func newHomeTaskTestDB(t *testing.T) *CSqlite {
 	t.Helper()
 

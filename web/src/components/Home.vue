@@ -117,16 +117,17 @@
               <div ref="homeTaskPanelScroll" class="home-task-panel-scroll">
                 <section class="home-task-panel">
                   <div class="home-task-panel__header">
-                    <div>
+                    <div class="home-task-panel__heading">
+                      <div class="home-task-panel__eyebrow">Home Tasks</div>
                       <div class="home-task-panel__title">任务清单</div>
-                      <div class="home-task-panel__desc">首页底部展示活跃任务与归档任务，便于随时记录与切换状态</div>
+                      <div class="home-task-panel__desc">保持和命令快捷操作一致的轻量层级，随时记录、切换和清理任务</div>
                     </div>
                   </div>
 
                   <div class="home-task-toolbar">
                     <div class="home-task-toolbar__text">
                       <div class="home-task-toolbar__title">任务管理</div>
-                      <div class="home-task-toolbar__desc">支持备注直出，列表操作统一收口到右侧状态变更按钮</div>
+                      <div class="home-task-toolbar__desc">保留状态切换和归档能力，删除按钮直接放在卡片右侧</div>
                     </div>
                     <div class="home-task-toolbar__actions">
                       <GitActionButton compact @click="openCreateHomeTaskDialog">
@@ -161,15 +162,15 @@
                           <div v-if="task.remark" class="home-task-card__remark">
                             {{ task.remark }}
                           </div>
-                          <div class="home-task-card__actions home-task-card__actions--single">
+                          <div class="home-task-card__actions">
                             <el-dropdown
                               trigger="click"
-                              :disabled="homeTaskOperatingId === task.id"
+                              :disabled="isHomeTaskBusy(task.id)"
                               @command="handleHomeTaskActionCommand(task, $event)"
                             >
                               <GitActionButton
                                 compact
-                                :loading="homeTaskOperatingId === task.id"
+                                :loading="isHomeTaskBusy(task.id, HOME_TASK_OPERATE_STATUS) || isHomeTaskBusy(task.id, HOME_TASK_OPERATE_ARCHIVE)"
                                 :variant="getHomeTaskActionButtonVariant(task.task_status)"
                               >
                                 状态变更
@@ -193,6 +194,15 @@
                                 </el-dropdown-menu>
                               </template>
                             </el-dropdown>
+                            <GitActionButton
+                              compact
+                              variant="danger"
+                              :loading="isHomeTaskBusy(task.id, HOME_TASK_OPERATE_DELETE)"
+                              :disabled="isHomeTaskBusy(task.id) && !isHomeTaskBusy(task.id, HOME_TASK_OPERATE_DELETE)"
+                              @click="deleteHomeTask(task)"
+                            >
+                              删除任务
+                            </GitActionButton>
                           </div>
                         </div>
                       </div>
@@ -222,13 +232,17 @@
                           <div v-if="task.remark" class="home-task-card__remark">
                             {{ task.remark }}
                           </div>
-                          <div class="home-task-card__actions home-task-card__actions--single">
+                          <div class="home-task-card__actions">
                             <el-dropdown
                               trigger="click"
-                              :disabled="homeTaskOperatingId === task.id"
+                              :disabled="isHomeTaskBusy(task.id)"
                               @command="handleHomeTaskActionCommand(task, $event)"
                             >
-                              <GitActionButton compact :loading="homeTaskOperatingId === task.id" variant="info">
+                              <GitActionButton
+                                compact
+                                :loading="isHomeTaskBusy(task.id, HOME_TASK_OPERATE_STATUS) || isHomeTaskBusy(task.id, HOME_TASK_OPERATE_ARCHIVE)"
+                                variant="info"
+                              >
                                 状态变更
                               </GitActionButton>
                               <template #dropdown>
@@ -250,6 +264,15 @@
                                 </el-dropdown-menu>
                               </template>
                             </el-dropdown>
+                            <GitActionButton
+                              compact
+                              variant="danger"
+                              :loading="isHomeTaskBusy(task.id, HOME_TASK_OPERATE_DELETE)"
+                              :disabled="isHomeTaskBusy(task.id) && !isHomeTaskBusy(task.id, HOME_TASK_OPERATE_DELETE)"
+                              @click="deleteHomeTask(task)"
+                            >
+                              删除任务
+                            </GitActionButton>
                           </div>
                         </div>
                       </div>
@@ -436,7 +459,11 @@ import module from "@/utils/module"
 import baseApi from '@/utils/base/base_api'
 import sshSet from '@/utils/base/ssh_set'
 import homeTaskApi from '@/utils/base/home_task'
-const { shouldBlockHomeDashboardPageSwitch } = require('@/utils/home_dashboard_wheel.cjs')
+const {
+  HOME_DASHBOARD_PAGE_SWITCH_HOT_ZONE_WIDTH,
+  isHomeDashboardPageSwitchHotZone,
+  shouldBlockHomeDashboardPageSwitch,
+} = require('@/utils/home_dashboard_wheel.cjs')
 import Tools from "@/components/Tools.vue";
 import Markdown from '@/components/Markdown.vue'
 import GitActionButton from "@/components/base/GitActionButton.vue";
@@ -476,10 +503,16 @@ const HOME_TASK_STATUS_ONLINE = '已上线'
 const HOME_TASK_OPERATE_SAVE = 'save'
 const HOME_TASK_OPERATE_STATUS = 'status'
 const HOME_TASK_OPERATE_ARCHIVE = 'archive'
+const HOME_TASK_OPERATE_DELETE = 'delete'
 // HOME_TASK_ACTION_COMMAND_* 用于统一处理任务卡片下拉操作。
 const HOME_TASK_ACTION_COMMAND_EDIT = 'edit'
 const HOME_TASK_ACTION_COMMAND_ARCHIVE = 'archive'
 const HOME_TASK_ACTION_COMMAND_UNARCHIVE = 'unarchive'
+// HOME_TASK_DELETE_CONFIRM_* 统一任务删除确认文案，避免危险操作提示分散。
+const HOME_TASK_DELETE_CONFIRM_TITLE = '确认删除'
+const HOME_TASK_DELETE_CONFIRM_MESSAGE_PREFIX = '确定要删除任务“'
+const HOME_TASK_DELETE_CONFIRM_MESSAGE_SUFFIX = '”吗？该操作不可恢复。'
+const HOME_TASK_DELETE_SUCCESS_MESSAGE = '任务已删除'
 // HOME_TASK_ACTION_COMMAND_STATUS_PREFIX 标识状态切换指令前缀。
 const HOME_TASK_ACTION_COMMAND_STATUS_PREFIX = 'status:'
 // HOME_DASHBOARD_PAGE_* 标识首页双屏结构中的页索引。
@@ -551,7 +584,9 @@ export default {
       HOME_TASK_TAB_ARCHIVED,
       HOME_TASK_ARCHIVED_NO,
       HOME_TASK_ARCHIVED_YES,
+      HOME_TASK_OPERATE_STATUS,
       HOME_TASK_OPERATE_ARCHIVE,
+      HOME_TASK_OPERATE_DELETE,
       HOME_TASK_ACTION_COMMAND_EDIT,
       HOME_TASK_ACTION_COMMAND_ARCHIVE,
       HOME_TASK_ACTION_COMMAND_UNARCHIVE,
@@ -707,8 +742,11 @@ export default {
       if (Math.abs(deltaY) < HOME_DASHBOARD_WHEEL_SWITCH_THRESHOLD) {
         return
       }
-      // 内部滚动容器或非可滚动空白区域都不触发整屏切换，避免首页误翻页。
-      if (shouldBlockHomeDashboardPageSwitch(event.target, deltaY, event.currentTarget)) {
+      const currentTarget = event.currentTarget
+      const currentTargetRect = currentTarget instanceof HTMLElement ? currentTarget.getBoundingClientRect() : null
+      const isRightHotZone = isHomeDashboardPageSwitchHotZone(event.clientX, currentTargetRect, HOME_DASHBOARD_PAGE_SWITCH_HOT_ZONE_WIDTH)
+      // 命中首页最右侧热区时，优先允许整屏翻页，不再被命令区全宽滚动容器拦截。
+      if (!isRightHotZone && shouldBlockHomeDashboardPageSwitch(event.target, deltaY, currentTarget)) {
         return
       }
       if (this.homeDashboardPageIndex === HOME_DASHBOARD_PAGE_COMMAND) {
@@ -770,6 +808,11 @@ export default {
         }
       })
     },
+    // refreshAllHomeTaskList 统一刷新活跃和归档列表，避免各操作分散重复调用。
+    refreshAllHomeTaskList() {
+      this.loadHomeTaskList(HOME_TASK_ARCHIVED_NO)
+      this.loadHomeTaskList(HOME_TASK_ARCHIVED_YES)
+    },
     resetHomeTaskForm() {
       this.homeTaskForm = {
         ...HOME_TASK_DEFAULT_FORM,
@@ -822,9 +865,19 @@ export default {
         }
         this.$helperNotify.success(this.homeTaskForm.id > 0 ? '任务已更新' : '任务已创建')
         this.closeHomeTaskDialog()
-        this.loadHomeTaskList(HOME_TASK_ARCHIVED_NO)
-        this.loadHomeTaskList(HOME_TASK_ARCHIVED_YES)
+        this.refreshAllHomeTaskList()
       })
+    },
+    // isHomeTaskBusy 判断指定任务是否正处于某个操作中，避免多个危险操作并发触发。
+    isHomeTaskBusy(taskId, operateType = '') {
+      const normalizedTaskId = Number(taskId || 0)
+      if (normalizedTaskId <= 0 || this.homeTaskOperatingId !== normalizedTaskId) {
+        return false
+      }
+      if (!operateType) {
+        return true
+      }
+      return this.homeTaskOperatingType === operateType
     },
     quickUpdateHomeTaskStatus(task, taskStatus) {
       if (this.homeTaskOperatingId > 0) {
@@ -839,8 +892,7 @@ export default {
           this.$helperNotify.error(response?.ErrMsg || '状态切换失败')
           return
         }
-        this.loadHomeTaskList(HOME_TASK_ARCHIVED_NO)
-        this.loadHomeTaskList(HOME_TASK_ARCHIVED_YES)
+        this.refreshAllHomeTaskList()
       })
     },
     // buildHomeTaskStatusCommand 生成状态切换菜单命令，避免状态值和其它动作混淆。
@@ -882,9 +934,38 @@ export default {
           this.$helperNotify.error(response?.ErrMsg || '归档状态更新失败')
           return
         }
-        this.loadHomeTaskList(HOME_TASK_ARCHIVED_NO)
-        this.loadHomeTaskList(HOME_TASK_ARCHIVED_YES)
+        this.refreshAllHomeTaskList()
       })
+    },
+    // deleteHomeTask 删除首页任务，使用确认弹窗降低误删风险。
+    deleteHomeTask(task) {
+      if (this.homeTaskOperatingId > 0) {
+        return
+      }
+      const taskId = Number(task?.id || 0)
+      const taskName = String(task?.name || '').trim() || `#${taskId}`
+      this.$confirm(
+        `${HOME_TASK_DELETE_CONFIRM_MESSAGE_PREFIX}${taskName}${HOME_TASK_DELETE_CONFIRM_MESSAGE_SUFFIX}`,
+        HOME_TASK_DELETE_CONFIRM_TITLE,
+        {
+          type: 'warning',
+          confirmButtonText: '确认删除',
+          cancelButtonText: '取消',
+        }
+      ).then(() => {
+        this.homeTaskOperatingId = taskId
+        this.homeTaskOperatingType = HOME_TASK_OPERATE_DELETE
+        homeTaskApi.HomeTaskDelete(taskId, (response) => {
+          this.homeTaskOperatingId = 0
+          this.homeTaskOperatingType = ''
+          if (!(response && response.ErrCode === 0)) {
+            this.$helperNotify.error(response?.ErrMsg || '任务删除失败')
+            return
+          }
+          this.$helperNotify.success(HOME_TASK_DELETE_SUCCESS_MESSAGE)
+          this.refreshAllHomeTaskList()
+        })
+      }).catch(() => {})
     },
     convertHomeTaskDateToUnix(dateText) {
       if (!dateText) {
@@ -1153,30 +1234,45 @@ export default {
 }
 
 .home-task-panel {
-  padding: 16px 18px 18px;
-  border: 1px solid #e3eadb;
-  border-radius: 18px;
-  background: linear-gradient(180deg, #fcfdf9 0%, #f7f9f3 100%);
-  box-shadow: 0 12px 32px rgba(138, 154, 126, 0.08);
+  padding: 20px 22px 22px;
+  border: 1px solid #e5ebde;
+  border-radius: 20px;
+  background: linear-gradient(180deg, #fdfdfb 0%, #f8faf5 100%);
+  box-shadow: 0 16px 36px rgba(138, 154, 126, 0.08);
 }
 
 .home-task-panel__header {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
+}
+
+.home-task-panel__heading {
+  display: flex;
+  flex-direction: column;
+}
+
+.home-task-panel__eyebrow {
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #93a18f;
 }
 
 .home-task-panel__title {
-  font-size: 18px;
+  margin-top: 8px;
+  font-size: 22px;
   font-weight: 600;
-  color: #3f4f3e;
+  color: #3d4b3d;
 }
 
 .home-task-panel__desc {
-  margin-top: 4px;
-  font-size: 12px;
+  margin-top: 8px;
+  font-size: 13px;
   color: #72816f;
+  line-height: 1.6;
 }
 
 /* 覆盖 Element Plus 菜单样式 */
@@ -1270,24 +1366,26 @@ export default {
 .home-task-toolbar {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
-  padding: 12px 14px;
-  margin-bottom: 14px;
-  border: 1px solid #e7ece1;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #f7fbf2 0%, #fffdf8 100%);
+  gap: 16px;
+  align-items: center;
+  padding: 14px 16px;
+  margin-bottom: 18px;
+  border: 1px solid #e4eadc;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #f7faf4 0%, #fcfdf9 100%);
 }
 
 .home-task-toolbar__title {
   font-size: 15px;
   font-weight: 600;
-  color: #465742;
+  color: #425241;
 }
 
 .home-task-toolbar__desc {
-  margin-top: 4px;
+  margin-top: 6px;
   font-size: 12px;
   color: #6c7d68;
+  line-height: 1.6;
 }
 
 .home-task-toolbar__actions {
@@ -1301,7 +1399,15 @@ export default {
 }
 
 .home-task-tabs :deep(.el-tabs__header) {
-  margin-bottom: 12px;
+  margin-bottom: 16px;
+}
+
+.home-task-tabs :deep(.el-tabs__item) {
+  color: #6f7d6d;
+}
+
+.home-task-tabs :deep(.el-tabs__item.is-active) {
+  color: #456c45;
 }
 
 .home-task-list {
@@ -1320,19 +1426,20 @@ export default {
 }
 
 .home-task-card {
-  padding: 14px 16px;
-  border: 1px solid #e2eadc;
-  border-radius: 12px;
-  background: linear-gradient(180deg, #ffffff 0%, #fbfcf9 100%);
-  box-shadow: 0 8px 20px rgba(144, 160, 132, 0.08);
+  padding: 16px 18px;
+  border: 1px solid #e3e9dd;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcf8 100%);
+  box-shadow: 0 10px 24px rgba(144, 160, 132, 0.08);
 }
 
 .home-task-card + .home-task-card {
-  margin-top: 12px;
+  margin-top: 14px;
 }
 
 .home-task-card--archived {
   opacity: 0.94;
+  background: linear-gradient(180deg, #fcfdfb 0%, #f7faf5 100%);
 }
 
 .home-task-card__header {
@@ -1342,7 +1449,7 @@ export default {
 }
 
 .home-task-card__title {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   color: #39463a;
 }
@@ -1360,18 +1467,16 @@ export default {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 14px;
-}
-
-.home-task-card__actions--single {
   justify-content: flex-end;
+  margin-top: 16px;
 }
 
 .home-task-card__remark {
-  margin-top: 12px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: #f5f8ef;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid #e7ede1;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f8faf4 0%, #f4f7ee 100%);
   color: #536251;
   font-size: 13px;
   line-height: 1.6;

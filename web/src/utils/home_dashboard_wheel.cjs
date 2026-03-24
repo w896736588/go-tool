@@ -3,6 +3,8 @@ const WHEEL_SCROLL_DIRECTION_UP = -1
 const WHEEL_SCROLL_DIRECTION_DOWN = 1
 // SCROLL_POSITION_MIN 表示滚动容器顶部位置。
 const SCROLL_POSITION_MIN = 0
+// HOME_DASHBOARD_PAGE_SWITCH_HOT_ZONE_WIDTH 表示首页最右侧允许强制翻页的热区宽度。
+const HOME_DASHBOARD_PAGE_SWITCH_HOT_ZONE_WIDTH = 200
 
 // getParentElement 兼容 Element 与普通节点，统一向上查找父元素。
 function getParentElement(node) {
@@ -68,26 +70,43 @@ function canElementScrollInDirection(element, direction) {
   return false
 }
 
-// shouldBlockHomeDashboardPageSwitch 只要事件源位于可继续滚动的内部容器中，就阻止首页整屏切换。
+// isHomeDashboardPageSwitchHotZone 判断鼠标是否位于首页最右侧热区内。
+function isHomeDashboardPageSwitchHotZone(clientX, containerRect, hotZoneWidth = HOME_DASHBOARD_PAGE_SWITCH_HOT_ZONE_WIDTH) {
+  const numericClientX = Number(clientX || 0)
+  if (!containerRect || typeof containerRect !== 'object') {
+    return false
+  }
+  const containerLeft = Number(containerRect.left || 0)
+  const containerRight = Number(containerRect.right || 0)
+  const numericHotZoneWidth = Math.max(Number(hotZoneWidth || 0), SCROLL_POSITION_MIN)
+  if (containerRight <= containerLeft || numericHotZoneWidth <= SCROLL_POSITION_MIN) {
+    return false
+  }
+  return numericClientX >= containerRight - numericHotZoneWidth && numericClientX <= containerRight
+}
+
+// shouldBlockHomeDashboardPageSwitch 只在命中可继续滚动的内部容器时阻止首页整屏切换。
 function shouldBlockHomeDashboardPageSwitch(target, deltaY, stopElement = null) {
   const direction = normalizeWheelDirection(deltaY)
   if (direction === SCROLL_POSITION_MIN) {
     return false
   }
   const scrollableAncestor = findScrollableAncestor(target, stopElement)
-  // 未命中任何可滚动容器时，直接拦截翻页，避免首页空白区域滚轮误切换。
+  // 未命中可滚动祖先时，说明事件来自首页空白区域或静态内容，应继续走整屏切换逻辑。
   if (!scrollableAncestor) {
-    return true
+    return false
   }
   return canElementScrollInDirection(scrollableAncestor, direction)
 }
 
 module.exports = {
+  HOME_DASHBOARD_PAGE_SWITCH_HOT_ZONE_WIDTH,
   WHEEL_SCROLL_DIRECTION_UP,
   WHEEL_SCROLL_DIRECTION_DOWN,
   normalizeWheelDirection,
   isScrollableElement,
   findScrollableAncestor,
   canElementScrollInDirection,
+  isHomeDashboardPageSwitchHotZone,
   shouldBlockHomeDashboardPageSwitch,
 }

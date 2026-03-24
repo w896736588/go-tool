@@ -57,3 +57,15 @@ func HomeTaskStatusQuickUpdate(c *gin.Context) {
 	}
 	gsgin.GinResponseSuccess(c, ``, info)
 }
+
+// HomeTaskDelete 删除首页任务。
+func HomeTaskDelete(c *gin.Context) {
+	request := _struct.HomeTaskDeleteRequest{}
+	_ = gsgin.GinPostBody(c, &request)
+	err := common.DbMain.HomeTaskDelete(request.ID)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	gsgin.GinResponseSuccess(c, ``, nil)
+}

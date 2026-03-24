@@ -267,6 +267,7 @@ func homeTask(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/HomeTaskSave`, controller.HomeTaskSave)
 	tGin.GinPost(`/api/HomeTaskArchiveToggle`, controller.HomeTaskArchiveToggle)
 	tGin.GinPost(`/api/HomeTaskStatusQuickUpdate`, controller.HomeTaskStatusQuickUpdate)
+	tGin.GinPost(`/api/HomeTaskDelete`, controller.HomeTaskDelete)
 }
 
 func infoCrawl(tGin *p_gin.Gin) {

@@ -25,3 +25,8 @@ type HomeTaskStatusQuickUpdateRequest struct {
 	ID         int    `json:"id"`
 	TaskStatus string `json:"task_status"`
 }
+
+// HomeTaskDeleteRequest 删除首页任务请求。
+type HomeTaskDeleteRequest struct {
+	ID int `json:"id"`
+}

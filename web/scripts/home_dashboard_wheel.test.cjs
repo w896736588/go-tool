@@ -17,7 +17,10 @@ const createScrollableElement = ({
 })
 
 const run = () => {
-  const { shouldBlockHomeDashboardPageSwitch } = loadWheelModule()
+  const {
+    shouldBlockHomeDashboardPageSwitch,
+    isHomeDashboardPageSwitchHotZone,
+  } = loadWheelModule()
 
   const rootElement = createScrollableElement({
     clientHeight: 480,
@@ -37,28 +40,28 @@ const run = () => {
   assert.strictEqual(
     shouldBlockHomeDashboardPageSwitch(processTextLine, 48),
     true,
-    '内部输出区域还能继续向下滚动时，不应该触发首页翻页'
+    '命令执行过程输出框还能继续向下滚动时，不应触发首页翻页'
   )
 
   processContainer.scrollTop = 80
   assert.strictEqual(
     shouldBlockHomeDashboardPageSwitch(processTextLine, -48),
     true,
-    '内部输出区域还能继续向上滚动时，不应该触发首页翻页'
+    '命令执行过程输出框还能继续向上滚动时，不应触发首页翻页'
   )
 
   processContainer.scrollTop = 0
   assert.strictEqual(
     shouldBlockHomeDashboardPageSwitch(processTextLine, -48),
     false,
-    '内部输出区域已经滚到顶部时，允许继续处理向上翻页'
+    '命令执行过程输出框滚到顶部后，应允许继续向上切换首页页面'
   )
 
   processContainer.scrollTop = 400
   assert.strictEqual(
     shouldBlockHomeDashboardPageSwitch(processTextLine, 48),
     false,
-    '内部输出区域已经滚到底部时，允许继续处理向下翻页'
+    '命令执行过程输出框滚到底部后，应允许继续向下切换首页页面'
   )
 
   const staticContainer = createScrollableElement({
@@ -71,9 +74,21 @@ const run = () => {
     parentElement: staticContainer,
   }
   assert.strictEqual(
-    shouldBlockHomeDashboardPageSwitch(staticChild, 48),
+    shouldBlockHomeDashboardPageSwitch(staticChild, 48, rootElement),
+    false,
+    '非可滚动区域的滚轮事件应该继续交给首页翻页逻辑处理'
+  )
+
+  assert.strictEqual(
+    isHomeDashboardPageSwitchHotZone(980, { left: 0, right: 1000 }),
     true,
-    '非可滚动区域滚轮事件不应该触发首页翻页'
+    '鼠标位于首页最右侧 200px 热区时，应允许直接触发翻页'
+  )
+
+  assert.strictEqual(
+    isHomeDashboardPageSwitchHotZone(760, { left: 0, right: 1000 }),
+    false,
+    '鼠标离开首页最右侧 200px 热区后，不应命中强制翻页热区'
   )
 
   console.log('home_dashboard_wheel tests passed')
