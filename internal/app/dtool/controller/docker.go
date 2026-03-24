@@ -26,8 +26,6 @@ const (
 	dockerImageFieldCount = 5
 	// dockerContainerFieldCount 容器列表输出字段数量。
 	dockerContainerFieldCount = 5
-	// dockerSpaceAnalysisFieldCount 空间分析输出字段数量。
-	dockerSpaceAnalysisFieldCount = 8
 	// dockerActionTimeoutSeconds Docker 相关操作统一超时时间，避免前端长时间无响应。
 	dockerActionTimeoutSeconds = 40
 	// byteSizeUnit 1024 进制字节单位换算基数。
@@ -295,30 +293,6 @@ func DockerComposeStart(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, ``, map[string]any{})
 }
 
-// DockerSpaceAnalysis 查询当前环境全部容器的空间和日志占用。
-func DockerSpaceAnalysis(c *gin.Context) {
-	_, sshClient, err := getDockerComponent(c)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	command := p_shell.NewCommand()
-	command.Sudo()
-	command.DockerSpaceAnalysis()
-	result, runErr := sshClient.RunCommandWait(command.GetCommand().ToStr(), dockerActionTimeoutSeconds*time.Second)
-	if runErr != nil {
-		gsgin.GinResponseError(c, runErr.Error(), map[string]any{
-			`raw`: result,
-		})
-		return
-	}
-	list := parseDockerSpaceAnalysisRows(result)
-	gsgin.GinResponseSuccess(c, ``, map[string]any{
-		`list`:    list,
-		`summary`: buildDockerSpaceSummary(list),
-	})
-}
-
 // DockerContainerLogTruncate 清理当前环境全部 Docker 容器日志。
 func DockerContainerLogTruncate(c *gin.Context) {
 	_, sshClient, err := getDockerComponent(c)
@@ -461,56 +435,6 @@ func parseDockerContainerRows(raw string) []map[string]string {
 		})
 	}
 	return list
-}
-
-// parseDockerSpaceAnalysisRows 解析容器空间分析输出，并补齐可读大小字段。
-func parseDockerSpaceAnalysisRows(raw string) []map[string]string {
-	rows := parseDockerRows(raw, dockerSpaceAnalysisFieldCount)
-	list := make([]map[string]string, 0, len(rows))
-	for _, fields := range rows {
-		logBytes := cast.ToInt64(fields[5])
-		rwBytes := cast.ToInt64(fields[6])
-		rootFsBytes := cast.ToInt64(fields[7])
-		list = append(list, map[string]string{
-			`container_id`:        fields[0],
-			`container_name`:      strings.TrimPrefix(fields[1], `/`),
-			`image`:               fields[2],
-			`status`:              fields[3],
-			`log_path`:            fields[4],
-			`log_bytes`:           cast.ToString(logBytes),
-			`log_size`:            formatByteSize(logBytes),
-			`rw_bytes`:            cast.ToString(rwBytes),
-			`rw_size`:             formatByteSize(rwBytes),
-			`root_fs_bytes`:       cast.ToString(rootFsBytes),
-			`root_fs_size`:        formatByteSize(rootFsBytes),
-			`combined_rw_log`:     cast.ToString(logBytes + rwBytes),
-			`combined_rw_log_size`: formatByteSize(logBytes + rwBytes),
-		})
-	}
-	return list
-}
-
-// buildDockerSpaceSummary 汇总容器空间分析结果，供页面顶部快速展示。
-func buildDockerSpaceSummary(rows []map[string]string) map[string]any {
-	var totalLogBytes int64
-	var totalRwBytes int64
-	var totalRootFsBytes int64
-	for _, row := range rows {
-		totalLogBytes += cast.ToInt64(row[`log_bytes`])
-		totalRwBytes += cast.ToInt64(row[`rw_bytes`])
-		totalRootFsBytes += cast.ToInt64(row[`root_fs_bytes`])
-	}
-	return map[string]any{
-		`container_count`:            int64(len(rows)),
-		`total_log_bytes`:            totalLogBytes,
-		`total_log_size`:             formatByteSize(totalLogBytes),
-		`total_rw_bytes`:             totalRwBytes,
-		`total_rw_size`:              formatByteSize(totalRwBytes),
-		`total_root_fs_bytes`:        totalRootFsBytes,
-		`total_root_fs_size`:         formatByteSize(totalRootFsBytes),
-		`total_combined_rw_log`:      totalLogBytes + totalRwBytes,
-		`total_combined_rw_log_size`: formatByteSize(totalLogBytes + totalRwBytes),
-	}
 }
 
 // formatByteSize 将字节数转换为便于页面展示的大小字符串。
