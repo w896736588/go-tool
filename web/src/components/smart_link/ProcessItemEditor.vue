@@ -652,7 +652,25 @@
             </div>
           </div>
           <div class="structured-locator-section">
-            <div class="structured-locator-section__title">2. 过滤条件</div>
+            <div class="structured-locator-section__title">2. 结果提取</div>
+            <div class="structured-locator-grid">
+              <el-select v-model="baseLocatorDialog.draft.locator_advanced_form.pick_mode" placeholder="多个结果时怎么处理">
+                <el-option label="默认" value="none" />
+                <el-option label="只取第一个" value="first" />
+                <el-option label="只取最后一个" value="last" />
+                <el-option label="取第 N 个" value="nth" />
+              </el-select>
+              <el-input-number
+                v-model="baseLocatorDialog.draft.locator_advanced_form.nth"
+                :min="0"
+                :step="1"
+                controls-position="right"
+                :disabled="baseLocatorDialog.draft.locator_advanced_form.pick_mode !== 'nth'"
+              />
+            </div>
+          </div>
+          <div class="structured-locator-section">
+            <div class="structured-locator-section__title">3. 过滤条件</div>
             <div class="structured-locator-grid">
               <el-input v-model="baseLocatorDialog.draft.locator_advanced_form.has_text" placeholder="包含文本" />
               <el-input v-model="baseLocatorDialog.draft.locator_advanced_form.has_not_text" placeholder="不包含文本" />
@@ -699,6 +717,24 @@
               <el-input
                 v-model="baseLocatorDialog.draft.locator_structured_form.value"
                 :placeholder="getStructuredLocatorPrimaryPlaceholder(baseLocatorDialog.draft.locator_structured_form.kind)"
+              />
+            </div>
+          </div>
+          <div class="structured-locator-section">
+            <div class="structured-locator-section__title">2. 结果提取</div>
+            <div class="structured-locator-grid">
+              <el-select v-model="baseLocatorDialog.draft.locator_structured_form.pick_mode" placeholder="多个结果时怎么处理">
+                <el-option label="默认" value="none" />
+                <el-option label="只取第一个" value="first" />
+                <el-option label="只取最后一个" value="last" />
+                <el-option label="取第 N 个" value="nth" />
+              </el-select>
+              <el-input-number
+                v-model="baseLocatorDialog.draft.locator_structured_form.nth"
+                :min="0"
+                :step="1"
+                controls-position="right"
+                :disabled="baseLocatorDialog.draft.locator_structured_form.pick_mode !== 'nth'"
               />
             </div>
           </div>
