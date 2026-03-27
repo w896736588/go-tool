@@ -3,7 +3,9 @@ package controller
 import (
 	"dev_tool/internal/app/dtool/business"
 	"dev_tool/internal/app/dtool/common"
+	"dev_tool/internal/app/dtool/component"
 	"dev_tool/internal/app/dtool/define"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -798,17 +800,9 @@ func SetGlobalDelete(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, ``, nil)
 }
 
+// SetMemoryConfigGet 返回记忆配置页面数据 / return memory settings page data.
 func SetMemoryConfigGet(c *gin.Context) {
-	memoryDir, err := memoryConfigValue(define.GlobalMemoryDir)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	memoryDBName, err := memoryConfigValue(define.GlobalMemoryDBName)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
+	memoryConfig := business.ReadMemoryConfigFromINI()
 	arrangePrompt, err := memoryConfigValue(define.GlobalMemoryArrangePrompt)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
@@ -830,8 +824,10 @@ func SetMemoryConfigGet(c *gin.Context) {
 		return
 	}
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
-		`memory_dir`:                      memoryDir,
-		`memory_db_name`:                  memoryDBName,
+		`memory_dir`:                      memoryConfig.Dir,
+		`memory_db_name`:                  memoryConfig.DBName,
+		`memory_db_configured`:            memoryConfig.Dir != `` && memoryConfig.DBName != ``,
+		`memory_config_file`:              memoryConfigFilePath(),
 		`memory_arrange_prompt`:           arrangePrompt,
 		`memory_arrange_model_id`:         cast.ToInt(arrangeModelID),
 		`home_task_daily_report_prompt`:   dailyReportPrompt,
@@ -839,19 +835,10 @@ func SetMemoryConfigGet(c *gin.Context) {
 	})
 }
 
+// SetMemoryConfigSave 仅保存 AI 相关配置 / save AI-related memory settings only.
 func SetMemoryConfigSave(c *gin.Context) {
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
-	memoryDir := strings.TrimSpace(cast.ToString(dataMap[`memory_dir`]))
-	memoryDBName := strings.TrimSpace(cast.ToString(dataMap[`memory_db_name`]))
-	if err := common.DbMain.SetGlobalValue(`记忆目录`, define.GlobalMemoryDir, memoryDir, `记忆专属库目录`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	if err := common.DbMain.SetGlobalValue(`记忆数据库名`, define.GlobalMemoryDBName, memoryDBName, `记忆专属库文件名`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
 	memoryArrangePrompt := strings.TrimSpace(cast.ToString(dataMap[`memory_arrange_prompt`]))
 	if memoryArrangePrompt == `` {
 		memoryArrangePrompt = defaultMemoryArrangePrompt()
@@ -863,6 +850,7 @@ func SetMemoryConfigSave(c *gin.Context) {
 			gsgin.GinResponseError(c, `AI 模型不存在`, nil)
 			return
 		}
+		// 记忆整理仅允许使用 LLM 模型 / only LLM models are allowed for memory arrangement.
 		if strings.ToLower(cast.ToString(modelInfo[`model_type`])) != `llm` {
 			gsgin.GinResponseError(c, `记忆整理仅支持选择 LLM 模型`, nil)
 			return
@@ -887,6 +875,7 @@ func SetMemoryConfigSave(c *gin.Context) {
 			gsgin.GinResponseError(c, `AI 模型不存在`, nil)
 			return
 		}
+		// 工作日报仅允许使用 LLM 模型 / only LLM models are allowed for daily report.
 		if strings.ToLower(cast.ToString(modelInfo[`model_type`])) != `llm` {
 			gsgin.GinResponseError(c, `工作日报仅支持选择 LLM 模型`, nil)
 			return
@@ -900,11 +889,20 @@ func SetMemoryConfigSave(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	if err := business.LoadMemoryStore(); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
 	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
+// memoryConfigFilePath 返回当前运行中的 ini 配置文件路径 / return active ini config file path.
+func memoryConfigFilePath() string {
+	if component.EnvClient == nil {
+		return ``
+	}
+	configFileName := component.EnvClient.ConfigFile
+	// 仅在未携带扩展名时补 `.ini` / append `.ini` only when extension is missing.
+	if filepath.Ext(configFileName) == `` {
+		configFileName += `.ini`
+	}
+	return filepath.Join(component.EnvClient.ConfigPath, configFileName)
 }
 
 func memoryConfigValue(key string) (string, error) {

@@ -226,9 +226,11 @@ func InitEnv(appName, ConfigFile string, viper *viper.Viper) {
 	component.EnvClient.NodePath = `node`
 	//base配置初始化
 	component.EnvClient.ConfigBase = &define.Base{
-		DbFileName: viper.GetString(`base.dbFileName`),
-		DbPath:     viper.GetString(`base.dbPath`),
-		WebPath:    viper.GetString(`base.webPath`),
+		DbFileName:   viper.GetString(`base.dbFileName`),
+		DbPath:       viper.GetString(`base.dbPath`),
+		MemoryDBPath: viper.GetString(`base.memoryDbPath`),
+		MemoryDBName: viper.GetString(`base.memoryDbFileName`),
+		WebPath:      viper.GetString(`base.webPath`),
 	}
 	//web
 	component.EnvClient.WebConfig = &define.WebConfig{

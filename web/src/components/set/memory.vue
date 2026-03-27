@@ -1,21 +1,40 @@
-﻿<template>
+<template>
   <div class="set-config-page">
     <div class="set-config-header">
       <h3 class="set-config-title">记忆配置</h3>
-      <p class="set-config-desc">配置记忆专属仓库目录与 sqlite 文件名。保存后重启应用生效。</p>
+      <p class="set-config-desc">记忆库目录和 sqlite 文件名改为从配置文件读取，这里仅展示当前生效值；AI 配置仍可在页面保存。</p>
       <div class="set-config-actions">
-        <pl-button type="primary" @click="saveConfig">保存</pl-button>
+        <pl-button type="primary" @click="saveConfig">保存 AI 配置</pl-button>
       </div>
     </div>
 
     <div class="set-config-table-card">
+      <el-alert
+        v-if="!form.memory_db_configured"
+        :closable="false"
+        type="warning"
+        :title="memoryConfigAlertTitle"
+      />
+      <el-alert
+        v-else
+        :closable="false"
+        type="info"
+        :title="memoryConfigAlertTitle"
+      />
+
+      <el-descriptions class="memory-config-display" :column="1" border>
+        <el-descriptions-item label="配置文件">
+          {{ form.memory_config_file || '-' }}
+        </el-descriptions-item>
+        <el-descriptions-item label="memoryDbPath">
+          {{ form.memory_dir || '未配置，请在配置文件中设置' }}
+        </el-descriptions-item>
+        <el-descriptions-item label="memoryDbFileName">
+          {{ form.memory_db_name || '未配置，请在配置文件中设置' }}
+        </el-descriptions-item>
+      </el-descriptions>
+
       <el-form label-width="120px" class="memory-config-form">
-        <el-form-item label="memory_dir">
-          <el-input v-model="form.memory_dir" placeholder="例如 D:\\repo\\memory-data 或 /data/memory" />
-        </el-form-item>
-        <el-form-item label="memory_db_name">
-          <el-input v-model="form.memory_db_name" placeholder="例如 memory.db" />
-        </el-form-item>
         <el-divider content-position="left">AI 整理</el-divider>
         <el-form-item label="整理模型">
           <el-select
@@ -70,7 +89,7 @@
       <el-alert
         :closable="false"
         type="info"
-        title="启动时会先判断目录是否为 git 仓库；是则先 git pull，之后加载该 sqlite。AI 整理配置保存后可立即生效。"
+        title="启动时会先判断记忆目录是否为 git 仓库；是则先 git pull，之后加载该 sqlite。修改 memoryDbPath 或 memoryDbFileName 后需要更新配置文件并重启应用。"
       />
     </div>
   </div>
@@ -92,11 +111,23 @@ export default {
       form: {
         memory_dir: '',
         memory_db_name: '',
+        memory_db_configured: false,
+        memory_config_file: '',
         memory_arrange_model_id: null,
         memory_arrange_prompt: DEFAULT_MEMORY_ARRANGE_PROMPT,
         home_task_daily_report_model_id: null,
         home_task_daily_report_prompt: DEFAULT_HOME_TASK_DAILY_REPORT_PROMPT,
       }
+    }
+  },
+  computed: {
+    // memoryConfigAlertTitle 统一生成记忆 db 配置提示 / build memory db config hint text.
+    memoryConfigAlertTitle() {
+      const configFile = this.form.memory_config_file || '配置文件'
+      if (!this.form.memory_db_configured) {
+        return `未检测到记忆库配置，请在 ${configFile} 的 [base] 节点中配置 memoryDbPath 和 memoryDbFileName。`
+      }
+      return `当前记忆库 db 配置来自 ${configFile} 的 [base] 节点，页面内不再直接修改。`
     }
   },
   mounted() {
@@ -124,6 +155,8 @@ export default {
         }
         this.form.memory_dir = response.Data.memory_dir || ''
         this.form.memory_db_name = response.Data.memory_db_name || ''
+        this.form.memory_db_configured = !!response.Data.memory_db_configured
+        this.form.memory_config_file = response.Data.memory_config_file || ''
         this.form.memory_arrange_model_id = response.Data.memory_arrange_model_id || null
         this.form.memory_arrange_prompt = response.Data.memory_arrange_prompt || DEFAULT_MEMORY_ARRANGE_PROMPT
         this.form.home_task_daily_report_model_id = response.Data.home_task_daily_report_model_id || null
@@ -131,9 +164,15 @@ export default {
       })
     },
     saveConfig() {
-      set.MemoryConfigSave(this.form, (response) => {
+      const payload = {
+        memory_arrange_model_id: this.form.memory_arrange_model_id,
+        memory_arrange_prompt: this.form.memory_arrange_prompt,
+        home_task_daily_report_model_id: this.form.home_task_daily_report_model_id,
+        home_task_daily_report_prompt: this.form.home_task_daily_report_prompt,
+      }
+      set.MemoryConfigSave(payload, (response) => {
         if (response.ErrCode === 0) {
-          this.$helperNotify.success('记忆配置已保存')
+          this.$helperNotify.success('AI 配置已保存')
         }
       })
     }
@@ -144,8 +183,11 @@ export default {
 <style scoped>
 @import "@/css/set_module_unified.css";
 
+.memory-config-display {
+  margin: 16px 0;
+}
+
 .memory-config-form {
   margin-bottom: 16px;
 }
 </style>
-

@@ -9,7 +9,7 @@ import (
 
 const MemorySyncCommitMessage = `chore: sync memory db`
 
-var ErrMemoryNotConfigured = errors.New(`请先到设置页面配置记忆目录和数据库名`)
+var ErrMemoryNotConfigured = errors.New(`请先在配置文件中配置记忆库目录和数据库名`)
 
 type MemoryConfig struct {
 	Dir       string `json:"memory_dir"`

@@ -17,7 +17,7 @@ func TestNewConfigViperReadsINI(t *testing.T) {
 	}
 
 	cfgPath := filepath.Join(cfgDir, "company.ini")
-	cfgBody := []byte("[base]\ndbFileName=frog.db\n")
+	cfgBody := []byte("[base]\ndbFileName=frog.db\nmemoryDbPath=D:/repo/memory\nmemoryDbFileName=memory.db\n")
 	if err := os.WriteFile(cfgPath, cfgBody, 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -33,6 +33,12 @@ func TestNewConfigViperReadsINI(t *testing.T) {
 
 	if got := v.GetString("base.dbFileName"); got != "frog.db" {
 		t.Fatalf("dbFileName = %q, want %q", got, "frog.db")
+	}
+	if got := v.GetString("base.memoryDbPath"); got != "D:/repo/memory" {
+		t.Fatalf("memoryDbPath = %q, want %q", got, "D:/repo/memory")
+	}
+	if got := v.GetString("base.memoryDbFileName"); got != "memory.db" {
+		t.Fatalf("memoryDbFileName = %q, want %q", got, "memory.db")
 	}
 }
 
