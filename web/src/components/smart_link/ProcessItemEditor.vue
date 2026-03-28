@@ -371,18 +371,47 @@
 
     <template v-if="localItem.type === 'redirect_uri'">
       <el-form-item label="跳转地址" :error="fieldError('value')">
-        <el-input v-model="formMeta.value" placeholder="例如 /login 或 https://example.com/login" />
+        <el-input
+          v-model="formMeta.value"
+          placeholder="例如 /login 或 https://example.com/login"
+          @focus="rememberCursorPosition('value', $event)"
+          @click="rememberCursorPosition('value', $event)"
+          @keyup="rememberCursorPosition('value', $event)"
+          @select="rememberCursorPosition('value', $event)"
+        />
         <div class="field-guide">{{ fieldGuide('value') }}</div>
       </el-form-item>
 
       <el-form-item label="跳转后等待地址" :error="fieldError('register_response_urls')">
         <div class="list-editor">
           <div v-for="(item, index) in formMeta.register_response_urls" :key="item.uid" class="response-url-row">
-            <el-input v-model="item.url" placeholder="等待地址，例如 /home 或 https://example.com/home" />
+            <el-input
+              v-model="item.url"
+              placeholder="等待地址，例如 /home 或 https://example.com/home"
+              @focus="rememberCursorPosition(registerResponseUrlCursorKey(item), $event)"
+              @click="rememberCursorPosition(registerResponseUrlCursorKey(item), $event)"
+              @keyup="rememberCursorPosition(registerResponseUrlCursorKey(item), $event)"
+              @select="rememberCursorPosition(registerResponseUrlCursorKey(item), $event)"
+            />
             <el-input-number v-model="item.wait_second" :min="1" :controls="false" class="plain-number-input" />
             <GitActionButton compact size="small" variant="danger" native-type="button" @click="removeRegisterResponseUrl(index)">
               删除
             </GitActionButton>
+          </div>
+          <div v-if="supportsVariableQuickPick('register_response_url')" class="variable-quick-pick variable-quick-pick--embedded">
+            <div class="variable-quick-pick__title">等待地址支持变量 / URL variables</div>
+            <div class="variable-quick-pick__actions">
+              <GitActionButton
+                v-for="option in variableQuickPickOptions('register_response_url')"
+                :key="`redirect-register-response-url-${option.value}`"
+                compact
+                size="small"
+                native-type="button"
+                @click="applyRegisterResponseUrlQuickPick(option.value)"
+              >
+                {{ option.label }}
+              </GitActionButton>
+            </div>
           </div>
           <GitActionButton compact size="small" native-type="button" @click="addRegisterResponseUrl">
             新增等待地址
@@ -399,14 +428,55 @@
           :placeholder="fieldPlaceholder('value')"
           type="textarea"
           :rows="textareaRows('value')"
+          @focus="rememberCursorPosition('value', $event)"
+          @click="rememberCursorPosition('value', $event)"
+          @keyup="rememberCursorPosition('value', $event)"
+          @select="rememberCursorPosition('value', $event)"
         />
+        <div v-if="supportsVariableQuickPick('value')" class="variable-quick-pick">
+          <div class="variable-quick-pick__title">支持变量 / Supported variables</div>
+          <div class="variable-quick-pick__actions">
+            <GitActionButton
+              v-for="option in variableQuickPickOptions('value')"
+              :key="`value-${option.value}`"
+              compact
+              size="small"
+              native-type="button"
+              @click="applyVariableQuickPick('value', option.value)"
+            >
+              {{ option.label }}
+            </GitActionButton>
+          </div>
+        </div>
         <div class="field-guide">{{ fieldGuide('value') }}</div>
       </el-form-item>
     </template>
 
     <template v-if="localItem.type === 'wait_url'">
       <el-form-item label="等待地址" :error="fieldError('response_url')">
-        <el-input v-model="formMeta.response_url" :placeholder="fieldPlaceholder('response_url')" />
+        <el-input
+          v-model="formMeta.response_url"
+          :placeholder="fieldPlaceholder('response_url')"
+          @focus="rememberCursorPosition('response_url', $event)"
+          @click="rememberCursorPosition('response_url', $event)"
+          @keyup="rememberCursorPosition('response_url', $event)"
+          @select="rememberCursorPosition('response_url', $event)"
+        />
+        <div v-if="supportsVariableQuickPick('response_url')" class="variable-quick-pick">
+          <div class="variable-quick-pick__title">支持变量 / Supported variables</div>
+          <div class="variable-quick-pick__actions">
+            <GitActionButton
+              v-for="option in variableQuickPickOptions('response_url')"
+              :key="`response-url-${option.value}`"
+              compact
+              size="small"
+              native-type="button"
+              @click="applyVariableQuickPick('response_url', option.value)"
+            >
+              {{ option.label }}
+            </GitActionButton>
+          </div>
+        </div>
         <div class="field-guide">{{ fieldGuide('response_url') }}</div>
       </el-form-item>
 
@@ -424,7 +494,29 @@
 
       <template v-if="showField('response_url')">
         <el-form-item :label="fieldLabel('response_url')" :error="fieldError('response_url')">
-          <el-input v-model="formMeta.response_url" :placeholder="fieldPlaceholder('response_url')" />
+          <el-input
+            v-model="formMeta.response_url"
+            :placeholder="fieldPlaceholder('response_url')"
+            @focus="rememberCursorPosition('response_url', $event)"
+            @click="rememberCursorPosition('response_url', $event)"
+            @keyup="rememberCursorPosition('response_url', $event)"
+            @select="rememberCursorPosition('response_url', $event)"
+          />
+          <div v-if="supportsVariableQuickPick('response_url')" class="variable-quick-pick">
+            <div class="variable-quick-pick__title">支持变量 / Supported variables</div>
+            <div class="variable-quick-pick__actions">
+              <GitActionButton
+                v-for="option in variableQuickPickOptions('response_url')"
+                :key="`response-url-general-${option.value}`"
+                compact
+                size="small"
+                native-type="button"
+                @click="applyVariableQuickPick('response_url', option.value)"
+              >
+                {{ option.label }}
+              </GitActionButton>
+            </div>
+          </div>
           <div class="field-guide">{{ fieldGuide('response_url') }}</div>
         </el-form-item>
       </template>
@@ -433,11 +525,33 @@
         <el-form-item :label="fieldLabel('register_response_urls')" :error="fieldError('register_response_urls')">
           <div class="list-editor">
             <div v-for="(item, index) in formMeta.register_response_urls" :key="item.uid" class="response-url-row">
-              <el-input v-model="item.url" placeholder="等待地址" />
+              <el-input
+                v-model="item.url"
+                placeholder="等待地址"
+                @focus="rememberCursorPosition(registerResponseUrlCursorKey(item), $event)"
+                @click="rememberCursorPosition(registerResponseUrlCursorKey(item), $event)"
+                @keyup="rememberCursorPosition(registerResponseUrlCursorKey(item), $event)"
+                @select="rememberCursorPosition(registerResponseUrlCursorKey(item), $event)"
+              />
               <el-input-number v-model="item.wait_second" :min="1" :controls="false" class="plain-number-input" />
               <GitActionButton compact size="small" variant="danger" native-type="button" @click="removeRegisterResponseUrl(index)">
                 删除
               </GitActionButton>
+            </div>
+            <div v-if="supportsVariableQuickPick('register_response_url')" class="variable-quick-pick variable-quick-pick--embedded">
+              <div class="variable-quick-pick__title">等待地址支持变量 / URL variables</div>
+              <div class="variable-quick-pick__actions">
+                <GitActionButton
+                  v-for="option in variableQuickPickOptions('register_response_url')"
+                  :key="`register-response-url-${option.value}`"
+                  compact
+                  size="small"
+                  native-type="button"
+                  @click="applyRegisterResponseUrlQuickPick(option.value)"
+                >
+                  {{ option.label }}
+                </GitActionButton>
+              </div>
             </div>
             <GitActionButton compact size="small" native-type="button" @click="addRegisterResponseUrl">
               新增等待地址
@@ -511,15 +625,19 @@
                 <el-input
                   v-model="formMeta.compare_rule.right"
                   placeholder="请输入固定字符串，或点击下方快捷填入注入值"
+                  @focus="rememberCursorPosition('compare_right', $event)"
+                  @click="rememberCursorPosition('compare_right', $event)"
+                  @keyup="rememberCursorPosition('compare_right', $event)"
+                  @select="rememberCursorPosition('compare_right', $event)"
                 />
-                <div class="compare-rule-right__actions">
+                <div class="compare-rule-right__actions variable-quick-pick__actions">
                   <GitActionButton
-                    v-for="option in compareRightOptions"
+                    v-for="option in variableQuickPickOptions('compare_right')"
                     :key="`right-${option.value}`"
                     compact
                     size="small"
                     native-type="button"
-                    @click="applyCompareRightQuickPick(option.value)"
+                    @click="applyVariableQuickPick('compare_right', option.value)"
                   >
                     {{ option.label }}
                   </GitActionButton>
@@ -872,6 +990,22 @@ const PROCESS_TYPE_OPTIONS = [
   { label: '删除元素 delete_element', value: 'delete_element' },
 ]
 
+// SMART_LINK_BUILTIN_VALUE_VARIABLES 用于集中维护“值/比较右值”字段支持的内置变量。
+// SMART_LINK_BUILTIN_VALUE_VARIABLES centralizes builtin variables for value-like fields.
+const SMART_LINK_BUILTIN_VALUE_VARIABLES = [
+  { value: '{user_name}', label: '当前账号用户名 {user_name}' },
+  { value: '{password}', label: '当前账号密码 {password}' },
+  { value: '{rand}', label: '随机值 {rand}' },
+  { value: '{domain}', label: '当前域名 {domain}' },
+]
+
+// SMART_LINK_URL_VARIABLES 用于维护 URL 类字段当前支持的变量。
+// SMART_LINK_URL_VARIABLES lists variables supported by URL-related fields.
+const SMART_LINK_URL_VARIABLES = [
+  { value: '{scheme}', label: '当前协议 {scheme}' },
+  { value: '{domain}', label: '当前域名 {domain}' },
+]
+
 function safeParseJson(text, fallback) {
   if (!text) return fallback
   try {
@@ -1044,6 +1178,7 @@ export default {
       syncingFromParent: false,
       lastSerializedSignature: '',
       fieldErrors: {},
+      cursorState: {},
       processTypeOptions: PROCESS_TYPE_OPTIONS,
     }
   },
@@ -1118,11 +1253,16 @@ export default {
           label: `${item.name || item.type || '未命名节点'}.${normalizeTokenLabel(item.out_key)}`,
         }))
     },
-    compareRightOptions() {
-      return [
-        { value: '{user_name}', label: '当前账号用户名 {user_name}' },
-        { value: '{password}', label: '当前账号密码 {password}' },
-      ]
+    replaceableOutputOptions() {
+      const processList = Array.isArray(this.processItemOptions) ? this.processItemOptions : []
+      const currentIndex = processList.findIndex(item => String(item.id) === String(this.localItem.id))
+      const availableList = currentIndex >= 0 ? processList.slice(0, currentIndex) : processList
+      return availableList
+        .filter((item) => String(item && item.out_key || '').trim() !== '' && String(item && item.append_to_replace || '0') === '1')
+        .map((item) => ({
+          value: normalizeTokenLabel(item.out_key),
+          label: `前序输出 ${normalizeTokenLabel(item.out_key)}`,
+        }))
     },
     autoExtractModelOptions() {
       const providerId = Number(this.autoExtractDialog.provider_id || 0)
@@ -1637,7 +1777,7 @@ export default {
       if (fieldName === 'locator') return '例如 .username 或 .login-btn'
       if (fieldName === 'secondary_locator') return '例如 #password'
       if (fieldName === 'tertiary_locator') return '例如 .submit-btn'
-      if (this.localItem.type === 'input' && fieldName === 'value') return '支持 {user_name} / {password} / {rand}'
+      if (this.localItem.type === 'input' && fieldName === 'value') return '支持 {user_name} / {password} / {rand} / {domain}'
       if (fieldName === 'response_url') return '例如 {scheme}://{domain}/api/login'
       return ''
     },
@@ -1668,10 +1808,101 @@ export default {
     removeCheckRule(index) {
       this.formMeta.check_rule_list.splice(index, 1)
     },
-    // applyCompareRightQuickPick 用于把注入变量快捷写入比较右值输入框。
-    // applyCompareRightQuickPick applies injected-variable shortcuts into the compare right input.
-    applyCompareRightQuickPick(value) {
-      this.formMeta.compare_rule.right = String(value || '')
+    // variableQuickPickOptions 用于按字段返回当前可快捷插入的变量列表。
+    // variableQuickPickOptions returns field-specific variable shortcuts.
+    variableQuickPickOptions(fieldName) {
+      if (fieldName === 'value' || fieldName === 'compare_right') {
+        return [...SMART_LINK_BUILTIN_VALUE_VARIABLES, ...this.replaceableOutputOptions]
+      }
+      if (fieldName === 'response_url' || fieldName === 'register_response_url') {
+        return SMART_LINK_URL_VARIABLES
+      }
+      return []
+    },
+    // supportsVariableQuickPick 用于控制支持变量的输入框是否显示快捷按钮区域。
+    // supportsVariableQuickPick decides whether a field should render variable shortcut buttons.
+    supportsVariableQuickPick(fieldName) {
+      return this.variableQuickPickOptions(fieldName).length > 0
+    },
+    // registerResponseUrlCursorKey 用于给每条等待地址输入框生成稳定的光标缓存 key。
+    // registerResponseUrlCursorKey builds a stable cursor-state key for response URL rows.
+    registerResponseUrlCursorKey(item) {
+      return `register_response_url:${item && item.uid ? item.uid : 'last'}`
+    },
+    // rememberCursorPosition 用于记录输入框最近一次的光标区间，供快捷插入按钮复用。
+    // rememberCursorPosition stores the latest caret selection for quick variable insertion.
+    rememberCursorPosition(fieldKey, event) {
+      const target = event && event.target
+      if (!target || typeof target.selectionStart !== 'number' || typeof target.selectionEnd !== 'number') {
+        return
+      }
+      this.cursorState = {
+        ...this.cursorState,
+        [fieldKey]: {
+          start: target.selectionStart,
+          end: target.selectionEnd,
+        },
+      }
+    },
+    // insertVariableAtCursor 用于按光标位置插入变量；没有光标时退化为追加到末尾。
+    // insertVariableAtCursor inserts a token at the caret, or appends when caret info is unavailable.
+    insertVariableAtCursor(currentValue, fieldKey, token) {
+      const text = String(currentValue || '')
+      const normalizedToken = String(token || '')
+      const cursor = this.cursorState[fieldKey]
+      if (!cursor || typeof cursor.start !== 'number' || typeof cursor.end !== 'number') {
+        return `${text}${normalizedToken}`
+      }
+      const start = Math.max(0, Math.min(cursor.start, text.length))
+      const end = Math.max(start, Math.min(cursor.end, text.length))
+      this.cursorState = {
+        ...this.cursorState,
+        [fieldKey]: {
+          start: start + normalizedToken.length,
+          end: start + normalizedToken.length,
+        },
+      }
+      return `${text.slice(0, start)}${normalizedToken}${text.slice(end)}`
+    },
+    // applyVariableQuickPick 用于把选中的变量写回对应输入框。
+    // applyVariableQuickPick writes the selected variable into the matching form field.
+    applyVariableQuickPick(fieldName, value) {
+      const normalizedValue = String(value || '')
+      if (fieldName === 'value') {
+        this.formMeta.value = this.insertVariableAtCursor(this.formMeta.value, 'value', normalizedValue)
+        return
+      }
+      if (fieldName === 'response_url') {
+        this.formMeta.response_url = this.insertVariableAtCursor(this.formMeta.response_url, 'response_url', normalizedValue)
+        return
+      }
+      if (fieldName === 'compare_right') {
+        this.formMeta.compare_rule.right = this.insertVariableAtCursor(this.formMeta.compare_rule.right, 'compare_right', normalizedValue)
+      }
+    },
+    // applyRegisterResponseUrlQuickPick 用于快速新增一条带变量的等待地址。
+    // applyRegisterResponseUrlQuickPick appends a URL variable shortcut into the latest wait URL row.
+    applyRegisterResponseUrlQuickPick(value) {
+      const normalizedValue = String(value || '')
+      if (!Array.isArray(this.formMeta.register_response_urls) || this.formMeta.register_response_urls.length === 0) {
+        this.formMeta.register_response_urls.push(createRegisterUrl())
+      }
+      let targetItem = null
+      let targetKey = ''
+      for (let i = this.formMeta.register_response_urls.length - 1; i >= 0; i -= 1) {
+        const item = this.formMeta.register_response_urls[i]
+        const cursorKey = this.registerResponseUrlCursorKey(item)
+        if (this.cursorState[cursorKey]) {
+          targetItem = item
+          targetKey = cursorKey
+          break
+        }
+      }
+      if (!targetItem) {
+        targetItem = this.formMeta.register_response_urls[this.formMeta.register_response_urls.length - 1]
+        targetKey = this.registerResponseUrlCursorKey(targetItem)
+      }
+      targetItem.url = this.insertVariableAtCursor(targetItem.url, targetKey, normalizedValue)
     },
     // openAutoExtractDialog 用于打开 AI 自动提取弹窗并懒加载服务商与模型列表。
     // openAutoExtractDialog opens the AI extractor dialog and lazily loads provider/model options.
@@ -1916,6 +2147,32 @@ export default {
 
 .field-guide {
   margin-top: 8px;
+}
+
+.variable-quick-pick {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: #f8fbf6;
+  border: 1px solid #dfe8d7;
+  border-radius: 10px;
+}
+
+.variable-quick-pick--embedded {
+  margin-bottom: 10px;
+}
+
+.variable-quick-pick__title {
+  margin-bottom: 8px;
+  color: #48653a;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.variable-quick-pick__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .locator-purpose-card {

@@ -127,7 +127,7 @@ export default {
       if (!this.form.memory_db_configured) {
         return `未检测到记忆库配置，请在 ${configFile} 的 [base] 节点中配置 memoryDbPath 和 memoryDbFileName。`
       }
-      return `当前记忆库 db 配置来自 ${configFile} 的 [base] 节点，页面内不再直接修改。`
+      return `当前记忆库 db 配置来自 ${configFile} 的 [base] 节点`
     }
   },
   mounted() {

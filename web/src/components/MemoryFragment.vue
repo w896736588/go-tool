@@ -2,7 +2,6 @@
   <div class="memory-page">
     <aside v-if="memoryConfigured" class="memory-sidebar">
       <div class="sidebar-header">
-        <div class="sidebar-title">片段列表</div>
         <div class="sidebar-header-actions">
           <GitActionButton variant="warning" compact @click="openTrashTab">
             <template #icon>
