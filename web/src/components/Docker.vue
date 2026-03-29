@@ -9,6 +9,9 @@
           <path d="M8 15H12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
         </svg>
         <span>Docker Compose 管理</span>
+        <pl-button class="page-settings-btn" type="warning" plain @click="openComposeSettings">
+          设置
+        </pl-button>
       </div>
       <div class="control-row">
         <el-select v-model="chooseSshId" placeholder="选择环境" @change="changeSsh" class="env-select">
@@ -203,6 +206,15 @@
         </el-table-column>
       </el-table>
     </el-dialog>
+
+    <SettingsDialog
+      v-model="composeSettingsVisible"
+      title="Docker Compose 设置"
+      width="82%"
+      @closed="refreshComposeAfterSettingsClose"
+    >
+      <ComposeSettingPage @changed="handleComposeSettingsChanged" />
+    </SettingsDialog>
   </div>
 </template>
 <script>
@@ -224,6 +236,8 @@ import {Throttle_string} from "@/utils/base/throttle_string";
 import type from "@/utils/base/type";
 import composeSet from "@/utils/base/compose_set";
 import dockerDefaultService from "@/utils/docker_default_service.cjs";
+import SettingsDialog from '@/components/base/SettingsDialog.vue'
+import ComposeSettingPage from '@/components/set/compose.vue'
 
 const TRUNCATE_CONTAINER_LOG_TITLE = '确认清理容器日志'
 // TRUNCATE_CONTAINER_LOG_MESSAGE 提示本次清理会作用于当前 SSH 环境的全部 Docker 容器日志。
@@ -235,6 +249,8 @@ export default {
   props: {},
   components: {
     shellResult,
+    SettingsDialog,
+    ComposeSettingPage,
   },
   data() {
     return {
@@ -285,6 +301,7 @@ export default {
       sse_distribute_id: '',
       sseThrottleStringFunc: null,
       defaultServiceLoadingMap: {},
+      composeSettingsVisible: false,
     }
   },
   inject: ["showTerminal", "resizeTerminal"],
@@ -352,6 +369,21 @@ export default {
         _that.sseThrottleStringFunc.update(msg)
       })
       return _that.sse_distribute_id
+    },
+    // openComposeSettings 打开 Compose 设置弹窗，在 Docker 页面内完成配置维护。
+    // Open the compose settings modal so Docker page configuration stays in place.
+    openComposeSettings: function () {
+      this.composeSettingsVisible = true
+    },
+    // handleComposeSettingsChanged 配置改动后立即刷新 Compose 项目列表。
+    // Reload compose projects immediately after settings change.
+    handleComposeSettingsChanged: function () {
+      this.getComposeList()
+    },
+    // refreshComposeAfterSettingsClose 关闭弹窗时再补一次刷新，覆盖更多编辑路径。
+    // Refresh once more on dialog close as a fallback for additional edit flows.
+    refreshComposeAfterSettingsClose: function () {
+      this.getComposeList()
     },
     // 切换星标状态
     toggleStar: function(row) {
@@ -914,6 +946,10 @@ export default {
   font-size: 18px;
   font-weight: 600;
   margin-bottom: 12px;
+}
+
+.page-settings-btn {
+  margin-left: auto;
 }
 
 .header-icon {

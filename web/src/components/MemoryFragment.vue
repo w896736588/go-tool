@@ -13,7 +13,7 @@
             <el-icon><Plus /></el-icon>
             新建片段
           </pl-button>
-          <pl-button plain @click="openSettingsTab">
+          <pl-button plain @click="openSettingsDialog">
             设置
           </pl-button>
         </div>
@@ -136,13 +136,6 @@
               @clear-filter="clearFilter"
               @go-memory-setting="goMemorySetting"
             />
-          </el-tab-pane>
-
-          <el-tab-pane name="settings" :closable="false">
-            <template #label>
-              <span class="tab-label">设置</span>
-            </template>
-            <MemorySettingPage ref="memorySettingPage" />
           </el-tab-pane>
 
           <el-tab-pane
@@ -312,6 +305,15 @@
       v-model="historyDialogVisible"
       :fragment-id="historyFragmentId"
     />
+
+    <SettingsDialog
+      v-model="settingsDialogVisible"
+      title="记忆设置"
+      width="76%"
+      @closed="refreshMemoryAfterSettingsClose"
+    >
+      <MemorySettingPage ref="memorySettingPage" @changed="handleMemorySettingsChanged" />
+    </SettingsDialog>
   </div>
 </template>
 
@@ -323,6 +325,7 @@ import MemoryEditor from '@/components/memory/MemoryEditor.vue'
 import MemoryHistoryDialog from '@/components/memory/MemoryHistoryDialog.vue'
 import MemorySettingPage from '@/components/set/memory.vue'
 import GitActionButton from '@/components/base/GitActionButton.vue'
+import SettingsDialog from '@/components/base/SettingsDialog.vue'
 
 // TAG_FILTER_COLLAPSED_MAX_HEIGHT 控制左侧标签筛选区收起时的最大高度。
 const TAG_FILTER_COLLAPSED_MAX_HEIGHT = 76
@@ -348,6 +351,7 @@ export default {
     MemoryEditor,
     MemoryHistoryDialog,
     MemorySettingPage,
+    SettingsDialog,
   },
   data() {
     return {
@@ -374,6 +378,7 @@ export default {
       lastPushTimeDesc: '-',
       lastPushError: '',
       statusPollTimer: null,
+      settingsDialogVisible: false,
     }
   },
   computed: {
@@ -758,13 +763,25 @@ export default {
       this.activeTab = TRASH_TAB_NAME
       this.loadTrashList()
     },
-    openSettingsTab() {
-      this.activeTab = 'settings'
+    // openSettingsDialog 打开记忆设置弹窗，在当前业务页内完成 AI 配置维护。
+    // Open the memory settings modal so AI configuration can be maintained in-place.
+    openSettingsDialog() {
+      this.settingsDialogVisible = true
       this.$nextTick(() => {
         if (this.$refs.memorySettingPage && this.$refs.memorySettingPage.loadConfig) {
           this.$refs.memorySettingPage.loadConfig()
         }
       })
+    },
+    // handleMemorySettingsChanged 设置保存成功后立即刷新记忆状态区展示。
+    // Refresh memory status immediately after settings change.
+    handleMemorySettingsChanged() {
+      this.loadMemoryStatus(false)
+    },
+    // refreshMemoryAfterSettingsClose 在弹窗关闭时再做一次兜底刷新。
+    // Refresh once more when the dialog closes as a fallback for additional setting edits.
+    refreshMemoryAfterSettingsClose() {
+      this.loadMemoryStatus(false)
     },
     // openFragment 打开指定片段 tab。
     openFragment(fragmentId) {
@@ -918,8 +935,7 @@ export default {
       this.activeTab = tabPane.paneName
     },
     goMemorySetting() {
-      localStorage.setItem('set_active_label', 'Memory')
-      this.$router.push('/Set')
+      this.openSettingsDialog()
     }
   }
 }

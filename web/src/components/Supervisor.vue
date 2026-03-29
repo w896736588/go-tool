@@ -10,6 +10,9 @@
           <path d="M9 17H12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
         </svg>
         <span>Supervisor 进程管理</span>
+        <pl-button class="page-settings-btn" type="warning" plain @click="openSupervisorSettings">
+          <el-icon><Setting /></el-icon>设置
+        </pl-button>
       </div>
       <div class="control-row">
         <el-select v-model="chooseSupervisorId" placeholder="选择环境" @change="changeSupervisor" class="env-select">
@@ -106,6 +109,15 @@
     </el-dialog>
 
     <shellResult ref="shellRef" :shellShowResult="shellController.sshResult" :isRunning="shellController.isRunning" :show-model="shellController.showModel"></shellResult>
+
+    <SettingsDialog
+      v-model="supervisorSettingsVisible"
+      title="Supervisor 设置"
+      width="82%"
+      @closed="refreshSupervisorAfterSettingsClose"
+    >
+      <SupervisorSettingPage @changed="handleSupervisorSettingsChanged" />
+    </SettingsDialog>
   </div>
 </template>
 <script>
@@ -125,6 +137,8 @@ import Init from '@/utils/base/set_init'
 import sseDistribute from "@/utils/base/sse_distribute";
 import {Throttle_string} from "@/utils/base/throttle_string";
 import search from "@/utils/base/search";
+import SettingsDialog from '@/components/base/SettingsDialog.vue'
+import SupervisorSettingPage from '@/components/set/supervisor.vue'
 
 export default {
   props : {
@@ -137,6 +151,8 @@ export default {
     Search,
     Edit,
     Document,
+    SettingsDialog,
+    SupervisorSettingPage,
   },
   activated: function () {
     this.resizeTerminal()
@@ -188,6 +204,7 @@ export default {
       sseId : '',
       sse_distribute_id: '',
       sseThrottleStringFunc: null,
+      supervisorSettingsVisible: false,
     }
   },
   inject: ["showTerminal", "resizeTerminal"],
@@ -242,6 +259,29 @@ export default {
         _that.sseThrottleStringFunc.update(msg)
       })
       return _that.sse_distribute_id
+    },
+    // openSupervisorSettings 打开 Supervisor 设置弹窗，在当前业务页内维护环境配置。
+    // Open the Supervisor settings modal so environment config can be edited in-place.
+    openSupervisorSettings: function () {
+      this.supervisorSettingsVisible = true
+    },
+    // handleSupervisorSettingsChanged 配置保存成功后立即刷新环境列表与当前数据。
+    // Refresh environment list and current page data immediately after settings change.
+    handleSupervisorSettingsChanged: function () {
+      let _that = this
+      supervisor.SupervisorConfigList({sse_distribute_id : _that.sse_distribute_id},function (response){
+        if(response.ErrCode === 0){
+          _that.supervisorConfigList = response.Data.supervisor_list
+          arr.SortByKey(_that.supervisorConfigList , 'name' , 'asc')
+          _that.chooseSupervisorId = _that.getLastSupervisorId()
+          _that.changeSupervisor()
+        }
+      })
+    },
+    // refreshSupervisorAfterSettingsClose 在弹窗关闭时再次刷新，兜底覆盖更多配置修改场景。
+    // Refresh once more when the dialog closes as a fallback for additional setting change paths.
+    refreshSupervisorAfterSettingsClose: function () {
+      this.handleSupervisorSettingsChanged()
     },
     getLastSupervisorId : function (){
       let _that = this
@@ -578,6 +618,10 @@ export default {
   font-size: 18px;
   font-weight: 600;
   margin-bottom: 12px;
+}
+
+.page-settings-btn {
+  margin-left: auto;
 }
 
 .header-icon {

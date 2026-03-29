@@ -2,7 +2,7 @@
   <div class="set-config-page">
     <div class="set-config-header">
       <h3 class="set-config-title">记忆配置</h3>
-      <p class="set-config-desc">记忆库目录和 sqlite 文件名改为从配置文件读取，这里仅展示当前生效值；AI 配置仍可在页面保存。</p>
+      <p class="set-config-desc">记忆库目录与数据库文件来自配置文件，这里仅展示当前生效值，并维护 AI 相关参数。</p>
       <div class="set-config-actions">
         <pl-button type="primary" @click="saveConfig">保存 AI 配置</pl-button>
       </div>
@@ -10,15 +10,8 @@
 
     <div class="set-config-table-card">
       <el-alert
-        v-if="!form.memory_db_configured"
         :closable="false"
-        type="warning"
-        :title="memoryConfigAlertTitle"
-      />
-      <el-alert
-        v-else
-        :closable="false"
-        type="info"
+        :type="form.memory_db_configured ? 'info' : 'warning'"
         :title="memoryConfigAlertTitle"
       />
 
@@ -60,6 +53,7 @@
             placeholder="请输入 AI 整理提示词"
           />
         </el-form-item>
+
         <el-divider content-position="left">工作日报 AI</el-divider>
         <el-form-item label="日报模型">
           <el-select
@@ -86,10 +80,11 @@
           />
         </el-form-item>
       </el-form>
+
       <el-alert
         :closable="false"
         type="info"
-        title="启动时会先判断记忆目录是否为 git 仓库；是则先 git pull，之后加载该 sqlite。修改 memoryDbPath 或 memoryDbFileName 后需要更新配置文件并重启应用。"
+        title="启动时会先判断记忆目录是否为 git 仓库；如果是则先 git pull，再加载 sqlite。修改 memoryDbPath 或 memoryDbFileName 后，需要更新配置文件并重启应用。"
       />
     </div>
   </div>
@@ -99,12 +94,16 @@
 import set from '@/utils/base/git_set'
 import AiSetApi from '@/utils/base/ai_set'
 
-const DEFAULT_MEMORY_ARRANGE_PROMPT = '帮我把当前markdown进行整理格式，让它看起来更顺畅清晰，注意禁止修改内容'
-// DEFAULT_HOME_TASK_DAILY_REPORT_PROMPT 定义首页任务工作日报默认提示词。
+// DEFAULT_MEMORY_ARRANGE_PROMPT 定义记忆整理默认提示词。
+// Default prompt used when arranging memory fragments with AI.
+const DEFAULT_MEMORY_ARRANGE_PROMPT = '帮我把当前 markdown 进行整理格式，让它看起来更顺畅清晰，注意禁止修改内容'
+// DEFAULT_HOME_TASK_DAILY_REPORT_PROMPT 定义首页任务日报默认提示词。
+// Default prompt used when generating the home task daily report.
 const DEFAULT_HOME_TASK_DAILY_REPORT_PROMPT = '请基于当前活跃任务生成中文工作日报，按已完成、进行中、风险与阻塞三个部分总结，输出 Markdown，禁止编造未提供的信息。'
 
 export default {
   name: 'MemorySet',
+  emits: ['changed'],
   data() {
     return {
       aiModelList: [],
@@ -117,24 +116,27 @@ export default {
         memory_arrange_prompt: DEFAULT_MEMORY_ARRANGE_PROMPT,
         home_task_daily_report_model_id: null,
         home_task_daily_report_prompt: DEFAULT_HOME_TASK_DAILY_REPORT_PROMPT,
-      }
+      },
     }
   },
   computed: {
-    // memoryConfigAlertTitle 统一生成记忆 db 配置提示 / build memory db config hint text.
+    // memoryConfigAlertTitle 统一生成记忆库配置提示。
+    // Build a consistent hint message for the current memory database configuration.
     memoryConfigAlertTitle() {
       const configFile = this.form.memory_config_file || '配置文件'
       if (!this.form.memory_db_configured) {
         return `未检测到记忆库配置，请在 ${configFile} 的 [base] 节点中配置 memoryDbPath 和 memoryDbFileName。`
       }
       return `当前记忆库 db 配置来自 ${configFile} 的 [base] 节点`
-    }
+    },
   },
   mounted() {
     this.loadAiModelList()
     this.loadConfig()
   },
   methods: {
+    // buildModelLabel 生成模型下拉展示文案，统一显示服务商和模型名。
+    // Build a readable select label with provider and model information.
     buildModelLabel(item) {
       const provider = item.provider_name || '未命名服务商'
       const model = item.name || item.model || `模型#${item.id}`
@@ -163,6 +165,8 @@ export default {
         this.form.home_task_daily_report_prompt = response.Data.home_task_daily_report_prompt || DEFAULT_HOME_TASK_DAILY_REPORT_PROMPT
       })
     },
+    // saveConfig 保存 AI 配置后通知宿主页面刷新状态。
+    // Save AI settings and notify host pages so they can refresh related status immediately.
     saveConfig() {
       const payload = {
         memory_arrange_model_id: this.form.memory_arrange_model_id,
@@ -173,10 +177,11 @@ export default {
       set.MemoryConfigSave(payload, (response) => {
         if (response.ErrCode === 0) {
           this.$helperNotify.success('AI 配置已保存')
+          this.$emit('changed')
         }
       })
-    }
-  }
+    },
+  },
 }
 </script>
 
