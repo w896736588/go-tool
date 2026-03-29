@@ -55,6 +55,7 @@ func PrepareMemoryStore() error {
 	memoryGit := NewMemoryGit()
 	// 仅当配置显式开启 git 同步时才检测和拉取 / only detect and pull git when config explicitly enables git sync.
 	if config.GitRepoEnabled {
+		gstool.FmtPrintlnLogTime(`记忆库 git 模式已开启，准备检查仓库并执行 pull dir=%s file=%s`, config.Dir, config.DBName)
 		isGitRepo, err := memoryGit.IsGitRepo(config.Dir)
 		if err != nil {
 			return fmt.Errorf(`检测记忆目录 git 仓库失败 %w`, err)
@@ -66,7 +67,10 @@ func PrepareMemoryStore() error {
 		if err = memoryGit.Pull(config.Dir); err != nil {
 			return fmt.Errorf(`拉取记忆目录失败 %w`, err)
 		}
+		gstool.FmtPrintlnLogTime(`记忆库 git pull 完成 dir=%s`, config.Dir)
 		config.IsGitRepo = true
+	} else {
+		gstool.FmtPrintlnLogTime(`记忆库 git 模式未开启，跳过 pull dir=%s file=%s`, config.Dir, config.DBName)
 	}
 	config.DBPath = filepath.Join(config.Dir, config.DBName)
 	preparedMemoryStore = &preparedMemoryBootstrap{
