@@ -66,53 +66,61 @@
             </div>
           </div>
           <div class="editor-title-meta-row">
-            <div v-if="visibleEditorTags.length > 0" class="editor-inline-tags editor-title-tags">
-              <el-tag
-                v-for="tag in visibleEditorTags"
-                :key="tag"
-                size="small"
-                closable
-                @close="removeTag(tag)"
-              >
-                {{ tag }}
-              </el-tag>
-              <el-tag v-if="hiddenEditorTagCount > 0" size="small" effect="plain">
-                +{{ hiddenEditorTagCount }}
-              </el-tag>
-            </div>
-            <div class="tag-input-wrap editor-tag-input-wrap">
-              <el-input
-                v-model="tagInput"
-                class="tag-input tag-input-compact"
-                :placeholder="tagInputPlaceholderText"
-                @focus="handleTagInputFocus"
-                @input="handleTagInputChange"
-                @keydown.enter.prevent="handleTagEnter"
-                @keydown.down.prevent="moveTagSuggestion(1)"
-                @keydown.up.prevent="moveTagSuggestion(-1)"
-                @keydown.esc.prevent="closeTagSuggestionPanel"
-                @keydown="handleTagKeydown"
-                @blur="handleTagInputBlur"
-              />
-              <div v-if="showTagSuggestionPanel" class="tag-suggestion-dropdown">
-                <button
-                  v-for="(tag, index) in filteredAvailableTags"
+            <div class="editor-title-meta-main">
+              <div v-if="visibleEditorTags.length > 0" class="editor-inline-tags editor-title-tags">
+                <el-tag
+                  v-for="tag in visibleEditorTags"
                   :key="tag"
-                  class="tag-suggestion-option"
-                  :class="{ active: index === highlightedTagIndex }"
-                  @mousedown.prevent="selectExistingTag(tag)"
+                  size="small"
+                  closable
+                  @close="removeTag(tag)"
                 >
                   {{ tag }}
-                </button>
-                <div v-if="showTagCreateHint" class="tag-suggestion-empty">
-                  回车创建标签 “{{ normalizedTagInput }}”
+                </el-tag>
+                <el-tag v-if="hiddenEditorTagCount > 0" size="small" effect="plain">
+                  +{{ hiddenEditorTagCount }}
+                </el-tag>
+              </div>
+              <div class="tag-input-wrap editor-tag-input-wrap">
+                <el-input
+                  v-model="tagInput"
+                  class="tag-input tag-input-compact"
+                  :placeholder="tagInputPlaceholderText"
+                  @focus="handleTagInputFocus"
+                  @input="handleTagInputChange"
+                  @keydown.enter.prevent="handleTagEnter"
+                  @keydown.down.prevent="moveTagSuggestion(1)"
+                  @keydown.up.prevent="moveTagSuggestion(-1)"
+                  @keydown.esc.prevent="closeTagSuggestionPanel"
+                  @keydown="handleTagKeydown"
+                  @blur="handleTagInputBlur"
+                />
+                <div v-if="showTagSuggestionPanel" class="tag-suggestion-dropdown">
+                  <button
+                    v-for="(tag, index) in filteredAvailableTags"
+                    :key="tag"
+                    class="tag-suggestion-option"
+                    :class="{ active: index === highlightedTagIndex }"
+                    @mousedown.prevent="selectExistingTag(tag)"
+                  >
+                    {{ tag }}
+                  </button>
+                  <div v-if="showTagCreateHint" class="tag-suggestion-empty">
+                    回车创建标签 “{{ normalizedTagInput }}”
+                  </div>
                 </div>
               </div>
             </div>
-            <el-tag size="small" :type="dirty ? statusTagWarningType : statusTagSuccessType" effect="light">
-              {{ dirty ? unsavedStatusText : savedStatusText }}
-            </el-tag>
-            <span class="editor-save-time">{{ lastSaveLabelText }}{{ draftFragment.update_time_desc || emptyTimeText }}</span>
+            <div class="editor-title-status-group">
+              <el-tag
+                size="small"
+                :type="dirty ? statusTagWarningType : statusTagSuccessType"
+                effect="light"
+              >
+                {{ dirty ? unsavedStatusText : savedStatusText }}
+              </el-tag>
+              <span class="editor-save-time">{{ lastSaveLabelText }}{{ draftFragment.update_time_desc || emptyTimeText }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -826,16 +834,41 @@ export default {
 .editor-title-meta-row {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 12px;
   min-width: 0;
   flex-wrap: wrap;
   width: 100%;
 }
 
-.editor-title-tags {
-  overflow: hidden;
+.editor-title-meta-main {
+  /* 中文注释：标签区负责吃掉剩余宽度，避免状态文案被长标签挤压。 */
+  /* English comment: Let the tag area absorb remaining width so status text keeps its full label. */
+  display: flex;
+  align-items: center;
+  gap: 10px;
   min-width: 0;
+  flex: 1 1 420px;
+  flex-wrap: wrap;
+}
+
+.editor-title-tags {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+}
+
+.editor-title-status-group {
+  /* 中文注释：状态区禁止压缩，确保“已保存”和时间始终完整可见。 */
+  /* English comment: Keep the status area from shrinking so saved label and timestamp stay readable. */
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
 }
 
 .editor-save-time {
@@ -843,10 +876,16 @@ export default {
   font-size: 12px;
   line-height: 1.4;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .editor-tag-input-wrap {
-  width: 180px;
+  width: min(220px, 100%);
+  flex: 0 1 220px;
+}
+
+.editor-title-status-group :deep(.el-tag) {
+  flex-shrink: 0;
 }
 
 .editor-body-actions {
@@ -965,6 +1004,15 @@ export default {
 @media (max-width: 1080px) {
   .tag-input-wrap {
     width: 100%;
+  }
+
+  .editor-title-meta-main,
+  .editor-title-status-group {
+    width: 100%;
+  }
+
+  .editor-title-status-group {
+    justify-content: flex-start;
   }
 
   .editor-body-toolbar-main,
