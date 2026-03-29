@@ -12,10 +12,11 @@ const MemorySyncCommitMessage = `chore: sync memory db`
 var ErrMemoryNotConfigured = errors.New(`请先在配置文件中配置记忆库目录和数据库名`)
 
 type MemoryConfig struct {
-	Dir       string `json:"memory_dir"`
-	DBName    string `json:"memory_db_name"`
-	DBPath    string `json:"memory_db_path"`
-	IsGitRepo bool   `json:"is_git_repo"`
+	Dir            string `json:"memory_dir"`
+	DBName         string `json:"memory_db_name"`
+	DBPath         string `json:"memory_db_path"`
+	IsGitRepo      bool   `json:"is_git_repo"`
+	GitRepoEnabled bool   `json:"git_repo_enabled"`
 }
 
 type stoppableTimer interface {

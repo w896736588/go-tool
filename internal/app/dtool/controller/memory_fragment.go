@@ -25,6 +25,7 @@ func MemoryFragmentStatus(c *gin.Context) {
 		`configured`:          common.MemoryRuntime.IsConfigured(),
 		`memory_dir`:          config.Dir,
 		`memory_db_name`:      config.DBName,
+		`git_repo_enabled`:    config.GitRepoEnabled,
 		`is_git_repo`:         config.IsGitRepo,
 		`last_push_time`:      lastPushTime,
 		`last_push_time_desc`: lastPushTimeDesc,

@@ -16,6 +16,7 @@ func TestReadMemoryConfigFromINI(t *testing.T) {
 	v := newTestMemoryConfigViper()
 	v.Set(`base.memoryDbPath`, `D:\repo\memory`)
 	v.Set(`base.memoryDbFileName`, `memory.db`)
+	v.Set(`base.memoryDbIsGitRepo`, true)
 	component.ConfigViper = v
 
 	got := ReadMemoryConfigFromINI()
@@ -28,6 +29,9 @@ func TestReadMemoryConfigFromINI(t *testing.T) {
 	if got.DBPath != `D:\repo\memory\memory.db` {
 		t.Fatalf("DBPath = %q, want %q", got.DBPath, `D:\repo\memory\memory.db`)
 	}
+	if !got.GitRepoEnabled {
+		t.Fatalf("GitRepoEnabled = %v, want true", got.GitRepoEnabled)
+	}
 }
 
 func TestReadMemoryConfigFromINIHandlesMissingConfig(t *testing.T) {
@@ -38,7 +42,7 @@ func TestReadMemoryConfigFromINIHandlesMissingConfig(t *testing.T) {
 
 	component.ConfigViper = newTestMemoryConfigViper()
 	got := ReadMemoryConfigFromINI()
-	if got.Dir != `` || got.DBName != `` || got.DBPath != `` {
+	if got.Dir != `` || got.DBName != `` || got.DBPath != `` || got.GitRepoEnabled {
 		t.Fatalf("expected empty memory config, got %+v", got)
 	}
 }

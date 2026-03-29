@@ -130,6 +130,9 @@
                       <div class="home-task-toolbar__desc">保留状态切换和归档能力，并支持基于活跃任务一键生成工作日报</div>
                     </div>
                     <div class="home-task-toolbar__actions">
+                      <GitActionButton compact variant="warning" @click="openHomeTaskReportSettingsDialog">
+                        设置
+                      </GitActionButton>
                       <GitActionButton compact variant="info" :loading="homeTaskGeneratingDailyReport" @click="generateHomeTaskDailyReport">
                         {{ HOME_TASK_DAILY_REPORT_BUTTON_TEXT }}
                       </GitActionButton>
@@ -458,6 +461,15 @@
       </div>
     </template>
   </el-dialog>
+
+  <SettingsDialog
+    v-model="homeTaskReportSettingsDialogVisible"
+    title="工作日报 AI 设置"
+    width="760px"
+    @closed="refreshHomeTaskReportSettings"
+  >
+    <HomeTaskReportSetting ref="homeTaskReportSetting" />
+  </SettingsDialog>
 </template>
 
 <script>
@@ -480,6 +492,8 @@ const {
 import Tools from "@/components/Tools.vue";
 import Markdown from '@/components/Markdown.vue'
 import GitActionButton from "@/components/base/GitActionButton.vue";
+import SettingsDialog from '@/components/base/SettingsDialog.vue'
+import HomeTaskReportSetting from '@/components/set/home_task_report.vue'
 import { 
   HomeFilled,
   Coin,
@@ -614,6 +628,7 @@ export default {
       HOME_TASK_DAILY_REPORT_BUTTON_TEXT,
       homeTaskActiveTab: HOME_TASK_TAB_ACTIVE,
       homeTaskDialogVisible: false,
+      homeTaskReportSettingsDialogVisible: false,
       homeDashboardPageIndex: HOME_DASHBOARD_PAGE_COMMAND,
       homeDashboardAnimating: false,
       homeTaskLoadingActive: false,
@@ -845,6 +860,24 @@ export default {
     openCreateHomeTaskDialog() {
       this.resetHomeTaskForm()
       this.homeTaskDialogVisible = true
+    },
+    // openHomeTaskReportSettingsDialog 打开工作日报 AI 设置弹窗。
+    openHomeTaskReportSettingsDialog() {
+      this.homeTaskReportSettingsDialogVisible = true
+      this.$nextTick(() => {
+        if (this.$refs.homeTaskReportSetting && this.$refs.homeTaskReportSetting.loadConfig) {
+          this.$refs.homeTaskReportSetting.loadConfig()
+        }
+        if (this.$refs.homeTaskReportSetting && this.$refs.homeTaskReportSetting.loadAiModelList) {
+          this.$refs.homeTaskReportSetting.loadAiModelList()
+        }
+      })
+    },
+    // refreshHomeTaskReportSettings 在弹窗关闭时兜底刷新设置组件状态。
+    refreshHomeTaskReportSettings() {
+      if (this.$refs.homeTaskReportSetting && this.$refs.homeTaskReportSetting.loadConfig) {
+        this.$refs.homeTaskReportSetting.loadConfig()
+      }
     },
     // generateHomeTaskDailyReport 调用后端基于活跃任务生成日报并写入记忆。
     generateHomeTaskDailyReport() {
@@ -1108,6 +1141,8 @@ export default {
     Monitor,
     ToolsIcon,
     GitActionButton,
+    SettingsDialog,
+    HomeTaskReportSetting,
     Markdown,
     Tools,
     Clipboard,

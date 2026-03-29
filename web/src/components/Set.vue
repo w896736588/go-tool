@@ -13,6 +13,9 @@
       <el-tab-pane label="AI" name="AI" class="set-tab-pane">
         <ai_provider ref="ai_provider"></ai_provider>
       </el-tab-pane>
+      <el-tab-pane label="Config" name="Config" class="set-tab-pane">
+        <memory ref="memory" :show-runtime-config="true"></memory>
+      </el-tab-pane>
     </el-tabs>
   </div>
 </template>
@@ -24,10 +27,11 @@ import mysql from './set/mysql.vue'
 import store from '@/utils/base/store'
 import global from '@/components/set/global.vue'
 import ai_provider from '@/components/set/ai_provider.vue'
+import memory from '@/components/set/memory.vue'
 
 // SET_ACTIVE_TABS 定义当前仍保留在配置页中的标签页，避免旧缓存命中已迁出的业务设置。
 // Keep the tabs that still belong to the settings page to avoid stale cache pointing to moved pages.
-const SET_ACTIVE_TABS = ['Ssh', 'Mysql', 'Global', 'AI']
+const SET_ACTIVE_TABS = ['Ssh', 'Mysql', 'Global', 'AI', 'Config']
 
 export default {
   props: {
@@ -40,6 +44,7 @@ export default {
     mysql,
     global,
     ai_provider,
+    memory,
   },
   data() {
     return {
@@ -81,6 +86,10 @@ export default {
         case 'AI':
           this.$refs.ai_provider && this.$refs.ai_provider.LoadProviderList()
           this.$refs.ai_provider && this.$refs.ai_provider.LoadModelList()
+          break
+        case 'Config':
+          this.$refs.memory && this.$refs.memory.loadConfig && this.$refs.memory.loadConfig()
+          this.$refs.memory && this.$refs.memory.loadAiModelList && this.$refs.memory.loadAiModelList()
           break
         default:
           break

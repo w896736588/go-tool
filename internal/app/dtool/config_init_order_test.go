@@ -19,6 +19,7 @@ func TestInitBasePreparesMemoryStoreBeforeAnyDatabaseInit(t *testing.T) {
 
 	want := []string{
 		`initComponent`,
+		`prepareMainDBStoreBeforeDB`,
 		`prepareMemoryStoreBeforeDB`,
 		`initSqlite`,
 		`initGin`,
@@ -58,6 +59,7 @@ func TestInitBasePanicsWhenPrepareMemoryStoreFails(t *testing.T) {
 // stubInitBaseHooks 统一替换 InitBase 依赖步骤，避免测试执行真实初始化 / replace InitBase steps to avoid real bootstrap in tests.
 func stubInitBaseHooks(record func(string)) func() {
 	originalInitComponent := initComponentFunc
+	originalPrepareMainDBStore := prepareMainDBStoreBeforeDBFunc
 	originalPrepareMemoryStore := prepareMemoryStoreBeforeDBFunc
 	originalInitSqlite := initSqliteFunc
 	originalInitGin := initGinFunc
@@ -67,6 +69,10 @@ func stubInitBaseHooks(record func(string)) func() {
 
 	initComponentFunc = func(string, string) {
 		record(`initComponent`)
+	}
+	prepareMainDBStoreBeforeDBFunc = func() error {
+		record(`prepareMainDBStoreBeforeDB`)
+		return nil
 	}
 	prepareMemoryStoreBeforeDBFunc = func() error {
 		record(`prepareMemoryStoreBeforeDB`)
@@ -90,6 +96,7 @@ func stubInitBaseHooks(record func(string)) func() {
 
 	return func() {
 		initComponentFunc = originalInitComponent
+		prepareMainDBStoreBeforeDBFunc = originalPrepareMainDBStore
 		prepareMemoryStoreBeforeDBFunc = originalPrepareMemoryStore
 		initSqliteFunc = originalInitSqlite
 		initGinFunc = originalInitGin

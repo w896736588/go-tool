@@ -16,6 +16,7 @@ import (
 	"gitee.com/Sxiaobai/gs/v2/gstool"
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/cast"
+	ini "gopkg.in/ini.v1"
 )
 
 // SetSshList ssh列表
@@ -802,6 +803,7 @@ func SetGlobalDelete(c *gin.Context) {
 
 // SetMemoryConfigGet 返回记忆配置页面数据 / return memory settings page data.
 func SetMemoryConfigGet(c *gin.Context) {
+	mainDBConfig := business.ReadMainDBConfig()
 	memoryConfig := business.ReadMemoryConfigFromINI()
 	arrangePrompt, err := memoryConfigValue(define.GlobalMemoryArrangePrompt)
 	if err != nil {
@@ -824,9 +826,17 @@ func SetMemoryConfigGet(c *gin.Context) {
 		return
 	}
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`db_dir`:                          mainDBConfig.Dir,
+		`db_name`:                         mainDBConfig.DBName,
+		`db_configured`:                   mainDBConfig.Dir != `` && mainDBConfig.DBName != ``,
+		`db_is_git_repo`:                  mainDBConfig.GitRepoEnabled,
+		`webkit_driver_path`:              component.ConfigViper.GetString(`path.webkit_driver_path`),
+		`webkit_data_path`:                component.ConfigViper.GetString(`path.webkit_data_path`),
+		`webkit_download_path`:            component.ConfigViper.GetString(`path.webkit_download_path`),
 		`memory_dir`:                      memoryConfig.Dir,
 		`memory_db_name`:                  memoryConfig.DBName,
 		`memory_db_configured`:            memoryConfig.Dir != `` && memoryConfig.DBName != ``,
+		`memory_db_is_git_repo`:           memoryConfig.GitRepoEnabled,
 		`memory_config_file`:              memoryConfigFilePath(),
 		`memory_arrange_prompt`:           arrangePrompt,
 		`memory_arrange_model_id`:         cast.ToInt(arrangeModelID),
@@ -890,6 +900,66 @@ func SetMemoryConfigSave(c *gin.Context) {
 		return
 	}
 	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
+// SetRuntimeConfigSave 保存可编辑的 ini 配置并重新加载运行时配置。 // Save editable ini config values and reload runtime config.
+func SetRuntimeConfigSave(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+
+	configFile := memoryConfigFilePath()
+	if strings.TrimSpace(configFile) == `` {
+		gsgin.GinResponseError(c, `未找到配置文件路径`, nil)
+		return
+	}
+
+	cfg, err := ini.LoadSources(ini.LoadOptions{
+		Loose: true,
+	}, configFile)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+
+	baseSection := cfg.Section(`base`)
+	pathSection := cfg.Section(`path`)
+
+	setIniKey(baseSection, `dbPath`, strings.TrimSpace(cast.ToString(dataMap[`db_path`])))
+	setIniKey(baseSection, `dbFileName`, strings.TrimSpace(cast.ToString(dataMap[`db_file_name`])))
+	setIniKey(baseSection, `dbIsGitRepo`, cast.ToString(cast.ToBool(dataMap[`db_is_git_repo`])))
+	setIniKey(baseSection, `memoryDbPath`, strings.TrimSpace(cast.ToString(dataMap[`memory_db_path`])))
+	setIniKey(baseSection, `memoryDbFileName`, strings.TrimSpace(cast.ToString(dataMap[`memory_db_file_name`])))
+	setIniKey(baseSection, `memoryDbIsGitRepo`, cast.ToString(cast.ToBool(dataMap[`memory_db_is_git_repo`])))
+	setIniKey(pathSection, `webkit_driver_path`, strings.TrimSpace(cast.ToString(dataMap[`webkit_driver_path`])))
+	setIniKey(pathSection, `webkit_data_path`, strings.TrimSpace(cast.ToString(dataMap[`webkit_data_path`])))
+	setIniKey(pathSection, `webkit_download_path`, strings.TrimSpace(cast.ToString(dataMap[`webkit_download_path`])))
+
+	if err = cfg.SaveTo(configFile); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+
+	if component.ConfigViper != nil {
+		// 保存后重新读取整个 ini，确保其他未编辑配置也保持最新。 // Re-read the whole ini after save so all config values stay in sync.
+		if readErr := component.ConfigViper.ReadInConfig(); readErr != nil {
+			gsgin.GinResponseError(c, readErr.Error(), nil)
+			return
+		}
+	}
+	business.ReloadEditableRuntimeConfig()
+
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`config_file`:  configFile,
+		`reloaded`:     true,
+		`need_restart`: true,
+	})
+}
+
+func setIniKey(section *ini.Section, key, value string) {
+	if section == nil {
+		return
+	}
+	section.Key(key).SetValue(value)
 }
 
 // memoryConfigFilePath 返回当前运行中的 ini 配置文件路径 / return active ini config file path.

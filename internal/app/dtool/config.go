@@ -50,6 +50,7 @@ const (
 var (
 	// initComponentFunc 允许测试替换基础初始化流程 / allow tests to replace bootstrap initialization.
 	initComponentFunc = initComponent
+	prepareMainDBStoreBeforeDBFunc = business.PrepareMainDBStore
 	// prepareMemoryStoreBeforeDBFunc 允许测试校验记忆库预处理时机 / allow tests to verify memory preflight timing.
 	prepareMemoryStoreBeforeDBFunc = business.PrepareMemoryStore
 	// initSqliteFunc 允许测试替换数据库初始化流程 / allow tests to replace sqlite initialization.
@@ -151,6 +152,9 @@ func writeSummarySection(builder *strings.Builder, title string, lines [][2]stri
 
 func InitBase(ConfigFile string) {
 	initComponentFunc(AppName, ConfigFile)
+	if err := prepareMainDBStoreBeforeDBFunc(); err != nil {
+		panic(err.Error())
+	}
 	// 记忆库若需要 git pull，必须先于所有数据库初始化 / memory git pull must happen before any database init.
 	if err := prepareMemoryStoreBeforeDBFunc(); err != nil {
 		panic(err.Error())
@@ -247,11 +251,13 @@ func InitEnv(appName, ConfigFile string, viper *viper.Viper) {
 	component.EnvClient.NodePath = `node`
 	//base配置初始化
 	component.EnvClient.ConfigBase = &define.Base{
-		DbFileName:   viper.GetString(`base.dbFileName`),
-		DbPath:       viper.GetString(`base.dbPath`),
-		MemoryDBPath: viper.GetString(`base.memoryDbPath`),
-		MemoryDBName: viper.GetString(`base.memoryDbFileName`),
-		WebPath:      viper.GetString(`base.webPath`),
+		DbFileName:        viper.GetString(`base.dbFileName`),
+		DbPath:            viper.GetString(`base.dbPath`),
+		DbIsGitRepo:       viper.GetBool(`base.dbIsGitRepo`),
+		MemoryDBPath:      viper.GetString(`base.memoryDbPath`),
+		MemoryDBName:      viper.GetString(`base.memoryDbFileName`),
+		MemoryDBIsGitRepo: viper.GetBool(`base.memoryDbIsGitRepo`),
+		WebPath:           viper.GetString(`base.webPath`),
 	}
 	//web
 	component.EnvClient.WebConfig = &define.WebConfig{
@@ -265,8 +271,9 @@ func InitEnv(appName, ConfigFile string, viper *viper.Viper) {
 	}
 	//数据库配置
 	component.EnvClient.DbConfig = &define.DbConfig{
-		DbName: ``,
-		DbPath: component.EnvClient.ConfigBase.DbPath,
+		DbName:      ``,
+		DbPath:      component.EnvClient.ConfigBase.DbPath,
+		DbIsGitRepo: component.EnvClient.ConfigBase.DbIsGitRepo,
 	}
 	//数据库名
 	component.EnvClient.DbConfig.DbName = component.EnvClient.AppName + `.db`
@@ -474,6 +481,9 @@ func Stop() {
 	}
 	if err := common.MemoryRuntime.SyncNow(); err != nil && !errors.Is(err, common.ErrMemoryNotConfigured) {
 		gstool.FmtPrintlnLogTime(`记忆库关闭前同步失败 %s`, err.Error())
+	}
+	if err := business.SyncMainDBStoreOnShutdown(); err != nil {
+		gstool.FmtPrintlnLogTime(`主库关闭前同步失败 %s`, err.Error())
 	}
 	_ = plw.PlaywrightClient.Log.Close()
 	_ = variable.VariableClient.Log.Close()

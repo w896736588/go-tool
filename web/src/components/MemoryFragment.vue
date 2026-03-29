@@ -96,7 +96,7 @@
         </button>
       </el-scrollbar>
 
-      <div class="sidebar-footer">
+      <div v-if="memoryGitRepoEnabled" class="sidebar-footer">
         <div class="sidebar-footer-row">
           <span class="sidebar-footer-label">上一次 push 记忆库</span>
           <span class="sidebar-footer-value">{{ lastPushTimeDesc }}</span>
@@ -375,6 +375,7 @@ export default {
       historyDialogVisible: false,
       historyFragmentId: 0,
       memoryConfigured: true,
+      memoryGitRepoEnabled: false,
       lastPushTimeDesc: '-',
       lastPushError: '',
       statusPollTimer: null,
@@ -456,6 +457,7 @@ export default {
     loadMemoryStatus(needReloadLists = true) {
       MemoryFragmentApi.MemoryFragmentStatus((response) => {
         this.memoryConfigured = !!(response.Data && response.Data.configured)
+        this.memoryGitRepoEnabled = !!(response.Data && response.Data.git_repo_enabled)
         this.lastPushTimeDesc = response.Data && response.Data.last_push_time_desc ? response.Data.last_push_time_desc : '-'
         this.lastPushError = response.Data && response.Data.last_push_error ? response.Data.last_push_error : ''
         if (!this.memoryConfigured) {
@@ -465,6 +467,7 @@ export default {
           this.searchResults = []
           this.fragmentTabs = []
           this.activeTab = HOME_TAB_NAME
+          this.memoryGitRepoEnabled = false
           return
         }
         if (needReloadLists) {

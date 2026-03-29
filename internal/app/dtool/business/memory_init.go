@@ -27,9 +27,11 @@ func ReadMemoryConfigFromINI() common.MemoryConfig {
 	}
 	memoryDir := strings.TrimSpace(component.ConfigViper.GetString(`base.memoryDbPath`))
 	memoryDBName := strings.TrimSpace(component.ConfigViper.GetString(`base.memoryDbFileName`))
+	memoryDBIsGitRepo := component.ConfigViper.GetBool(`base.memoryDbIsGitRepo`)
 	config := common.MemoryConfig{
-		Dir:    memoryDir,
-		DBName: memoryDBName,
+		Dir:            memoryDir,
+		DBName:         memoryDBName,
+		GitRepoEnabled: memoryDBIsGitRepo,
 	}
 	// 仅在目录和文件名都齐全时拼接完整路径 / build full path only when both path and file name exist.
 	if config.Dir != `` && config.DBName != `` {
@@ -51,16 +53,21 @@ func PrepareMemoryStore() error {
 	}
 
 	memoryGit := NewMemoryGit()
-	isGitRepo, err := memoryGit.IsGitRepo(config.Dir)
-	if err != nil {
-		return fmt.Errorf(`检测记忆目录 git 仓库失败 %w`, err)
-	}
-	if isGitRepo {
+	// 仅当配置显式开启 git 同步时才检测和拉取 / only detect and pull git when config explicitly enables git sync.
+	if config.GitRepoEnabled {
+		isGitRepo, err := memoryGit.IsGitRepo(config.Dir)
+		if err != nil {
+			return fmt.Errorf(`检测记忆目录 git 仓库失败 %w`, err)
+		}
+		// 配置已启用 git，但目录不是仓库时直接报错 / fail fast when git sync is enabled but the directory is not a repository.
+		if !isGitRepo {
+			return fmt.Errorf(`记忆目录未检测到 git 仓库，请检查 base.memoryDbIsGitRepo 和 memoryDbPath 配置`)
+		}
 		if err = memoryGit.Pull(config.Dir); err != nil {
 			return fmt.Errorf(`拉取记忆目录失败 %w`, err)
 		}
+		config.IsGitRepo = true
 	}
-	config.IsGitRepo = isGitRepo
 	config.DBPath = filepath.Join(config.Dir, config.DBName)
 	preparedMemoryStore = &preparedMemoryBootstrap{
 		Config:    config,

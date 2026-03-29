@@ -1,16 +1,19 @@
 package define
 
 type Base struct {
-	DbFileName   string // 主库 db file name / main database file name
-	DbPath       string // 主库目录 db directory / main database directory
-	MemoryDBPath string // 记忆库目录 memory db directory / memory database directory
-	MemoryDBName string // 记忆库文件名 memory db file name / memory database file name
-	WebPath      string // 前端 dist 目录 web dist path / frontend dist directory
+	DbFileName        string // 主库 db file name / main database file name
+	DbPath            string // 主库目录 db directory / main database directory
+	DbIsGitRepo       bool   // 主库是否按 git 仓库处理 main db git repo flag / whether main db should be treated as a git repository
+	MemoryDBPath      string // 记忆库目录 memory db directory / memory database directory
+	MemoryDBName      string // 记忆库文件名 memory db file name / memory database file name
+	MemoryDBIsGitRepo bool   // 记忆库是否按 git 仓库处理 memory git repo flag / whether memory db should be treated as a git repository
+	WebPath           string // 前端 dist 目录 web dist path / frontend dist directory
 }
 
 type DbConfig struct {
-	DbName string // 数据库文件名 db file name / database file name
-	DbPath string // 数据库目录 db directory / database directory
+	DbName         string // 数据库文件名 db file name / database file name
+	DbPath         string // 数据库目录 db directory / database directory
+	DbIsGitRepo    bool   // 数据库是否按 git 仓库处理 db git repo flag / whether database should be treated as a git repository
 }
 
 type WebConfig struct {
