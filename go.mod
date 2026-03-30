@@ -5,9 +5,11 @@ go 1.26.1
 require (
 	gitee.com/Sxiaobai/gs/v2 v2.0.56
 	github.com/gin-gonic/gin v1.9.1
+	github.com/go-viper/encoding/ini v0.1.1
 	github.com/pion/stun v0.6.1
 	github.com/playwright-community/playwright-go v0.4901.0
 	github.com/redis/go-redis/v9 v9.2.0
+	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/spf13/cast v1.10.0
 	github.com/spf13/viper v1.21.0
 	github.com/tidwall/gjson v1.18.0
@@ -37,7 +39,6 @@ require (
 	github.com/go-playground/validator/v10 v10.28.0 // indirect
 	github.com/go-sql-driver/mysql v1.7.1 // indirect
 	github.com/go-stack/stack v1.8.1 // indirect
-	github.com/go-viper/encoding/ini v0.1.1 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
@@ -83,7 +84,6 @@ require (
 	github.com/samber/lo v1.53.0 // indirect
 	github.com/sbabiv/xml2map v1.2.1 // indirect
 	github.com/sbzhu/weworkapi_golang v0.0.0-20210525081115-1799804a7c8d // indirect
-	github.com/shirou/gopsutil/v3 v3.24.5 // indirect
 	github.com/shoenig/go-m1cpu v0.1.6 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/sourcegraph/conc v0.3.1-0.20240121214520-5f936abd7ae8 // indirect

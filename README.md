@@ -63,6 +63,8 @@ go install github.com/wailsapp/wails/v3/cmd/wails3@latest
 task run-company
 # 前端
 task run-web-dev
+# 都不行时
+# go run github.com/go-task/task/v3/cmd/task@latest run-dev-company
 ```
 正式运行时
 默认访问地址：`http://localhost:17170/`（以配置中的 `run.ports` 为准）。
