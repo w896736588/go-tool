@@ -49,7 +49,7 @@ const (
 
 var (
 	// initComponentFunc 允许测试替换基础初始化流程 / allow tests to replace bootstrap initialization.
-	initComponentFunc = initComponent
+	initComponentFunc              = initComponent
 	prepareMainDBStoreBeforeDBFunc = business.PrepareMainDBStore
 	// prepareMemoryStoreBeforeDBFunc 允许测试校验记忆库预处理时机 / allow tests to verify memory preflight timing.
 	prepareMemoryStoreBeforeDBFunc = business.PrepareMemoryStore
@@ -272,17 +272,13 @@ func InitEnv(appName, ConfigFile string, viper *viper.Viper) {
 	//数据库配置
 	component.EnvClient.DbConfig = &define.DbConfig{
 		DbName:      ``,
-		DbPath:      component.EnvClient.ConfigBase.DbPath,
+		DbPath:      common.ResolveDefaultDToolDir(component.EnvClient.ConfigBase.DbPath),
 		DbIsGitRepo: component.EnvClient.ConfigBase.DbIsGitRepo,
 	}
 	//数据库名
 	component.EnvClient.DbConfig.DbName = component.EnvClient.AppName + `.db`
 	if component.EnvClient.ConfigBase.DbFileName != `` {
 		component.EnvClient.DbConfig.DbName = component.EnvClient.ConfigBase.DbFileName
-	}
-	//配置文件目录
-	if component.EnvClient.DbConfig.DbPath == `` {
-		component.EnvClient.DbConfig.DbPath = filepath.Join(component.EnvClient.RootPath, `config`, component.EnvClient.AppName)
 	}
 	// log 库默认与主库放在同一目录，便于统一管理。
 	component.EnvClient.LogDbConfig = &define.DbConfig{
@@ -298,21 +294,12 @@ func InitEnv(appName, ConfigFile string, viper *viper.Viper) {
 	} else {
 		drive = `C`
 	}
-	component.EnvClient.WebkitDriverPath = viper.GetString(`path.webkit_driver_path`)
-	component.EnvClient.WebkitDataPath = viper.GetString(`path.webkit_data_path`)
-	component.EnvClient.WebkitDownloadPath = viper.GetString(`path.webkit_download_path`)
+	component.EnvClient.WebkitDriverPath = common.ResolvePlaywrightPath(viper.GetString(`path.webkit_driver_path`), `webkit_driver`, drive)
+	component.EnvClient.WebkitDataPath = common.ResolvePlaywrightPath(viper.GetString(`path.webkit_data_path`), `webkit_data`, drive)
+	component.EnvClient.WebkitDownloadPath = common.ResolvePlaywrightPath(viper.GetString(`path.webkit_download_path`), `webkit_download`, drive)
 	component.EnvClient.Crawl4AIHost = viper.GetString(`crawl4ai.host`)
 	component.EnvClient.Crawl4AIPort = viper.GetString(`crawl4ai.port`)
 	component.EnvClient.Crawl4AIDataPath = viper.GetString(`crawl4ai.data_path`)
-	component.EnvClient.WebkitDataPath = gstool.SReplaces(component.EnvClient.WebkitDataPath, map[string]string{
-		`{DRIVE}`: drive,
-	})
-	component.EnvClient.WebkitDownloadPath = gstool.SReplaces(component.EnvClient.WebkitDownloadPath, map[string]string{
-		`{DRIVE}`: drive,
-	})
-	component.EnvClient.WebkitDriverPath = gstool.SReplaces(component.EnvClient.WebkitDriverPath, map[string]string{
-		`{DRIVE}`: drive,
-	})
 	if component.EnvClient.Crawl4AIHost == `` {
 		component.EnvClient.Crawl4AIHost = `127.0.0.1`
 	}

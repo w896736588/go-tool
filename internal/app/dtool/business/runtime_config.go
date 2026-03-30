@@ -1,18 +1,17 @@
 package business
 
 import (
+	"dev_tool/internal/app/dtool/common"
 	"dev_tool/internal/app/dtool/component"
 	"dev_tool/internal/app/dtool/define"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"gitee.com/Sxiaobai/gs/v2/gstool"
 )
 
 const (
-	runtimeConfigDatabaseFileExt    = `.db`
-	runtimeConfigLogDatabaseSuffix  = `.log`
+	runtimeConfigDatabaseFileExt   = `.db`
+	runtimeConfigLogDatabaseSuffix = `.log`
 )
 
 // ReloadEditableRuntimeConfig 重新把当前 viper 中的可编辑配置同步到运行时环境。 // Reload editable config values from viper into the runtime environment.
@@ -44,14 +43,11 @@ func ReloadEditableRuntimeConfig() {
 	if component.EnvClient.DbConfig == nil {
 		component.EnvClient.DbConfig = &define.DbConfig{}
 	}
-	component.EnvClient.DbConfig.DbPath = component.EnvClient.ConfigBase.DbPath
+	component.EnvClient.DbConfig.DbPath = common.ResolveDefaultDToolDir(component.EnvClient.ConfigBase.DbPath)
 	component.EnvClient.DbConfig.DbIsGitRepo = component.EnvClient.ConfigBase.DbIsGitRepo
 	component.EnvClient.DbConfig.DbName = component.EnvClient.AppName + `.db`
 	if component.EnvClient.ConfigBase.DbFileName != `` {
 		component.EnvClient.DbConfig.DbName = component.EnvClient.ConfigBase.DbFileName
-	}
-	if component.EnvClient.DbConfig.DbPath == `` {
-		component.EnvClient.DbConfig.DbPath = filepath.Join(component.EnvClient.RootPath, `config`, component.EnvClient.AppName)
 	}
 
 	if component.EnvClient.LogDbConfig == nil {
@@ -64,15 +60,9 @@ func ReloadEditableRuntimeConfig() {
 	if _, err := os.Stat(`D:\`); err == nil {
 		drive = `D`
 	}
-	component.EnvClient.WebkitDriverPath = gstool.SReplaces(component.ConfigViper.GetString(`path.webkit_driver_path`), map[string]string{
-		`{DRIVE}`: drive,
-	})
-	component.EnvClient.WebkitDataPath = gstool.SReplaces(component.ConfigViper.GetString(`path.webkit_data_path`), map[string]string{
-		`{DRIVE}`: drive,
-	})
-	component.EnvClient.WebkitDownloadPath = gstool.SReplaces(component.ConfigViper.GetString(`path.webkit_download_path`), map[string]string{
-		`{DRIVE}`: drive,
-	})
+	component.EnvClient.WebkitDriverPath = common.ResolvePlaywrightPath(component.ConfigViper.GetString(`path.webkit_driver_path`), `webkit_driver`, drive)
+	component.EnvClient.WebkitDataPath = common.ResolvePlaywrightPath(component.ConfigViper.GetString(`path.webkit_data_path`), `webkit_data`, drive)
+	component.EnvClient.WebkitDownloadPath = common.ResolvePlaywrightPath(component.ConfigViper.GetString(`path.webkit_download_path`), `webkit_download`, drive)
 }
 
 // buildRuntimeLogDBName 基于主库文件名生成 log 库文件名。 // Build log db file name from the main database file name.

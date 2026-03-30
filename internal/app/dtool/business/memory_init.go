@@ -17,7 +17,22 @@ var preparedMemoryStore *preparedMemoryBootstrap
 // preparedMemoryBootstrap 记录记忆库预处理后的配置和 git 状态 / records memory config and git status after preflight.
 type preparedMemoryBootstrap struct {
 	Config    common.MemoryConfig
-	MemoryGit *MemoryGit
+	MemoryGit memoryGitSyncer
+}
+
+// memoryGitSyncer 定义记忆库 git 同步所需能力。 // Defines the git sync capabilities required by the memory store.
+type memoryGitSyncer interface {
+	IsGitRepo(dir string) (bool, error)
+	Pull(dir string) error
+	HasFileChanges(dir, fileName string) (bool, error)
+	AddFile(dir, fileName string) error
+	Commit(dir, fileName, message string) error
+	Push(dir string) error
+}
+
+// newMemoryGitFactory 允许测试替换记忆库 git 实现。 // Allows tests to replace the memory git implementation.
+var newMemoryGitFactory = func() memoryGitSyncer {
+	return NewMemoryGit()
 }
 
 // ReadMemoryConfigFromINI 从 ini 读取记忆库配置 / read memory db config from ini.
@@ -28,15 +43,16 @@ func ReadMemoryConfigFromINI() common.MemoryConfig {
 	memoryDir := strings.TrimSpace(component.ConfigViper.GetString(`base.memoryDbPath`))
 	memoryDBName := strings.TrimSpace(component.ConfigViper.GetString(`base.memoryDbFileName`))
 	memoryDBIsGitRepo := component.ConfigViper.GetBool(`base.memoryDbIsGitRepo`)
+	if memoryDBName == `` {
+		// 未显式配置文件名时使用 memory.db，和注释说明保持一致。 // Use memory.db when no file name is explicitly configured, matching the config comment.
+		memoryDBName = `memory.db`
+	}
 	config := common.MemoryConfig{
-		Dir:            memoryDir,
+		Dir:            common.ResolveDefaultDToolDir(memoryDir),
 		DBName:         memoryDBName,
 		GitRepoEnabled: memoryDBIsGitRepo,
 	}
-	// 仅在目录和文件名都齐全时拼接完整路径 / build full path only when both path and file name exist.
-	if config.Dir != `` && config.DBName != `` {
-		config.DBPath = filepath.Join(config.Dir, config.DBName)
-	}
+	config.DBPath = filepath.Join(config.Dir, config.DBName)
 	return config
 }
 
@@ -52,7 +68,7 @@ func PrepareMemoryStore() error {
 		return fmt.Errorf(`创建记忆目录失败 %w`, err)
 	}
 
-	memoryGit := NewMemoryGit()
+	memoryGit := newMemoryGitFactory()
 	// 仅当配置显式开启 git 同步时才检测和拉取 / only detect and pull git when config explicitly enables git sync.
 	if config.GitRepoEnabled {
 		gstool.FmtPrintlnLogTime(`记忆库 git 模式已开启，准备检查仓库并执行 pull dir=%s file=%s`, config.Dir, config.DBName)

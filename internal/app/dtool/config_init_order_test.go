@@ -56,6 +56,30 @@ func TestInitBasePanicsWhenPrepareMemoryStoreFails(t *testing.T) {
 	InitBase(`config`)
 }
 
+func TestInitBasePanicsWhenPrepareMainDBStoreFails(t *testing.T) {
+	t.Parallel()
+
+	restore := stubInitBaseHooks(func(string) {})
+	defer restore()
+
+	prepareMainDBStoreBeforeDBFunc = func() error {
+		panicMessage := errors.New(`prepare main db failed`)
+		return panicMessage
+	}
+
+	defer func() {
+		recovered := recover()
+		if recovered == nil {
+			t.Fatalf("InitBase() panic = nil, want panic")
+		}
+		if recovered != `prepare main db failed` {
+			t.Fatalf("InitBase() panic = %v, want %q", recovered, `prepare main db failed`)
+		}
+	}()
+
+	InitBase(`config`)
+}
+
 // stubInitBaseHooks 统一替换 InitBase 依赖步骤，避免测试执行真实初始化 / replace InitBase steps to avoid real bootstrap in tests.
 func stubInitBaseHooks(record func(string)) func() {
 	originalInitComponent := initComponentFunc

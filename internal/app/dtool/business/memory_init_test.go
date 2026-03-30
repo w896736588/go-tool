@@ -2,6 +2,9 @@ package business
 
 import (
 	"dev_tool/internal/app/dtool/component"
+	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -42,8 +45,84 @@ func TestReadMemoryConfigFromINIHandlesMissingConfig(t *testing.T) {
 
 	component.ConfigViper = newTestMemoryConfigViper()
 	got := ReadMemoryConfigFromINI()
-	if got.Dir != `` || got.DBName != `` || got.DBPath != `` || got.GitRepoEnabled {
-		t.Fatalf("expected empty memory config, got %+v", got)
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("UserHomeDir() error = %v", err)
+	}
+	if got.Dir != filepath.Join(homeDir, `.dtool`) {
+		t.Fatalf("Dir = %q, want %q", got.Dir, filepath.Join(homeDir, `.dtool`))
+	}
+	if got.DBName != `memory.db` {
+		t.Fatalf("DBName = %q, want %q", got.DBName, `memory.db`)
+	}
+	if got.DBPath != filepath.Join(homeDir, `.dtool`, `memory.db`) {
+		t.Fatalf("DBPath = %q, want %q", got.DBPath, filepath.Join(homeDir, `.dtool`, `memory.db`))
+	}
+	if got.GitRepoEnabled {
+		t.Fatalf("GitRepoEnabled = %v, want false", got.GitRepoEnabled)
+	}
+}
+
+type fakeMemoryGitSyncer struct {
+	isRepo       bool
+	pullErr      error
+	isGitRepoErr error
+}
+
+func (h *fakeMemoryGitSyncer) IsGitRepo(string) (bool, error) {
+	return h.isRepo, h.isGitRepoErr
+}
+
+func (h *fakeMemoryGitSyncer) Pull(string) error {
+	return h.pullErr
+}
+
+func (h *fakeMemoryGitSyncer) HasFileChanges(string, string) (bool, error) {
+	return false, nil
+}
+
+func (h *fakeMemoryGitSyncer) AddFile(string, string) error {
+	return nil
+}
+
+func (h *fakeMemoryGitSyncer) Commit(string, string, string) error {
+	return nil
+}
+
+func (h *fakeMemoryGitSyncer) Push(string) error {
+	return nil
+}
+
+func TestPrepareMemoryStoreReturnsPullErrorWhenGitPullFails(t *testing.T) {
+	oldViper := component.ConfigViper
+	oldPrepared := preparedMemoryStore
+	oldFactory := newMemoryGitFactory
+	t.Cleanup(func() {
+		component.ConfigViper = oldViper
+		preparedMemoryStore = oldPrepared
+		newMemoryGitFactory = oldFactory
+	})
+
+	v := newTestMemoryConfigViper()
+	v.Set(`base.memoryDbPath`, t.TempDir())
+	v.Set(`base.memoryDbFileName`, `memory.db`)
+	v.Set(`base.memoryDbIsGitRepo`, true)
+	component.ConfigViper = v
+
+	fakeGit := &fakeMemoryGitSyncer{
+		isRepo:  true,
+		pullErr: errors.New(`pull failed`),
+	}
+	newMemoryGitFactory = func() memoryGitSyncer {
+		return fakeGit
+	}
+
+	err := PrepareMemoryStore()
+	if err == nil {
+		t.Fatalf("PrepareMemoryStore() error = nil, want error")
+	}
+	if err.Error() != `拉取记忆目录失败 pull failed` {
+		t.Fatalf("PrepareMemoryStore() error = %q, want %q", err.Error(), `拉取记忆目录失败 pull failed`)
 	}
 }
 
