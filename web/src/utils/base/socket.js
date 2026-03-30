@@ -2,14 +2,16 @@
 const socketMap = {} //存放socket连接
 const socketMsg = {} //存放每个socket的消息
 const socketReConnection = {} //存放重连以及定时器
+import base from '@/utils/base'
 function GetSocketHost(uniqueKey) {
     if (socketMap[uniqueKey]) {
         return socketMap[uniqueKey]
     }
     let url = ''
     let params = 'uniqueKey=' + encodeURIComponent(uniqueKey)
-    if (process.env.NODE_ENV === 'production') {
-        url = 'ws://localhost:17171/socket?' + params
+    if (base.IsFrontendDevProxyRuntime()) {
+        const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://'
+        url = protocol + window.location.host + '/socket?' + params
     } else {
         url = 'ws://localhost:17171/socket?' + params
     }

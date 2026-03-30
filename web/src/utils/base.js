@@ -5,6 +5,11 @@ import {globals} from '@/main'
 
 var ports = ["17170"]
 
+// IsFrontendDevProxyRuntime 判断当前是否运行在前端开发代理环境。
+function IsFrontendDevProxyRuntime() {
+    return typeof window !== 'undefined' && window.location && window.location.port === '8080'
+}
+
 //登录拿到 unikey
 function BaseLogin(userName, password, okFunc) {
     BasePost(
@@ -70,9 +75,11 @@ function BasePostForm(uri, params, callBack) {
 
 //拿到接口地址
 function GetApiHost() {
-    // if (process.env.NODE_ENV === 'production') {
-    //     return ''
-    // }
+    // 开发代理模式走相对路径，避免 localhost:8080 -> localhost:17170 的跨域报错。
+    // Development proxy mode uses relative paths to avoid CORS failures from localhost:8080 to localhost:17170.
+    if (IsFrontendDevProxyRuntime()) {
+        return ''
+    }
     let port = GetRandPort()
     return 'http://localhost:' + port
 }
@@ -192,4 +199,5 @@ export default {
     DisableSaveShortcut,
     UploadFile,
     FormatEnterToMarkdown,
+    IsFrontendDevProxyRuntime,
 }
