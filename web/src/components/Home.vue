@@ -76,15 +76,15 @@
           {{ ip }}
         </el-tag>
         <div class="footer-buttons">
-          <el-tag size="small" style="cursor: pointer;" @click="OpenNewBlank()">
-            新页卡
-          </el-tag>
-          <el-tag size="small" style="cursor: pointer;" @click="drawerVisibleTools = true">
-            小工具
-          </el-tag>
-          <el-tag size="small" style="cursor: pointer;" @click="openSshConnectionsDialog">
-            当前SSH连接数 {{ sshConnectionCount }}
-          </el-tag>
+          <button type="button" class="footer-action footer-action--leaf" @click="OpenNewBlank()">
+            <span class="footer-action__title">新页卡</span>
+          </button>
+          <button type="button" class="footer-action footer-action--mint" @click="drawerVisibleTools = true">
+            <span class="footer-action__title">小工具</span>
+          </button>
+          <button type="button" class="footer-action footer-action--sky" @click="openSshConnectionsDialog">
+            <span class="footer-action__title">当前 SSH 连接数 {{ sshConnectionCount }}</span>
+          </button>
         </div>
         <pl-button v-if="loginInfo.dialog" size="small" @click="loginInfo.dialog = true">登录</pl-button>
       </div>
@@ -1212,7 +1212,56 @@ export default {
   margin-bottom: 8px;
 }
 
-.footer-button-bar :deep(.git-action-button) {
+.footer-action {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid rgba(120, 140, 111, 0.14);
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.97) 0%, rgba(247, 249, 243, 0.98) 100%);
+  box-shadow: 0 10px 24px rgba(119, 137, 112, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  text-align: center;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.footer-action:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(119, 137, 112, 0.12);
+}
+
+.footer-action:active {
+  transform: translateY(0);
+}
+
+.footer-action__title {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: #3f5040;
+}
+
+.footer-action--leaf:hover {
+  border-color: rgba(87, 126, 80, 0.28);
+}
+
+.footer-action--mint:hover {
+  border-color: rgba(56, 128, 109, 0.28);
+}
+
+.footer-action--sky:hover {
+  border-color: rgba(53, 119, 166, 0.28);
+}
+
+.footer-action:focus-visible {
+  outline: 2px solid rgba(83, 123, 77, 0.24);
+  outline-offset: 2px;
+}
+
+.footer-buttons :deep(.git-action-button) {
   width: 100%;
   justify-content: center;
 }
