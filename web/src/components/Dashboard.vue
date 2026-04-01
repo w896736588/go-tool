@@ -1800,28 +1800,6 @@ export default {
 
     // 加载 Docker Compose 列表
     const loadDockerComposeList = () => {
-      ssh.SshList((response) => {
-        if (response.ErrCode !== 0 || !Array.isArray(response.Data) || response.Data.length === 0) {
-          isLoadingDynamic.value = false
-          dynamicDataCache.value['dockerComposeList'] = []
-          currentChildren.value = []
-          refreshCommandDropdownVisibility()
-          return
-        }
-        fetchDockerComposeList(response.Data)
-      })
-    }
-
-    const fetchDockerComposeList = (sshList) => {
-      const allSshList = Array.isArray(sshList) ? sshList : []
-      if (allSshList.length === 0) {
-        isLoadingDynamic.value = false
-        dynamicDataCache.value['dockerComposeList'] = []
-        currentChildren.value = []
-        refreshCommandDropdownVisibility()
-        return
-      }
-
       const normalizeDockerDefaultServices = (item) => {
         if (Array.isArray(item?.default_service_list) && item.default_service_list.length > 0) {
           return item.default_service_list
@@ -1836,20 +1814,19 @@ export default {
           .filter(Boolean)
       }
 
-      const sshNameMap = {}
-      allSshList.forEach(item => {
-        const sshId = normalizeCommandPart(item?.id)
-        if (sshId) {
-          sshNameMap[sshId] = normalizeCommandPart(item?.name)
-        }
-      })
+      compose.DockerComposeList({}, (response) => {
+        const composeItemList = Array.isArray(response?.Data?.list)
+          ? response.Data.list
+          : (Array.isArray(response?.Data) ? response.Data : [])
 
-      let pendingCount = allSshList.length
-      const composeItemList = []
-      const finalizeComposeList = () => {
-        if (pendingCount > 0) {
+        if (response?.ErrCode !== 0 || composeItemList.length === 0) {
+          isLoadingDynamic.value = false
+          dynamicDataCache.value['dockerComposeList'] = []
+          currentChildren.value = []
+          refreshCommandDropdownVisibility()
           return
         }
+
         const duplicateNameCountMap = {}
         composeItemList.forEach(item => {
           const nameKey = normalizeCommandPart(item?.name).toLowerCase()
@@ -1861,7 +1838,7 @@ export default {
         const list = composeItemList
           .map(item => {
             const sshId = normalizeCommandPart(item?.ssh_id)
-            const sshName = sshNameMap[sshId] || `SSH ${sshId || '-'}`
+            const sshName = normalizeCommandPart(item?.ssh_name) || `SSH ${sshId || '-'}`
             const normalizedName = normalizeCommandPart(item?.name)
             const hasDuplicateName = !!normalizedName && duplicateNameCountMap[normalizedName.toLowerCase()] > 1
             const displayName = hasDuplicateName ? `${normalizedName} (${sshName})` : normalizedName
@@ -1876,7 +1853,7 @@ export default {
                 String(item.id || '')
               ].filter(Boolean),
               desc: [sshName, item.compose_yml_path || ''].filter(Boolean).join(' | '),
-              id: `${sshId}_${item.id}`,
+              id: sshId ? `${sshId}_${item.id}` : String(item.id || normalizedName),
               data: item,
               default_service_list: normalizeDockerDefaultServices(item)
             }
@@ -1895,27 +1872,6 @@ export default {
         parseInput()
         tryAutoExecutePendingHistory()
         refreshCommandDropdownVisibility()
-      }
-
-      allSshList.forEach(sshItem => {
-        const sshId = normalizeCommandPart(sshItem?.id)
-        if (!sshId) {
-          pendingCount -= 1
-          finalizeComposeList()
-          return
-        }
-        compose.DockerComposeList({ ssh_id: sshId }, (response) => {
-          if (response.ErrCode === 0 && Array.isArray(response?.Data?.list)) {
-            response.Data.list.forEach(item => {
-              composeItemList.push({
-                ...item,
-                ssh_id: normalizeCommandPart(item?.ssh_id) || sshId
-              })
-            })
-          }
-          pendingCount -= 1
-          finalizeComposeList()
-        })
       })
     }
     // 加载 Docker 服务列表（用于快速重启/停止）
