@@ -1160,11 +1160,13 @@ export default {
 
 .sidebar {
   width: 140px;
-  background-color: #f5f5f0;
+  background:
+    linear-gradient(180deg, #f9fbf6 0%, #f3f5ee 100%);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  border-right: 1px solid #e8e8e0;
+  border-right: 1px solid rgba(212, 220, 205, 0.9);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.72);
 }
 
 .sidebar-header {
@@ -1172,18 +1174,28 @@ export default {
   display: flex;
   align-items: center;
   padding: 0 12px;
-  border-bottom: 1px solid #e8e8e0;
+  border-bottom: 1px solid rgba(214, 223, 208, 0.82);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.68) 0%, rgba(245, 248, 239, 0.32) 100%);
 }
 
 .logo {
-  font-size: 20px;
-  margin-right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-right: 8px;
+  font-size: 16px;
+  border-radius: 10px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.95) 0%, rgba(234, 241, 229, 0.98) 100%);
+  box-shadow: 0 6px 14px rgba(118, 141, 104, 0.14);
 }
 
 .title {
-  color: #4a4a4a;
-  font-size: 16px;
-  font-weight: 600;
+  color: #455446;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .sidebar-menu {
@@ -1197,39 +1209,41 @@ export default {
 }
 
 .sidebar-footer {
-  padding: 10px;
-  border-top: 1px solid #e8e8e0;
+  padding: 8px 10px 10px;
+  border-top: 1px solid rgba(214, 223, 208, 0.82);
   display: flex;
   flex-direction: column;
   align-items: stretch;
+  background: linear-gradient(180deg, rgba(246, 248, 242, 0.4) 0%, rgba(255, 255, 255, 0.72) 100%);
 }
 
-.footer-button-bar {
+.footer-buttons {
   display: flex;
   flex-direction: column;
   width: 100%;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 6px;
+  margin-bottom: 6px;
 }
 
 .footer-action {
   width: 100%;
-  padding: 10px 12px;
-  border: 1px solid rgba(120, 140, 111, 0.14);
-  border-radius: 14px;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.97) 0%, rgba(247, 249, 243, 0.98) 100%);
-  box-shadow: 0 10px 24px rgba(119, 137, 112, 0.08);
+  min-height: 34px;
+  padding: 6px 8px;
+  border: 1px solid rgba(126, 145, 117, 0.12);
+  border-radius: 10px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.98) 0%, rgba(244, 248, 240, 0.98) 100%);
+  box-shadow: 0 5px 12px rgba(119, 137, 112, 0.07);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   text-align: center;
-  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, background 0.18s ease;
 }
 
 .footer-action:hover {
   transform: translateY(-1px);
-  box-shadow: 0 14px 28px rgba(119, 137, 112, 0.12);
+  box-shadow: 0 8px 18px rgba(119, 137, 112, 0.1);
 }
 
 .footer-action:active {
@@ -1238,10 +1252,10 @@ export default {
 
 .footer-action__title {
   display: block;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
-  line-height: 1.5;
-  color: #3f5040;
+  line-height: 1.35;
+  color: #425142;
 }
 
 .footer-action--leaf:hover {
@@ -1429,32 +1443,55 @@ export default {
 
 /* 覆盖 Element Plus 菜单样式 */
 .sidebar-menu {
-  padding: 6px 0;
+  padding: 8px 0;
 }
 
 .sidebar-menu .el-menu-item {
   position: relative;
-  height: 40px;
-  line-height: 40px;
-  margin: 2px 6px;
-  border-radius: 6px;
+  height: 42px;
+  line-height: 42px;
+  margin: 3px 8px;
+  border-radius: 12px;
   padding-left: 12px !important;
+  border: 1px solid transparent;
+  transition: background-color 0.18s ease, transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
 .sidebar-menu .el-menu-item:hover {
-  background-color: #e8f5e8 !important;
-  border-radius: 6px;
+  background: linear-gradient(135deg, rgba(237, 246, 232, 0.9) 0%, rgba(250, 252, 246, 0.98) 100%) !important;
+  border-color: rgba(168, 194, 149, 0.26);
+  transform: translateX(2px);
+  box-shadow: 0 6px 14px rgba(141, 163, 126, 0.1);
 }
 
 .sidebar-menu .el-menu-item.is-active {
-  background-color: #dcedc8 !important;
-  border-radius: 6px;
-  color: #3a7a3a !important;
+  background: linear-gradient(135deg, rgba(221, 238, 203, 0.96) 0%, rgba(241, 248, 231, 0.98) 100%) !important;
+  border-color: rgba(130, 173, 107, 0.3);
+  color: #376e38 !important;
+  box-shadow: 0 8px 18px rgba(128, 160, 112, 0.12);
 }
 
 .sidebar-menu .el-menu-item .el-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
   margin-right: 8px;
   font-size: 16px;
+  color: #71836f;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(206, 216, 198, 0.45);
+  transition: transform 0.18s ease, color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.sidebar-menu .el-menu-item:hover .el-icon,
+.sidebar-menu .el-menu-item.is-active .el-icon {
+  transform: translateY(-1px) scale(1.03);
+  color: #537953;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: inset 0 0 0 1px rgba(178, 198, 166, 0.42), 0 5px 12px rgba(137, 162, 122, 0.14);
 }
 
 .sidebar-menu .el-menu-item.menu-item-common-actions .el-icon {
@@ -1489,7 +1526,8 @@ export default {
 
 .sidebar-menu .el-menu-item span {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .ssh-dialog-toolbar {
