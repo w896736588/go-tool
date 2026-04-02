@@ -44,7 +44,7 @@
         </template>
       </el-table-column>
 
-      <el-table-column label="操作" width="200" align="center">
+      <el-table-column label="操作" width="240" align="center">
         <template #default="{ row, $index }">
           <div v-if="row.editing">
             <pl-button type="primary" link @click="handleSaveEnv(row)">保存</pl-button>
@@ -131,7 +131,6 @@ export default {
     },
 
     handleAddEnvironment() {
-      let _that = this
       const newEnv = {
         id: 0,
         name: '',
@@ -211,11 +210,11 @@ export default {
         id : env.id,
       } , async function (res){
         _that.loading = false
-        _that.loading = false
         if(res.ErrCode !== 0){
           _that.$message.error(res.ErrMsg)
           return
         }
+        let saveWarning = ''
         try {
           const isNewEnv = parseInt(env.id) === 0
           if (isNewEnv) {
@@ -237,21 +236,28 @@ export default {
             }
           }
         } catch (error) {
-          _that.$message.error(error.message || '复制环境变量失败')
-          return
+          saveWarning = error.message || '环境已保存，但复制环境变量失败'
         }
         env.editing = false
         for (let i in _that.environmentList) {
           if (parseInt(res.Data.id) === parseInt(_that.environmentList[i].id) || (parseInt(env.id) === 0 && parseInt(_that.environmentList[i].id) === 0)) {
             _that.environmentList[i] = res.Data
             _that.$emit('environmentUpdate', _that.environmentList)
-            _that.$message.success('保存成功')
+            if (saveWarning) {
+              _that.$message.warning(saveWarning)
+            } else {
+              _that.$message.success('保存成功')
+            }
             return
           }
         }
         _that.environmentList.push(res.Data)
         _that.$emit('environmentUpdate', _that.environmentList)
-        _that.$message.success('保存成功')
+        if (saveWarning) {
+          _that.$message.warning(saveWarning)
+        } else {
+          _that.$message.success('保存成功')
+        }
       })
     },
 
