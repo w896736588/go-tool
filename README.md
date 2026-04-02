@@ -61,7 +61,10 @@ http://localhost:17170
 ## 编译打包命令
 
 ```bash
+# web端和桌面端
 task package-windows
+# web端
 task package-linux
+# web端和桌面端
 task package-macos
 ```
