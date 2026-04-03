@@ -1,7 +1,6 @@
-package plw
+package component
 
 import (
-	"dev_tool/internal/app/dtool/component"
 	"dev_tool/internal/pkg/p_common"
 	"dev_tool/internal/pkg/p_sse"
 	"fmt"
@@ -17,48 +16,47 @@ import (
 )
 
 type TPlaywright struct {
-	//处理下载后自动打开
+	// 处理下载后自动打开
 	DownloadPath string
 	EventLock    sync.Mutex
-	//全局
+	// 全局
 	BrowserWebkitChrome  playwright.Browser
 	BrowserWebkitSilence playwright.Browser
-	//pw
+	// pw
 	Pw  *playwright.Playwright
 	Log *gstool.GsSlog
-	//文件
+	// 文件
 	LockFileFullPath string
 }
 
-var PlaywrightClient *TPlaywright
 var lookPathFunc = exec.LookPath
 var statFunc = os.Stat
 
 func NewTPlaywright() *TPlaywright {
-	gsLog := gstool.NewSlog2(component.EnvClient.LogPath, `playwright`)
+	gsLog := gstool.NewSlog2(EnvClient.LogPath, `playwright`)
 	_ = gsLog.CleanOldLogs(2)
 	return &TPlaywright{
 		Log:          gsLog,
-		DownloadPath: component.EnvClient.WebkitDownloadPath,
+		DownloadPath: EnvClient.WebkitDownloadPath,
 	}
 }
 
 func (h *TPlaywright) SetWebkitPath() {
 	// 设置自定义浏览器安装路径
-	_ = os.Setenv("PLAYWRIGHT_BROWSERS_PATH", component.EnvClient.WebkitDriverPath)
+	_ = os.Setenv("PLAYWRIGHT_BROWSERS_PATH", EnvClient.WebkitDriverPath)
 	// PLAYWRIGHT_DRIVER_PATH 是驱动目录，不是 node.exe 路径
 	_ = os.Unsetenv("PLAYWRIGHT_DRIVER_PATH")
-	_ = os.Setenv("PLAYWRIGHT_NODEJS_PATH", component.EnvClient.NodePath)
+	_ = os.Setenv("PLAYWRIGHT_NODEJS_PATH", EnvClient.NodePath)
 	_ = os.Setenv("GOPROXY", "https://goproxy.cn,direct")
 }
 
 // EnsureNodeRuntime 确保 Node.js 可用并写回最终路径
 func (h *TPlaywright) EnsureNodeRuntime() bool {
-	nodePath := resolveNodePath(component.EnvClient.NodePath)
+	nodePath := resolveNodePath(EnvClient.NodePath)
 	if nodePath == `` {
 		return false
 	}
-	component.EnvClient.NodePath = nodePath
+	EnvClient.NodePath = nodePath
 	h.SetWebkitPath()
 	return true
 }
@@ -141,7 +139,7 @@ func (h *TPlaywright) WitchDownload() {
 	h.Log.Debugf(`开始监听%s`, h.DownloadPath)
 }
 
-// SetTitle 设置title
+// SetTitle 设置 title
 func (h *TPlaywright) SetTitle(page playwright.Page, title string) {
 	_, _ = page.Evaluate(`(function() {
 			document.title = "` + title + `";
@@ -188,8 +186,7 @@ func (h *TPlaywright) InitPlaywright() {
 	}
 	h.BrowserWebkitSilence, _ = h.Pw.Chromium.Launch()
 	h.BrowserWebkitChrome, _ = h.Pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-		//DownloadsPath: &h.DownloadPath,
-		Headless: playwright.Bool(false), //有界面模式
+		Headless: playwright.Bool(false),
 	})
 	gstool.FmtPrintlnLogTime(`启动成功..`)
 }

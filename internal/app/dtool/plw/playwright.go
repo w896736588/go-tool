@@ -2,6 +2,7 @@ package plw
 
 import (
 	"dev_tool/internal/app/dtool/common"
+	"dev_tool/internal/app/dtool/component"
 	"dev_tool/internal/app/dtool/define"
 	"dev_tool/internal/pkg/p_common"
 	"errors"
@@ -36,7 +37,7 @@ func NewPlaywright(runParams *PlaywrightRunParams, log *gstool.GsSlog) *Playwrig
 }
 
 func (h *Playwright) Open(call *p_common.Call, stopCall func() bool) error {
-	if PlaywrightClient.Pw == nil {
+	if component.PlaywrightClient.Pw == nil {
 		return errors.New(`未启动浏览器核心`)
 	}
 	h.RunParams.StreamFunc(`启动playwright`, `获取page`)
@@ -170,7 +171,7 @@ func (h *Playwright) GetPage(call *p_common.Call) (*playwright.Page, error) {
 	}
 	//等待加载完成
 	//h.RunParams.ReplaceList[`{link}`] = u.String()
-	PlaywrightClient.WaitForLoadState(&page, h.RunParams.LocatorTimeout)
+	component.PlaywrightClient.WaitForLoadState(&page, h.RunParams.LocatorTimeout)
 	return &page, nil
 }
 
@@ -227,39 +228,39 @@ func (h *Playwright) LastUserDataIndex(runParams *PlaywrightRunParams, userDataI
 }
 
 func (h *Playwright) GetBrowser() (playwright.Browser, error) {
-	if h.RunParams.OpenType == define.OpenTypeWebkitSilence && PlaywrightClient.BrowserWebkitSilence != nil {
-		return PlaywrightClient.BrowserWebkitSilence, nil
-	} else if h.RunParams.OpenType == define.OpenTypeWebkitChrome && PlaywrightClient.BrowserWebkitChrome != nil {
-		return PlaywrightClient.BrowserWebkitChrome, nil
+	if h.RunParams.OpenType == define.OpenTypeWebkitSilence && component.PlaywrightClient.BrowserWebkitSilence != nil {
+		return component.PlaywrightClient.BrowserWebkitSilence, nil
+	} else if h.RunParams.OpenType == define.OpenTypeWebkitChrome && component.PlaywrightClient.BrowserWebkitChrome != nil {
+		return component.PlaywrightClient.BrowserWebkitChrome, nil
 	}
 	var browserErr error
 	if h.RunParams.OpenType == define.OpenTypeWebkitSilence {
-		PlaywrightClient.BrowserWebkitSilence, browserErr = PlaywrightClient.Pw.Chromium.Launch()
+		component.PlaywrightClient.BrowserWebkitSilence, browserErr = component.PlaywrightClient.Pw.Chromium.Launch()
 		if browserErr != nil {
-			PlaywrightClient.BrowserWebkitSilence = nil
+			component.PlaywrightClient.BrowserWebkitSilence = nil
 			return nil, browserErr
 		} else {
-			return PlaywrightClient.BrowserWebkitSilence, nil
+			return component.PlaywrightClient.BrowserWebkitSilence, nil
 		}
 	} else {
-		PlaywrightClient.BrowserWebkitChrome, browserErr = PlaywrightClient.Pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
+		component.PlaywrightClient.BrowserWebkitChrome, browserErr = component.PlaywrightClient.Pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
 			//DownloadsPath: &h.downloadPath,
 			Headless: playwright.Bool(false), //有界面模式
 		})
 		if browserErr != nil {
-			PlaywrightClient.BrowserWebkitChrome = nil
+			component.PlaywrightClient.BrowserWebkitChrome = nil
 			return nil, browserErr
 		} else {
-			return PlaywrightClient.BrowserWebkitChrome, nil
+			return component.PlaywrightClient.BrowserWebkitChrome, nil
 		}
 	}
 }
 
 func (h *Playwright) Recycle() error {
 	h.log.Debugf(`开始回收..`)
-	_ = PlaywrightClient.Pw.Stop()
+	_ = component.PlaywrightClient.Pw.Stop()
 	h.ContextPageList.CleanContextList(true)
-	PlaywrightClient.InitPlaywright()
+	component.PlaywrightClient.InitPlaywright()
 	InitPageActiveTime()
 	return nil
 }

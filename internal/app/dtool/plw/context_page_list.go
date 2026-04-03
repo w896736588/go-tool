@@ -146,7 +146,7 @@ func (h *ContextPageList) FindNotSaveUserDataContext(runParams *PlaywrightRunPar
 			return nil
 		}
 		//非同种类型的context跳过
-		if !PlaywrightClient.IsSameLink(context.LinkIdLabel, runParams.LinkIdLabel) {
+		if !component.PlaywrightClient.IsSameLink(context.LinkIdLabel, runParams.LinkIdLabel) {
 			runParams.StreamFunc(`获取无痕浏览器实例`, context.LinkIdLabel+`,`+context.LinkId+` 不属于同一链接类型，当前需要的链接类型为：`+context.LinkIdLabel)
 			return nil
 		}
@@ -385,7 +385,7 @@ func (h *ContextPageList) GetContextSaveUserData(runParams *PlaywrightRunParams)
 	//浏览器自带验证
 	if runParams.BrowserAuthUsername != `` && runParams.BrowserAuthPassword != `` {
 		runParams.StreamFunc(`获取浏览器实例`, fmt.Sprintf(`打开contxt，使用浏览器自带验证 用户名%s,超时时间 %f`, runParams.BrowserAuthUsername, runParams.GetPageTimeout))
-		context, contextErr = PlaywrightClient.Pw.Chromium.LaunchPersistentContext(userDataPath, playwright.BrowserTypeLaunchPersistentContextOptions{
+		context, contextErr = component.PlaywrightClient.Pw.Chromium.LaunchPersistentContext(userDataPath, playwright.BrowserTypeLaunchPersistentContextOptions{
 			//DownloadsPath:     &h.downloadPath,
 			Headless:          &Headless,
 			Channel:           playwright.String(runParams.Channel), // 使用完整版 Chrome 而非 Chromium
@@ -417,7 +417,7 @@ func (h *ContextPageList) GetContextSaveUserData(runParams *PlaywrightRunParams)
 		}
 	} else {
 		runParams.StreamFunc(`获取浏览器实例`, fmt.Sprintf(`启动超时时间：%f`, runParams.GetPageTimeout))
-		context, contextErr = PlaywrightClient.Pw.Chromium.LaunchPersistentContext(userDataPath, playwright.BrowserTypeLaunchPersistentContextOptions{
+		context, contextErr = component.PlaywrightClient.Pw.Chromium.LaunchPersistentContext(userDataPath, playwright.BrowserTypeLaunchPersistentContextOptions{
 			//DownloadsPath:     &h.downloadPath,
 			Headless: &Headless,
 			//Channel:           playwright.String(runParams.Channel),//增加这个会导致问题 关闭后不能正常启动下一个

@@ -306,15 +306,15 @@ func InitEnv(appName, ConfigFile string, viper *viper.Viper) {
 
 func initPlaywright() {
 	//初始化playwright
-	plw.PlaywrightClient = plw.NewTPlaywright()
-	plw.PlaywrightClient.LockFileFullPath = filepath.Join(component.EnvClient.RootPath, `playwright.RunLock`)
+	component.PlaywrightClient = component.NewTPlaywright()
+	component.PlaywrightClient.LockFileFullPath = filepath.Join(component.EnvClient.RootPath, `playwright.RunLock`)
 	plw.InitPageActiveTime()
-	if !plw.PlaywrightClient.EnsureNodeRuntime() {
+	if !component.PlaywrightClient.EnsureNodeRuntime() {
 		gstool.FmtPrintlnLogTime(`未检测到 Node.js，跳过 Playwright 初始化，等待用户安装后再使用自定义网页`)
 		return
 	}
-	go plw.PlaywrightClient.WitchDownload()
-	go plw.PlaywrightClient.SmartCheckAndUpdate(&p_sse.SseShell{})
+	go component.PlaywrightClient.WitchDownload()
+	go component.PlaywrightClient.SmartCheckAndUpdate(&p_sse.SseShell{})
 }
 
 func initSqlite() {
@@ -450,7 +450,7 @@ func Stop() {
 	if err := business.SyncMainDBStoreOnShutdown(); err != nil {
 		gstool.FmtPrintlnLogTime(`主库关闭前同步失败 %s`, err.Error())
 	}
-	_ = plw.PlaywrightClient.Log.Close()
+	_ = component.PlaywrightClient.Log.Close()
 	_ = variable.VariableClient.Log.Close()
 	_ = component.GsLog.Close()
 }

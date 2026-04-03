@@ -2,6 +2,7 @@ package controller
 
 import (
 	"dev_tool/internal/app/dtool/common"
+	"dev_tool/internal/app/dtool/component"
 	"dev_tool/internal/app/dtool/define"
 	"dev_tool/internal/app/dtool/plw"
 	"dev_tool/internal/pkg/p_common"
@@ -32,7 +33,7 @@ func SmartLinkUpWebkit(c *gin.Context) {
 	if !ensureSmartLinkNodeInstalled(c, sse) {
 		return
 	}
-	go plw.PlaywrightClient.Install(sse, pw.Version)
+	go component.PlaywrightClient.Install(sse, pw.Version)
 	gsgin.GinResponseSuccess(c, `更新浏览器核心中`, ``)
 	return
 }
@@ -49,7 +50,7 @@ func SmartLinkRecycle(c *gin.Context) {
 		return
 	}
 	sse.Send(`开始释放实例` + "\n")
-	p := plw.NewPlaywright(nil, plw.PlaywrightClient.Log)
+	p := plw.NewPlaywright(nil, component.PlaywrightClient.Log)
 	err := p.Recycle()
 	if err != nil {
 		sse.Send(`释放失败 ` + err.Error() + "\n")
@@ -65,7 +66,7 @@ func SmartLinkDownloadPath(c *gin.Context) {
 	if !ensureSmartLinkNodeInstalled(c, nil) {
 		return
 	}
-	err := plw.PlaywrightClient.SmartLinkDownloadPath()
+	err := component.PlaywrightClient.SmartLinkDownloadPath()
 	if err != nil {
 		gsgin.GinResponseError(c, fmt.Sprintf(`释放失败 %s`, err.Error()), nil)
 		return
@@ -276,7 +277,7 @@ func SmartLinkRunPlaywright(c *gin.Context) {
 			runParams.StreamFunc = streamFunc
 			streamFunc(`构建run_params`, `成功，准备打开的链接：`+runParams.Link+`,链接类型：`+runParams.LinkIdLabel)
 			streamFunc(`打开浏览器实例`, `开始`)
-			p := plw.NewPlaywright(runParams, plw.PlaywrightClient.Log)
+			p := plw.NewPlaywright(runParams, component.PlaywrightClient.Log)
 			openErr := p.Open(common.GetCall(), nil)
 			if openErr != nil {
 				streamFunc(`打开浏览器实例`, `失败：`+openErr.Error())
@@ -296,7 +297,7 @@ func SmartLinkRunPlaywrightList(c *gin.Context) {
 	if !ensureSmartLinkNodeInstalled(c, nil) {
 		return
 	}
-	contextPageList := plw.NewContextList(plw.PlaywrightClient.Log)
+	contextPageList := plw.NewContextList(component.PlaywrightClient.Log)
 	runList := contextPageList.GetPlaywrightRunList()
 	gsgin.GinResponseSuccess(c, ``, runList)
 }
@@ -312,7 +313,7 @@ func SmartLinkPlaywrightVersion(c *gin.Context) {
 		return
 	}
 	sse.Send(`获取核心版本` + "\n")
-	pw, pwErr := plw.PlaywrightClient.SmartLinkPlaywrightVersion()
+	pw, pwErr := component.PlaywrightClient.SmartLinkPlaywrightVersion()
 	if pwErr != nil {
 		sse.Send(`获取核心版本失败` + pwErr.Error() + "\n")
 		gsgin.GinResponseError(c, `查询失败`+pwErr.Error(), nil)
@@ -320,11 +321,11 @@ func SmartLinkPlaywrightVersion(c *gin.Context) {
 	}
 	//是否在安装中
 	isInstall := 0
-	if !gstool.FileIsExisted(plw.PlaywrightClient.LockFileFullPath) {
+	if !gstool.FileIsExisted(component.PlaywrightClient.LockFileFullPath) {
 		sse.Send(`核心正在安装中` + "\n")
 		isInstall = 1
 	} else {
-		content, _ := gstool.FileGetContent(plw.PlaywrightClient.LockFileFullPath)
+		content, _ := gstool.FileGetContent(component.PlaywrightClient.LockFileFullPath)
 		if content == `` {
 			sse.Send(`核心正在安装中` + "\n")
 			isInstall = 1

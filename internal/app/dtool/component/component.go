@@ -20,3 +20,4 @@ var LogSqliteClient *gsdb.GsSqlite
 var EnvClient *define.Env
 var ConfigViper *viper.Viper
 var GsLog *gstool.GsSlog
+var PlaywrightClient *TPlaywright
