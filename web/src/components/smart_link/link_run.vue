@@ -281,6 +281,8 @@ import SettingsDialog from '@/components/base/SettingsDialog.vue'
 import AccountSettingPage from '@/components/set/account.vue'
 import { Plus, Tools, Refresh, Download, QuestionFilled, EditPen, Setting, Notebook, Delete, User } from '@element-plus/icons-vue'
 
+const { mergeSavedSmartLinkIntoList } = require('@/utils/smart_link_config_sync.cjs')
+
 export default {
   props: {
     shellShowResult: {
@@ -580,15 +582,10 @@ export default {
       _that.smartLinkConfig.linkList = JSON.parse(_that.smartLinkConfig.links || '[]')
       smart_link_set.SmartLinkAdd(_that.smartLinkConfig, function (response) {
         if (response.ErrCode === 0) {
+          _that.smartList = mergeSavedSmartLinkIntoList(_that.smartList, response.Data)
           _that.dialogSmartLink = false
         } else {
           _that.$helperNotify.error('失败')
-        }
-        // 更新页面上的
-        for (let i in _that.smartList) {
-          if (_that.smartList[i].id === _that.smartLinkConfig.id) {
-            _that.smartList[i].linkList = _that.smartLinkConfig.linkList
-          }
         }
         ticker_step.Active(_that.tickerKey)
       })

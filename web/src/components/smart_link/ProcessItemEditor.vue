@@ -355,20 +355,6 @@
       </el-form-item>
     </template>
 
-    <template v-if="showField('secondary_locator')">
-      <el-form-item :label="fieldLabel('secondary_locator')" :error="fieldError('secondary_locator')">
-        <el-input v-model="formMeta.secondary_locator" :placeholder="fieldPlaceholder('secondary_locator')" />
-        <div class="field-guide">{{ fieldGuide('secondary_locator') }}</div>
-      </el-form-item>
-    </template>
-
-    <template v-if="showField('tertiary_locator')">
-      <el-form-item :label="fieldLabel('tertiary_locator')" :error="fieldError('tertiary_locator')">
-        <el-input v-model="formMeta.tertiary_locator" :placeholder="fieldPlaceholder('tertiary_locator')" />
-        <div class="field-guide">{{ fieldGuide('tertiary_locator') }}</div>
-      </el-form-item>
-    </template>
-
     <template v-if="localItem.type === 'redirect_uri'">
       <el-form-item label="跳转地址" :error="fieldError('value')">
         <el-input
@@ -929,6 +915,7 @@ const {
   serializeCheckConfig,
   serializeRedirectUriValue,
   serializeWaitUrlValue,
+  shouldShowAppendToReplace,
   validateProcessItemForm,
 } = require('../../utils/smart_link_process_validation.cjs')
 const {
@@ -1187,7 +1174,10 @@ export default {
       return PROCESS_TYPE_FIELDS[this.localItem.type] || []
     },
     allowAppendToReplace() {
-      return this.localItem.type !== 'click' && this.localItem.type !== 'delete_element'
+      return shouldShowAppendToReplace({
+        type: this.localItem.type,
+        out_key: this.formMeta.out_key,
+      })
     },
     useLocatorExpressionEditor() {
       return this.showField('locator') && this.supportLocatorExpression(this.localItem.type)
@@ -1436,10 +1426,8 @@ export default {
           meta.locator_structured = JSON.stringify(structuredLocator, null, 2)
         }
       } else if (item.type === 'login_username_password') {
-        const parts = String(item.locator || '').split('||')
-        meta.locator_list = parts[0] ? [{ uid: createLocatorRow().uid, value: parts[0] }] : [createLocatorRow()]
-        meta.secondary_locator = parts[1] || ''
-        meta.tertiary_locator = parts[2] || ''
+        meta.secondary_locator = ''
+        meta.tertiary_locator = ''
       } else if (item.type === 'delete_element') {
         meta.locator_list = this.decodeLocatorList(item.locator, '|')
       } else if ((item.type === 'click' || item.type === 'input') && isLocatorConfigPayload(item.locator)) {
@@ -1673,11 +1661,10 @@ export default {
         item.out_key = this.formMeta.out_key
         item.check_key = checkKeyExpression
       } else if (item.type === 'login_username_password') {
-        const userLocator = this.formMeta.locator_list[0] ? this.formMeta.locator_list[0].value : ''
-        item.locator = [userLocator, this.formMeta.secondary_locator, this.formMeta.tertiary_locator].filter(Boolean).join('||')
+        item.locator = ''
         item.value = ''
         item.out_key = ''
-        item.check_key = ''
+        item.check_key = checkKeyExpression
       } else if (item.type === 'delete_element') {
         item.locator = this.formMeta.locator_list.map(v => v.value.trim()).filter(Boolean).join('|')
         item.value = this.formMeta.delete_mode
@@ -1767,9 +1754,6 @@ export default {
         response_url: '等待地址',
         delete_mode: '删除类型',
         register_response_urls: '跳转后等待地址',
-      }
-      if (this.localItem.type === 'login_username_password' && fieldName === 'locator') {
-        return '用户名框定位'
       }
       return labels[fieldName] || fieldName
     },

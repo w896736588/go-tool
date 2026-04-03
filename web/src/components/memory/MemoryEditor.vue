@@ -137,11 +137,36 @@
           />
         </div>
       </div>
-      <div v-else class="preview-body">
-        <MdPreview
-          :model-value="draftFragment.content"
-          preview-theme="github"
-        />
+      <div v-else class="preview-body" :class="{ 'preview-body--with-outline': hasOutline }">
+        <div
+          ref="previewBody"
+          class="preview-renderer"
+          @scroll="handlePreviewScroll"
+        >
+          <MdPreview
+            :model-value="draftFragment.content"
+            preview-theme="github"
+          />
+        </div>
+        <aside v-if="hasOutline" class="preview-outline">
+          <div class="preview-outline-card">
+            <div class="preview-outline-title">目录</div>
+            <button
+              v-for="item in outlineItems"
+              :key="item.slug"
+              type="button"
+              class="preview-outline-item"
+              :class="{
+                active: activeOutlineSlug === item.slug,
+                'preview-outline-item--child': item.level > 1,
+                'preview-outline-item--grandchild': item.level > 2,
+              }"
+              @click="scrollToOutline(item.slug)"
+            >
+              {{ item.text }}
+            </button>
+          </div>
+        </aside>
       </div>
     </div>
 
@@ -194,6 +219,7 @@ import { Check, MagicStick, MoreFilled } from '@element-plus/icons-vue'
 import DiffMarkdown from '@/components/base/diff_markwodn.vue'
 import GitActionButton from '@/components/base/GitActionButton.vue'
 import MemoryFragmentApi from '@/utils/base/memory_fragment'
+const { buildMarkdownOutline } = require('@/utils/markdown_outline.cjs')
 
 // STATUS_TAG_WARNING_TYPE 统一未保存状态标签类型，避免模板中散落硬编码。
 const STATUS_TAG_WARNING_TYPE = 'warning'
@@ -323,6 +349,7 @@ export default {
       tagInput: '',
       tagInputFocused: false,
       highlightedTagIndex: 0,
+      activeOutlineSlug: '',
       draftFragment: {
         id: 0,
         title: '',
@@ -363,6 +390,14 @@ export default {
       handler() {
         this.resetDraft(true)
       },
+    },
+    // outlineItems 变化后刷新预览区标题锚点。
+    outlineItems() {
+      this.schedulePreviewOutlineRefresh()
+    },
+    // contentEditMode 切回查看模式时重新同步目录锚点与高亮。
+    contentEditMode() {
+      this.schedulePreviewOutlineRefresh()
     },
   },
   computed: {
@@ -411,6 +446,14 @@ export default {
     showTagCreateHint() {
       return this.normalizedTagInput !== '' && this.filteredAvailableTags.length === 0
     },
+    // outlineItems 返回预览区目录项，当前只收录 h1-h3。
+    outlineItems() {
+      return buildMarkdownOutline(this.draftFragment.content)
+    },
+    // hasOutline 标记当前预览区是否展示目录。
+    hasOutline() {
+      return this.outlineItems.length > 0
+    },
     // editorContentStyle 统一让 Markdown 编辑器撑满弹性容器。
     editorContentStyle() {
       return {
@@ -431,6 +474,7 @@ export default {
     resetDraft(preserveEditMode) {
       this.contentEditMode = preserveEditMode ? this.contentEditMode : false
       this.organizeDialogVisible = false
+      this.activeOutlineSlug = ''
       this.closeTagSuggestionPanel()
       this.organizeResult = {
         content: '',
@@ -446,6 +490,7 @@ export default {
         update_time_desc: this.fragment.update_time_desc || '',
         create_time_desc: this.fragment.create_time_desc || '',
       }
+      this.schedulePreviewOutlineRefresh()
     },
     // handleFormChange 在编辑后向父组件同步状态。
     handleFormChange() {
@@ -454,6 +499,81 @@ export default {
     // setContentEditMode 切换正文查看或编辑模式。
     setContentEditMode(editMode) {
       this.contentEditMode = !!editMode
+    },
+    // schedulePreviewOutlineRefresh 在预览 DOM 更新后重建标题锚点。
+    schedulePreviewOutlineRefresh() {
+      if (this.contentEditMode) {
+        return
+      }
+      this.$nextTick(() => {
+        window.setTimeout(() => {
+          this.decoratePreviewHeadings()
+          this.syncActiveOutlineByScroll()
+        }, 0)
+      })
+    },
+    // buildOutlineHeadingDomId 返回渲染后标题使用的 DOM id。
+    buildOutlineHeadingDomId(slug) {
+      return `memory-fragment-heading-${slug}`
+    },
+    // decoratePreviewHeadings 给预览区标题写入稳定锚点，供目录点击跳转。
+    decoratePreviewHeadings() {
+      const previewBody = this.$refs.previewBody
+      if (!previewBody) {
+        return
+      }
+      const headingList = previewBody.querySelectorAll('.md-editor-preview h1, .md-editor-preview h2, .md-editor-preview h3')
+      headingList.forEach((heading, index) => {
+        const outlineItem = this.outlineItems[index]
+        if (!outlineItem) {
+          return
+        }
+        heading.id = this.buildOutlineHeadingDomId(outlineItem.slug)
+        heading.dataset.outlineSlug = outlineItem.slug
+      })
+    },
+    // scrollToOutline 点击目录后滚动到对应标题位置。
+    scrollToOutline(slug) {
+      const previewBody = this.$refs.previewBody
+      if (!previewBody) {
+        return
+      }
+      const heading = previewBody.querySelector(`#${this.buildOutlineHeadingDomId(slug)}`)
+      if (!heading) {
+        return
+      }
+      previewBody.scrollTo({
+        top: Math.max(heading.offsetTop - 12, 0),
+        behavior: 'smooth',
+      })
+      this.activeOutlineSlug = slug
+    },
+    // handlePreviewScroll 在预览滚动时同步当前目录高亮。
+    handlePreviewScroll() {
+      this.syncActiveOutlineByScroll()
+    },
+    // syncActiveOutlineByScroll 根据正文滚动位置高亮最接近的目录项。
+    syncActiveOutlineByScroll() {
+      const previewBody = this.$refs.previewBody
+      if (!previewBody || this.outlineItems.length === 0) {
+        this.activeOutlineSlug = ''
+        return
+      }
+      const headingList = Array.from(
+        previewBody.querySelectorAll('.md-editor-preview h1, .md-editor-preview h2, .md-editor-preview h3')
+      )
+      if (headingList.length === 0) {
+        this.activeOutlineSlug = this.outlineItems[0].slug
+        return
+      }
+      const scrollTop = previewBody.scrollTop
+      const matchedHeading = headingList.reduce((currentHeading, heading) => {
+        if (heading.offsetTop - 28 <= scrollTop) {
+          return heading
+        }
+        return currentHeading
+      }, headingList[0])
+      this.activeOutlineSlug = matchedHeading.dataset.outlineSlug || this.outlineItems[0].slug
     },
     // handleToolbarActionCommand / 统一处理右侧下拉操作 / Dispatch commands from the toolbar dropdown.
     handleToolbarActionCommand(command) {
@@ -955,14 +1075,87 @@ export default {
 .preview-body {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  display: flex;
+  gap: 18px;
   padding: 18px 22px;
   background: #fff;
+}
+
+.preview-body--with-outline {
+  align-items: stretch;
+}
+
+.preview-renderer {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 6px;
 }
 
 .preview-body :deep(.md-editor-preview) {
   font-size: 14px;
   color: #33422f;
+}
+
+.preview-outline {
+  width: 220px;
+  flex: 0 0 220px;
+  min-width: 0;
+}
+
+.preview-outline-card {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 100%;
+  overflow: auto;
+  padding: 14px 12px;
+  border: 1px solid var(--memory-toolbar-border-color);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fbfcf8 0%, #f6f8f2 100%);
+}
+
+.preview-outline-title {
+  margin-bottom: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #50604a;
+}
+
+.preview-outline-item {
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: #556551;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: left;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.preview-outline-item:hover {
+  background: #eef4e8;
+  color: #30412d;
+}
+
+.preview-outline-item.active {
+  background: #e6f1de;
+  color: #264224;
+  font-weight: 600;
+}
+
+.preview-outline-item--child {
+  padding-left: 22px;
+}
+
+.preview-outline-item--grandchild {
+  padding-left: 34px;
 }
 
 .organize-dialog-layout {
@@ -1045,6 +1238,20 @@ export default {
 
   .editor-body-content :deep(.md-editor) {
     height: 60vh;
+  }
+
+  .preview-body {
+    flex-direction: column;
+  }
+
+  .preview-outline {
+    width: 100%;
+    flex-basis: auto;
+  }
+
+  .preview-outline-card {
+    position: static;
+    max-height: 220px;
   }
 }
 </style>

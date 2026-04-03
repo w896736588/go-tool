@@ -1,6 +1,8 @@
 const assert = require('assert')
 
 const {
+  PROCESS_TYPE_FIELDS,
+  shouldShowAppendToReplace,
   validateProcessItemForm,
   parseRedirectUriValue,
   parseWaitUrlValue,
@@ -145,6 +147,61 @@ const run = () => {
     },
   })
   assert.strictEqual(optionalBoolResult.valid, true, 'bool_result 的主元素定位规则现在应允许为空')
+
+  assert.strictEqual(
+    shouldShowAppendToReplace({ type: 'bool_exist', out_key: 'login_state' }),
+    true,
+    '有输出键且当前类型显示输出键时，应显示输出追加到替换列表'
+  )
+  assert.strictEqual(
+    shouldShowAppendToReplace({ type: 'bool_exist', out_key: '' }),
+    false,
+    '输出键为空时，不应显示输出追加到替换列表'
+  )
+  assert.strictEqual(
+    shouldShowAppendToReplace({ type: 'click', out_key: 'clicked_flag' }),
+    false,
+    'click 类型即使有输出键也不应显示输出追加到替换列表'
+  )
+  assert.strictEqual(
+    shouldShowAppendToReplace({ type: 'input', out_key: 'input_text' }),
+    false,
+    '界面未显示输出键的 input 类型不应显示输出追加到替换列表'
+  )
+  assert.strictEqual(
+    shouldShowAppendToReplace({ type: 'login_username_password', out_key: 'login_state' }),
+    false,
+    '没有显示输出键的类型不应显示输出追加到替换列表'
+  )
+
+  assert.deepStrictEqual(
+    PROCESS_TYPE_FIELDS.login_username_password,
+    ['check_key'],
+    'login_username_password 类型应只展示是否执行判断'
+  )
+
+  const loginUsernamePasswordResult = validateProcessItemForm({
+    item: {
+      ...createBaseItem(),
+      type: 'login_username_password',
+      locator: '',
+      check_key: 'need_login',
+    },
+    formMeta: {
+      check_mode: 'bool',
+      check_rule_list: [
+        { key: 'need_login', expect: 'true' },
+      ],
+      bool_result_rules: [],
+      register_response_urls: [],
+      next_id_list: [],
+    },
+  })
+  assert.strictEqual(
+    loginUsernamePasswordResult.valid,
+    true,
+    'login_username_password 类型应允许仅配置是否执行判断'
+  )
 
   const waitWithCheckKeyResult = validateProcessItemForm({
     item: {

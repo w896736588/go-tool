@@ -336,7 +336,18 @@ func (h *ContextPageList) GetNoUserDataIndex() int {
 	return 0
 }
 
-func (h *ContextPageList) GetContextByIndex(dataIndex int) *ContextPage {
+func (h *ContextPageList) GetContextByIndex(dataIndex int, openType define.OpenType) *ContextPage {
+	return h.FindContextList(func(context *ContextPage) *ContextPage {
+		// 同一个 userDataIndex 可能残留不同打开模式的实例，复用时必须同时校验 openType，
+		// 否则首次无头打开后，后续切换为有头模式仍会错误复用旧的无头 context。
+		if context.UserDataIndex == dataIndex && context.OpenType == openType {
+			return context
+		}
+		return nil
+	})
+}
+
+func (h *ContextPageList) GetContextByIndexIgnoreOpenType(dataIndex int) *ContextPage {
 	return h.FindContextList(func(context *ContextPage) *ContextPage {
 		if context.UserDataIndex == dataIndex {
 			return context
@@ -352,10 +363,17 @@ func (h *ContextPageList) GetContextParam(runParams *PlaywrightRunParams) (*Cont
 	//获取数据索引目录
 	userDataIndex := h.GetUserDataIndex(runParams)
 	//通过索引目录拿到已存在的context
-	existContextPage := h.GetContextByIndex(userDataIndex)
+	existContextPage := h.GetContextByIndex(userDataIndex, runParams.OpenType)
 	if existContextPage != nil {
 		runParams.StreamFunc(`获取数据目录`, fmt.Sprintf(`已存在浏览器实例 %s ,直接使用`, existContextPage.LinkId))
 		return existContextPage, existContextPage.UserDataIndex, existContextPage.UserDataPath
+	}
+	mismatchContextPage := h.GetContextByIndexIgnoreOpenType(userDataIndex)
+	if mismatchContextPage != nil {
+		// 同目录下若已有另一种打开模式的实例，先关闭旧实例再重建；
+		// 持久化目录可以复用，但浏览器是否有头是启动期选项，不能沿用旧 context 强行切换。
+		runParams.StreamFunc(`获取数据目录`, fmt.Sprintf(`同目录已存在 %d 类型的旧实例，当前需要 %d，先关闭旧实例再重建`, mismatchContextPage.OpenType, runParams.OpenType))
+		h.RemoveContextPage(mismatchContextPage)
 	}
 	userDataPath := fmt.Sprintf(component.EnvClient.WebkitDataPath+`/%d`, userDataIndex)
 	runParams.StreamFunc(`获取数据目录`, fmt.Sprintf(`未找到已存在的浏览器实例，使用的数据目录 %s,开始创建实例`, userDataPath))
