@@ -25,14 +25,37 @@ type TVariable struct {
 	RunTaskId     string //正在执行的任务ID 一次只能一个任务
 }
 
-var VariableClient *TVariable
-
 func NewVariableClient() *TVariable {
 	log := gstool.NewSlog3(component.EnvClient.LogPath, `variable`)
 	_ = log.CleanOldLogs(2)
 	return &TVariable{
 		Log: log,
 	}
+}
+
+// GetLog 通过接口暴露日志实例，避免外部依赖 TVariable 具体字段。
+func (h *TVariable) GetLog() *gstool.GsSlog {
+	return h.Log
+}
+
+// SetLoginCredentials 统一封装登录态写入，便于从 component 接口访问。
+func (h *TVariable) SetLoginCredentials(username, password string) {
+	h.LoginUsername = username
+	h.LoginPassword = password
+}
+
+// ClearLoginCredentials 用于需要重新等待前端输入账号密码的场景。
+func (h *TVariable) ClearLoginCredentials() {
+	h.LoginUsername = ``
+	h.LoginPassword = ``
+}
+
+func (h *TVariable) GetLoginUsername() string {
+	return h.LoginUsername
+}
+
+func (h *TVariable) GetLoginPassword() string {
+	return h.LoginPassword
 }
 
 func (h *TVariable) CreateTask(taskId string) {

@@ -2,7 +2,6 @@ package business
 
 import (
 	"dev_tool/internal/app/dtool/common"
-	"dev_tool/internal/app/dtool/component"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,16 +17,15 @@ type TDataBaseUp struct {
 	tableName      string
 }
 
-var DataBaseUp *TDataBaseUp
-
 // log 库升级表名，单独记录 log 库执行过的迁移文件。
 const logDatabaseUpTableName = `tbl_log_database_up`
 
 // log 库中的 smart link 最近使用目录表名。
 const logSmartLinkLastTableName = `tbl_smart_link_last`
 
-func NewTDataBaseUp() *TDataBaseUp {
-	return newDatabaseUp(common.DbMain, component.EnvClient.DatabaseUpPath, `tbl_database_up`)
+// NewTDataBaseUp 改为显式注入依赖，避免 business 反向依赖 component。
+func NewTDataBaseUp(db *common.CSqlite, databaseUpPath string) *TDataBaseUp {
+	return newDatabaseUp(db, databaseUpPath, `tbl_database_up`)
 }
 
 func NewMemoryDataBaseUp(db *common.CSqlite, databaseUpPath string) *TDataBaseUp {

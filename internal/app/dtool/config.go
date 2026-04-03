@@ -327,9 +327,11 @@ func initSqlite() {
 		panic(fmt.Sprintf(`连接sqlite失败 %s`, err.Error()))
 	}
 	p_db.InitMysql()
-	common.DbMain = &common.CSqlite{Client: component.SqliteClient, Env: component.EnvClient}
-	business.DataBaseUp = business.NewTDataBaseUp()
-	business.DataBaseUp.Run()
+	// 新代码统一从 component 取主库实例；common 保留同步赋值，兼容现有调用。
+	component.DbMain = &common.CSqlite{Client: component.SqliteClient, Env: component.EnvClient}
+	common.DbMain = component.DbMain
+	component.DataBaseUp = business.NewTDataBaseUp(component.DbMain, component.EnvClient.DatabaseUpPath)
+	component.DataBaseUp.Run()
 	initLogSqlite()
 	if err = business.LoadMemoryStore(); err != nil {
 		panic(err.Error())
@@ -348,8 +350,10 @@ func initLogSqlite() {
 		panic(fmt.Sprintf(`连接log sqlite失败 %s`, err.Error()))
 	}
 
-	common.DbLog = &common.CSqlite{Client: component.LogSqliteClient, Env: component.EnvClient}
-	business.NewLogDataBaseUp(common.DbLog, component.EnvClient.LogDatabaseUpPath).Run()
+	// log 库入口也收敛到 component；common.DbLog 继续保留给旧逻辑平滑过渡。
+	component.DbLog = &common.CSqlite{Client: component.LogSqliteClient, Env: component.EnvClient}
+	common.DbLog = component.DbLog
+	business.NewLogDataBaseUp(component.DbLog, component.EnvClient.LogDatabaseUpPath).Run()
 }
 
 // buildLogDBName 基于主库文件名派生 log 库文件名。
@@ -410,7 +414,8 @@ func initOther() {
 		JsData: map[string]string{},
 	}
 	p_common.TJasClient.Load()
-	variable.VariableClient = variable.NewVariableClient()
+	// VariableClient 放到 component 持有，外层不再直接依赖 variable 包级全局变量。
+	component.VariableClient = variable.NewVariableClient()
 }
 
 func InitComponent() {
@@ -452,6 +457,8 @@ func Stop() {
 		gstool.FmtPrintlnLogTime(`主库关闭前同步失败 %s`, err.Error())
 	}
 	_ = component.PlaywrightClient.Log.Close()
-	_ = variable.VariableClient.Log.Close()
+	if component.VariableClient != nil && component.VariableClient.GetLog() != nil {
+		_ = component.VariableClient.GetLog().Close()
+	}
 	_ = component.GsLog.Close()
 }
