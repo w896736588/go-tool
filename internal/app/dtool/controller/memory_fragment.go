@@ -252,7 +252,7 @@ func MemoryFragmentOrganize(c *gin.Context) {
 	}
 	title := strings.TrimSpace(cast.ToString(dataMap[`title`]))
 	userPrompt := buildMemoryArrangeUserPrompt(prompt, title, content)
-	result, modelInfo, err := common.DbMain.InfoCrawlChatByModel(modelID, memoryArrangeSystemPrompt(), userPrompt)
+	result, modelInfo, err := common.DbMain.AIChatByModel(modelID, memoryArrangeSystemPrompt(), userPrompt)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
@@ -316,7 +316,7 @@ func memoryArrangeConfig() (int, string, error) {
 	if modelID <= 0 {
 		return 0, ``, gstool.Error(`请先在记忆设置中配置 AI 整理模型`)
 	}
-	modelInfo, err := common.DbMain.InfoCrawlAiModelInfo(modelID)
+	modelInfo, err := common.DbMain.AiModelInfo(modelID)
 	if err != nil {
 		return 0, ``, gstool.Error(`当前记忆整理模型不可用`)
 	}

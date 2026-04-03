@@ -94,7 +94,7 @@ func HomeTaskDailyReportGenerate(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	result, modelInfo, err := common.DbMain.InfoCrawlChatByModel(modelID, homeTaskDailyReportSystemPrompt(), userPrompt)
+	result, modelInfo, err := common.DbMain.AIChatByModel(modelID, homeTaskDailyReportSystemPrompt(), userPrompt)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return

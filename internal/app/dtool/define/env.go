@@ -36,11 +36,6 @@ type Env struct {
 	WebkitDownloadPath   string     // 浏览器下载目录 webkit download path / browser download directory
 	WebkitDataPath       string     // 浏览器数据目录 webkit data path / browser data directory
 	PythonCommand        string     // Python 命令 python command / Python executable command
-	Crawl4AIHost         string     // Crawl4AI host / Crawl4AI host
-	Crawl4AIPort         string     // Crawl4AI 端口 Crawl4AI port / Crawl4AI port
-	Crawl4AIBaseURL      string     // Crawl4AI 地址 Crawl4AI base URL / Crawl4AI base URL
-	Crawl4AIDataPath     string     // Crawl4AI 数据目录 Crawl4AI data path / Crawl4AI data directory
-	Crawl4AIScriptPath   string     // Crawl4AI 脚本路径 Crawl4AI script path / Crawl4AI script path
 	Ports                []string   // gin 端口 ports / gin ports
 	ConfigBase           *Base      // 基础配置 base config / base configuration
 	DbConfig             *DbConfig  // 主库配置 main db config / main database configuration

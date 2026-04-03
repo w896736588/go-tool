@@ -94,7 +94,7 @@ func homeTaskDailyReportConfig() (int, string, error) {
 	if modelID <= 0 {
 		return 0, "", errors.New(homeTaskDailyReportModelRequiredError)
 	}
-	modelInfo, err := common.DbMain.InfoCrawlAiModelInfo(modelID)
+	modelInfo, err := common.DbMain.AiModelInfo(modelID)
 	if err != nil {
 		return 0, "", errors.New(homeTaskDailyReportModelUnavailableError)
 	}

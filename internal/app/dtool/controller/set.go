@@ -856,7 +856,7 @@ func SetMemoryConfigSave(c *gin.Context) {
 	}
 	memoryArrangeModelID := cast.ToInt(dataMap[`memory_arrange_model_id`])
 	if memoryArrangeModelID > 0 {
-		modelInfo, err := common.DbMain.InfoCrawlAiModelInfo(memoryArrangeModelID)
+		modelInfo, err := common.DbMain.AiModelInfo(memoryArrangeModelID)
 		if err != nil {
 			gsgin.GinResponseError(c, `AI 模型不存在`, nil)
 			return
@@ -881,7 +881,7 @@ func SetMemoryConfigSave(c *gin.Context) {
 	}
 	homeTaskDailyReportModelID := cast.ToInt(dataMap[`home_task_daily_report_model_id`])
 	if homeTaskDailyReportModelID > 0 {
-		modelInfo, err := common.DbMain.InfoCrawlAiModelInfo(homeTaskDailyReportModelID)
+		modelInfo, err := common.DbMain.AiModelInfo(homeTaskDailyReportModelID)
 		if err != nil {
 			gsgin.GinResponseError(c, `AI 模型不存在`, nil)
 			return

@@ -3,7 +3,6 @@ package common
 import (
 	"bufio"
 	"bytes"
-	"dev_tool/internal/app/dtool/crawl4ai"
 	"dev_tool/internal/pkg/p_common"
 	"encoding/json"
 	"errors"
@@ -15,23 +14,17 @@ import (
 	"github.com/spf13/cast"
 )
 
-// InfoCrawlChatByModel 使用模型发起一次 AI 请求。
-func (h *CSqlite) InfoCrawlChatByModel(modelID int, systemPrompt, userPrompt string) (string, map[string]any, error) {
-	modelInfo, requestURL, apiKey, err := h.infoCrawlBuildChatRequest(modelID)
+// AIChatByModel 使用模型发起一次 AI 请求。
+func (h *CSqlite) AIChatByModel(modelID int, systemPrompt, userPrompt string) (string, map[string]any, error) {
+	modelInfo, requestURL, apiKey, err := h.aiChatBuildRequest(modelID)
 	if err != nil {
 		return ``, nil, err
 	}
 	bodyMap := map[string]any{
 		`model`: cast.ToString(modelInfo[`model`]),
 		`messages`: []map[string]string{
-			{
-				`role`:    `system`,
-				`content`: systemPrompt,
-			},
-			{
-				`role`:    `user`,
-				`content`: userPrompt,
-			},
+			{`role`: `system`, `content`: systemPrompt},
+			{`role`: `user`, `content`: userPrompt},
 		},
 	}
 	bodyBytes, _ := json.Marshal(bodyMap)
@@ -61,9 +54,9 @@ func (h *CSqlite) InfoCrawlChatByModel(modelID int, systemPrompt, userPrompt str
 	return strings.TrimSpace(content), modelInfo, nil
 }
 
-// InfoCrawlChatStreamByModel 使用模型发起流式 AI 请求。
-func (h *CSqlite) InfoCrawlChatStreamByModel(modelID int, systemPrompt, userPrompt string, onChunk func(string)) (string, map[string]any, error) {
-	modelInfo, requestURL, apiKey, err := h.infoCrawlBuildChatRequest(modelID)
+// AIChatStreamByModel 使用模型发起流式 AI 请求。
+func (h *CSqlite) AIChatStreamByModel(modelID int, systemPrompt, userPrompt string, onChunk func(string)) (string, map[string]any, error) {
+	modelInfo, requestURL, apiKey, err := h.aiChatBuildRequest(modelID)
 	if err != nil {
 		return ``, nil, err
 	}
@@ -71,14 +64,8 @@ func (h *CSqlite) InfoCrawlChatStreamByModel(modelID int, systemPrompt, userProm
 		`model`:  cast.ToString(modelInfo[`model`]),
 		`stream`: true,
 		`messages`: []map[string]string{
-			{
-				`role`:    `system`,
-				`content`: systemPrompt,
-			},
-			{
-				`role`:    `user`,
-				`content`: userPrompt,
-			},
+			{`role`: `system`, `content`: systemPrompt},
+			{`role`: `user`, `content`: userPrompt},
 		},
 	}
 	bodyBytes, _ := json.Marshal(bodyMap)
@@ -108,7 +95,7 @@ func (h *CSqlite) InfoCrawlChatStreamByModel(modelID int, systemPrompt, userProm
 			if payload == `[DONE]` {
 				break
 			}
-			chunk := h.infoCrawlExtractStreamContent(payload)
+			chunk := h.aiChatExtractStreamContent(payload)
 			if chunk != `` {
 				contentBuilder.WriteString(chunk)
 				if onChunk != nil {
@@ -126,54 +113,24 @@ func (h *CSqlite) InfoCrawlChatStreamByModel(modelID int, systemPrompt, userProm
 	return strings.TrimSpace(contentBuilder.String()), modelInfo, nil
 }
 
-// InfoCrawlSystemPrompt 返回统一系统提示词。
-func (h *CSqlite) InfoCrawlSystemPrompt() string {
-	return "你是一个信息抓取与整理助手。\n" +
-		"请严格根据用户提示词和已抓取的网页材料完成整理。\n" +
-		"不要假装自己联网，不要编造未在材料中出现的事实。\n" +
-		"输出使用中文，内容尽量结构化，明确标注来源网址。"
-}
-
-// InfoCrawlBuildUserPrompt 构建信息采集 AI 用户提示词。
-func (h *CSqlite) InfoCrawlBuildUserPrompt(taskInfo map[string]any, crawlResultList []crawl4ai.CrawlResult) string {
-	builder := strings.Builder{}
-	builder.WriteString("任务名称：")
-	builder.WriteString(cast.ToString(taskInfo[`name`]))
-	builder.WriteString("\n\n任务提示词：\n")
-	builder.WriteString(cast.ToString(taskInfo[`prompt`]))
-	builder.WriteString("\n\n已抓取网页材料：\n")
-	for index, item := range crawlResultList {
-		builder.WriteString("材料")
-		builder.WriteString(cast.ToString(index + 1))
-		builder.WriteString("：\nURL: ")
-		builder.WriteString(item.URL)
-		builder.WriteString("\n状态: ")
-		if item.Success {
-			builder.WriteString("成功")
-		} else {
-			builder.WriteString("失败")
-		}
-		if item.Title != `` {
-			builder.WriteString("\n标题: ")
-			builder.WriteString(item.Title)
-		}
-		if item.Error != `` {
-			builder.WriteString("\n错误: ")
-			builder.WriteString(item.Error)
-		}
-		if item.Markdown != `` {
-			builder.WriteString("\n内容:\n")
-			builder.WriteString(item.Markdown)
-		}
-		builder.WriteString("\n\n")
+// AiModelInfo 查询 AI 模型配置。
+func (h *CSqlite) AiModelInfo(id int) (map[string]any, error) {
+	info, err := h.Client.QueryBySql(`
+select m.*,p.name as provider_name,p.provider_type,p.base_url,p.api_key
+from tbl_ai_model m
+left join tbl_ai_provider p on p.id = m.provider_id
+where m.id = ? and m.status = 1 and p.status = 1`, id).One()
+	if err != nil {
+		return nil, err
 	}
-	builder.WriteString("请基于以上材料完成信息整理，并明确引用对应网址。")
-	return builder.String()
+	if len(info) == 0 {
+		return nil, errors.New(`AI模型不存在或已停用`)
+	}
+	return info, nil
 }
 
-// infoCrawlBuildChatRequest 构建 AI 请求基础信息。
-func (h *CSqlite) infoCrawlBuildChatRequest(modelID int) (map[string]any, string, string, error) {
-	modelInfo, err := h.InfoCrawlAiModelInfo(modelID)
+func (h *CSqlite) aiChatBuildRequest(modelID int) (map[string]any, string, string, error) {
+	modelInfo, err := h.AiModelInfo(modelID)
 	if err != nil {
 		return nil, ``, ``, err
 	}
@@ -195,8 +152,7 @@ func (h *CSqlite) infoCrawlBuildChatRequest(modelID int) (map[string]any, string
 	return modelInfo, joinAIRequestURL(baseURL, requestURI), apiKey, nil
 }
 
-// infoCrawlExtractStreamContent 提取流式响应文本。
-func (h *CSqlite) infoCrawlExtractStreamContent(payload string) string {
+func (h *CSqlite) aiChatExtractStreamContent(payload string) string {
 	if strings.TrimSpace(payload) == `` {
 		return ``
 	}

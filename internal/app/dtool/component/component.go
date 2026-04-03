@@ -1,7 +1,6 @@
 package component
 
 import (
-	"dev_tool/internal/app/dtool/crawl4ai"
 	"dev_tool/internal/app/dtool/define"
 	"dev_tool/internal/pkg/p_db"
 	"dev_tool/internal/pkg/p_gin"
@@ -21,4 +20,3 @@ var LogSqliteClient *gsdb.GsSqlite
 var EnvClient *define.Env
 var ConfigViper *viper.Viper
 var GsLog *gstool.GsSlog
-var Crawl4AIClient *crawl4ai.Service

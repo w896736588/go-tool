@@ -217,7 +217,7 @@ func SetAiModelTest(c *gin.Context) {
 		gsgin.GinResponseError(c, `模型 id 不能为空`, nil)
 		return
 	}
-	modelInfo, err := common.DbMain.InfoCrawlAiModelInfo(modelID)
+	modelInfo, err := common.DbMain.AiModelInfo(modelID)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return

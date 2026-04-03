@@ -65,9 +65,6 @@ func TestFormatEnvSummary(t *testing.T) {
 		WebkitDriverPath:   `C:/devtool/webkit_driver`,
 		WebkitDownloadPath: `C:/devtool/webkit_download`,
 		WebkitDataPath:     `C:/devtool/webkit_data`,
-		Crawl4AIBaseURL:    "http://127.0.0.1:11235",
-		Crawl4AIDataPath:   `C:\work\frog\dev_tool_master\upload\crawl4ai`,
-		Crawl4AIScriptPath: `C:\work\frog\dev_tool_master\script\crawl4ai_service.py`,
 		DbConfig: &define.DbConfig{
 			DbName: "frog.db",
 			DbPath: `C:\work\frog\dev_tool_db\zhima`,
@@ -95,8 +92,6 @@ func TestFormatEnvSummary(t *testing.T) {
 		"目录: C:\\work\\frog\\dev_tool_master\\web\\dist",
 		"[Playwright]",
 		"Node: node",
-		"[Crawl4AI]",
-		"地址: http://127.0.0.1:11235",
 		"[日志]",
 		"目录: C:\\work\\frog\\dev_tool_master\\logs",
 	}

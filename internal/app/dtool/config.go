@@ -4,7 +4,6 @@ import (
 	"dev_tool/internal/app/dtool/business"
 	"dev_tool/internal/app/dtool/common"
 	"dev_tool/internal/app/dtool/component"
-	"dev_tool/internal/app/dtool/crawl4ai"
 	"dev_tool/internal/app/dtool/define"
 	"dev_tool/internal/app/dtool/plw"
 	"dev_tool/internal/app/dtool/variable"
@@ -110,12 +109,6 @@ func formatEnvSummary(env *define.Env) string {
 		{"Driver目录", env.WebkitDriverPath},
 		{"下载目录", env.WebkitDownloadPath},
 		{"数据目录", env.WebkitDataPath},
-	})
-
-	writeSummarySection(&builder, "Crawl4AI", [][2]string{
-		{"地址", env.Crawl4AIBaseURL},
-		{"数据目录", env.Crawl4AIDataPath},
-		{"脚本", env.Crawl4AIScriptPath},
 	})
 
 	writeSummarySection(&builder, "日志", [][2]string{
@@ -301,27 +294,12 @@ func InitEnv(appName, ConfigFile string, viper *viper.Viper) {
 	component.EnvClient.WebkitDriverPath = common.ResolvePlaywrightPath(viper.GetString(`path.webkit_driver_path`), `webkit_driver`, drive)
 	component.EnvClient.WebkitDataPath = common.ResolvePlaywrightPath(viper.GetString(`path.webkit_data_path`), `webkit_data`, drive)
 	component.EnvClient.WebkitDownloadPath = common.ResolvePlaywrightPath(viper.GetString(`path.webkit_download_path`), `webkit_download`, drive)
-	component.EnvClient.Crawl4AIHost = viper.GetString(`crawl4ai.host`)
-	component.EnvClient.Crawl4AIPort = viper.GetString(`crawl4ai.port`)
-	component.EnvClient.Crawl4AIDataPath = viper.GetString(`crawl4ai.data_path`)
-	if component.EnvClient.Crawl4AIHost == `` {
-		component.EnvClient.Crawl4AIHost = `127.0.0.1`
-	}
-	if component.EnvClient.Crawl4AIPort == `` {
-		component.EnvClient.Crawl4AIPort = `11235`
-	}
-	if component.EnvClient.Crawl4AIDataPath == `` {
-		component.EnvClient.Crawl4AIDataPath = filepath.Join(component.EnvClient.RootPath, `upload`, `crawl4ai`)
-	}
-	component.EnvClient.Crawl4AIBaseURL = fmt.Sprintf(`http://%s:%s`, component.EnvClient.Crawl4AIHost, component.EnvClient.Crawl4AIPort)
-	component.EnvClient.Crawl4AIScriptPath = filepath.Join(component.EnvClient.RootPath, `script`, `crawl4ai_service.py`)
 	//创建目录
 	_ = gstool.DirCreatePath(component.EnvClient.LogPath)
 	_ = gstool.DirCreatePath(component.EnvClient.DbConfig.DbPath)
 	_ = gstool.DirCreatePath(component.EnvClient.WebkitDataPath)
 	_ = gstool.DirCreatePath(component.EnvClient.WebkitDriverPath)
 	_ = gstool.DirCreatePath(component.EnvClient.WebkitDownloadPath)
-	_ = gstool.DirCreatePath(component.EnvClient.Crawl4AIDataPath)
 	gstool.FmtPrintlnLogTime(`输出配置：`)
 	gstool.FmtPrintlnLogTime(`%s`, formatEnvSummary(component.EnvClient))
 }
@@ -432,7 +410,6 @@ func initOther() {
 	}
 	p_common.TJasClient.Load()
 	variable.VariableClient = variable.NewVariableClient()
-	component.Crawl4AIClient = crawl4ai.NewService(component.EnvClient, component.GsLog)
 }
 
 func InitComponent() {
@@ -467,9 +444,6 @@ func Stop() {
 		})
 	}
 	task.RunAll()
-	if component.Crawl4AIClient != nil {
-		component.Crawl4AIClient.Stop()
-	}
 	if err := common.MemoryRuntime.SyncNow(); err != nil && !errors.Is(err, common.ErrMemoryNotConfigured) {
 		gstool.FmtPrintlnLogTime(`记忆库关闭前同步失败 %s`, err.Error())
 	}

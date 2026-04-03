@@ -33,7 +33,6 @@ func InitRouter(tGin *p_gin.Gin) {
 	setMarkdown(tGin)
 	setMemoryFragment(tGin)
 	homeTask(tGin)
-	infoCrawl(tGin)
 	shellOut(tGin)
 	variableRouter(tGin)
 	smartLink(tGin)
@@ -274,17 +273,6 @@ func homeTask(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/HomeTaskStatusQuickUpdate`, controller.HomeTaskStatusQuickUpdate)
 	tGin.GinPost(`/api/HomeTaskDelete`, controller.HomeTaskDelete)
 	tGin.GinPost(`/api/HomeTaskDailyReportGenerate`, controller.HomeTaskDailyReportGenerate)
-}
-
-func infoCrawl(tGin *p_gin.Gin) {
-	tGin.GinPost(`/api/InfoCrawlCrawl4AIStatus`, controller.InfoCrawlCrawl4AIStatus)
-	tGin.GinPost(`/api/InfoCrawlTaskList`, controller.InfoCrawlTaskList)
-	tGin.GinPost(`/api/InfoCrawlTaskInfo`, controller.InfoCrawlTaskInfo)
-	tGin.GinPost(`/api/InfoCrawlTaskSave`, controller.InfoCrawlTaskSave)
-	tGin.GinPost(`/api/InfoCrawlTaskDelete`, controller.InfoCrawlTaskDelete)
-	tGin.GinPost(`/api/InfoCrawlTaskRun`, controller.InfoCrawlTaskRun)
-	tGin.GinPost(`/api/InfoCrawlRunList`, controller.InfoCrawlRunList)
-	tGin.GinPost(`/api/InfoCrawlRunInfo`, controller.InfoCrawlRunInfo)
 }
 
 func shellOut(tGin *p_gin.Gin) {
