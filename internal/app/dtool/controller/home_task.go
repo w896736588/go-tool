@@ -5,10 +5,13 @@ import (
 	"dev_tool/internal/app/dtool/component"
 	"dev_tool/internal/app/dtool/define"
 	_struct "dev_tool/internal/app/dtool/struct"
+	"strings"
 	"time"
 
 	"gitee.com/Sxiaobai/gs/v2/gsgin"
+	"gitee.com/Sxiaobai/gs/v2/gstool"
 	"github.com/gin-gonic/gin"
+	"github.com/spf13/cast"
 )
 
 // HomeTaskList 查询首页任务列表。
@@ -20,6 +23,7 @@ func HomeTaskList(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
+	enrichHomeTaskListWithMemoryFragment(list)
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`task_list`: list,
 	})
@@ -29,11 +33,17 @@ func HomeTaskList(c *gin.Context) {
 func HomeTaskSave(c *gin.Context) {
 	request := _struct.HomeTaskSaveRequest{}
 	_ = gsgin.GinPostBody(c, &request)
-	info, err := common.DbMain.HomeTaskSave(request.ID, request.Name, request.TaskStatus, request.Remark, request.StartTime)
+	memoryFragmentID, err := ensureHomeTaskMemoryFragment(request)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
+	info, err := common.DbMain.HomeTaskSave(request.ID, request.Name, request.TaskStatus, request.StartTime, memoryFragmentID)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	enrichHomeTaskListWithMemoryFragment([]map[string]any{info})
 	gsgin.GinResponseSuccess(c, ``, info)
 }
 
@@ -46,6 +56,7 @@ func HomeTaskArchiveToggle(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
+	enrichHomeTaskListWithMemoryFragment([]map[string]any{info})
 	gsgin.GinResponseSuccess(c, ``, info)
 }
 
@@ -58,6 +69,7 @@ func HomeTaskStatusQuickUpdate(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
+	enrichHomeTaskListWithMemoryFragment([]map[string]any{info})
 	gsgin.GinResponseSuccess(c, ``, info)
 }
 
@@ -117,4 +129,61 @@ func HomeTaskDailyReportGenerate(c *gin.Context) {
 		`model`:           modelInfo[`model`],
 		`prompt`:          prompt,
 	})
+}
+
+func ensureHomeTaskMemoryFragment(request _struct.HomeTaskSaveRequest) (int, error) {
+	taskName := strings.TrimSpace(request.Name)
+	if taskName == `` {
+		return 0, gstool.Error(`任务名称不能为空`)
+	}
+	if component.MemoryRuntime == nil {
+		return 0, common.ErrMemoryNotConfigured
+	}
+	if err := component.MemoryRuntime.EnsureConfigured(); err != nil {
+		return 0, err
+	}
+	memoryDB := component.MemoryRuntime.DB()
+	memoryFragmentID := request.MemoryFragmentID
+	if memoryFragmentID > 0 {
+		if _, infoErr := memoryDB.MemoryFragmentInfo(memoryFragmentID); infoErr != nil {
+			return 0, infoErr
+		}
+		return memoryFragmentID, nil
+	}
+	fragmentInfo, saveErr := memoryDB.MemoryFragmentSave(0, taskName, "# "+taskName+"\n\n", []string{`需求`})
+	if saveErr != nil {
+		return 0, saveErr
+	}
+	component.MemoryRuntime.ScheduleSync()
+	return cast.ToInt(fragmentInfo[`id`]), nil
+}
+
+func enrichHomeTaskListWithMemoryFragment(list []map[string]any) {
+	if component.MemoryRuntime == nil || component.MemoryRuntime.EnsureConfigured() != nil {
+		return
+	}
+	memoryDB := component.MemoryRuntime.DB()
+	for _, item := range list {
+		memoryFragmentID := cast.ToInt(item[`memory_fragment_id`])
+		if memoryFragmentID <= 0 {
+			item[`memory_fragment`] = map[string]any{}
+			continue
+		}
+		info, infoErr := memoryDB.MemoryFragmentInfo(memoryFragmentID)
+		if infoErr != nil {
+			item[`memory_fragment`] = map[string]any{
+				`id`:      memoryFragmentID,
+				`title`:   `关联片段不存在`,
+				`tags`:    []string{},
+				`missing`: true,
+			}
+			continue
+		}
+		item[`memory_fragment`] = map[string]any{
+			`id`:      cast.ToInt(info[`id`]),
+			`title`:   cast.ToString(info[`title`]),
+			`tags`:    cast.ToStringSlice(info[`tags`]),
+			`missing`: false,
+		}
+	}
 }

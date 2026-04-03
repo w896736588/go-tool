@@ -409,6 +409,10 @@ export default {
       const tab = this.fragmentTabs.find(item => item.name === this.activeTab)
       return tab ? tab.fragment.id : 0
     },
+    // routeFragmentId 返回路由中指定的片段 id。
+    routeFragmentId() {
+      return Number(this.$route.query.fragment_id || 0)
+    },
     // searchTabLabel 返回搜索结果标签名称。
     searchTabLabel() {
       if (this.submittedSearchQuery.trim() !== '') {
@@ -477,6 +481,13 @@ export default {
     this.unbindGlobalSaveShortcut()
     this.stopStatusPolling()
     this.clearSaveFeedbackTimers()
+  },
+  watch: {
+    '$route.fullPath'() {
+      if (this.routeFragmentId > 0 && this.memoryConfigured) {
+        this.openRouteFragment()
+      }
+    },
   },
   methods: {
     bindGlobalSaveShortcut() {
@@ -604,13 +615,16 @@ export default {
           this.lastPushTime = 0
           return
         }
-        if (needReloadLists) {
-          this.loadFragmentList()
-          this.loadTrashList()
-          this.loadTagList()
-        }
-      })
-    },
+      if (needReloadLists) {
+        this.loadFragmentList()
+        this.loadTrashList()
+        this.loadTagList()
+      }
+      if (this.routeFragmentId > 0) {
+        this.openRouteFragment()
+      }
+    })
+  },
     // loadFragmentList 加载左侧片段列表。
     loadFragmentList() {
       if (!this.memoryConfigured) {
@@ -936,6 +950,17 @@ export default {
         }
         this.upsertFragmentTab(response.Data, true)
       })
+    },
+    // openRouteFragment 根据路由参数自动打开目标知识片段。
+    openRouteFragment() {
+      if (!this.memoryConfigured) {
+        return
+      }
+      const fragmentId = this.routeFragmentId
+      if (fragmentId <= 0) {
+        return
+      }
+      this.openFragment(fragmentId)
     },
     // upsertFragmentTab 新增或更新片段 tab。
     upsertFragmentTab(fragment, switchTab) {

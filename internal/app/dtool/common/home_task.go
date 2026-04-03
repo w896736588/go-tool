@@ -13,7 +13,7 @@ import (
 const (
 	// homeTaskListQuerySQL 用于查询首页任务列表。
 	homeTaskListQuerySQL = `
-select id,name,task_status,remark,is_archived,start_time,last_operated_at,create_time,update_time
+select id,name,task_status,memory_fragment_id,is_archived,start_time,last_operated_at,create_time,update_time
 from tbl_home_task
 where is_archived = ?
 order by last_operated_at desc, id desc`
@@ -55,11 +55,11 @@ func (h *CSqlite) HomeTaskRow(id int) (map[string]any, error) {
 }
 
 // HomeTaskSave 保存首页任务。
-func (h *CSqlite) HomeTaskSave(id int, name, taskStatus, remark string, startTime int64) (map[string]any, error) {
+func (h *CSqlite) HomeTaskSave(id int, name, taskStatus string, startTime int64, memoryFragmentID int) (map[string]any, error) {
 	now := time.Now().Unix()
 	name = strings.TrimSpace(name)
 	taskStatus = strings.TrimSpace(taskStatus)
-	remark = strings.TrimSpace(remark)
+	startTime = normalizeHomeTaskStartTime(startTime)
 
 	// 任务名称为空时直接返回错误，避免写入无意义记录。
 	if name == `` {
@@ -71,12 +71,12 @@ func (h *CSqlite) HomeTaskSave(id int, name, taskStatus, remark string, startTim
 	}
 
 	updateData := map[string]any{
-		`name`:             name,
-		`task_status`:      taskStatus,
-		`remark`:           remark,
-		`start_time`:       startTime,
-		`last_operated_at`: now,
-		`update_time`:      now,
+		`name`:               name,
+		`task_status`:        taskStatus,
+		`memory_fragment_id`: memoryFragmentID,
+		`start_time`:         startTime,
+		`last_operated_at`:   now,
+		`update_time`:        now,
 	}
 	if id <= 0 {
 		updateData[`is_archived`] = define.HomeTaskArchivedNo
@@ -189,6 +189,15 @@ func formatHomeTaskTime(unixTime int64, layout string) string {
 		return ``
 	}
 	return gstool.TimeUnixToString(time.Unix(unixTime, 0), layout)
+}
+
+// normalizeHomeTaskStartTime 统一把空开始日期补到当天零点，避免前端漏传时留下空值。
+func normalizeHomeTaskStartTime(startTime int64) int64 {
+	if startTime > 0 {
+		return startTime
+	}
+	now := time.Now()
+	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).Unix()
 }
 
 // isValidHomeTaskStatus 校验首页任务状态是否合法。

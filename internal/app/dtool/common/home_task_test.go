@@ -16,7 +16,7 @@ func TestHomeTaskSaveCreatesTaskWithLastOperateTime(t *testing.T) {
 	db := newHomeTaskTestDB(t)
 
 	startTime := time.Date(2026, 3, 23, 0, 0, 0, 0, time.Local).Unix()
-	info, err := db.HomeTaskSave(0, `任务A`, define.HomeTaskStatusTodo, `需要和测试确认缓存命中`, startTime)
+	info, err := db.HomeTaskSave(0, `任务A`, define.HomeTaskStatusTodo, startTime, 12)
 	if err != nil {
 		t.Fatalf("HomeTaskSave() error = %v", err)
 	}
@@ -27,8 +27,8 @@ func TestHomeTaskSaveCreatesTaskWithLastOperateTime(t *testing.T) {
 	if cast.ToString(info[`task_status`]) != define.HomeTaskStatusTodo {
 		t.Fatalf("task_status = %q, want %q", cast.ToString(info[`task_status`]), define.HomeTaskStatusTodo)
 	}
-	if cast.ToString(info[`remark`]) != `需要和测试确认缓存命中` {
-		t.Fatalf("remark = %q, want %q", cast.ToString(info[`remark`]), `需要和测试确认缓存命中`)
+	if cast.ToInt(info[`memory_fragment_id`]) != 12 {
+		t.Fatalf("memory_fragment_id = %d, want %d", cast.ToInt(info[`memory_fragment_id`]), 12)
 	}
 	if cast.ToInt64(info[`start_time`]) != startTime {
 		t.Fatalf("start_time = %d, want %d", cast.ToInt64(info[`start_time`]), startTime)
@@ -46,7 +46,7 @@ func TestHomeTaskStatusQuickUpdateSetsStartTimeWhenRunning(t *testing.T) {
 
 	db := newHomeTaskTestDB(t)
 
-	info, err := db.HomeTaskSave(0, `任务B`, define.HomeTaskStatusTodo, `联调前补充接口说明`, 0)
+	info, err := db.HomeTaskSave(0, `任务B`, define.HomeTaskStatusTodo, 0, 0)
 	if err != nil {
 		t.Fatalf("HomeTaskSave() error = %v", err)
 	}
@@ -70,12 +70,33 @@ func TestHomeTaskStatusQuickUpdateSetsStartTimeWhenRunning(t *testing.T) {
 	}
 }
 
+func TestHomeTaskSaveDefaultsStartTimeToTodayWhenMissing(t *testing.T) {
+	t.Parallel()
+
+	db := newHomeTaskTestDB(t)
+
+	now := time.Now()
+	expectedStartTime := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).Unix()
+
+	info, err := db.HomeTaskSave(0, `任务D`, define.HomeTaskStatusTodo, 0, 0)
+	if err != nil {
+		t.Fatalf("HomeTaskSave() error = %v", err)
+	}
+
+	if cast.ToInt64(info[`start_time`]) != expectedStartTime {
+		t.Fatalf("start_time = %d, want %d", cast.ToInt64(info[`start_time`]), expectedStartTime)
+	}
+	if cast.ToString(info[`start_time_desc`]) != time.Unix(expectedStartTime, 0).Format(`2006-01-02`) {
+		t.Fatalf("start_time_desc = %q, want %q", cast.ToString(info[`start_time_desc`]), time.Unix(expectedStartTime, 0).Format(`2006-01-02`))
+	}
+}
+
 func TestHomeTaskDeleteRemovesTask(t *testing.T) {
 	t.Parallel()
 
 	db := newHomeTaskTestDB(t)
 
-	info, err := db.HomeTaskSave(0, `任务C`, define.HomeTaskStatusTodo, `删除后不应再能查询到`, 0)
+	info, err := db.HomeTaskSave(0, `任务C`, define.HomeTaskStatusTodo, 0, 0)
 	if err != nil {
 		t.Fatalf("HomeTaskSave() error = %v", err)
 	}
@@ -104,7 +125,7 @@ CREATE TABLE "tbl_home_task" (
   "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
   "name" TEXT NOT NULL DEFAULT '',
   "task_status" TEXT NOT NULL DEFAULT '',
-  "remark" TEXT NOT NULL DEFAULT '',
+  "memory_fragment_id" INTEGER NOT NULL DEFAULT 0,
   "is_archived" INTEGER NOT NULL DEFAULT 0,
   "start_time" INTEGER NOT NULL DEFAULT 0,
   "last_operated_at" INTEGER NOT NULL DEFAULT 0,
