@@ -126,8 +126,8 @@ function IsBase64(str) {
 
 function GenerateId(prefix) {
     const ts = Date.now();                 // 毫秒时间戳
-    const rand = Math.floor(Math.random() * 90000) + 10000; // 5 位随机数
-    return prefix + `_${ts}_${rand}`;
+    const rand = Math.floor(Math.random() * 100) + 100; // 3 位随机数
+    return prefix + `_${rand}`;
 }
 
 //防抖函数

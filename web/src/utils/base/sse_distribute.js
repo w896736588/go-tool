@@ -1,5 +1,5 @@
 //单sse连接，用于所有sse
-const SseClientId = 'distribute'
+const SseClientId = 'sse_client_id'
 import t from "@/utils/base/type";
 import base from '@/utils/base'
 import store from "@/utils/base/store"
