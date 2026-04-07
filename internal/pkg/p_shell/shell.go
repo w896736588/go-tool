@@ -120,30 +120,21 @@ func (h *Shell) cleanupIdleClients() {
 // 每个 shellClientId 对应一个独立的连接，不复用连接池。
 func (h *Shell) GetClient(sshConfig map[string]any, shellClientId string, sse *p_sse.SseShell,
 	formatStream func(string) []string, promptKeywords []string, promptFunc func(string, io.WriteCloser, *ssh.Session) string) (*gsssh.SshTerminal, error) {
-	start := time.Now()
 	sshId := cast.ToString(sshConfig["id"])
 	if sshId == "" {
 		return nil, errors.New("ssh config error, GetClient " + cast.ToString(debug.Stack()))
 	}
-	gstool.FmtPrintlnLogTime(`[Shell.GetClient] enter ssh_id=%s shell_client_id=%s`,
-		sshId, shellClientId)
 
 	h.lock.Lock()
 	if client, ok := h.ShellClientMap[shellClientId]; ok && client != nil {
 		h.ShellClientLastUsed[client] = time.Now().Unix()
 		bindReceiveHandler(client, sse, formatStream)
 		h.lock.Unlock()
-		gstool.FmtPrintlnLogTime(`[Shell.GetClient] return existing client ssh_id=%s shell_client_id=%s total_cost_ms=%d`,
-			sshId, shellClientId, time.Since(start).Milliseconds())
 		return client, nil
 	}
 	h.lock.Unlock()
 
-	gstool.FmtPrintlnLogTime(`[Shell.GetClient] create begin ssh_id=%s shell_client_id=%s`, sshId, shellClientId)
-	createStart := time.Now()
 	client, err := h.createShellClient(sshConfig, shellClientId, sse, formatStream, promptKeywords, promptFunc)
-	gstool.FmtPrintlnLogTime(`[Shell.GetClient] create end ssh_id=%s shell_client_id=%s cost_ms=%d err=%v`,
-		sshId, shellClientId, time.Since(createStart).Milliseconds(), err)
 	if err != nil {
 		return nil, err
 	}
@@ -154,17 +145,12 @@ func (h *Shell) GetClient(sshConfig map[string]any, shellClientId string, sse *p
 	h.ShellClientLastUsed[client] = time.Now().Unix()
 	h.lock.Unlock()
 
-	gstool.FmtPrintlnLogTime(`[Shell.GetClient] return success ssh_id=%s shell_client_id=%s total_cost_ms=%d`,
-		sshId, shellClientId, time.Since(start).Milliseconds())
 	return client, nil
 }
 
 // createShellClient 创建一个新的交互式 SSH 终端，并绑定断线与消息转发处理。
 func (h *Shell) createShellClient(sshConfig map[string]any, shellClientId string, sse *p_sse.SseShell,
 	formatStream func(string) []string, promptKeywords []string, promptFunc func(string, io.WriteCloser, *ssh.Session) string) (*gsssh.SshTerminal, error) {
-	start := time.Now()
-	sshId := cast.ToString(sshConfig["id"])
-	gstool.FmtPrintlnLogTime(`[Shell.createShellClient] enter ssh_id=%s shell_client_id=%s`, sshId, shellClientId)
 	gsShell := gsssh.NewSshTerminal(gsssh.NewSsh(&gsssh.SshConfig{
 		Name:     "",
 		Host:     cast.ToString(sshConfig["host"]),
@@ -174,7 +160,6 @@ func (h *Shell) createShellClient(sshConfig map[string]any, shellClientId string
 	}))
 
 	gsShell.SetFuncBroken(func(msg string) {
-		gstool.FmtPrintlnLogTime(`[Shell.createShellClient] broken ssh_id=%s shell_client_id=%s err=%s`, sshId, shellClientId, msg)
 		if canSendSse(sse) {
 			sse.Send(" connection broken, will reconnect on next action: " + msg + "\n")
 		}
@@ -183,11 +168,7 @@ func (h *Shell) createShellClient(sshConfig map[string]any, shellClientId string
 
 	gsShell.SetPtyConfig(gsssh.PtyConfig{Echo: 1})
 	gsShell.SetMaxBufferSize(2 * 1024 * 1024)
-	gstool.FmtPrintlnLogTime(`[Shell.createShellClient] run pwd begin ssh_id=%s shell_client_id=%s`, sshId, shellClientId)
-	pwdStart := time.Now()
 	_, err := gsShell.RunCommandWait("pwd", 40*time.Second)
-	gstool.FmtPrintlnLogTime(`[Shell.createShellClient] run pwd end ssh_id=%s shell_client_id=%s cost_ms=%d err=%v`,
-		sshId, shellClientId, time.Since(pwdStart).Milliseconds(), err)
 	if err != nil {
 		return nil, err
 	}
@@ -201,8 +182,6 @@ func (h *Shell) createShellClient(sshConfig map[string]any, shellClientId string
 	if promptFunc != nil {
 		gsShell.SetFuncAuthPrompt(promptFunc)
 	}
-	gstool.FmtPrintlnLogTime(`[Shell.createShellClient] return success ssh_id=%s shell_client_id=%s total_cost_ms=%d`,
-		sshId, shellClientId, time.Since(start).Milliseconds())
 	return gsShell, nil
 }
 

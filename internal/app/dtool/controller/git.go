@@ -555,128 +555,221 @@ func GitGroupBranchList(c *gin.Context) {
 	}
 
 	totalCount := len(gitList)
-	resultList := make([]map[string]any, 0, totalCount)
+	gstool.FmtPrintlnLogTime(`本次查询仓库数量%d`, totalCount)
 	summaryLines := make([]string, 0, totalCount+4)
 	summaryLines = append(summaryLines, fmt.Sprintf("### Git分组 `%s` 分支总览", cast.ToString(groupInfo[`name`])))
 	summaryLines = append(summaryLines, "")
-	summaryHeaderIndex := len(summaryLines)
-	summaryLines = append(summaryLines, "| 名称 | 路径 | 当前分支 | 远程分支/错误 |")
-	summaryLines = append(summaryLines, "| --- | --- | --- | --- |")
-	// 先输出表头，后续只输出表格行，不输出其他日志文本
-	summaryLines[summaryHeaderIndex] = "| 鍚嶇О | 璺緞 | 褰撳墠鍒嗘敮 | 杩滅▼鍒嗘敮/閿欒 | 鏄惁鏈変汉浣跨敤 |"
-	summaryLines[summaryHeaderIndex+1] = "| --- | --- | --- | --- | --- |"
-	summaryLines[summaryHeaderIndex] = "| 名称 | 路径 | 当前分支 | 远程分支/错误 | 是否有人使用 |"
+	summaryLines = append(summaryLines, "| 名称 | 路径 | 当前分支 | 远程分支/错误 | 是否有人使用 |")
+	summaryLines = append(summaryLines, "| --- | --- | --- | --- | --- |")
 	writeSummary("\n" + strings.Join(summaryLines, "\n") + "\n")
-
+	//初始化5个连接 以第一个的ssh作为基准
+	sshId := gitList[0][`ssh_id`]
+	sshConfig, sshErr := common.DbMain.GetSshConfig(sshId)
+	if sshErr != nil || len(sshConfig) == 0 {
+		gsgin.GinResponseSuccess(c, ``, map[string]any{
+			`git_group_id`: gitGroupId,
+			`group_name`:   cast.ToString(groupInfo[`name`]),
+			`list`:         []map[string]any{},
+			`summary_text`: fmt.Sprintf("Git(%s)未配置ssh连接\n", gitList[0][`name`]),
+		})
+		return
+	}
+	pool := p_shell.NewShellPoolWithConfig(`git_group_`, sshConfig, p_shell.PoolConfig{
+		PoolSize: 5,
+		CoolDown: time.Second * 15,
+	}, func(sshConfig map[string]any, shellClientId string) (*gsssh.SshTerminal, error) {
+		return component.ShellClient.GetClient(sshConfig, shellClientId, nil, nil, nil, nil)
+	})
+	task := gstask.NewTask()
 	for _, item := range gitList {
-		itemName := cast.ToString(item[`name`])
-		itemPath := cast.ToString(item[`code_path`])
-		sshId := cast.ToString(item[`ssh_id`])
-
-		itemResult := map[string]any{
-			`id`:            cast.ToString(item[`id`]),
-			`name`:          itemName,
-			`code_path`:     itemPath,
-			`ssh_id`:        sshId,
-			`local_branch`:  `N/A`,
-			`remote_branch`: `N/A`,
-			`usage_status`:  `N/A`,
-			`usage_owners`:  []string{},
-			`ok`:            false,
-			`error`:         ``,
-		}
-		tableLine := ``
-		if itemPath == `` || sshId == `` {
-			itemResult[`error`] = `缺少 code_path 或 ssh_id 配置`
-			tableLine = fmt.Sprintf(
-				"| %s | %s | %s | %s |",
-				escapeMarkdownTableCell(itemName),
-				escapeMarkdownTableCell(itemPath),
-				escapeMarkdownTableCell(`N/A`),
-				escapeMarkdownTableCell(`失败: `+cast.ToString(itemResult[`error`])),
-			)
-		} else {
-			sshConfig, sshErr := common.DbMain.GetSshConfig(sshId)
-			if sshErr != nil || len(sshConfig) == 0 {
-				itemResult[`error`] = `SSH配置不存在`
-				tableLine = fmt.Sprintf(
-					"| %s | %s | %s | %s |",
-					escapeMarkdownTableCell(itemName),
-					escapeMarkdownTableCell(itemPath),
-					escapeMarkdownTableCell(`N/A`),
-					escapeMarkdownTableCell(`失败: `+cast.ToString(itemResult[`error`])),
-				)
-			} else {
-				uniqueKey := p_common.TBaseClient.GetCombineKey(
-					sshId,
-					`group_branch_`+gitGroupId+`_`+cast.ToString(item[`id`])+`_`+cast.ToString(time.Now().UnixNano()),
-				)
-				// 组内批量查询只保留汇总结果，避免每个项目的原始 shell 输出刷屏
-				silentSse := &p_sse.SseShell{}
-				sshClient, clientErr := component.ShellClient.GetClient(sshConfig, uniqueKey, silentSse, nil, nil, nil)
-				if clientErr != nil {
-					itemResult[`error`] = clientErr.Error()
-					tableLine = fmt.Sprintf(
-						"| %s | %s | %s | %s |",
-						escapeMarkdownTableCell(itemName),
-						escapeMarkdownTableCell(itemPath),
-						escapeMarkdownTableCell(`N/A`),
-						escapeMarkdownTableCell(`失败: `+cast.ToString(itemResult[`error`])),
-					)
-				} else if prepareErr := prepareGitOperationEnv(sshClient, itemPath); prepareErr != nil {
-					// 复用统一预处理，避免分组查询单独实现认证方案。
-					itemResult[`error`] = prepareErr.Error()
-					tableLine = fmt.Sprintf(
-						"| %s | %s | %s | %s |",
-						escapeMarkdownTableCell(itemName),
-						escapeMarkdownTableCell(itemPath),
-						escapeMarkdownTableCell(`N/A`),
-						escapeMarkdownTableCell(`失败: `+cast.ToString(itemResult[`error`])),
-					)
-				} else {
-					branchInfo, queryErr := queryCurrentBranchInfo(sshClient, itemPath, 5*time.Second)
-					if queryErr != nil {
-						itemResult[`error`] = queryErr.Error()
-						tableLine = fmt.Sprintf(
-							"| %s | %s | %s | %s |",
-							escapeMarkdownTableCell(itemName),
-							escapeMarkdownTableCell(itemPath),
-							escapeMarkdownTableCell(`N/A`),
-							escapeMarkdownTableCell(`失败: `+cast.ToString(itemResult[`error`])),
-						)
-					} else {
-						usageInfo := queryBranchUsageInfo(sshClient, itemPath, branchInfo, 8*time.Second)
-						itemResult[`local_branch`] = branchInfo.LocalBranch
-						itemResult[`remote_branch`] = branchInfo.RemoteBranch
-						itemResult[`usage_status`] = usageInfo.UsageDisplay
-						itemResult[`usage_owners`] = usageInfo.Owners
-						itemResult[`ok`] = true
-						tableLine = fmt.Sprintf(
-							"| %s | %s | %s | %s |",
-							escapeMarkdownTableCell(itemName),
-							escapeMarkdownTableCell(itemPath),
-							escapeMarkdownTableCell(branchInfo.LocalBranch),
-							escapeMarkdownTableCell(branchInfo.RemoteBranch),
-						)
+		name := cast.ToString(item[`name`])
+		codePath := cast.ToString(item[`code_path`])
+		task.Add(gstask.CallbackFunc{
+			Timeout: time.Second * 30,
+			Func: func() *gstask.Result {
+				command := p_shell.NewCommand()
+				command.Cd(codePath)
+				command.Echo(`当前分支：`)
+				command.GitShowBranch()
+				command.Echo(`远程分支：`)
+				command.GitShowOriginBranch()
+				client, index, cliErr := pool.GetOne(time.Second * 60)
+				if cliErr != nil {
+					return &gstask.Result{
+						Result: map[string]any{
+							`name`:         name,
+							`local_branch`: cliErr.Error(),
+						},
 					}
 				}
-			}
+				result, getErr := client.RunCommandWait(command.GetCommand().ToStr(), time.Second*4)
+				if getErr != nil {
+					pool.ReleaseByIndex(index)
+					return &gstask.Result{
+						Result: map[string]any{
+							`name`:         name,
+							`local_branch`: getErr.Error(),
+						},
+					}
+				}
+				ret := client.FilterCommand(result)
+				ret = p_common.TBaseClient.FilterTerminalChars(ret)
+				//解析出本地和远程分支
+				splitRet := strings.Split(ret, "\n")
+				localBranch := ``
+				remoteBranch := ``
+				for indexSplit, split := range splitRet {
+					if split == `当前分支：` {
+						if len(splitRet) > indexSplit+1 {
+							localBranch = splitRet[indexSplit+1]
+						}
+					}
+					if split == `远程分支：` {
+						if len(splitRet) > indexSplit+1 {
+							remoteBranch = splitRet[indexSplit+1]
+						}
+					}
+				}
+				gstool.FmtPrintlnLogTime(`%#v`, splitRet)
+				gstool.FmtPrintlnLogTime(`%s 结果 %s %s`, name, localBranch, remoteBranch)
+				pool.ReleaseByIndex(index)
+				return &gstask.Result{
+					Result: map[string]any{
+						`name`:          name,
+						`local_branch`:  localBranch,
+						`remote_branch`: remoteBranch,
+					},
+				}
+
+			},
+		})
+	}
+	resultList := task.RunAll()
+	for _, result := range resultList {
+		if resultMap, ok := result.Result.(map[string]any); ok {
+			gstool.FmtPrintlnLogTime(`name %s  local %s`, resultMap[`name`], resultMap[`local_branch`])
+		} else {
+			gstool.FmtPrintlnLogTime(`name %s  local %s`, `faild`, `faild`)
 		}
 
-		tableLine = appendMarkdownTableUsageCell(tableLine, cast.ToString(itemResult[`usage_status`]))
-		writeSummary(tableLine + "\n")
-
-		resultList = append(resultList, itemResult)
-		summaryLines = append(summaryLines, tableLine)
 	}
-	summaryText := strings.Join(summaryLines, "\n")
+	pool.Close()
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`git_group_id`:  gitGroupId,
 		`group_name`:    cast.ToString(groupInfo[`name`]),
 		`list`:          resultList,
 		`summary_lines`: summaryLines,
-		`summary_text`:  summaryText,
 	})
+	return
+	// for _, item := range gitList {
+	// 	itemName := cast.ToString(item[`name`])
+	// 	itemPath := cast.ToString(item[`code_path`])
+	// 	sshId := cast.ToString(item[`ssh_id`])
+
+	// 	itemResult := map[string]any{
+	// 		`id`:            cast.ToString(item[`id`]),
+	// 		`name`:          itemName,
+	// 		`code_path`:     itemPath,
+	// 		`ssh_id`:        sshId,
+	// 		`local_branch`:  `N/A`,
+	// 		`remote_branch`: `N/A`,
+	// 		`usage_status`:  `N/A`,
+	// 		`usage_owners`:  []string{},
+	// 		`ok`:            false,
+	// 		`error`:         ``,
+	// 	}
+	// 	tableLine := ``
+	// 	if itemPath == `` || sshId == `` {
+	// 		itemResult[`error`] = `缺少 code_path 或 ssh_id 配置`
+	// 		tableLine = fmt.Sprintf(
+	// 			"| %s | %s | %s | %s |",
+	// 			escapeMarkdownTableCell(itemName),
+	// 			escapeMarkdownTableCell(itemPath),
+	// 			escapeMarkdownTableCell(`N/A`),
+	// 			escapeMarkdownTableCell(`失败: `+cast.ToString(itemResult[`error`])),
+	// 		)
+	// 	} else {
+	// 		sshConfig, sshErr := common.DbMain.GetSshConfig(sshId)
+	// 		if sshErr != nil || len(sshConfig) == 0 {
+	// 			itemResult[`error`] = `SSH配置不存在`
+	// 			tableLine = fmt.Sprintf(
+	// 				"| %s | %s | %s | %s |",
+	// 				escapeMarkdownTableCell(itemName),
+	// 				escapeMarkdownTableCell(itemPath),
+	// 				escapeMarkdownTableCell(`N/A`),
+	// 				escapeMarkdownTableCell(`失败: `+cast.ToString(itemResult[`error`])),
+	// 			)
+	// 		} else {
+	// 			uniqueKey := p_common.TBaseClient.GetCombineKey(
+	// 				sshId,
+	// 				`group_branch_`+cast.ToString(item[`id`]),
+	// 			)
+	// 			// 组内批量查询只保留汇总结果，避免每个项目的原始 shell 输出刷屏
+	// 			silentSse := &p_sse.SseShell{}
+	// 			sshClient, clientErr := component.ShellClient.GetClient(sshConfig, uniqueKey, silentSse, nil, nil, nil)
+	// 			if clientErr != nil {
+	// 				itemResult[`error`] = clientErr.Error()
+	// 				tableLine = fmt.Sprintf(
+	// 					"| %s | %s | %s | %s |",
+	// 					escapeMarkdownTableCell(itemName),
+	// 					escapeMarkdownTableCell(itemPath),
+	// 					escapeMarkdownTableCell(`N/A`),
+	// 					escapeMarkdownTableCell(`失败: `+cast.ToString(itemResult[`error`])),
+	// 				)
+	// 			} else if prepareErr := prepareGitOperationEnv(sshClient, itemPath); prepareErr != nil {
+	// 				// 复用统一预处理，避免分组查询单独实现认证方案。
+	// 				itemResult[`error`] = prepareErr.Error()
+	// 				tableLine = fmt.Sprintf(
+	// 					"| %s | %s | %s | %s |",
+	// 					escapeMarkdownTableCell(itemName),
+	// 					escapeMarkdownTableCell(itemPath),
+	// 					escapeMarkdownTableCell(`N/A`),
+	// 					escapeMarkdownTableCell(`失败: `+cast.ToString(itemResult[`error`])),
+	// 				)
+	// 			} else {
+	// 				branchInfo, queryErr := queryCurrentBranchInfo(sshClient, itemPath, 5*time.Second)
+	// 				if queryErr != nil {
+	// 					itemResult[`error`] = queryErr.Error()
+	// 					tableLine = fmt.Sprintf(
+	// 						"| %s | %s | %s | %s |",
+	// 						escapeMarkdownTableCell(itemName),
+	// 						escapeMarkdownTableCell(itemPath),
+	// 						escapeMarkdownTableCell(`N/A`),
+	// 						escapeMarkdownTableCell(`失败: `+cast.ToString(itemResult[`error`])),
+	// 					)
+	// 				} else {
+	// 					usageInfo := queryBranchUsageInfo(sshClient, itemPath, branchInfo, 8*time.Second)
+	// 					itemResult[`local_branch`] = branchInfo.LocalBranch
+	// 					itemResult[`remote_branch`] = branchInfo.RemoteBranch
+	// 					itemResult[`usage_status`] = usageInfo.UsageDisplay
+	// 					itemResult[`usage_owners`] = usageInfo.Owners
+	// 					itemResult[`ok`] = true
+	// 					tableLine = fmt.Sprintf(
+	// 						"| %s | %s | %s | %s |",
+	// 						escapeMarkdownTableCell(itemName),
+	// 						escapeMarkdownTableCell(itemPath),
+	// 						escapeMarkdownTableCell(branchInfo.LocalBranch),
+	// 						escapeMarkdownTableCell(branchInfo.RemoteBranch),
+	// 					)
+	// 				}
+	// 			}
+	// 		}
+	// 	}
+
+	// 	tableLine = appendMarkdownTableUsageCell(tableLine, cast.ToString(itemResult[`usage_status`]))
+	// 	writeSummary(tableLine + "\n")
+
+	// 	resultList = append(resultList, itemResult)
+	// 	summaryLines = append(summaryLines, tableLine)
+	// }
+	// summaryText := strings.Join(summaryLines, "\n")
+	// gsgin.GinResponseSuccess(c, ``, map[string]any{
+	// 	`git_group_id`:  gitGroupId,
+	// 	`group_name`:    cast.ToString(groupInfo[`name`]),
+	// 	`list`:          resultList,
+	// 	`summary_lines`: summaryLines,
+	// 	`summary_text`:  summaryText,
+	// })
 }
 
 // gitItemQueryResult querySingleGitItemBranchInfo 返回的复合结果
