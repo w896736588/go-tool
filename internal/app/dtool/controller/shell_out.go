@@ -53,7 +53,8 @@ func (b *ShellConnectionsBroadcaster) run() {
 	for {
 		select {
 		case <-b.ticker.C:
-			b.Broadcast()
+			// 中文注释：连接状态改为跟随普通 SSE client_id 推送，这里保留空轮询以兼容旧初始化流程。
+			// English comment: Shell connection events now ride on normal SSE client IDs, so global broadcast is a no-op.
 		case <-b.stopC:
 			return
 		}
@@ -68,11 +69,11 @@ func (b *ShellConnectionsBroadcaster) Stop() {
 
 // Broadcast 广播当前所有Shell连接状态
 func (b *ShellConnectionsBroadcaster) Broadcast() {
-	sse := gsgin.SseGetByClientId(define.SseShellConnections)
-	if sse == nil {
-		return
-	}
+}
 
+// buildShellConnectionsPayload 构造当前所有 Shell 连接状态快照。
+// buildShellConnectionsPayload builds the current shell connection snapshot payload.
+func buildShellConnectionsPayload() map[string]any {
 	// 获取p_shell.Shell类型的连接
 	shellConnections := component.ShellClient.GetConnections()
 
@@ -95,11 +96,19 @@ func (b *ShellConnectionsBroadcaster) Broadcast() {
 		return allConnections[i].ConnectSeconds < allConnections[j].ConnectSeconds
 	})
 
-	data := map[string]any{
+	return map[string]any{
 		`connections`: allConnections,
 		`total`:       len(allConnections),
 	}
+}
 
+// sendShellConnectionsSnapshot 向指定 SSE 连接发送一次连接状态快照。
+// sendShellConnectionsSnapshot sends one shell-connections snapshot to the provided SSE client.
+func sendShellConnectionsSnapshot(sse *gsgin.Sse) {
+	if sse == nil {
+		return
+	}
+	data := buildShellConnectionsPayload()
 	err := sse.SendToChan(gstool.JsonEncode(p_define.SseData{
 		SseDistributeId: define.SseShellConnections,
 		Data:            data,
@@ -108,6 +117,32 @@ func (b *ShellConnectionsBroadcaster) Broadcast() {
 	if err != nil {
 		gstool.FmtPrintlnLogTime(`ShellConnections广播错误 %s`, err.Error())
 	}
+}
+
+// BindShellConnectionsSSE 为普通 SSE client 绑定连接状态推送，无需单独 shell_connections 连接。
+// BindShellConnectionsSSE attaches shell-connections events to a normal SSE client_id stream.
+func BindShellConnectionsSSE(sse *gsgin.Sse, stopC chan int, interval time.Duration) {
+	if sse == nil {
+		return
+	}
+	if interval <= 0 {
+		interval = 5 * time.Second
+	}
+	// 中文注释：建连后立即推一次，避免前端初次打开时要等下一个周期。
+	// English comment: Push once immediately so the UI does not wait for the first ticker tick.
+	sendShellConnectionsSnapshot(sse)
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				sendShellConnectionsSnapshot(sse)
+			case <-stopC:
+				return
+			}
+		}
+	}()
 }
 
 func ShellOut(c *gin.Context) {

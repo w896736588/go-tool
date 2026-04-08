@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"gitee.com/Sxiaobai/gs/v2/gsgin"
 	"gitee.com/Sxiaobai/gs/v2/gstool"
@@ -402,16 +403,16 @@ func apiUse(tGin *p_gin.Gin) {
 	})
 	openFunc := func(urlValues url.Values, stopC chan int, c *gin.Context) (*gsgin.Sse, error) {
 		clientId := urlValues.Get(`client_id`)
-		// shell_connections 使用固定client_id，允许后续连接复用（广播模式）
-		if clientId != define.SseShellConnections {
-			sseC := gsgin.SseGetByClientId(clientId)
-			if sseC != nil {
-				return nil, errors.New(`已存在链接`)
-			}
+		sseC := gsgin.SseGetByClientId(clientId)
+		if sseC != nil {
+			return nil, errors.New(`已存在链接`)
 		}
 		sse := gsgin.SseRegister(clientId, stopC, c)
 		//发送一个事件 前端才会建立连接
 		_ = sse.SendToChan(define.SseConnect)
+		// 中文注释：Shell 连接状态复用普通 SSE 通道推送，无需单独订阅 shell_connections client_id。
+		// English comment: Shell connection status now rides on the normal SSE channel for this client.
+		controller.BindShellConnectionsSSE(sse, stopC, 5*time.Second)
 		return sse, nil
 	}
 	closeFunc := func(sse *gsgin.Sse) {
