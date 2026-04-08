@@ -18,7 +18,6 @@ import (
 
 	"gitee.com/Sxiaobai/gs/v2/gsgin"
 	"gitee.com/Sxiaobai/gs/v2/gsssh"
-	"gitee.com/Sxiaobai/gs/v2/gstask"
 	"gitee.com/Sxiaobai/gs/v2/gstool"
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/cast"
@@ -517,6 +516,170 @@ func pushTableLine(name, codePath, localBranch, remoteBranch, use string, writeS
 	writeSummary(tableLine + "\n")
 }
 
+const (
+	// gitGroupBranchListConcurrency Git 分组分支查询的最大并发数。
+	// gitGroupBranchListConcurrency caps Git group branch queries to 5 concurrent SSH sessions.
+	gitGroupBranchListConcurrency = 5
+)
+
+// gitBranchRunner 抽象单次 SSH 执行能力，避免交互式终端缓冲造成串线。
+// gitBranchRunner abstracts one-shot SSH execution to avoid interactive terminal buffer bleed.
+type gitBranchRunner interface {
+	RunCommandOnce(command string) (string, error)
+	Close()
+}
+
+// gitBranchOnceRunner 包装 SshOnce，统一成可关闭的单次执行接口。
+// gitBranchOnceRunner wraps SshOnce into a closeable one-shot runner interface.
+type gitBranchOnceRunner struct {
+	client *gsssh.SshOnce
+}
+
+func (h *gitBranchOnceRunner) RunCommandOnce(command string) (string, error) {
+	return h.client.RunCommandOnce(command)
+}
+
+func (h *gitBranchOnceRunner) Close() {}
+
+// gitBranchRunnerFactory 创建单次查询使用的一次性 SSH 执行器。
+// gitBranchRunnerFactory builds a one-shot SSH runner for every repository query.
+type gitBranchRunnerFactory func(sshConfig map[string]any) (gitBranchRunner, error)
+
+// gitBranchRunnerRelease 在单次执行结束后做额外清理；默认无需动作。
+// gitBranchRunnerRelease performs optional cleanup after one-shot execution completes.
+type gitBranchRunnerRelease func()
+
+var (
+	// gitGroupBranchRunnerFactory 默认创建一次性 SSH 执行器；测试中可替换。
+	// gitGroupBranchRunnerFactory creates a one-shot SSH runner and can be swapped in tests.
+	gitGroupBranchRunnerFactory gitBranchRunnerFactory = func(sshConfig map[string]any) (gitBranchRunner, error) {
+		client, err := component.ShellClient.GetSshOnce(sshConfig)
+		if err != nil {
+			return nil, err
+		}
+		return &gitBranchOnceRunner{client: client}, nil
+	}
+	// gitGroupBranchRunnerRelease 一次性执行器默认无需额外释放；测试中可替换。
+	// gitGroupBranchRunnerRelease is a no-op by default because SshOnce is not pooled.
+	gitGroupBranchRunnerRelease gitBranchRunnerRelease = func() {
+	}
+)
+
+// runGitGroupBranchQueries 并发查询 Git 分组下所有仓库分支。
+// runGitGroupBranchQueries uses fresh SSH connections per repository and limits concurrency.
+func runGitGroupBranchQueries(
+	gitList []map[string]any,
+	sshConfig map[string]any,
+	writeSummary func(string),
+	factory gitBranchRunnerFactory,
+	release gitBranchRunnerRelease,
+) []map[string]any {
+	if len(gitList) == 0 {
+		return []map[string]any{}
+	}
+	if factory == nil {
+		factory = gitGroupBranchRunnerFactory
+	}
+	if release == nil {
+		release = gitGroupBranchRunnerRelease
+	}
+
+	results := make([]map[string]any, len(gitList))
+	// 中文注释：使用信号量限制同时活跃的 SSH 连接数，避免同一 SSH 被瞬时打满。
+	// English comment: A semaphore keeps active SSH sessions under the configured concurrency cap.
+	limiter := make(chan struct{}, gitGroupBranchListConcurrency)
+	var waitGroup sync.WaitGroup
+
+	for index, item := range gitList {
+		index := index
+		item := item
+		waitGroup.Add(1)
+		go func() {
+			defer waitGroup.Done()
+			limiter <- struct{}{}
+			defer func() {
+				<-limiter
+			}()
+			results[index] = queryGitGroupBranchItem(item, sshConfig, writeSummary, factory, release)
+		}()
+	}
+
+	waitGroup.Wait()
+	return results
+}
+
+// queryGitGroupBranchItem 查询单个仓库的本地/远程分支，并保证连接即用即释放。
+// queryGitGroupBranchItem queries one repository and always closes/releases the fresh SSH client.
+func queryGitGroupBranchItem(
+	item map[string]any,
+	sshConfig map[string]any,
+	writeSummary func(string),
+	factory gitBranchRunnerFactory,
+	release gitBranchRunnerRelease,
+) map[string]any {
+	name := cast.ToString(item[`name`])
+	codePath := cast.ToString(item[`code_path`])
+	command := p_shell.NewCommand()
+	command.Cd(codePath)
+	command.Echo(`当前分支：`)
+	command.GitShowBranch()
+	command.Echo(`远程分支：`)
+	command.GitShowOriginBranch()
+
+	runner, cliErr := factory(sshConfig)
+	if cliErr != nil {
+		pushTableLine(name, codePath, cliErr.Error(), ``, ``, writeSummary)
+		return map[string]any{
+			`name`:         name,
+			`local_branch`: cliErr.Error(),
+		}
+	}
+	defer func() {
+		runner.Close()
+		release()
+	}()
+
+	result, getErr := runner.RunCommandOnce(command.GetCommand().ToStr())
+	if getErr != nil {
+		pushTableLine(name, codePath, getErr.Error(), ``, ``, writeSummary)
+		return map[string]any{
+			`name`:         name,
+			`local_branch`: getErr.Error(),
+		}
+	}
+
+	localBranch, remoteBranch := parseGitGroupBranchOutput(name, result)
+	pushTableLine(name, codePath, localBranch, remoteBranch, ``, writeSummary)
+	return map[string]any{
+		`name`:          name,
+		`local_branch`:  localBranch,
+		`remote_branch`: remoteBranch,
+	}
+}
+
+// parseGitGroupBranchOutput 解析分支查询输出中的本地/远程分支名称。
+// parseGitGroupBranchOutput extracts local and remote branch names from one-shot command output.
+func parseGitGroupBranchOutput(name string, result string) (string, string) {
+	// 中文注释：一次性 SSH 输出不存在交互式终端 prompt，只需清理终端控制字符并按标签提取。
+	// English comment: One-shot SSH output has no terminal prompt state; clean terminal chars and parse labels.
+	ret := p_common.TBaseClient.FilterTerminalChars(result)
+
+	splitRet := strings.Split(ret, "\n")
+	localBranch := `-`
+	remoteBranch := `-`
+	for indexSplit, split := range splitRet {
+		if split == `当前分支：` && len(splitRet) > indexSplit+1 {
+			localBranch = splitRet[indexSplit+1]
+		}
+		if split == `远程分支：` && len(splitRet) > indexSplit+1 {
+			remoteBranch = splitRet[indexSplit+1]
+		}
+	}
+	gstool.FmtPrintlnLogTime(`%s 运行结果 %#v`, name, splitRet)
+	gstool.FmtPrintlnLogTime(`%s 结果 本地：%s 远程：%s`, name, localBranch, remoteBranch)
+	return localBranch, remoteBranch
+}
+
 // 查询某个组当前的git分支和使用情况
 func GitGroupBranchList(c *gin.Context) {
 	reqMap := make(map[string]interface{})
@@ -568,12 +731,14 @@ func GitGroupBranchList(c *gin.Context) {
 	totalCount := len(gitList)
 	gstool.FmtPrintlnLogTime(`本次查询仓库数量%d`, totalCount)
 	summaryLines := make([]string, 0, totalCount+4)
-	summaryLines = append(summaryLines, fmt.Sprintf("### Git分组 `%s` 分支总览", cast.ToString(groupInfo[`name`])))
-	summaryLines = append(summaryLines, "")
+	writeSummary("\n" + fmt.Sprintf("### Git分组 `%s` 分支总览", cast.ToString(groupInfo[`name`])))
+	writeSummary(fmt.Sprintf("本次查询仓库数量 %d", totalCount))
+
 	summaryLines = append(summaryLines, "| 名称 | 路径 | 当前分支 | 远程分支 |")
 	summaryLines = append(summaryLines, "| --- | --- | --- | --- | ")
 	writeSummary("\n" + strings.Join(summaryLines, "\n") + "\n")
-	//初始化5个连接 以第一个的ssh作为基准
+	// 中文注释：同组仓库共用一个 SSH 配置，但每个仓库查询都重新建连。
+	// English comment: Repositories in the group share one SSH config, but each query uses a fresh connection.
 	sshId := gitList[0][`ssh_id`]
 	sshConfig, sshErr := common.DbMain.GetSshConfig(sshId)
 	if sshErr != nil || len(sshConfig) == 0 {
@@ -585,94 +750,11 @@ func GitGroupBranchList(c *gin.Context) {
 		})
 		return
 	}
-	//构建连接池
-	pool := p_shell.NewShellPoolWithConfig(`git_group_`, sshConfig, p_shell.PoolConfig{
-		PoolSize: totalCount,
-		CoolDown: time.Second * 5,
-	}, func(sshConfig map[string]any, shellClientId string) (*gsssh.SshTerminal, error) {
-		return component.ShellClient.GetClient(sshConfig, shellClientId, nil, nil, nil, nil)
-	}, func(shellClientId string) {
-		component.ShellClient.RmClient(shellClientId)
-	})
-	task := gstask.NewTask()
-	for _, item := range gitList {
-		name := cast.ToString(item[`name`])
-		codePath := cast.ToString(item[`code_path`])
-		task.Add(gstask.CallbackFunc{
-			Timeout: time.Second * 30,
-			Func: func() *gstask.Result {
-				command := p_shell.NewCommand()
-				command.Cd(codePath)
-				command.Echo(`当前分支：`)
-				command.GitShowBranch()
-				command.Echo(`远程分支：`)
-				command.GitShowOriginBranch()
-				//获取到连接
-				client, index, cliErr := pool.GetOne(time.Second * 60)
-				if cliErr != nil {
-					pushTableLine(name, codePath, cliErr.Error(), ``, ``, writeSummary)
-					return &gstask.Result{
-						Result: map[string]any{
-							`name`:         name,
-							`local_branch`: cliErr.Error(),
-						},
-					}
-				}
-				result, getErr := client.RunCommandWait(command.GetCommand().ToStr(), time.Second*4)
-				if getErr != nil {
-					pool.ReleaseByIndex(index)
-					pushTableLine(name, codePath, getErr.Error(), ``, ``, writeSummary)
-					return &gstask.Result{
-						Result: map[string]any{
-							`name`:         name,
-							`local_branch`: getErr.Error(),
-						},
-					}
-				}
-				//过滤掉执行的命令
-				ret := client.FilterCommand(result)
-				//过滤掉结尾标记
-				ret = client.FilterEndTip(ret)
-				//过滤掉特殊字符
-				ret = p_common.TBaseClient.FilterTerminalChars(ret)
-				//解析出本地和远程分支
-				splitRet := strings.Split(ret, "\n")
-				localBranch := `-`
-				remoteBranch := `-`
-				for indexSplit, split := range splitRet {
-					if split == `当前分支：` {
-						if len(splitRet) > indexSplit+1 {
-							localBranch = splitRet[indexSplit+1]
-						}
-					}
-					if split == `远程分支：` {
-						if len(splitRet) > indexSplit+1 {
-							remoteBranch = splitRet[indexSplit+1]
-						}
-					}
-				}
-				gstool.FmtPrintlnLogTime(`%s 运行结果 %#v`, name, splitRet)
-				gstool.FmtPrintlnLogTime(`%s 结果 本地：%s 远程：%s`, name, localBranch, remoteBranch)
-				//释放连接
-				pool.ReleaseByIndex(index)
-				//推送到前端
-				pushTableLine(name, codePath, localBranch, remoteBranch, ``, writeSummary)
-				return &gstask.Result{
-					Result: map[string]any{
-						`name`:          name,
-						`local_branch`:  localBranch,
-						`remote_branch`: remoteBranch,
-					},
-				}
-
-			},
-		})
-	}
-	_ = task.RunAll()
-	pool.Close()
+	resultList := runGitGroupBranchQueries(gitList, sshConfig, writeSummary, nil, nil)
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`git_group_id`:  gitGroupId,
 		`group_name`:    cast.ToString(groupInfo[`name`]),
+		`list`:          resultList,
 		`summary_lines`: summaryLines,
 	})
 	return
