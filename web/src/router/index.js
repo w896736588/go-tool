@@ -2,7 +2,7 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 import Home from '@/components/Home'
 import fullPageShellOut from '@/components/shellout/ShellOut.vue'
 
-export default createRouter({
+const router = createRouter({
   history: createWebHashHistory(),
   routes: [
     {
@@ -144,3 +144,13 @@ export default createRouter({
     },
   ],
 })
+
+// 全局导航守卫：根据当前路由名称动态设置页面标题
+router.afterEach((to) => {
+  const title = to.name || to.path
+  if (title) {
+    document.title = title
+  }
+})
+
+export default router
