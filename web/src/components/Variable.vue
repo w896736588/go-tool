@@ -317,7 +317,6 @@
   overflow: hidden;
   padding: 10px;
   background: #fafaf7;
-  border: 1px solid #e6e8de;
   border-radius: 12px;
   box-sizing: border-box;
   --el-color-primary: #6fa56f;

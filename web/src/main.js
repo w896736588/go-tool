@@ -10,8 +10,16 @@ import '../src/css/el_textarea.css'
 import '../src/css/pretty_json.css'
 import '../src/css/markdown.css'
 import '../src/css/api_module_unified.css'
+import { config as configureMdEditor } from 'md-editor-v3'
 app.use(ElementUI)
 import { ElMessage } from 'element-plus'
+const { buildMdEditorCodeMirrorExtensions } = require('./utils/md_editor_config.cjs')
+
+configureMdEditor({
+  codeMirrorExtensions(extensions) {
+    return buildMdEditorCodeMirrorExtensions(extensions)
+  },
+})
 
 
 //自定义通用方法
