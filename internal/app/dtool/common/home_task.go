@@ -111,7 +111,6 @@ func (h *CSqlite) HomeTaskArchiveToggle(id, isArchived int) (map[string]any, err
 	}, map[string]any{
 		`is_archived`:      isArchived,
 		`last_operated_at`: now,
-		`update_time`:      now,
 	}).Exec()
 	if err != nil {
 		return nil, err

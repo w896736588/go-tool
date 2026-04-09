@@ -4,7 +4,7 @@ const WHEEL_SCROLL_DIRECTION_DOWN = 1
 // SCROLL_POSITION_MIN 表示滚动容器顶部位置。
 const SCROLL_POSITION_MIN = 0
 // HOME_DASHBOARD_PAGE_SWITCH_HOT_ZONE_WIDTH 表示首页最右侧允许强制翻页的热区宽度。
-const HOME_DASHBOARD_PAGE_SWITCH_HOT_ZONE_WIDTH = 200
+const HOME_DASHBOARD_PAGE_SWITCH_HOT_ZONE_WIDTH = 300
 
 // getParentElement 兼容 Element 与普通节点，统一向上查找父元素。
 function getParentElement(node) {

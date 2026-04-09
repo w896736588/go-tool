@@ -24,7 +24,7 @@
           <el-input
             v-model="searchQuery"
             clearable
-            placeholder="搜索标题、正文或标签，空格分隔多个关键词，回车打开结果页"
+            :placeholder="searchPlaceholder"
             @keydown.enter.prevent="submitSearch"
             @clear="handleSearchClear"
           >
@@ -32,6 +32,12 @@
               <el-icon><Search /></el-icon>
             </template>
           </el-input>
+        </div>
+        <div class="search-mode-row">
+          <el-radio-group v-model="searchMode" size="small">
+            <el-radio-button label="keyword">全文检索</el-radio-button>
+            <el-radio-button label="semantic">智能检索</el-radio-button>
+          </el-radio-group>
         </div>
         <div class="tag-filter-row">
           <div class="tag-filter-head">
@@ -158,7 +164,7 @@
                   <div class="search-result-desc">
                     <span v-if="submittedSearchQuery">关键词：{{ submittedSearchQuery }}</span>
                     <span v-if="submittedSelectedTags.length > 0">标签：{{ submittedSelectedTags.join('、') }}</span>
-                    <span>模式：关键词</span>
+                    <span>模式：{{ submittedSearchMode === 'semantic' ? '智能检索' : '全文检索' }}</span>
                     <span>命中：{{ searchResults.length }}</span>
                   </div>
                 </div>
@@ -351,6 +357,8 @@ const TRASH_TAB_NAME = 'trash'
 const HOME_TAB_NAME = 'home'
 // KEYWORD_SEARCH_MODE 统一定义关键词搜索模式值，避免散落硬编码。
 const KEYWORD_SEARCH_MODE = 'keyword'
+// SEMANTIC_SEARCH_MODE 统一定义语义搜索模式值，避免散落硬编码。
+const SEMANTIC_SEARCH_MODE = 'semantic'
 
 export default {
   name: 'MemoryFragment',
@@ -463,6 +471,13 @@ export default {
         return this.formatRelativeTime(this.lastPushTime, 'past')
       }
       return this.lastPushTimeDesc || '-'
+    },
+    // searchPlaceholder 根据搜索模式返回对应的输入框提示文本。
+    searchPlaceholder() {
+      if (this.searchMode === 'semantic') {
+        return '输入想要查询的内容，自然语言描述，回车打开结果页'
+      }
+      return '输入关键词，多个关键词使用空格分隔，回车打开结果页'
     }
   },
   mounted() {
@@ -1375,6 +1390,27 @@ export default {
 .sidebar-search-card .tag-filter-row {
   flex-direction: column;
   align-items: stretch;
+}
+
+.sidebar-search-card .search-mode-row {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-start;
+}
+
+/* 搜索模式切换按钮自定义样式 - 绿色主题 */
+.search-mode-row :deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) {
+  background-color: #5f7d56;
+  border-color: #5f7d56;
+  box-shadow: -1px 0 0 0 #5f7d56;
+}
+
+.search-mode-row :deep(.el-radio-button__inner:hover) {
+  color: #5f7d56;
+}
+
+.search-mode-row :deep(.el-radio-button__original-radio:checked + .el-radio-button__inner:hover) {
+  color: #fff;
 }
 
 .sidebar-search-card .tag-filter-label {
