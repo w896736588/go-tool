@@ -4,7 +4,7 @@ import (
 	"dev_tool/internal/app/dtool/common"
 	"dev_tool/internal/app/dtool/component"
 	"dev_tool/internal/app/dtool/define"
-	"dev_tool/internal/pkg/p_sse"
+	"dev_tool/internal/pkg/p_define"
 	"strings"
 	"time"
 
@@ -113,6 +113,7 @@ func MemoryFragmentSave(c *gin.Context) {
 		return
 	}
 	component.MemoryRuntime.ScheduleSync()
+	broadcastMemoryFragmentUpsert(info)
 	gsgin.GinResponseSuccess(c, ``, info)
 }
 
@@ -135,6 +136,7 @@ func MemoryFragmentDelete(c *gin.Context) {
 		return
 	}
 	component.MemoryRuntime.ScheduleSync()
+	broadcastMemoryFragmentDelete(fragmentID)
 	gsgin.GinResponseSuccess(c, ``, nil)
 }
 
@@ -173,6 +175,9 @@ func MemoryFragmentRestore(c *gin.Context) {
 		return
 	}
 	component.MemoryRuntime.ScheduleSync()
+	if info, infoErr := memoryDB.MemoryFragmentInfo(fragmentID); infoErr == nil {
+		broadcastMemoryFragmentUpsert(info)
+	}
 	gsgin.GinResponseSuccess(c, ``, nil)
 }
 
@@ -194,7 +199,67 @@ func MemoryFragmentHardDelete(c *gin.Context) {
 		return
 	}
 	component.MemoryRuntime.ScheduleSync()
+	broadcastMemoryFragmentDelete(fragmentID)
 	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
+const (
+	// memoryFragmentSseActionUpsert 表示知识片段新增或更新。 // memoryFragmentSseActionUpsert marks a fragment upsert event.
+	memoryFragmentSseActionUpsert = `upsert`
+	// memoryFragmentSseActionDelete 表示知识片段删除或移出当前列表。 // memoryFragmentSseActionDelete marks a fragment delete event.
+	memoryFragmentSseActionDelete = `delete`
+	// memoryFragmentSseStatusPrefix 是 gsgin.SseStatus 返回值里的 client_id 前缀。 // memoryFragmentSseStatusPrefix matches the client-id prefix returned by gsgin.SseStatus.
+	memoryFragmentSseStatusPrefix = `ClientId:`
+)
+
+// broadcastMemoryFragmentUpsert 广播知识片段新增或更新事件。 // broadcastMemoryFragmentUpsert broadcasts a fragment upsert event.
+func broadcastMemoryFragmentUpsert(fragment map[string]any) {
+	fragmentID := strings.TrimSpace(cast.ToString(fragment[`id`]))
+	if fragmentID == `` {
+		fragmentID = strings.TrimSpace(cast.ToString(fragment[`file_id`]))
+	}
+	if fragmentID == `` {
+		return
+	}
+	broadcastMemoryFragmentEvent(memoryFragmentSseActionUpsert, fragmentID, fragment)
+}
+
+// broadcastMemoryFragmentDelete 广播知识片段删除事件。 // broadcastMemoryFragmentDelete broadcasts a fragment delete event.
+func broadcastMemoryFragmentDelete(fragmentID string) {
+	normalizedID := strings.TrimSpace(fragmentID)
+	if normalizedID == `` || normalizedID == `0` {
+		return
+	}
+	broadcastMemoryFragmentEvent(memoryFragmentSseActionDelete, normalizedID, nil)
+}
+
+// broadcastMemoryFragmentEvent 把知识片段变更广播到所有普通 SSE 客户端。 // broadcastMemoryFragmentEvent pushes fragment changes to all normal SSE clients.
+func broadcastMemoryFragmentEvent(action, fragmentID string, fragment map[string]any) {
+	payload := map[string]any{
+		`action`:      strings.TrimSpace(action),
+		`fragment_id`: strings.TrimSpace(fragmentID),
+	}
+	if fragment != nil {
+		payload[`fragment`] = fragment
+	}
+	msg := gstool.JsonEncode(p_define.SseData{
+		SseDistributeId: define.SseMemoryFragmentUpdates,
+		Data:            payload,
+		Type:            p_define.SseContentTypeMsg,
+	})
+	// 中文注释：这里只复用全局普通 SSE 通道，避免为知识片段同步再单独维护一套长连接。
+	// English comment: Reuse the shared SSE channel so fragment sync does not require a second long-lived connection.
+	for _, item := range gsgin.SseStatus() {
+		clientID := strings.TrimSpace(strings.TrimPrefix(item, memoryFragmentSseStatusPrefix))
+		if clientID == `` || clientID == item {
+			continue
+		}
+		sse := gsgin.SseGetByClientId(clientID)
+		if sse == nil {
+			continue
+		}
+		_ = sse.SendToChan(msg)
+	}
 }
 
 // MemoryFragmentHistoryList 查询知识片段历史记录。
@@ -267,7 +332,7 @@ func MemoryFragmentSearch(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, ``, list)
 }
 
-// MemoryFragmentOrganize 调用 AI 对当前片段内容进行整理。
+// MemoryFragmentOrganize 创建知识片段整理异步任务。 // MemoryFragmentOrganize creates an async memory fragment arrange task.
 func MemoryFragmentOrganize(c *gin.Context) {
 	_, ok := memoryDBOrResponse(c)
 	if !ok {
@@ -280,33 +345,36 @@ func MemoryFragmentOrganize(c *gin.Context) {
 		gsgin.GinResponseError(c, `片段内容不能为空`, nil)
 		return
 	}
-	modelID, prompt, err := memoryArrangeConfig()
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
+	fragmentID := strings.TrimSpace(cast.ToString(dataMap[`id`]))
 	title := strings.TrimSpace(cast.ToString(dataMap[`title`]))
-	userPrompt := buildMemoryArrangeUserPrompt(prompt, title, content)
-	sseDistributeID := strings.TrimSpace(cast.ToString(dataMap[`sse_distribute_id`]))
-	sseShell := &p_sse.SseShell{
-		Sse:             gsgin.SseGetByClientId(c.GetHeader(`SseClientId`)),
-		SseDistributeId: sseDistributeID,
-	}
-	result, modelInfo, err := common.DbMain.AIChatStreamByModel(modelID, memoryArrangeSystemPrompt(), userPrompt, func(chunk string) {
-		if strings.TrimSpace(sseDistributeID) == `` {
-			return
-		}
-		sseShell.Send(chunk)
-	})
+	taskInfo, err := createAsyncTask(
+		asyncTaskTypeMemoryFragmentArrange,
+		`整理知识片段 `+title,
+		fragmentID,
+		map[string]any{
+			`fragment_id`: fragmentID,
+			`title`:       title,
+			`content`:     content,
+		},
+		func(taskID int) {
+			runAsyncTaskAndPersistResult(taskID, func() (map[string]any, error) {
+				resultMap, buildErr := buildAsyncMemoryArrangeResult(title, content)
+				if buildErr != nil {
+					return nil, buildErr
+				}
+				resultMap[`fragment_id`] = fragmentID
+				return resultMap, nil
+			})
+		},
+	)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
-		`content`:  stripMarkdownCodeFence(result),
-		`prompt`:   prompt,
-		`model`:    cast.ToString(modelInfo[`model`]),
-		`model_id`: modelID,
+		`task_id`:     taskInfo[`id`],
+		`task_status`: taskInfo[`task_status`],
+		`task_type`:   taskInfo[`task_type`],
 	})
 }
 

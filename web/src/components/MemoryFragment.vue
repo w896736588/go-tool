@@ -51,12 +51,13 @@
       <el-scrollbar class="sidebar-scroll">
         <button
           v-for="item in fragmentList"
-          :key="item.id"
+          :key="sidebarItemKey(item)"
           :class="[
             'sidebar-item',
             fragmentFreshnessClass(item),
             {
               active: activeFragmentId === item.id,
+              'sidebar-item--dirty': isFragmentDirty(item.id),
               'save-success': !!saveFeedbackMap[item.id],
             }
           ]"
@@ -275,6 +276,7 @@ import MemoryHistoryDialog from '@/components/memory/MemoryHistoryDialog.vue'
 import MemorySettingPage from '@/components/set/memory.vue'
 import GitActionButton from '@/components/base/GitActionButton.vue'
 import SettingsDialog from '@/components/base/SettingsDialog.vue'
+import sseDistribute from '@/utils/base/sse_distribute'
 const {
   isMemoryFragmentTabName,
   activateMemorySaveFeedback,
@@ -293,6 +295,12 @@ const TRASH_TAB_NAME = 'trash'
 const KEYWORD_SEARCH_MODE = 'keyword'
 // SEMANTIC_SEARCH_MODE 统一定义语义搜索模式值，避免散落硬编码。
 const SEMANTIC_SEARCH_MODE = 'semantic'
+// MEMORY_FRAGMENT_UPDATES_DISTRIBUTE_ID 统一定义知识片段同步推送通道。
+const MEMORY_FRAGMENT_UPDATES_DISTRIBUTE_ID = 'memory_fragment_updates'
+// MEMORY_FRAGMENT_SSE_ACTION_UPSERT 表示片段新增或更新。
+const MEMORY_FRAGMENT_SSE_ACTION_UPSERT = 'upsert'
+// MEMORY_FRAGMENT_SSE_ACTION_DELETE 表示片段删除。
+const MEMORY_FRAGMENT_SSE_ACTION_DELETE = 'delete'
 
 export default {
   name: 'MemoryFragment',
@@ -388,22 +396,26 @@ export default {
   },
   mounted() {
     this.bindGlobalSaveShortcut()
+    this.registerMemoryFragmentUpdatesSse()
     this.loadMemoryStatus()
     this.startStatusPolling()
     this.tryOpenRouteFragmentOnEntry()
   },
   activated() {
     this.bindGlobalSaveShortcut()
+    this.registerMemoryFragmentUpdatesSse()
     this.startStatusPolling()
     this.loadMemoryStatus()
     this.tryOpenRouteFragmentOnEntry()
   },
   deactivated() {
     this.unbindGlobalSaveShortcut()
+    this.unregisterMemoryFragmentUpdatesSse()
     this.stopStatusPolling()
   },
   beforeUnmount() {
     this.unbindGlobalSaveShortcut()
+    this.unregisterMemoryFragmentUpdatesSse()
     this.stopStatusPolling()
     this.clearSaveFeedbackTimers()
   },
@@ -414,6 +426,63 @@ export default {
     },
   },
   methods: {
+    // registerMemoryFragmentUpdatesSse 注册知识片段实时同步推送。
+    registerMemoryFragmentUpdatesSse() {
+      sseDistribute.RegisterReceive(MEMORY_FRAGMENT_UPDATES_DISTRIBUTE_ID, (data) => {
+        this.handleMemoryFragmentSseUpdate(data)
+      })
+    },
+    // unregisterMemoryFragmentUpdatesSse 清理知识片段同步推送监听。
+    unregisterMemoryFragmentUpdatesSse() {
+      sseDistribute.UnRegisterReceive(MEMORY_FRAGMENT_UPDATES_DISTRIBUTE_ID)
+    },
+    // handleMemoryFragmentSseUpdate 处理来自其他页面或异步任务的知识片段变更。
+    handleMemoryFragmentSseUpdate(payload) {
+      const fragmentId = this.normalizeFragmentId(payload?.fragment_id || payload?.fragment?.id || payload?.fragment?.file_id)
+      const action = String(payload?.action || '').trim()
+      this.loadFragmentList()
+      this.loadTrashList()
+      this.rerunSubmittedSearch()
+      if (!fragmentId) {
+        return
+      }
+      if (action === MEMORY_FRAGMENT_SSE_ACTION_DELETE) {
+        this.handleRemoteDeletedFragment(fragmentId)
+        return
+      }
+      if (action !== MEMORY_FRAGMENT_SSE_ACTION_UPSERT) {
+        return
+      }
+      this.handleRemoteUpsertFragment(fragmentId, payload?.fragment || null)
+    },
+    // handleRemoteDeletedFragment 同步处理远端删除的片段。
+    handleRemoteDeletedFragment(fragmentId) {
+      this.fragmentTabs = this.fragmentTabs.filter(item => this.normalizeFragmentId(item.fragment.id) !== fragmentId)
+      if (this.activeTab === `fragment-${fragmentId}`) {
+        this.activeTab = ''
+        this.ensureDefaultFragmentTab()
+      }
+    },
+    // handleRemoteUpsertFragment 在安全前提下同步远端更新的片段内容。
+    handleRemoteUpsertFragment(fragmentId, fragment) {
+      const targetTab = this.fragmentTabs.find(item => this.normalizeFragmentId(item.fragment.id) === fragmentId)
+      if (targetTab && targetTab.dirty) {
+        // 中文注释：本地有未保存改动时只提醒，不直接覆盖，避免把用户草稿冲掉。
+        // English comment: Warn instead of overwriting when the local editor still has unsaved draft changes.
+        this.$helperNotify.warning('当前片段已被其他操作更新，请先处理本地未保存内容')
+        return
+      }
+      if (fragment && typeof fragment === 'object' && Object.keys(fragment).length > 0) {
+        this.upsertFragmentTab(fragment, false)
+        return
+      }
+      MemoryFragmentApi.MemoryFragmentInfo(fragmentId, (response) => {
+        if (!(response && response.ErrCode === 0 && response.Data)) {
+          return
+        }
+        this.upsertFragmentTab(response.Data, false)
+      })
+    },
     bindGlobalSaveShortcut() {
       if (this.globalSaveShortcutBound) {
         return
@@ -611,6 +680,23 @@ export default {
         return 'is-updated-7d'
       }
       return 'is-updated-older'
+    },
+    // sidebarItemKey 为左侧列表项构造稳定且可重启动画的 key。
+    // sidebarItemKey builds a stable sidebar key while allowing save-feedback animation to replay on each save.
+    sidebarItemKey(item) {
+      const normalizedFragmentId = this.normalizeFragmentId(item && (item.id || item.file_id))
+      const feedback = normalizedFragmentId ? this.saveFeedbackMap[normalizedFragmentId] : null
+      const feedbackStartedAt = feedback && feedback.startedAt ? Number(feedback.startedAt) : 0
+      return `${normalizedFragmentId || 'fragment'}-${feedbackStartedAt}`
+    },
+    // isFragmentDirty 判断左侧片段是否存在未保存改动。
+    // isFragmentDirty checks whether the sidebar fragment currently has unsaved edits.
+    isFragmentDirty(fragmentId) {
+      const normalizedFragmentId = this.normalizeFragmentId(fragmentId)
+      if (!normalizedFragmentId) {
+        return false
+      }
+      return this.fragmentTabs.some(item => item.dirty && item.fragment.id === normalizedFragmentId)
     },
     // loadTrashList 加载回收站片段列表。
     loadTrashList() {
@@ -1215,6 +1301,12 @@ export default {
   background: #fcfdfb;
 }
 
+.sidebar-item.sidebar-item--dirty {
+  border-color: rgba(224, 191, 146, 0.78);
+  background: linear-gradient(180deg, #fdf7ef 0%, #f7eee1 100%);
+  box-shadow: inset 0 -1px 0 rgba(241, 214, 179, 0.52);
+}
+
 .sidebar-item::before {
   content: '';
   position: absolute;
@@ -1255,11 +1347,22 @@ export default {
   background: #f5faef;
 }
 
+.sidebar-item.sidebar-item--dirty:hover {
+  border-color: rgba(222, 182, 128, 0.88);
+  background: linear-gradient(180deg, #fdf6ec 0%, #f6ead9 100%);
+}
+
 .sidebar-item.active {
   border-color: #93b88a;
   background: linear-gradient(135deg, #f1f8e8 0%, #e6f3da 100%);
   box-shadow: 0 14px 26px rgba(83, 122, 72, 0.16);
   transform: translateX(4px);
+}
+
+.sidebar-item.sidebar-item--dirty.active {
+  border-color: rgba(213, 170, 112, 0.92);
+  background: linear-gradient(135deg, #fdf7ef 0%, #f6ead7 100%);
+  box-shadow: 0 14px 26px rgba(181, 140, 89, 0.16);
 }
 
 .sidebar-item.active::after {
@@ -1273,6 +1376,11 @@ export default {
   background: linear-gradient(180deg, #5f9754 0%, #78b66c 100%);
   box-shadow: 0 0 0 1px rgba(95, 151, 84, 0.08);
   z-index: 1;
+}
+
+.sidebar-item.sidebar-item--dirty.active::after {
+  background: linear-gradient(180deg, #d79b53 0%, #e6b77a 100%);
+  box-shadow: 0 0 0 1px rgba(215, 155, 83, 0.08);
 }
 
 .sidebar-item-main {

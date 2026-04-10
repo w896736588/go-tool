@@ -1,7 +1,12 @@
 <template>
   <div class="memory-editor" @keydown.ctrl.s.prevent="handleSave">
     <div class="editor-body">
-      <div class="editor-body-toolbar">
+      <div
+        :class="[
+          'editor-body-toolbar',
+          dirty ? 'editor-body-toolbar--dirty' : 'editor-body-toolbar--saved',
+        ]"
+      >
         <div class="editor-body-toolbar-main">
           <div class="editor-body-toolbar-top">
             <div class="editor-body-toolbar-left">
@@ -11,7 +16,6 @@
                 class="title-input editor-toolbar-title-input"
                 :class="{ 'title-input--search-hit': titleSearchMatchCount > 0 }"
                 :placeholder="titlePlaceholderText"
-                @input="handleFormChange"
               />
               <div class="editor-title-inline-meta">
                 <el-tag
@@ -143,8 +147,6 @@
               preview-theme="github"
               :toolbars="toolbars"
               :style="editorContentStyle"
-              @onChange="handleFormChange"
-              @onBlur="handleFormChange"
             />
           </div>
           <aside v-if="hasOutline" class="preview-outline">
@@ -358,6 +360,16 @@ export default {
     fragment: {
       type: Object,
       required: true,
+    },
+    // draftFragment 统一监听草稿变化，确保父组件与左侧列表同步未保存状态。
+    // draftFragment keeps parent state synced so the sidebar dirty color updates on the first edit.
+    draftFragment: {
+      deep: true,
+      handler() {
+        this.$nextTick(() => {
+          this.handleFormChange()
+        })
+      },
     },
     savedFragment: {
       type: Object,
@@ -1161,46 +1173,22 @@ export default {
         this.$helperNotify.error(EMPTY_CONTENT_ERROR_TEXT)
         return
       }
-      this.unregisterOrganizeSse()
-      this.organizeResult = {
-        content: '',
-        model: '',
-        prompt: '',
-      }
-      this.organizeDialogVisible = true
-      this.organizeSseDistributeId = `${base.GenerateId('memory_organize')}_${this.draftFragment.id || 0}`
-      sseDistribute.RegisterReceive(this.organizeSseDistributeId, (msg) => {
-        const chunk = typeof msg === 'string' ? msg : String(msg || '')
-        if (chunk === '') {
-          return
-        }
-        this.organizeResult.content += chunk
-      })
       this.organizing = true
       MemoryFragmentApi.MemoryFragmentOrganize(
         this.draftFragment.id,
         this.draftFragment.title,
         this.draftFragment.content,
         this.draftFragment.tags || [],
-        this.organizeSseDistributeId,
+        '',
         (response) => {
           this.organizing = false
-          this.unregisterOrganizeSse()
           if (response.ErrCode !== 0 || !response.Data) {
             if (response.ErrMsg) {
               this.$helperNotify.error(response.ErrMsg)
             }
-            if (!this.organizeResult.content) {
-              this.organizeDialogVisible = false
-            }
             return
           }
-          this.organizeResult = {
-            content: response.Data.content || this.organizeResult.content || '',
-            model: response.Data.model || '',
-            prompt: response.Data.prompt || '',
-          }
-          this.organizeDialogVisible = true
+          this.$helperNotify.success('AI 整理任务已加入异步任务列表')
         }
       )
     },
@@ -1401,6 +1389,19 @@ export default {
   padding: 12px 16px;
   border-bottom: 1px solid rgba(226, 232, 216, 0.9);
   background: #f8faf5;
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.editor-body-toolbar--dirty {
+  background: linear-gradient(180deg, #fdf7ef 0%, #f7eee1 100%);
+  border-bottom-color: rgba(224, 191, 146, 0.78);
+  box-shadow: inset 0 -1px 0 rgba(241, 214, 179, 0.52);
+}
+
+.editor-body-toolbar--saved {
+  background: linear-gradient(180deg, #f6faf2 0%, #edf5e7 100%);
+  border-bottom-color: rgba(196, 217, 186, 0.9);
+  box-shadow: inset 0 -1px 0 rgba(210, 229, 201, 0.54);
 }
 
 .editor-body-toolbar-main {

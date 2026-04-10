@@ -78,7 +78,6 @@ function MemoryFragmentOrganize(id, title, content, tags, sseDistributeId, callB
     id: id,
     title: title,
     content: content,
-    sse_distribute_id: sseDistributeId,
   }, callBack)
 }
 

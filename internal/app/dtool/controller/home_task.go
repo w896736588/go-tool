@@ -85,10 +85,9 @@ func HomeTaskDelete(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, ``, nil)
 }
 
-// HomeTaskDailyReportGenerate 生成首页工作日报并写入记忆库。
+// HomeTaskDailyReportGenerate 创建首页工作日报异步任务。 // HomeTaskDailyReportGenerate creates an async home-task daily report task.
 func HomeTaskDailyReportGenerate(c *gin.Context) {
-	memoryDB, ok := memoryDBOrResponse(c)
-	if !ok {
+	if _, ok := memoryDBOrResponse(c); !ok {
 		return
 	}
 	activeTaskList, err := common.DbMain.HomeTaskList(define.HomeTaskArchivedNo)
@@ -102,38 +101,33 @@ func HomeTaskDailyReportGenerate(c *gin.Context) {
 		return
 	}
 	taskList := mergeHomeTaskDailyReportTaskList(activeTaskList, archivedTaskList)
-	modelID, prompt, err := homeTaskDailyReportConfig()
-	if err != nil {
+	reportTime := time.Now().Unix()
+	if _, err = buildHomeTaskDailyReportTasksSnapshot(taskList); err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	reportTime := time.Now()
-	userPrompt, err := buildHomeTaskDailyReportUserPrompt(prompt, taskList, reportTime)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	result, modelInfo, err := common.DbMain.AIChatByModel(modelID, homeTaskDailyReportSystemPrompt(), userPrompt)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	memoryInfo, err := memoryDB.MemoryFragmentSave(
-		0,
-		buildHomeTaskDailyReportTitle(reportTime),
-		stripMarkdownCodeFence(result),
-		[]string{homeTaskDailyReportMemoryTag},
+	taskInfo, err := createAsyncTask(
+		asyncTaskTypeHomeTaskDailyReport,
+		buildHomeTaskDailyReportTitle(time.Unix(reportTime, 0)),
+		``,
+		map[string]any{
+			`report_time`: reportTime,
+			`task_count`:  len(taskList),
+		},
+		func(taskID int) {
+			runAsyncTaskAndPersistResult(taskID, func() (map[string]any, error) {
+				return buildAsyncHomeTaskDailyReportResult(taskList, reportTime)
+			})
+		},
 	)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	component.MemoryRuntime.ScheduleSync()
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
-		`memory_fragment`: memoryInfo,
-		`model_id`:        modelID,
-		`model`:           modelInfo[`model`],
-		`prompt`:          prompt,
+		`task_id`:     taskInfo[`id`],
+		`task_status`: taskInfo[`task_status`],
+		`task_type`:   taskInfo[`task_type`],
 	})
 }
 

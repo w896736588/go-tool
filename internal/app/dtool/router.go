@@ -266,6 +266,10 @@ func setMemoryFragment(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/MemoryFragmentTagList`, controller.MemoryFragmentTagList)
 	tGin.GinPost(`/api/MemoryFragmentSearch`, controller.MemoryFragmentSearch)
 	tGin.GinPost(`/api/MemoryFragmentOrganize`, controller.MemoryFragmentOrganize)
+	tGin.GinPost(`/api/AsyncTaskList`, controller.AsyncTaskList)
+	tGin.GinPost(`/api/AsyncTaskInfo`, controller.AsyncTaskInfo)
+	tGin.GinPost(`/api/AsyncTaskAction`, controller.AsyncTaskAction)
+	tGin.GinPost(`/api/AsyncTaskDelete`, controller.AsyncTaskDelete)
 }
 
 func homeTask(tGin *p_gin.Gin) {

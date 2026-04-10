@@ -14,6 +14,11 @@ import (
 	"github.com/spf13/cast"
 )
 
+const (
+	// aiChatRequestTimeout 统一限制 AI 普通与流式请求的最长等待时间为 5 分钟。 // aiChatRequestTimeout caps both standard and streaming AI requests at 5 minutes.
+	aiChatRequestTimeout = 5 * time.Minute
+)
+
 // AIChatByModel 使用模型发起一次 AI 请求。
 func (h *CSqlite) AIChatByModel(modelID int, systemPrompt, userPrompt string) (string, map[string]any, error) {
 	modelInfo, requestURL, apiKey, err := h.aiChatBuildRequest(modelID)
@@ -34,7 +39,7 @@ func (h *CSqlite) AIChatByModel(modelID int, systemPrompt, userPrompt string) (s
 	}
 	request.Header.Set(`Authorization`, `Bearer `+apiKey)
 	request.Header.Set(`Content-Type`, `application/json`)
-	client := &http.Client{Timeout: 120 * time.Second}
+	client := &http.Client{Timeout: aiChatRequestTimeout}
 	startTime := time.Now()
 	response, err := client.Do(request)
 	costTimeMs := time.Since(startTime).Milliseconds()
@@ -84,7 +89,7 @@ func (h *CSqlite) AIChatStreamByModel(modelID int, systemPrompt, userPrompt stri
 	}
 	request.Header.Set(`Authorization`, `Bearer `+apiKey)
 	request.Header.Set(`Content-Type`, `application/json`)
-	client := &http.Client{Timeout: 10 * time.Minute}
+	client := &http.Client{Timeout: aiChatRequestTimeout}
 	startTime := time.Now()
 	response, err := client.Do(request)
 	costTimeMs := time.Since(startTime).Milliseconds()

@@ -82,6 +82,18 @@
             <span class="footer-action__title">当前 SSH 连接数 {{ sshConnectionCount }}</span>
           </button>
         </div>
+        <button
+          type="button"
+          class="footer-action footer-action--sand async-task-entry"
+          :class="{ 'async-task-entry--running': hasRunningAsyncTask() }"
+          @click="openAsyncTaskDialog"
+        >
+          <span class="footer-action__title">
+            异步任务 {{ asyncTaskSummary.await_confirm_count || 0 }}/{{ asyncTaskSummary.running_count || 0 }}
+            <span v-if="hasRunningAsyncTask()" class="async-task-entry__spinner" aria-hidden="true"></span>
+          </span>
+          <span class="footer-action__meta">待处理/运行中</span>
+        </button>
         <pl-button v-if="loginInfo.dialog" size="small" @click="loginInfo.dialog = true">登录</pl-button>
       </div>
     </aside>
@@ -453,6 +465,106 @@
   </el-dialog>
 
   <el-dialog
+    v-model="asyncTaskDialogVisible"
+    title="异步任务"
+    width="78%"
+    top="6vh"
+    class="async-task-dialog"
+  >
+    <div class="async-task-toolbar">
+      <el-tag type="warning" effect="light">待处理 {{ asyncTaskSummary.await_confirm_count || 0 }}</el-tag>
+      <el-tag type="info" effect="light">运行中 {{ asyncTaskSummary.running_count || 0 }}</el-tag>
+      <el-tag effect="plain">列表 {{ asyncTaskList.length }}</el-tag>
+    </div>
+    <div class="async-task-layout">
+      <div v-loading="asyncTaskLoading" class="async-task-list">
+        <button
+          v-for="task in asyncTaskList"
+          :key="task.id"
+          type="button"
+          class="async-task-item"
+          :class="{ 'async-task-item--active': Number(asyncTaskSelectedId) === Number(task.id) }"
+          @click="selectAsyncTask(task)"
+        >
+          <div class="async-task-item__header">
+            <div class="async-task-item__title">{{ task.title || getAsyncTaskTypeText(task) }}</div>
+            <el-tag size="small" effect="light" :type="getAsyncTaskStatusTagType(task.task_status)">
+              {{ getAsyncTaskStatusText(task.task_status) }}
+            </el-tag>
+          </div>
+          <div class="async-task-item__meta">{{ getAsyncTaskTypeText(task) }}</div>
+          <div class="async-task-item__time">创建时间 {{ formatAsyncTaskTime(task.create_time) }}</div>
+        </button>
+        <div v-if="!asyncTaskLoading && asyncTaskList.length === 0" class="async-task-empty">
+          当前没有异步任务
+        </div>
+      </div>
+      <div class="async-task-detail">
+        <div v-if="!asyncTaskDetail.id" class="async-task-empty">
+          请选择左侧任务查看详情
+        </div>
+        <template v-else>
+          <div class="async-task-detail__header">
+            <div>
+              <div class="async-task-detail__title">{{ asyncTaskDetail.title || getAsyncTaskTypeText(asyncTaskDetail) }}</div>
+              <div class="async-task-detail__meta">
+                <span>{{ getAsyncTaskTypeText(asyncTaskDetail) }}</span>
+                <span>状态 {{ getAsyncTaskStatusText(asyncTaskDetail.task_status) }}</span>
+                <span>完成时间 {{ formatAsyncTaskTime(asyncTaskDetail.finish_time) }}</span>
+              </div>
+            </div>
+            <GitActionButton compact variant="danger" :loading="asyncTaskDeleting" @click="deleteAsyncTask(asyncTaskDetail)">
+              删除
+            </GitActionButton>
+          </div>
+          <div v-if="asyncTaskDetail.error_message" class="async-task-detail__error">
+            {{ asyncTaskDetail.error_message }}
+          </div>
+          <div v-if="asyncTaskDetail.task_type === ASYNC_TASK_TYPE_DAILY_REPORT" class="async-task-detail__content">
+            <div class="async-task-detail__section-title">日报预览</div>
+            <pre class="async-task-detail__pre">{{ asyncTaskDetail.result_payload_map?.markdown || '' }}</pre>
+          </div>
+          <div v-else-if="asyncTaskDetail.task_type === ASYNC_TASK_TYPE_MEMORY_ARRANGE" class="async-task-detail__content">
+            <div class="async-task-detail__section-title">正文差异</div>
+            <diff-markdown
+              :old-text="asyncTaskDetail.result_payload_map?.original_content || ''"
+              :new-text="asyncTaskDetail.result_payload_map?.arranged_content || ''"
+              title="正文差异"
+            />
+          </div>
+          <div class="async-task-detail__actions">
+            <GitActionButton
+              v-if="asyncTaskDetail.task_status === ASYNC_TASK_STATUS_AWAIT_CONFIRM && asyncTaskDetail.task_type === ASYNC_TASK_TYPE_DAILY_REPORT"
+              compact
+              :loading="asyncTaskActing"
+              @click="runAsyncTaskAction(ASYNC_TASK_ACTION_SAVE_DAILY_REPORT)"
+            >
+              保存为知识片段
+            </GitActionButton>
+            <GitActionButton
+              v-if="asyncTaskDetail.task_status === ASYNC_TASK_STATUS_AWAIT_CONFIRM && asyncTaskDetail.task_type === ASYNC_TASK_TYPE_MEMORY_ARRANGE"
+              compact
+              :loading="asyncTaskActing"
+              @click="runAsyncTaskAction(ASYNC_TASK_ACTION_OVERWRITE_MEMORY_FRAGMENT)"
+            >
+              覆盖原文
+            </GitActionButton>
+            <GitActionButton
+              v-if="asyncTaskDetail.task_status === ASYNC_TASK_STATUS_AWAIT_CONFIRM"
+              compact
+              variant="info"
+              :loading="asyncTaskActing"
+              @click="runAsyncTaskAction(ASYNC_TASK_ACTION_DISCARD)"
+            >
+              丢弃
+            </GitActionButton>
+          </div>
+        </template>
+      </div>
+    </div>
+  </el-dialog>
+
+  <el-dialog
     v-model="homeTaskDialogVisible"
     :title="homeTaskDialogTitle"
     width="920px"
@@ -554,6 +666,7 @@ import baseApi from '@/utils/base/base_api'
 import sshSet from '@/utils/base/ssh_set'
 import homeTaskApi from '@/utils/base/home_task'
 import memoryFragmentApi from '@/utils/base/memory_fragment'
+import asyncTaskApi from '@/utils/base/async_task'
 import sseDistribute from '@/utils/base/sse_distribute'
 const { mergeHomeTaskFragmentOptions } = require('@/utils/home_task_fragment_options.cjs')
 const {
@@ -566,6 +679,7 @@ import Markdown from '@/components/Markdown.vue'
 import GitActionButton from "@/components/base/GitActionButton.vue";
 import SettingsDialog from '@/components/base/SettingsDialog.vue'
 import HomeTaskReportSetting from '@/components/set/home_task_report.vue'
+import DiffMarkdown from '@/components/base/diff_markwodn.vue'
 import { 
   HomeFilled,
   Coin,
@@ -582,6 +696,8 @@ import {
 
 // SSH_CONNECTION_REFRESH_INTERVAL_MS 统一控制 SSH 连接轮询周期。
 const SSH_CONNECTION_REFRESH_INTERVAL_MS = 5000
+// ASYNC_TASK_REFRESH_INTERVAL_MS 统一控制异步任务轮询周期。
+const ASYNC_TASK_REFRESH_INTERVAL_MS = 5000
 // HOME_TASK_TAB_* 用于区分任务弹窗内的标签页。
 const HOME_TASK_TAB_ACTIVE = 'active'
 const HOME_TASK_TAB_ARCHIVED = 'archived'
@@ -619,8 +735,21 @@ const HOME_TASK_EDIT_BUTTON_TEXT = '编辑任务'
 // HOME_TASK_DAILY_REPORT_BUTTON_TEXT 统一定义日报生成按钮文案。
 const HOME_TASK_DAILY_REPORT_BUTTON_TEXT = 'AI 生成工作日报'
 // HOME_TASK_DAILY_REPORT_* 统一定义日报生成提示文案。
-const HOME_TASK_DAILY_REPORT_SUCCESS_MESSAGE = '工作日报已生成并保存到记忆'
+const HOME_TASK_DAILY_REPORT_SUCCESS_MESSAGE = '工作日报任务已加入异步任务列表'
 const HOME_TASK_DAILY_REPORT_FAILED_MESSAGE = '工作日报生成失败'
+// ASYNC_TASK_ACTION_* 统一定义异步任务动作常量。
+const ASYNC_TASK_ACTION_SAVE_DAILY_REPORT = 'save_daily_report'
+const ASYNC_TASK_ACTION_OVERWRITE_MEMORY_FRAGMENT = 'overwrite_memory_fragment'
+const ASYNC_TASK_ACTION_DISCARD = 'discard'
+// ASYNC_TASK_STATUS_* 统一定义异步任务状态常量。
+const ASYNC_TASK_STATUS_AWAIT_CONFIRM = 'await_confirm'
+const ASYNC_TASK_STATUS_RUNNING = 'running'
+const ASYNC_TASK_STATUS_FAILED = 'failed'
+const ASYNC_TASK_STATUS_CONFIRMED = 'confirmed'
+const ASYNC_TASK_STATUS_REJECTED = 'rejected'
+// ASYNC_TASK_TYPE_* 统一定义异步任务类型常量。
+const ASYNC_TASK_TYPE_DAILY_REPORT = 'home_task_daily_report'
+const ASYNC_TASK_TYPE_MEMORY_ARRANGE = 'memory_fragment_arrange'
 // HOME_TASK_ACTION_COMMAND_STATUS_PREFIX 标识状态切换指令前缀。
 const HOME_TASK_ACTION_COMMAND_STATUS_PREFIX = 'status:'
 // HOME_DASHBOARD_PAGE_* 标识首页双屏结构中的页索引。
@@ -699,6 +828,12 @@ export default {
       sshConnectionsDialogVisible: false,
       sshConnectionsLoading: false,
       sshConnectionTimer: null,
+      ASYNC_TASK_ACTION_SAVE_DAILY_REPORT,
+      ASYNC_TASK_ACTION_OVERWRITE_MEMORY_FRAGMENT,
+      ASYNC_TASK_ACTION_DISCARD,
+      ASYNC_TASK_STATUS_AWAIT_CONFIRM,
+      ASYNC_TASK_TYPE_DAILY_REPORT,
+      ASYNC_TASK_TYPE_MEMORY_ARRANGE,
       HOME_TASK_TAB_ACTIVE,
       HOME_TASK_TAB_ARCHIVED,
       HOME_TASK_ARCHIVED_NO,
@@ -732,6 +867,21 @@ export default {
       homeTaskEditFeedbackMap: {},
       homeTaskEditFeedbackTimers: {},
       homeTaskEditFeedbackDurationMs: 1000,
+      asyncTaskDialogVisible: false,
+      asyncTaskLoading: false,
+      asyncTaskActing: false,
+      asyncTaskDeleting: false,
+      asyncTaskTimer: null,
+      asyncTaskSelectedId: 0,
+      asyncTaskList: [],
+      asyncTaskDetail: {},
+      asyncTaskNotifiedStateMap: {},
+      asyncTaskNotificationPermissionRequested: false,
+      asyncTaskSummary: {
+        await_confirm_count: 0,
+        running_count: 0,
+        total: 0,
+      },
     }
   },
   computed: {
@@ -785,9 +935,15 @@ export default {
     sseDistribute.RegisterReceive('shell_connections', function(data, type, distributeId) {
       _that.handleSshConnectionsUpdate(data)
     })
+    sseDistribute.RegisterReceive('async_tasks', function() {
+      _that.loadAsyncTaskSummary(false)
+    })
     this.loadHomeTaskFragmentOptions()
     this.loadHomeTaskList(HOME_TASK_ARCHIVED_NO)
     this.loadHomeTaskList(HOME_TASK_ARCHIVED_YES)
+    this.ensureAsyncTaskNotificationPermission()
+    this.loadAsyncTaskSummary(false)
+    this.startAsyncTaskPolling()
     this.menuName = this.$route.path || '/Dashboard'
     window.addEventListener('resize', function () {});
   },
@@ -1026,12 +1182,255 @@ export default {
           return
         }
         this.$helperNotify.success(HOME_TASK_DAILY_REPORT_SUCCESS_MESSAGE)
-        // 生成成功后打开日报所属的知识片段
-        const fragmentId = this.normalizeHomeTaskMemoryFragmentId(response.Data?.memory_fragment?.file_id || response.Data?.memory_fragment?.id)
-        if (fragmentId) {
-          this.openMemoryFragmentById(fragmentId)
+        this.loadAsyncTaskSummary(false)
+      })
+    },
+    // openAsyncTaskDialog 打开异步任务弹窗，并刷新摘要与详情。
+    openAsyncTaskDialog() {
+      this.asyncTaskDialogVisible = true
+      this.loadAsyncTaskSummary(true)
+    },
+    // startAsyncTaskPolling 启动异步任务轮询，沿用类似 shell_connections 的轻量刷新思路。
+    startAsyncTaskPolling() {
+      if (this.asyncTaskTimer) {
+        clearInterval(this.asyncTaskTimer)
+      }
+      this.asyncTaskTimer = setInterval(() => {
+        this.loadAsyncTaskSummary(false)
+      }, ASYNC_TASK_REFRESH_INTERVAL_MS)
+    },
+    // loadAsyncTaskSummary 刷新异步任务摘要与最近任务列表。
+    loadAsyncTaskSummary(showLoading) {
+      if (showLoading) {
+        this.asyncTaskLoading = true
+      }
+      asyncTaskApi.AsyncTaskList(20, (response) => {
+        this.asyncTaskLoading = false
+        if (!(response && response.ErrCode === 0 && response.Data)) {
+          return
+        }
+        const list = Array.isArray(response.Data.list) ? response.Data.list : []
+        this.processAsyncTaskNotifications(list)
+        this.asyncTaskList = list
+        this.asyncTaskSummary = {
+          await_confirm_count: Number(response.Data.await_confirm_count || 0),
+          running_count: Number(response.Data.running_count || 0),
+          total: Number(response.Data.total || list.length),
+        }
+        if (!this.asyncTaskSelectedId && list.length > 0) {
+          this.selectAsyncTask(list[0])
+          return
+        }
+        if (this.asyncTaskSelectedId) {
+          const activeTask = list.find(item => Number(item.id) === Number(this.asyncTaskSelectedId))
+          if (activeTask) {
+            this.selectAsyncTask(activeTask)
+          } else {
+            this.asyncTaskSelectedId = 0
+            this.asyncTaskDetail = {}
+          }
         }
       })
+    },
+    // ensureAsyncTaskNotificationPermission 尝试申请浏览器通知权限，只在首次进入时请求一次。 // ensureAsyncTaskNotificationPermission requests browser notification permission once for async task completion alerts.
+    ensureAsyncTaskNotificationPermission() {
+      if (this.asyncTaskNotificationPermissionRequested) {
+        return
+      }
+      this.asyncTaskNotificationPermissionRequested = true
+      if (typeof window === 'undefined' || typeof Notification === 'undefined') {
+        return
+      }
+      if (Notification.permission !== 'default') {
+        return
+      }
+      Notification.requestPermission().catch(() => {})
+    },
+    // processAsyncTaskNotifications 检测新完成任务并触发浏览器通知。 // processAsyncTaskNotifications detects newly finished tasks and raises browser notifications.
+    processAsyncTaskNotifications(taskList) {
+      const nextStateMap = {}
+      taskList.forEach((task) => {
+        const taskId = Number(task?.id || 0)
+        if (taskId <= 0) {
+          return
+        }
+        const status = String(task.task_status || '')
+        const previousStatus = String(this.asyncTaskNotifiedStateMap[taskId] || '')
+        nextStateMap[taskId] = status
+        const shouldNotifySuccess = status === ASYNC_TASK_STATUS_AWAIT_CONFIRM && previousStatus && previousStatus !== status
+        const shouldNotifyFailed = status === ASYNC_TASK_STATUS_FAILED && previousStatus && previousStatus !== status
+        if (shouldNotifySuccess || shouldNotifyFailed) {
+          this.notifyAsyncTaskCompletion(task)
+        }
+      })
+      this.asyncTaskNotifiedStateMap = nextStateMap
+    },
+    // notifyAsyncTaskCompletion 使用浏览器原生通知提醒用户异步任务已完成或失败。 // notifyAsyncTaskCompletion uses the browser Notification API to alert the user when an async task finishes or fails.
+    notifyAsyncTaskCompletion(task) {
+      if (typeof window === 'undefined' || typeof Notification === 'undefined') {
+        return
+      }
+      if (Notification.permission !== 'granted') {
+        return
+      }
+      const taskType = String(task?.task_type || '')
+      const taskStatus = String(task?.task_status || '')
+      let title = '异步任务有新结果'
+      let body = '请打开异步任务查看详情'
+      if (taskStatus === ASYNC_TASK_STATUS_FAILED) {
+        title = '异步任务执行失败'
+        body = '请打开异步任务查看失败原因'
+      } else if (taskType === ASYNC_TASK_TYPE_DAILY_REPORT) {
+        title = '工作日报已生成'
+        body = '等待你确认是否保存为知识片段'
+      } else if (taskType === ASYNC_TASK_TYPE_MEMORY_ARRANGE) {
+        title = '知识片段整理完成'
+        body = '等待你确认是否覆盖原文'
+      }
+      const notification = new Notification(title, {
+        body: body,
+        tag: `async-task-${task.id}`,
+      })
+      notification.onclick = () => {
+        window.focus()
+        this.openAsyncTaskDialog()
+        this.selectAsyncTask(task)
+        notification.close()
+      }
+    },
+    // selectAsyncTask 选中指定异步任务并加载详情。
+    selectAsyncTask(task) {
+      const taskId = Number(task?.id || 0)
+      if (taskId <= 0) {
+        return
+      }
+      this.asyncTaskSelectedId = taskId
+      asyncTaskApi.AsyncTaskInfo(taskId, (response) => {
+        if (!(response && response.ErrCode === 0 && response.Data)) {
+          return
+        }
+        this.asyncTaskDetail = this.normalizeAsyncTaskDetail(response.Data)
+      })
+    },
+    // normalizeAsyncTaskDetail 解析详情里的 JSON 字段，方便模板直接读取结果内容。
+    normalizeAsyncTaskDetail(task) {
+      const normalizedTask = { ...(task || {}), result_payload_map: {} }
+      try {
+        normalizedTask.result_payload_map = JSON.parse(String(normalizedTask.result_payload || '{}'))
+      } catch (error) {
+        normalizedTask.result_payload_map = {}
+      }
+      return normalizedTask
+    },
+    // runAsyncTaskAction 处理异步任务确认或丢弃动作，并刷新当前选中详情。
+    runAsyncTaskAction(action) {
+      if (!this.asyncTaskDetail.id) {
+        return
+      }
+      this.asyncTaskActing = true
+      asyncTaskApi.AsyncTaskAction(this.asyncTaskDetail.id, action, (response) => {
+        this.asyncTaskActing = false
+        if (!(response && response.ErrCode === 0 && response.Data)) {
+          this.$helperNotify.error(response?.ErrMsg || '异步任务处理失败')
+          return
+        }
+        this.asyncTaskDetail = this.normalizeAsyncTaskDetail(response.Data)
+        this.loadAsyncTaskSummary(false)
+        if (action === ASYNC_TASK_ACTION_SAVE_DAILY_REPORT || action === ASYNC_TASK_ACTION_OVERWRITE_MEMORY_FRAGMENT) {
+          // 中文注释：首页任务卡片会内嵌知识片段摘要，这里立即刷新避免覆盖原文后还显示旧内容。
+          // English comment: Home task cards embed fragment previews, so refresh right away after async writes.
+          this.refreshAllHomeTaskList()
+        }
+        this.$helperNotify.success(action === ASYNC_TASK_ACTION_DISCARD ? '异步任务结果已丢弃' : '异步任务结果已处理')
+      })
+    },
+    // deleteAsyncTask 删除异步任务记录，并同步刷新列表与详情。
+    deleteAsyncTask(task) {
+      const taskId = Number(task?.id || 0)
+      if (taskId <= 0) {
+        return
+      }
+      this.asyncTaskDeleting = true
+      asyncTaskApi.AsyncTaskDelete(taskId, (response) => {
+        this.asyncTaskDeleting = false
+        if (!(response && response.ErrCode === 0)) {
+          this.$helperNotify.error(response?.ErrMsg || '异步任务删除失败')
+          return
+        }
+        if (Number(this.asyncTaskSelectedId) === taskId) {
+          this.asyncTaskSelectedId = 0
+          this.asyncTaskDetail = {}
+        }
+        this.loadAsyncTaskSummary(false)
+        this.$helperNotify.success('异步任务记录已删除')
+      })
+    },
+    // getAsyncTaskTypeText 统一格式化异步任务类型文案。
+    getAsyncTaskTypeText(task) {
+      const taskType = String(task?.task_type || '')
+      if (taskType === ASYNC_TASK_TYPE_DAILY_REPORT) {
+        return '工作日报'
+      }
+      if (taskType === ASYNC_TASK_TYPE_MEMORY_ARRANGE) {
+        return '知识片段整理'
+      }
+      return '异步任务'
+    },
+    // getAsyncTaskStatusText 统一格式化异步任务状态文案。
+    getAsyncTaskStatusText(taskStatus) {
+      const normalizedStatus = String(taskStatus || '')
+      if (normalizedStatus === ASYNC_TASK_STATUS_AWAIT_CONFIRM) {
+        return '待处理'
+      }
+      if (normalizedStatus === ASYNC_TASK_STATUS_RUNNING) {
+        return '运行中'
+      }
+      if (normalizedStatus === ASYNC_TASK_STATUS_FAILED) {
+        return '失败'
+      }
+      if (normalizedStatus === ASYNC_TASK_STATUS_CONFIRMED) {
+        return '已确认'
+      }
+      if (normalizedStatus === ASYNC_TASK_STATUS_REJECTED) {
+        return '已丢弃'
+      }
+      return normalizedStatus || '-'
+    },
+    // getAsyncTaskStatusTagType 根据状态返回标签样式。
+    getAsyncTaskStatusTagType(taskStatus) {
+      const normalizedStatus = String(taskStatus || '')
+      if (normalizedStatus === ASYNC_TASK_STATUS_AWAIT_CONFIRM) {
+        return 'warning'
+      }
+      if (normalizedStatus === ASYNC_TASK_STATUS_RUNNING) {
+        return 'info'
+      }
+      if (normalizedStatus === ASYNC_TASK_STATUS_FAILED) {
+        return 'danger'
+      }
+      if (normalizedStatus === ASYNC_TASK_STATUS_CONFIRMED) {
+        return 'success'
+      }
+      return ''
+    },
+    // hasRunningAsyncTask 判断当前是否存在执行中的异步任务，用于左下角入口动画提示。 // hasRunningAsyncTask checks whether any async task is currently running so the footer entry can animate.
+    hasRunningAsyncTask() {
+      return Number(this.asyncTaskSummary.running_count || 0) > 0
+    },
+    // formatAsyncTaskTime 统一格式化异步任务时间戳。
+    formatAsyncTaskTime(unixTime) {
+      const timeValue = Number(unixTime || 0)
+      if (timeValue <= 0) {
+        return '-'
+      }
+      const date = new Date(timeValue * 1000)
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      const hour = String(date.getHours()).padStart(2, '0')
+      const minute = String(date.getMinutes()).padStart(2, '0')
+      const second = String(date.getSeconds()).padStart(2, '0')
+      return `${year}-${month}-${day} ${hour}:${minute}:${second}`
     },
     // openMemoryFragmentById 根据知识片段ID在新页卡中打开详情页。
     openMemoryFragmentById(fragmentId) {
@@ -1351,6 +1750,10 @@ export default {
       clearInterval(this.sshConnectionTimer)
       this.sshConnectionTimer = null
     }
+    if (this.asyncTaskTimer) {
+      clearInterval(this.asyncTaskTimer)
+      this.asyncTaskTimer = null
+    }
   },
   components: {
     HomeFilled,
@@ -1368,6 +1771,7 @@ export default {
     SettingsDialog,
     HomeTaskReportSetting,
     Markdown,
+    DiffMarkdown,
     Tools,
     Clipboard,
   },
@@ -1772,6 +2176,205 @@ export default {
   background: linear-gradient(135deg, #f6fbf4 0%, #ffffff 100%);
 }
 
+.async-task-entry {
+  width: 100%;
+  margin-top: 10px;
+  position: relative;
+  overflow: hidden;
+}
+
+.footer-action--sand {
+  background: linear-gradient(180deg, #f7efe1 0%, #f2e5cf 100%);
+  color: #6e5430;
+}
+
+.async-task-entry--running {
+  box-shadow: 0 0 0 1px rgba(214, 133, 55, 0.24), 0 0 0 8px rgba(214, 133, 55, 0.08);
+  animation: async-task-entry-pulse 1.6s ease-in-out infinite;
+}
+
+.async-task-entry--running::after {
+  content: '';
+  position: absolute;
+  inset: -30%;
+  background: radial-gradient(circle, rgba(245, 179, 84, 0.18) 0%, rgba(245, 179, 84, 0) 62%);
+  animation: async-task-entry-sheen 2.1s linear infinite;
+  pointer-events: none;
+}
+
+.footer-action__meta {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  opacity: 0.78;
+}
+
+.async-task-entry__spinner {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-left: 6px;
+  border-radius: 999px;
+  border: 2px solid rgba(110, 84, 48, 0.28);
+  border-top-color: #c46b1f;
+  animation: async-task-spinner-rotate 0.9s linear infinite;
+  vertical-align: middle;
+}
+
+.async-task-toolbar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.async-task-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 16px;
+  min-height: 480px;
+}
+
+.async-task-list {
+  border-right: 1px solid rgba(210, 214, 203, 0.9);
+  padding-right: 12px;
+  overflow: auto;
+}
+
+.async-task-item {
+  width: 100%;
+  border: 1px solid rgba(218, 223, 212, 0.92);
+  background: #fbfbf7;
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.async-task-item--active {
+  border-color: #94ad78;
+  box-shadow: 0 0 0 1px rgba(148, 173, 120, 0.32);
+}
+
+.async-task-item__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.async-task-item__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #374332;
+}
+
+.async-task-item__meta,
+.async-task-item__time,
+.async-task-detail__meta {
+  font-size: 12px;
+  color: #697262;
+}
+
+.async-task-item__meta,
+.async-task-item__time {
+  margin-top: 6px;
+}
+
+.async-task-detail {
+  overflow: auto;
+}
+
+.async-task-detail__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.async-task-detail__title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #31402e;
+}
+
+.async-task-detail__meta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.async-task-detail__section-title {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #4a5441;
+}
+
+.async-task-detail__content {
+  margin-bottom: 14px;
+}
+
+.async-task-detail__pre {
+  margin: 0;
+  padding: 14px;
+  border-radius: 12px;
+  background: #f5f6ef;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 420px;
+  overflow: auto;
+  min-height: 220px;
+}
+
+.async-task-detail__actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.async-task-detail__error,
+.async-task-empty {
+  padding: 18px;
+  border-radius: 12px;
+  background: #f7f4ea;
+  color: #705e42;
+}
+
+@keyframes async-task-entry-pulse {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-1px);
+  }
+}
+
+@keyframes async-task-entry-sheen {
+  0% {
+    transform: translateX(-18%) translateY(0);
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateX(18%) translateY(0);
+    opacity: 0.35;
+  }
+}
+
+@keyframes async-task-spinner-rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .ssh-connections-table :deep(.el-table__header-wrapper th) {
   background: #f5faf4;
   color: #44584a;
@@ -2070,6 +2673,17 @@ export default {
   .ssh-dialog-toolbar {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .async-task-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .async-task-list {
+    border-right: none;
+    border-bottom: 1px solid rgba(210, 214, 203, 0.9);
+    padding-right: 0;
+    padding-bottom: 12px;
   }
 
   .home-task-toolbar {

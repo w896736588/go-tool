@@ -28,3 +28,4 @@ tmp/dtool.exe
 *_test.js
 *_test.go
 *_test.py
+*.test.cjs
