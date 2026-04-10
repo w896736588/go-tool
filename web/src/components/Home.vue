@@ -85,7 +85,7 @@
         <button
           type="button"
           class="footer-action footer-action--sand async-task-entry"
-          :class="{ 'async-task-entry--running': hasRunningAsyncTask() }"
+          :class="[getAsyncTaskEntryClassName(), { 'async-task-entry--running': hasRunningAsyncTask() }]"
           @click="openAsyncTaskDialog"
         >
           <span class="footer-action__title">
@@ -880,6 +880,7 @@ export default {
       asyncTaskSummary: {
         await_confirm_count: 0,
         running_count: 0,
+        failed_count: 0,
         total: 0,
       },
     }
@@ -1215,6 +1216,7 @@ export default {
         this.asyncTaskSummary = {
           await_confirm_count: Number(response.Data.await_confirm_count || 0),
           running_count: Number(response.Data.running_count || 0),
+          failed_count: Number(response.Data.failed_count || 0),
           total: Number(response.Data.total || list.length),
         }
         if (!this.asyncTaskSelectedId && list.length > 0) {
@@ -1416,6 +1418,37 @@ export default {
     // hasRunningAsyncTask 判断当前是否存在执行中的异步任务，用于左下角入口动画提示。 // hasRunningAsyncTask checks whether any async task is currently running so the footer entry can animate.
     hasRunningAsyncTask() {
       return Number(this.asyncTaskSummary.running_count || 0) > 0
+    },
+    // getAsyncTaskEntryState 根据汇总数量决定左下角入口背景优先级。 // getAsyncTaskEntryState decides the footer entry state by summary priority.
+    getAsyncTaskEntryState() {
+      const failedCount = Number(this.asyncTaskSummary.failed_count || 0)
+      if (failedCount > 0) {
+        return 'failed'
+      }
+      const awaitConfirmCount = Number(this.asyncTaskSummary.await_confirm_count || 0)
+      if (awaitConfirmCount > 0) {
+        return 'await-confirm'
+      }
+      const runningCount = Number(this.asyncTaskSummary.running_count || 0)
+      // 失败和待处理都没有时，执行中优先展示柔和绿色。 // Show the soft green running state only when failed and await-confirm are both absent.
+      if (runningCount > 0) {
+        return 'running'
+      }
+      return 'idle'
+    },
+    // getAsyncTaskEntryClassName 返回左下角入口对应的背景样式类。 // getAsyncTaskEntryClassName returns the footer entry background class name.
+    getAsyncTaskEntryClassName() {
+      const state = this.getAsyncTaskEntryState()
+      if (state === 'failed') {
+        return 'async-task-entry--failed'
+      }
+      if (state === 'await-confirm') {
+        return 'async-task-entry--await-confirm'
+      }
+      if (state === 'running') {
+        return 'async-task-entry--active'
+      }
+      return 'async-task-entry--idle'
     },
     // formatAsyncTaskTime 统一格式化异步任务时间戳。
     formatAsyncTaskTime(unixTime) {
@@ -2184,12 +2217,31 @@ export default {
 }
 
 .footer-action--sand {
-  background: linear-gradient(180deg, #f7efe1 0%, #f2e5cf 100%);
-  color: #6e5430;
+  color: #5f6158;
+}
+
+.async-task-entry--idle {
+  background: linear-gradient(180deg, #f3f4f5 0%, #e8ebee 100%);
+  color: #61656d;
+}
+
+.async-task-entry--active {
+  background: linear-gradient(180deg, #edf7ee 0%, #dff0e2 100%);
+  color: #476651;
+}
+
+.async-task-entry--await-confirm {
+  background: linear-gradient(180deg, #fbf2e4 0%, #f6e5cb 100%);
+  color: #7a5c33;
+}
+
+.async-task-entry--failed {
+  background: linear-gradient(180deg, #fbeaea 0%, #f4d9d9 100%);
+  color: #835252;
 }
 
 .async-task-entry--running {
-  box-shadow: 0 0 0 1px rgba(214, 133, 55, 0.24), 0 0 0 8px rgba(214, 133, 55, 0.08);
+  box-shadow: 0 0 0 1px rgba(115, 164, 122, 0.22), 0 0 0 8px rgba(115, 164, 122, 0.08);
   animation: async-task-entry-pulse 1.6s ease-in-out infinite;
 }
 
@@ -2197,7 +2249,7 @@ export default {
   content: '';
   position: absolute;
   inset: -30%;
-  background: radial-gradient(circle, rgba(245, 179, 84, 0.18) 0%, rgba(245, 179, 84, 0) 62%);
+  background: radial-gradient(circle, rgba(138, 188, 143, 0.18) 0%, rgba(138, 188, 143, 0) 62%);
   animation: async-task-entry-sheen 2.1s linear infinite;
   pointer-events: none;
 }
@@ -2215,8 +2267,8 @@ export default {
   height: 9px;
   margin-left: 6px;
   border-radius: 999px;
-  border: 2px solid rgba(110, 84, 48, 0.28);
-  border-top-color: #c46b1f;
+  border: 2px solid rgba(71, 102, 81, 0.24);
+  border-top-color: #64916e;
   animation: async-task-spinner-rotate 0.9s linear infinite;
   vertical-align: middle;
 }

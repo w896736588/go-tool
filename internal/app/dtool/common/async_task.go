@@ -145,10 +145,15 @@ func (h *CSqlite) AsyncTaskSummary(limit int) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	failedCount, err := h.asyncTaskCountByStatus(AsyncTaskStatusFailed)
+	if err != nil {
+		return nil, err
+	}
 	return map[string]any{
 		`list`:                list,
 		`running_count`:       runningCount,
 		`await_confirm_count`: awaitConfirmCount,
+		`failed_count`:        failedCount,
 		`total`:               len(list),
 	}, nil
 }
