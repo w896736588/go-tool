@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strconv"
@@ -14,6 +15,11 @@ import (
 	"gitee.com/Sxiaobai/gs/v2/gsgin"
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/cast"
+)
+
+var (
+	queryToolPortProcessesFunc = queryToolPortProcesses
+	killToolProcessFunc        = killToolProcess
 )
 
 type toolPortProcessItem struct {
@@ -126,6 +132,95 @@ func killToolProcess(pid int) error {
 	default:
 		return fmt.Errorf(`当前系统暂不支持: %s`, runtime.GOOS)
 	}
+}
+
+func CleanupPortsByPreference(portList []string, preferredCommands []string) error {
+	for _, rawPort := range portList {
+		portText := strings.TrimSpace(rawPort)
+		if portText == `` {
+			continue
+		}
+		port, err := strconv.Atoi(portText)
+		if err != nil || port <= 0 || port > 65535 {
+			return fmt.Errorf(`无效端口: %s`, portText)
+		}
+
+		items, err := queryToolPortProcessesFunc(port)
+		if err != nil {
+			return err
+		}
+		preferred, _ := buildPortCleanupPlan(items, preferredCommands)
+		if err = killPortProcessList(port, preferred); err != nil {
+			return err
+		}
+
+		items, err = queryToolPortProcessesFunc(port)
+		if err != nil {
+			return err
+		}
+		_, fallback := buildPortCleanupPlan(items, preferredCommands)
+		if err = killPortProcessList(port, fallback); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func killPortProcessList(port int, pidList []int) error {
+	for _, pid := range pidList {
+		if err := killToolProcessFunc(pid); err != nil {
+			return fmt.Errorf(`清理端口 %d 的进程 %d 失败: %w`, port, pid, err)
+		}
+	}
+	return nil
+}
+
+func buildPortCleanupPlan(items []toolPortProcessItem, preferredCommands []string) ([]int, []int) {
+	preferredList := make([]int, 0, len(items))
+	fallbackList := make([]int, 0, len(items))
+	seen := make(map[int]struct{}, len(items))
+	for _, item := range items {
+		if item.PID <= 0 {
+			continue
+		}
+		if _, ok := seen[item.PID]; ok {
+			continue
+		}
+		seen[item.PID] = struct{}{}
+		if matchPreferredProcessName(item.Command, preferredCommands) {
+			preferredList = append(preferredList, item.PID)
+			continue
+		}
+		fallbackList = append(fallbackList, item.PID)
+	}
+	return preferredList, fallbackList
+}
+
+func matchPreferredProcessName(command string, preferredCommands []string) bool {
+	if len(preferredCommands) == 0 {
+		return false
+	}
+	name := normalizeProcessName(command)
+	if name == `` {
+		return false
+	}
+	for _, preferred := range preferredCommands {
+		if name == normalizeProcessName(preferred) {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeProcessName(command string) string {
+	name := strings.TrimSpace(command)
+	if name == `` {
+		return ``
+	}
+	name = filepath.Base(strings.ReplaceAll(name, `\`, `/`))
+	name = strings.ToLower(name)
+	name = strings.TrimSuffix(name, `.exe`)
+	return name
 }
 
 func runToolCommand(name string, args ...string) (string, error) {

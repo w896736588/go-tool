@@ -59,37 +59,7 @@
         </div>
       </section>
 
-      <section class="welcome-card">
-        <div class="section-head">
-          <span>标签面板</span>
-          <el-tag size="small" effect="light">{{ tagList.length }}</el-tag>
-        </div>
-        <div v-if="selectedTags.length > 0" class="selected-tags">
-          <span class="selected-label">当前筛选</span>
-          <el-tag
-            v-for="tag in selectedTags"
-            :key="tag"
-            size="small"
-            closable
-            @close="$emit('toggle-tag', tag)"
-          >
-            {{ tag }}
-          </el-tag>
-        </div>
-        <el-empty v-if="tagList.length === 0" description="暂无标签" />
-        <div v-else class="tag-cloud">
-          <button
-            v-for="tag in tagList"
-            :key="tag.tag_name"
-            class="tag-chip"
-            :class="{ active: selectedTags.includes(tag.tag_name) }"
-            @click="$emit('toggle-tag', tag.tag_name)"
-          >
-            <span>{{ tag.tag_name }}</span>
-            <span class="tag-count">{{ tag.use_count }}</span>
-          </button>
-        </div>
-      </section>
+      
     </div>
     </template>
   </div>

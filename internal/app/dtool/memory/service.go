@@ -258,10 +258,11 @@ func (h *Service) MemoryFragmentHardDelete(id any) error {
 
 // MemoryFragmentHistoryList 首版不再维护独立历史，统一交给 Git。
 func (h *Service) MemoryFragmentHistoryList(id any) ([]map[string]any, error) {
-	if _, ok := h.getFragment(normalizeID(id)); !ok {
+	fragment, ok := h.getFragment(normalizeID(id))
+	if !ok {
 		return nil, errFragmentNotFound
 	}
-	return []map[string]any{}, nil
+	return h.gitHistoryList(fragment)
 }
 
 // MemoryFragmentTagList 已移除标签功能。
@@ -757,4 +758,174 @@ func min(left, right int) int {
 		return left
 	}
 	return right
+}
+
+func (h *Service) gitHistoryList(fragment Fragment) ([]map[string]any, error) {
+	if strings.TrimSpace(fragment.FilePath) == `` {
+		return []map[string]any{}, nil
+	}
+	repoRelativePath, err := h.gitRepoRelativePath(fragment.FilePath)
+	if err != nil {
+		return nil, err
+	}
+	logOutput, err := h.runGitCommand(
+		`log`,
+		`--follow`,
+		`--date=iso-strict`,
+		`--format=%H%x1f%P%x1f%ad%x1f%s`,
+		`--`,
+		repoRelativePath,
+	)
+	if err != nil {
+		if isGitMissingPathError(err) {
+			return []map[string]any{}, nil
+		}
+		return nil, err
+	}
+	lines := strings.Split(normalizeLineBreaks(logOutput), "\n")
+	result := make([]map[string]any, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == `` {
+			continue
+		}
+		item, buildErr := h.buildGitHistoryEntry(line, repoRelativePath)
+		if buildErr != nil {
+			return nil, buildErr
+		}
+		if item != nil {
+			result = append(result, item)
+		}
+	}
+	return result, nil
+}
+
+func (h *Service) gitRepoRelativePath(filePath string) (string, error) {
+	repoRoot, err := h.gitRepoRoot()
+	if err != nil {
+		return ``, err
+	}
+	repoRoot = strings.TrimSpace(repoRoot)
+	if repoRoot == `` {
+		return ``, fmt.Errorf(`未检测到 git 仓库根目录`)
+	}
+	absoluteFilePath := filePath
+	if !filepath.IsAbs(absoluteFilePath) {
+		absoluteFilePath, err = filepath.Abs(absoluteFilePath)
+		if err != nil {
+			return ``, err
+		}
+	}
+	absoluteRepoRoot := repoRoot
+	if !filepath.IsAbs(absoluteRepoRoot) {
+		absoluteRepoRoot, err = filepath.Abs(absoluteRepoRoot)
+		if err != nil {
+			return ``, err
+		}
+	}
+	relativePath, err := filepath.Rel(absoluteRepoRoot, absoluteFilePath)
+	if err != nil {
+		return ``, err
+	}
+	relativePath = filepath.ToSlash(relativePath)
+	if relativePath == `.` || strings.HasPrefix(relativePath, `../`) {
+		return ``, fmt.Errorf(`片段文件不在 git 仓库目录内`)
+	}
+	return relativePath, nil
+}
+
+func (h *Service) buildGitHistoryEntry(line, relativePath string) (map[string]any, error) {
+	partList := strings.Split(line, "\x1f")
+	if len(partList) < 4 {
+		return nil, nil
+	}
+	commitHash := strings.TrimSpace(partList[0])
+	parentHashes := strings.Fields(strings.TrimSpace(partList[1]))
+	commitTimeRaw := strings.TrimSpace(partList[2])
+	commitMessage := strings.TrimSpace(partList[3])
+	newContent, err := h.readGitFileContent(commitHash, relativePath)
+	if err != nil {
+		return nil, err
+	}
+	oldContent := ``
+	if len(parentHashes) > 0 {
+		oldContent, err = h.readGitFileContent(parentHashes[0], relativePath)
+		if err != nil && !isGitMissingPathError(err) {
+			return nil, err
+		}
+	}
+	oldTitle := extractFragmentTitleFromContent(oldContent)
+	newTitle := extractFragmentTitleFromContent(newContent)
+	createTimeDesc := commitTimeRaw
+	if parsedTime, err := time.Parse(time.RFC3339, commitTimeRaw); err == nil {
+		createTimeDesc = parsedTime.Format(`2006-01-02 15:04:05`)
+	}
+	return map[string]any{
+		`id`:               commitHash,
+		`commit_hash`:      commitHash,
+		`create_time_desc`: createTimeDesc,
+		`change_desc`:      commitMessage,
+		`title_old`:        oldTitle,
+		`title_new`:        newTitle,
+		`content_old`:      strings.TrimSpace(oldContent),
+		`content_new`:      strings.TrimSpace(newContent),
+		`tags_old_list`:    []string{},
+		`tags_new_list`:    []string{},
+	}, nil
+}
+
+func (h *Service) readGitFileContent(revision, relativePath string) (string, error) {
+	if strings.TrimSpace(revision) == `` {
+		return ``, nil
+	}
+	return h.runGitCommand(`show`, revision+`:`+relativePath)
+}
+
+func (h *Service) runGitCommand(args ...string) (string, error) {
+	repoRoot, err := h.gitRepoRoot()
+	if err != nil {
+		return ``, err
+	}
+	return runGitCommandInDir(repoRoot, args...)
+}
+
+func (h *Service) gitRepoRoot() (string, error) {
+	return runGitCommandInDir(h.root, `rev-parse`, `--show-toplevel`)
+}
+
+func runGitCommandInDir(dir string, args ...string) (string, error) {
+	cmd := exec.Command(`git`, args...)
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	text := normalizeLineBreaks(string(output))
+	if err != nil {
+		return ``, fmt.Errorf(`git %s 失败: %s`, strings.Join(args, ` `), strings.TrimSpace(text))
+	}
+	return strings.TrimSpace(text), nil
+}
+
+func isGitMissingPathError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, `does not have that path`) ||
+		strings.Contains(message, `exists on disk, but not in`) ||
+		strings.Contains(message, `unknown revision or path not in the working tree`) ||
+		strings.Contains(message, `fatal: ambiguous argument`)
+}
+
+func extractFragmentTitleFromContent(content string) string {
+	content = strings.TrimSpace(content)
+	if content == `` {
+		return ``
+	}
+	meta, markdownBody, err := parseFrontMatter(content)
+	if err == nil {
+		title := NormalizeFragmentTitle(meta.Title, markdownBody)
+		if strings.TrimSpace(title) != `` {
+			return title
+		}
+	}
+	return NormalizeFragmentTitle(``, content)
 }

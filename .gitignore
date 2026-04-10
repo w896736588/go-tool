@@ -21,3 +21,5 @@ AGENTS.md
 web/test
 /docs/
 /.codex/docs/
+tmp/dtool.exe
+tmp/build-errors.log

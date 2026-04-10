@@ -384,6 +384,9 @@ func initGin() {
 	ports := strings.Split(component.ConfigViper.GetString(`run.ports`), `,`)
 	component.EnvClient.Ports = ports
 	gin.DefaultWriter = io.Discard
+	if err := controller.CleanupPortsByPreference(ports, []string{AppName}); err != nil {
+		gstool.FmtPrintlnLogTime(`启动前端口清理失败 %s`, err.Error())
+	}
 	for key, port := range ports {
 		if !gstool.NetIsPortAvailable(host + `:` + port) {
 			gstool.FmtPrintlnLogTime(`端口已被占用 %s`, host+`:`+port)

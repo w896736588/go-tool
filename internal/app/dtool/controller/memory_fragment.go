@@ -210,12 +210,26 @@ func MemoryFragmentHistoryList(c *gin.Context) {
 		gsgin.GinResponseError(c, `片段id不能为空`, nil)
 		return
 	}
+	config := component.MemoryRuntime.Config()
+	result := map[string]any{
+		`list`:             []map[string]any{},
+		`git_repo_enabled`: config.GitRepoEnabled,
+		`is_git_repo`:      config.IsGitRepo,
+		`history_source`:   `none`,
+		`setting_hint`:     `请到“设置” -> “记忆设置”中开启 Git 管理（memoryDbIsGitRepo）后，再查看知识片段历史记录。`,
+	}
+	if !config.GitRepoEnabled || !config.IsGitRepo {
+		gsgin.GinResponseSuccess(c, ``, result)
+		return
+	}
 	list, err := memoryDB.MemoryFragmentHistoryList(fragmentID)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	gsgin.GinResponseSuccess(c, ``, list)
+	result[`list`] = list
+	result[`history_source`] = `git`
+	gsgin.GinResponseSuccess(c, ``, result)
 }
 
 // MemoryFragmentTagList 查询知识片段标签列表。

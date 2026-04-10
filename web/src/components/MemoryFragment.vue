@@ -258,6 +258,9 @@
     <MemoryHistoryDialog
       v-model="historyDialogVisible"
       :fragment-id="historyFragmentId"
+      :git-repo-enabled="memoryGitRepoEnabled"
+      :is-git-repo="memoryIsGitRepo"
+      @open-settings="openSettingsDialog"
     />
 
     <SettingsDialog
@@ -334,6 +337,7 @@ export default {
       historyFragmentId: '',
       memoryConfigured: true,
       memoryGitRepoEnabled: false,
+      memoryIsGitRepo: false,
       nextPushTime: 0,
       lastPushTime: 0,
       lastPushTimeDesc: '-',
@@ -542,6 +546,7 @@ export default {
         this.statusNowTick = Math.floor(Date.now() / 1000)
         this.memoryConfigured = !!(response.Data && response.Data.configured)
         this.memoryGitRepoEnabled = !!(response.Data && response.Data.git_repo_enabled)
+        this.memoryIsGitRepo = !!(response.Data && response.Data.is_git_repo)
         this.nextPushTime = response.Data && response.Data.next_push_time ? Number(response.Data.next_push_time) : 0
         this.lastPushTime = response.Data && response.Data.last_push_time ? Number(response.Data.last_push_time) : 0
         this.lastPushTimeDesc = response.Data && response.Data.last_push_time_desc ? response.Data.last_push_time_desc : '-'
@@ -553,6 +558,7 @@ export default {
           this.fragmentTabs = []
           this.activeTab = HOME_TAB_NAME
           this.memoryGitRepoEnabled = false
+          this.memoryIsGitRepo = false
           this.nextPushTime = 0
           this.lastPushTime = 0
           return
