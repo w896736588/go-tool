@@ -25,3 +25,6 @@ tmp/dtool.exe
 tmp/build-errors.log
 tmp/dtool.exe
 /tmp/
+*_test.js
+*_test.go
+*_test.py
