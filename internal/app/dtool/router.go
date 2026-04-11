@@ -420,6 +420,9 @@ func apiUse(tGin *p_gin.Gin) {
 		// 中文注释：异步任务状态复用普通 SSE 通道推送，页面加载时初始化一次，后续后端主动推送。
 		// English comment: Async task status now rides on the normal SSE channel for this client.
 		controller.BindAsyncTasksSSE(sse, stopC, 5*time.Second)
+		// 中文注释：记忆库状态复用普通 SSE 通道推送，替代原来的轮询方式。
+		// English comment: Memory fragment status now rides on the normal SSE channel for this client.
+		controller.BindMemoryFragmentStatusSSE(sse, stopC, 10*time.Second)
 		return sse, nil
 	}
 	closeFunc := func(sse *gsgin.Sse) {

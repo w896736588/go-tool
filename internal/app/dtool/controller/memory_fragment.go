@@ -14,8 +14,8 @@ import (
 	"github.com/spf13/cast"
 )
 
-// MemoryFragmentStatus 返回记忆库配置状态。
-func MemoryFragmentStatus(c *gin.Context) {
+// buildMemoryFragmentStatusPayload 构造记忆库状态数据。
+func buildMemoryFragmentStatusPayload() map[string]any {
 	config := component.MemoryRuntime.Config()
 	nextPushTime := component.MemoryRuntime.NextPushTime()
 	lastPushTime := component.MemoryRuntime.LastPushTime()
@@ -40,7 +40,7 @@ func MemoryFragmentStatus(c *gin.Context) {
 	if lastPushTime > 0 {
 		lastPushTimeDesc = gstool.TimeUnixToString(time.Unix(lastPushTime, 0), `Y-m-d H:i:s`)
 	}
-	gsgin.GinResponseSuccess(c, ``, map[string]any{
+	return map[string]any{
 		`configured`:              component.MemoryRuntime.IsConfigured(),
 		`memory_dir`:              config.Dir,
 		`git_repo_enabled`:        config.GitRepoEnabled,
@@ -54,7 +54,52 @@ func MemoryFragmentStatus(c *gin.Context) {
 		`last_push_time`:          lastPushTime,
 		`last_push_time_desc`:     lastPushTimeDesc,
 		`last_push_error`:         lastPushError,
-	})
+	}
+}
+
+// MemoryFragmentStatus 返回记忆库配置状态。
+func MemoryFragmentStatus(c *gin.Context) {
+	gsgin.GinResponseSuccess(c, ``, buildMemoryFragmentStatusPayload())
+}
+
+// sendMemoryFragmentStatusSnapshot 向指定 SSE 连接发送一次记忆库状态快照。
+func sendMemoryFragmentStatusSnapshot(sse *gsgin.Sse) {
+	if sse == nil {
+		return
+	}
+	data := buildMemoryFragmentStatusPayload()
+	err := sse.SendToChan(gstool.JsonEncode(p_define.SseData{
+		SseDistributeId: define.SseMemoryFragmentStatus,
+		Data:            data,
+		Type:            p_define.SseContentTypeMsg,
+	}))
+	if err != nil {
+		gstool.FmtPrintlnLogTime(`MemoryFragmentStatus广播错误 %s`, err.Error())
+	}
+}
+
+// BindMemoryFragmentStatusSSE 为普通 SSE client 绑定记忆库状态推送。
+func BindMemoryFragmentStatusSSE(sse *gsgin.Sse, stopC chan int, interval time.Duration) {
+	if sse == nil {
+		return
+	}
+	if interval <= 0 {
+		interval = 10 * time.Second
+	}
+	// 建连后立即推一次，避免前端初次打开时要等下一个周期。
+	sendMemoryFragmentStatusSnapshot(sse)
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				sendMemoryFragmentStatusSnapshot(sse)
+			case <-stopC:
+				return
+			}
+		}
+	}()
 }
 
 // MemoryFragmentList 查询知识片段列表。

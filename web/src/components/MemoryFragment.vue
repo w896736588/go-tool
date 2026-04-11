@@ -297,6 +297,8 @@ const KEYWORD_SEARCH_MODE = 'keyword'
 const SEMANTIC_SEARCH_MODE = 'semantic'
 // MEMORY_FRAGMENT_UPDATES_DISTRIBUTE_ID 统一定义知识片段同步推送通道。
 const MEMORY_FRAGMENT_UPDATES_DISTRIBUTE_ID = 'memory_fragment_updates'
+// MEMORY_FRAGMENT_STATUS_DISTRIBUTE_ID 统一定义记忆库状态推送通道。
+const MEMORY_FRAGMENT_STATUS_DISTRIBUTE_ID = 'memory_fragment_status'
 // MEMORY_FRAGMENT_SSE_ACTION_UPSERT 表示片段新增或更新。
 const MEMORY_FRAGMENT_SSE_ACTION_UPSERT = 'upsert'
 // MEMORY_FRAGMENT_SSE_ACTION_DELETE 表示片段删除。
@@ -340,7 +342,6 @@ export default {
       lastPushTimeDesc: '-',
       lastPushError: '',
       statusNowTick: Math.floor(Date.now() / 1000),
-      statusPollTimer: null,
       settingsDialogVisible: false,
       editorRefMap: {},
       saveFeedbackMap: {},
@@ -397,26 +398,26 @@ export default {
   mounted() {
     this.bindGlobalSaveShortcut()
     this.registerMemoryFragmentUpdatesSse()
+    this.registerMemoryFragmentStatusSse()
     this.loadMemoryStatus()
-    this.startStatusPolling()
     this.tryOpenRouteFragmentOnEntry()
   },
   activated() {
     this.bindGlobalSaveShortcut()
     this.registerMemoryFragmentUpdatesSse()
-    this.startStatusPolling()
+    this.registerMemoryFragmentStatusSse()
     this.loadMemoryStatus()
     this.tryOpenRouteFragmentOnEntry()
   },
   deactivated() {
     this.unbindGlobalSaveShortcut()
     this.unregisterMemoryFragmentUpdatesSse()
-    this.stopStatusPolling()
+    this.unregisterMemoryFragmentStatusSse()
   },
   beforeUnmount() {
     this.unbindGlobalSaveShortcut()
     this.unregisterMemoryFragmentUpdatesSse()
-    this.stopStatusPolling()
+    this.unregisterMemoryFragmentStatusSse()
     this.clearSaveFeedbackTimers()
   },
   watch: {
@@ -435,6 +436,45 @@ export default {
     // unregisterMemoryFragmentUpdatesSse 清理知识片段同步推送监听。
     unregisterMemoryFragmentUpdatesSse() {
       sseDistribute.UnRegisterReceive(MEMORY_FRAGMENT_UPDATES_DISTRIBUTE_ID)
+    },
+    // registerMemoryFragmentStatusSse 注册记忆库状态 SSE 推送。
+    registerMemoryFragmentStatusSse() {
+      sseDistribute.RegisterReceive(MEMORY_FRAGMENT_STATUS_DISTRIBUTE_ID, (data) => {
+        this.handleMemoryFragmentStatusSseUpdate(data)
+      })
+    },
+    // unregisterMemoryFragmentStatusSse 清理记忆库状态 SSE 推送监听。
+    unregisterMemoryFragmentStatusSse() {
+      sseDistribute.UnRegisterReceive(MEMORY_FRAGMENT_STATUS_DISTRIBUTE_ID)
+    },
+    // handleMemoryFragmentStatusSseUpdate 处理记忆库状态 SSE 推送。
+    handleMemoryFragmentStatusSseUpdate(data) {
+      this.statusNowTick = Math.floor(Date.now() / 1000)
+      this.memoryConfigured = !!(data && data.configured)
+      this.memoryGitRepoEnabled = !!(data && data.git_repo_enabled)
+      this.memoryIsGitRepo = !!(data && data.is_git_repo)
+      this.nextPushTime = data && data.next_push_time ? Number(data.next_push_time) : 0
+      this.lastPushTime = data && data.last_push_time ? Number(data.last_push_time) : 0
+      this.lastPushTimeDesc = data && data.last_push_time_desc ? data.last_push_time_desc : '-'
+      this.lastPushError = data && data.last_push_error ? data.last_push_error : ''
+      if (!this.memoryConfigured) {
+        this.fragmentList = []
+        this.trashList = []
+        this.searchResults = []
+        this.fragmentTabs = []
+        this.activeTab = ''
+        this.memoryGitRepoEnabled = false
+        this.memoryIsGitRepo = false
+        this.nextPushTime = 0
+        this.lastPushTime = 0
+        return
+      }
+      // 首次加载时需要加载列表
+      if (this.fragmentList.length === 0 && this.trashList.length === 0) {
+        this.loadFragmentList()
+        this.loadTrashList()
+      }
+      this.tryOpenRouteFragmentOnEntry()
     },
     // handleMemoryFragmentSseUpdate 处理来自其他页面或异步任务的知识片段变更。
     handleMemoryFragmentSseUpdate(payload) {
@@ -553,22 +593,7 @@ export default {
         delete this.saveFeedbackTimers[normalizedId]
       }, this.saveFeedbackDurationMs)
     },
-    startStatusPolling() {
-      if (this.statusPollTimer) {
-        return
-      }
-      this.statusPollTimer = window.setInterval(() => {
-        this.statusNowTick = Math.floor(Date.now() / 1000)
-        this.loadMemoryStatus(false)
-      }, 10000)
-    },
-    stopStatusPolling() {
-      if (!this.statusPollTimer) {
-        return
-      }
-      window.clearInterval(this.statusPollTimer)
-      this.statusPollTimer = null
-    },
+
     // formatRelativeTime 把 unix 秒时间格式化为“xx小时xx分钟前/后”。
     formatRelativeTime(unixTime, direction) {
       const targetTime = Number(unixTime || 0)
