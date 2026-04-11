@@ -3,6 +3,7 @@ package dtool
 import (
 	"dev_tool/internal/app/dtool/controller"
 	"dev_tool/internal/app/dtool/define"
+	"dev_tool/internal/app/dtool/middleware"
 	"dev_tool/internal/pkg/p_define"
 	"dev_tool/internal/pkg/p_gin"
 	"errors"
@@ -18,7 +19,14 @@ import (
 )
 
 func InitRouter(tGin *p_gin.Gin) {
+	// 注册 SafeAuth 中间件（需要在基础路由之后，其他受保护路由之前）
+	// 但白名单接口需要在中间件之前注册，所以这里采用另一种方式：
+	// 1. 先注册白名单接口
 	baseRouter(tGin)
+	
+	// 2. 注册 SafeAuth 中间件到所有后续路由
+	tGin.UseMiddleware(middleware.SafeAuthMiddleware())
+	
 	toolRouter(tGin)
 	redisRouter(tGin)
 	phpRouter(tGin)
@@ -101,11 +109,12 @@ func toolRouter(tGin *p_gin.Gin) {
 
 // 基础接口
 func baseRouter(tGin *p_gin.Gin) {
-	tGin.GinPost(`/api/BaseLogin`, controller.BaseLogin)                       //登录
+	tGin.GinPost(`/api/BaseLogin`, controller.BaseLogin)                       //Safe 登录
+	tGin.GinPost(`/api/BaseLoginStatus`, controller.BaseLoginStatus)           //Safe 登录状态检查
 	tGin.GinPost(`/api/BaseRegisterService`, controller.BaseRegisterService)   //注册各类服务 CheckUnikeyExist
 	tGin.GinPost(`/api/BaseCheckUnikeyExist`, controller.BaseCheckUnikeyExist) //检查unikey是否已经登录注册
 	tGin.GinPost(`/api/BaseSshList`, controller.BaseSshList)                   //ssh列表
-	tGin.GinPost(`/api/Ip`, controller.Ip)                                     //登录
+	tGin.GinPost(`/api/Ip`, controller.Ip)                                     //外网IP
 	tGin.GinPost(`/api/Upload`, controller.Upload)                             //上传文件
 }
 

@@ -120,7 +120,7 @@ export default defineComponent({
           // Sort by ID ascending
           state.sshList = response.Data.sort((a, b) => a.id - b.id)
         }
-      })
+      }, {is_check_connection: 1})
     }
     // 处理SSE推送的连接状态更新
     const handleConnectionsUpdate = function (data){

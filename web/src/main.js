@@ -79,6 +79,11 @@ Axios.interceptors.response.use((response) => {
 app.use(VueAxios, Axios)
 app.config.globalProperties.$axios = Axios
 
+// 创建全局事件总线（用于登录失效等全局事件）
+import mitt from 'mitt'
+const eventBus = mitt()
+app.config.globalProperties.$eventBus = eventBus
+
 import router from './router/index'
 
 app.config.productionTip = false

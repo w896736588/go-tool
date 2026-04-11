@@ -22,9 +22,9 @@
           <pl-button @click="groupDialog = true">
             <el-icon><FolderOpened /></el-icon>分组管理
           </pl-button>
-          <pl-button type="success">
-            <el-icon><DataLine /></el-icon>运行总览
-          </pl-button>
+          <!-- <pl-button type="success"> -->
+            <!-- <el-icon><DataLine /></el-icon>运行总览 -->
+          <!-- </pl-button> -->
         </div>
         <!-- 本地搜索框 -->
         <el-input
@@ -40,35 +40,59 @@
       </div>
     </div>
 
-    <!-- 执行卡片列表 -->
-    <template v-for="tab in tabConfigList" :key="tab.id">
-      <div v-if="getExecutionInfo(tab.id) && (!chooseGroupId || parseInt(chooseGroupId) === -1 || Number(tab.group_id) === Number(chooseGroupId)) && matchSearch(tab)" class="execution-card">
+    <!-- execution-grid 使用卡片网格承载任务，减少宽屏场景下的空白。 / Use a card grid so wide screens feel denser and easier to scan. -->
+    <div v-if="filteredTabConfigList.length > 0" class="execution-grid">
+      <div v-for="tab in filteredTabConfigList" :key="tab.id" class="execution-card">
         <div class="card-header">
           <div class="card-info">
             <el-tag class="tab-id-tag">#{{ tab.id }}</el-tag>
-            <span class="tab-name">{{ tab.name }}</span>
-          </div>
-          <div class="card-actions">
-            <pl-button size="small" @click="showEditTabConfig(tab.id)">
-              <el-icon><Edit /></el-icon>编辑
-            </pl-button>
-            <pl-button size="small" @click="showCopyCreateTabConfig(tab.id)">
-              <el-icon><CopyDocument /></el-icon>复制
-            </pl-button>
-            <pl-button size="small" type="danger" @click="removeTab(tab.id)">
-              <el-icon><Delete /></el-icon>删除
-            </pl-button>
-            <pl-button size="small" type="primary" @click="openNewTab(tab)">
-              <el-icon><Position /></el-icon>新窗口
-            </pl-button>
+            <div class="card-title-block">
+              <span class="tab-name">{{ tab.name }}</span>
+              <div class="card-subtitle">{{ getGroupName(tab.group_id) }}</div>
+            </div>
           </div>
         </div>
+
+        <div class="card-meta-list">
+          <div class="card-meta-item">
+            <span class="card-meta-label">分组</span>
+            <span class="card-meta-value">{{ getGroupName(tab.group_id) }}</span>
+          </div>
+          <div class="card-meta-item">
+            <span class="card-meta-label">SSH</span>
+            <span class="card-meta-value">{{ getSshName(tab.ssh_id) }}</span>
+          </div>
+        </div>
+
         <div class="card-command">
-          <el-icon class="command-icon"><Terminal /></el-icon>
-          <code class="command-text">{{ getExecutionInfo(tab.id).command }}</code>
+          <el-icon class="command-icon"><Monitor /></el-icon>
+          <code class="command-text">{{ getCommandPreview(tab.command) }}</code>
+        </div>
+
+        <div class="card-actions">
+          <pl-button size="small" @click="showEditTabConfig(tab.id)">
+            <el-icon><Edit /></el-icon>编辑
+          </pl-button>
+          <pl-button size="small" @click="showCopyCreateTabConfig(tab.id)">
+            <el-icon><CopyDocument /></el-icon>复制
+          </pl-button>
+          <pl-button size="small" type="danger" @click="removeTab(tab.id)">
+            <el-icon><Delete /></el-icon>删除
+          </pl-button>
+          <pl-button size="small" type="primary" @click="openNewTab(tab)">
+            <el-icon><Position /></el-icon>运行
+          </pl-button>
         </div>
       </div>
-    </template>
+    </div>
+
+    <div v-else class="shell-empty-state">
+      <div class="shell-empty-state__icon">
+        <el-icon><Monitor /></el-icon>
+      </div>
+      <div class="shell-empty-state__title">当前没有可展示的终端输出任务</div>
+      <div class="shell-empty-state__desc">可以尝试切换分组、清空搜索条件，或者直接创建一个新的终端输出任务。</div>
+    </div>
 
     <!-- 创建/编辑弹窗 -->
     <el-dialog v-model="shellOutDialog" title="创建终端输出" width="550px" destroy-on-close class="create-dialog">
@@ -121,7 +145,7 @@
 
 <script>
 /* 以下 import 保持你原来的即可 */
-import { Plus, FolderOpened, DataLine, Edit, CopyDocument, Delete, Position, CollectionTag, Check, Terminal, Search } from '@element-plus/icons-vue';
+import { Plus, FolderOpened, DataLine, Edit, CopyDocument, Delete, Position, CollectionTag, Check, Monitor, Search } from '@element-plus/icons-vue';
 import base from '@/utils/base.js'
 import sse from '@/utils/base/sse'
 import shell from '@/utils/base/shell'
@@ -156,7 +180,7 @@ export default {
     Position,
     CollectionTag,
     Check,
-    Terminal,
+    Monitor,
     Search,
   },
   data() {
@@ -208,6 +232,21 @@ export default {
   },
   deactivated() {
 
+  },
+  computed: {
+    // filteredTabConfigList 统一收敛分组和搜索过滤，模板只负责渲染。 / Centralize group and search filtering so the template stays clean.
+    filteredTabConfigList() {
+      return this.tabConfigList.filter((tab) => {
+        if (!this.getExecutionInfo(tab.id)) {
+          return false
+        }
+        // 仅当选择了具体分组时做精确过滤。 / Filter by group only when the user picked a concrete group.
+        if (this.chooseGroupId && parseInt(this.chooseGroupId) !== -1 && Number(tab.group_id) !== Number(this.chooseGroupId)) {
+          return false
+        }
+        return this.matchSearch(tab)
+      })
+    },
   },
   methods: {
     // Local search filter
@@ -292,7 +331,30 @@ export default {
       let _that = this
       return _that.getTabConfigById(tabId)
     },
-
+    // getGroupName 返回分组展示名，缺失时统一给出兜底文案。 / Return a stable group label with a fallback when the group is missing.
+    getGroupName(groupId) {
+      if (!groupId) {
+        return '未分组'
+      }
+      const found = this.groupList.find((item) => Number(item.id) === Number(groupId))
+      return found && found.name ? found.name : '未分组'
+    },
+    // getSshName 返回 SSH 环境名称，便于卡片直接展示执行上下文。 / Resolve the SSH environment name so each card shows where it runs.
+    getSshName(sshId) {
+      if (!sshId) {
+        return '未选择'
+      }
+      const found = this.sshList.find((item) => Number(item.id) === Number(sshId))
+      return found && found.name ? found.name : `SSH#${sshId}`
+    },
+    // getCommandPreview 对长命令做两行左右的预览，避免卡片被超长命令撑散。 / Create a compact command preview so long commands do not dominate the card.
+    getCommandPreview(command) {
+      const normalizedCommand = String(command || '').replace(/\s+/g, ' ').trim()
+      if (normalizedCommand.length <= 180) {
+        return normalizedCommand || '-'
+      }
+      return `${normalizedCommand.slice(0, 180)}...`
+    },
     createTab: function () {
       let _that = this
       _that.shellOutDialog = true
@@ -583,33 +645,52 @@ export default {
   min-width: 200px;
 }
 
+.execution-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, 500px);
+  gap: 14px;
+  justify-content: space-evenly;
+}
+
 .execution-card {
   background: #fff;
   border: 1px solid #e8e8e0;
   border-left: 3px solid #b8ceb6;
   border-radius: 12px;
   padding: 14px;
-  margin-bottom: 10px;
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 10px 24px rgba(90, 122, 90, 0.06);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
 }
 
 .execution-card:hover {
   border-left-color: #93b793;
   background: #fcfdfb;
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px rgba(90, 122, 90, 0.1);
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
   flex-wrap: wrap;
   gap: 8px;
 }
 
 .card-info {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
+}
+
+.card-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .tab-id-tag {
@@ -625,10 +706,50 @@ export default {
   color: #303133;
 }
 
+.card-subtitle {
+  color: #7b8b7b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.status-tag {
+  border-radius: 999px;
+}
+
+.card-meta-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.card-meta-item {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #f8faf6 0%, #f2f7ef 100%);
+  border: 1px solid #e4ecde;
+}
+
+.card-meta-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: #839283;
+}
+
+.card-meta-value {
+  display: block;
+  color: #334133;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
 .card-actions {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  margin-top: auto;
 }
 
 .card-command {
@@ -655,6 +776,43 @@ export default {
   line-height: 1.45;
 }
 
+.shell-empty-state {
+  margin-top: 18px;
+  padding: 42px 24px;
+  border-radius: 16px;
+  border: 1px dashed #cdd9c9;
+  background: radial-gradient(circle at top, #fbfdf9 0%, #f4f8f1 100%);
+  text-align: center;
+  color: #607160;
+}
+
+.shell-empty-state__icon {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 14px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eaf3e6;
+  color: #5c845c;
+  font-size: 26px;
+}
+
+.shell-empty-state__title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #3c4a3c;
+  margin-bottom: 8px;
+}
+
+.shell-empty-state__desc {
+  max-width: 520px;
+  margin: 0 auto;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
 .create-form :deep(.el-input__wrapper),
 .create-form :deep(.el-textarea__inner),
 .create-form :deep(.el-select .el-input__wrapper) {
@@ -678,8 +836,16 @@ export default {
     align-items: flex-start;
   }
 
+  .card-meta-list {
+    grid-template-columns: 1fr;
+  }
+
   .card-actions {
     width: 100%;
+  }
+
+  .execution-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

@@ -88,6 +88,18 @@
               <div class="config-item-help">Playwright 文件下载目录，支持使用 {DRIVE} 占位符。</div>
             </el-form-item>
           </el-form>
+
+          <el-divider content-position="left">[safe] 安全登录配置</el-divider>
+          <el-form label-width="150px">
+            <el-form-item label="password">
+              <el-input v-model="runtimeEditForm.safe_password" placeholder="请输入后台访问密码" show-password />
+              <div class="config-item-help">后台访问密码，留空表示不启用密码保护。</div>
+            </el-form-item>
+            <el-form-item label="sessionExpireMinutes">
+              <el-input-number v-model="runtimeEditForm.safe_session_expire_minutes" :min="1" :step="10" />
+              <div class="config-item-help">会话有效期（分钟），默认 120 分钟。每次请求成功会自动续期。</div>
+            </el-form-item>
+          </el-form>
         </div>
 
         <template v-else>
@@ -166,6 +178,18 @@
               <div class="config-item-help">Playwright 文件下载目录，支持使用 {DRIVE} 占位符。</div>
             </el-descriptions-item>
           </el-descriptions>
+
+          <el-divider content-position="left">[safe] 安全登录配置</el-divider>
+          <el-descriptions class="memory-config-display" :column="1" border>
+            <el-descriptions-item label="password">
+              <div class="config-value">{{ safePasswordDisplay }}</div>
+              <div class="config-item-help">后台访问密码，留空表示不启用密码保护。</div>
+            </el-descriptions-item>
+            <el-descriptions-item label="sessionExpireMinutes">
+              <div class="config-value">{{ form.safe_session_expire_minutes }} 分钟</div>
+              <div class="config-item-help">会话有效期，每次请求成功会自动续期。</div>
+            </el-descriptions-item>
+          </el-descriptions>
         </template>
 
         <el-alert
@@ -232,6 +256,8 @@ function createRuntimeEditForm() {
     webkit_driver_path: '',
     webkit_data_path: '',
     webkit_download_path: '',
+    safe_password: '',
+    safe_session_expire_minutes: 120,
   }
 }
 
@@ -279,6 +305,8 @@ export default {
         memory_arrange_prompt: DEFAULT_MEMORY_ARRANGE_PROMPT,
         home_task_daily_report_model_id: null,
         home_task_daily_report_prompt: DEFAULT_HOME_TASK_DAILY_REPORT_PROMPT,
+        safe_password: '',
+        safe_session_expire_minutes: 120,
       },
       RUNTIME_DATABASE_SYNC_TARGET_MAIN,
       RUNTIME_DATABASE_SYNC_TARGET_MEMORY,
@@ -319,6 +347,13 @@ export default {
     showMemoryDbSyncButton() {
       return this.showRuntimeConfig && !this.runtimeEditMode && this.form.memory_db_is_git_repo
     },
+    // safePasswordDisplay 展示密码状态（已设置/未设置）
+    safePasswordDisplay() {
+      if (this.form.safe_password && this.form.safe_password.length > 0) {
+        return '已设置（' + '*'.repeat(Math.min(this.form.safe_password.length, 8)) + '）'
+      }
+      return '未设置（不启用密码保护）'
+    },
   },
   mounted() {
     this.loadAiModelList()
@@ -340,6 +375,9 @@ export default {
         return
       }
       AiSetApi.AiModelList({ model_type: 'llm' }, (response) => {
+        if (response.__loginRequired) {
+          return
+        }
         if (response.ErrCode !== 0) {
           return
         }
@@ -359,10 +397,15 @@ export default {
         webkit_driver_path: this.form.webkit_driver_path || '',
         webkit_data_path: this.form.webkit_data_path || '',
         webkit_download_path: this.form.webkit_download_path || '',
+        safe_password: this.form.safe_password || '',
+        safe_session_expire_minutes: Number(this.form.safe_session_expire_minutes ?? 120),
       }
     },
     loadConfig() {
       set.MemoryConfigGet((response) => {
+        if (response.__loginRequired) {
+          return
+        }
         if (response.ErrCode !== 0 || !response.Data) {
           return
         }
@@ -383,6 +426,8 @@ export default {
         this.form.memory_arrange_prompt = response.Data.memory_arrange_prompt || DEFAULT_MEMORY_ARRANGE_PROMPT
         this.form.home_task_daily_report_model_id = response.Data.home_task_daily_report_model_id || null
         this.form.home_task_daily_report_prompt = response.Data.home_task_daily_report_prompt || DEFAULT_HOME_TASK_DAILY_REPORT_PROMPT
+        this.form.safe_password = response.Data.safe_password || ''
+        this.form.safe_session_expire_minutes = Number(response.Data.safe_session_expire_minutes ?? 120)
         this.syncRuntimeEditForm()
       })
     },
@@ -409,14 +454,31 @@ export default {
         webkit_driver_path: this.runtimeEditForm.webkit_driver_path,
         webkit_data_path: this.runtimeEditForm.webkit_data_path,
         webkit_download_path: this.runtimeEditForm.webkit_download_path,
+        safe_password: this.runtimeEditForm.safe_password || '',
+        safe_session_expire_minutes: Number(this.runtimeEditForm.safe_session_expire_minutes || 120),
       }
       set.RuntimeConfigSave(payload, (response) => {
+        if (response.__loginRequired) {
+          // 登录失效，已触发登录弹窗，不显示错误
+          return
+        }
         if (response.ErrCode !== 0) {
           this.$helperNotify.error(response.ErrMsg || '配置保存失败')
           return
         }
         this.runtimeEditMode = false
         this.loadConfig()
+        // 如果修改了密码且需要重新登录
+        if (response.Data && response.Data.need_relogin) {
+          this.$helperNotify.success('密码已修改，请使用新密码重新登录')
+          // 清除本地 token
+          this.$base.ClearSafeToken()
+          // 触发全局登录弹窗事件，让用户重新输入密码
+          if (this.$eventBus) {
+            this.$eventBus.emit('safe_auth_required', { message: '密码已修改，请使用新密码登录' })
+          }
+          return
+        }
         this.$helperNotify.success('配置已写入文件并重新加载')
         this.$emit('changed')
       })
@@ -429,6 +491,9 @@ export default {
       this.syncLoading[loadingKey] = true
       set.RuntimeDatabaseGitSync({ target }, (response) => {
         this.syncLoading[loadingKey] = false
+        if (response.__loginRequired) {
+          return
+        }
         if (response.ErrCode !== 0) {
           this.$helperNotify.error(response.ErrMsg || '同步失败')
           return
@@ -449,6 +514,9 @@ export default {
         home_task_daily_report_prompt: this.form.home_task_daily_report_prompt,
       }
       set.MemoryConfigSave(payload, (response) => {
+        if (response.__loginRequired) {
+          return
+        }
         if (response.ErrCode === 0) {
           this.$helperNotify.success('AI 配置已保存')
           this.$emit('changed')

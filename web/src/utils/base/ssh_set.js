@@ -1,7 +1,7 @@
 import base from "@/utils/base";
 
-function SshList(callBack){
-    base.BasePost('/api/Set/SshList', {} , callBack)
+function SshList(callBack, params = {}){
+    base.BasePost('/api/Set/SshList', params , callBack)
 }
 function SshAdd(data , callBack){
     base.BasePost(

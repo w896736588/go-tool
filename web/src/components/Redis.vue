@@ -808,16 +808,16 @@ export default {
     },
     getRedisDbSelect: function () {
       let _that = this
+      if (!_that.redisList || _that.redisList.length === 0) {
+        _that.redisChooseId = 0
+        _that.redisChooseConfig = {}
+        return
+      }
       _that.redisChooseId = this.getStore('redisCheckId')
       for (let i in _that.redisList) {
         if (parseInt(_that.redisChooseId) === parseInt(_that.redisList[i].id)) {
           _that.redisChooseConfig = _that.redisList[i]
         }
-      }
-      if (_that.redisList.length === 0) {
-        _that.redisChooseId = 0
-        _that.redisChooseConfig = {}
-        return
       }
       if (!_that.redisChooseConfig || !_that.redisChooseConfig.id) {
         _that.redisChooseConfig = _that.redisList[0]

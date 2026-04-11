@@ -4,15 +4,46 @@ import module from './module'
 import {globals} from '@/main'
 
 const DEV_PORT = '17170'
+const SAFE_TOKEN_KEY = 'safe_token'
 
-//登录拿到 unikey
-function BaseLogin(userName, password, okFunc) {
+// 获取 safe token
+function GetSafeToken() {
+    return store.getStore(SAFE_TOKEN_KEY) || ''
+}
+
+// 设置 safe token
+function SetSafeToken(token) {
+    if (token) {
+        store.setStore(SAFE_TOKEN_KEY, token)
+    }
+}
+
+// 清除 safe token
+function ClearSafeToken() {
+    store.removeStore(SAFE_TOKEN_KEY)
+}
+
+// Safe 登录接口（使用配置文件密码）
+function BaseLogin(password, okFunc) {
     BasePost(
         '/api/BaseLogin',
         {
-            UserName: userName,
-            Password: password,
+            password: password,
         },
+        function (response) {
+            if (response.ErrCode === 0 && response.Data && response.Data.token) {
+                SetSafeToken(response.Data.token)
+            }
+            okFunc(response)
+        }
+    )
+}
+
+// 检查登录状态
+function BaseLoginStatus(okFunc) {
+    BasePost(
+        '/api/BaseLoginStatus',
+        {},
         function (response) {
             okFunc(response)
         }
@@ -36,15 +67,50 @@ function Globals() {
     return globals
 }
 
+// 处理响应，检查续期 token 和登录失效
+function handleResponse(response) {
+    // 检查是否有续期 token
+    const renewedToken = response.headers && response.headers['x-renewed-token']
+    if (renewedToken) {
+        SetSafeToken(renewedToken)
+    }
+    return response
+}
+
+// 处理错误，检查登录失效错误码
+function handleError(error, callBack) {
+    if (error.response && error.response.data) {
+        const errCode = error.response.data.ErrCode
+        const errMsg = error.response.data.ErrMsg || ''
+        // 40101: 未登录, 40102: 过期, 40103: 密码版本不匹配, 40104: token非法
+        if (errCode === 40101 || errCode === 40102 || errCode === 40103 || errCode === 40104) {
+            ClearSafeToken()
+            // 触发全局登录失效事件，带上错误消息用于弹窗显示
+            if (globals && globals.$eventBus) {
+                globals.$eventBus.emit('safe_auth_required', { message: errMsg })
+            }
+            // 登录失效时调用回调，但将错误消息置空，避免显示错误通知
+            // 40103（密码版本不匹配）通常是修改密码后触发，直接弹窗不显示错误
+            callBack({...error.response.data, ErrMsg: '', __loginRequired: true})
+            return
+        }
+        callBack(error.response.data)
+        return
+    }
+    callBack({ErrCode: -1, ErrMsg: error.message || '请求失败'})
+}
+
 //POST请求
 function BasePost(uri, params, callBack) {
     globals.$axios.post(GetApiHost() + uri, params , {
         headers: {
-            'Content-Type': 'application/json', // 常用示例
-            'Token' : store.getStore('token'),
+            'Content-Type': 'application/json',
+            'Token' : GetSafeToken(),
         }
     }).then(function (response) {
-        callBack(response)
+        callBack(handleResponse(response))
+    }).catch(function (error) {
+        handleError(error, callBack)
     })
 }
 
@@ -53,10 +119,12 @@ function BasePostForm(uri, params, callBack) {
     globals.$axios.post(GetApiHost() + uri, params , {
         headers: {
             'Content-Type': 'multipart/form-data',
-            'Token' : store.getStore('token'),
+            'Token' : GetSafeToken(),
         }
     }).then(function (response) {
-        callBack(response)
+        callBack(handleResponse(response))
+    }).catch(function (error) {
+        handleError(error, callBack)
     })
 }
 
@@ -179,10 +247,14 @@ function FormatEnterToMarkdown(data) {
 
 export default {
     BaseLogin,
+    BaseLoginStatus,
     BasePost,
     BasePostForm,
     GetApiHost,
     GetSseApiHost,
+    GetSafeToken,
+    SetSafeToken,
+    ClearSafeToken,
     Globals,
     GetDivHeight,
     GetDivHeight2,

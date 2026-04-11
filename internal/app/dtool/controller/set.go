@@ -21,38 +21,53 @@ import (
 
 // SetSshList ssh列表
 func SetSshList(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	// 是否检查连接状态，1检查，0不检查，默认0
+	isCheckConnection := cast.ToInt(dataMap[`is_check_connection`])
+
 	all, allErr := common.DbMain.Client.QuickQuery(`tbl_ssh`, `*`, nil).All()
 	if allErr != nil {
 		gsgin.GinResponseError(c, allErr.Error(), nil)
 		return
 	}
 	allSsh := map[int]map[string]any{}
-	//返回连接状态
-	task := gstask.NewTask()
-	for _, sshValue := range all {
-		allSsh[cast.ToInt(sshValue[`id`])] = sshValue
-		callBack := gstask.CallbackFunc{
-			Func: func() *gstask.Result {
-				return testSshConn(sshValue)
-			},
-			Timeout: 3 * time.Second,
-			Id:      cast.ToString(sshValue[`id`]),
+
+	// 只有在需要检查连接状态时才执行连接测试
+	if isCheckConnection == 1 {
+		//返回连接状态
+		task := gstask.NewTask()
+		for _, sshValue := range all {
+			allSsh[cast.ToInt(sshValue[`id`])] = sshValue
+			callBack := gstask.CallbackFunc{
+				Func: func() *gstask.Result {
+					return testSshConn(sshValue)
+				},
+				Timeout: 3 * time.Second,
+				Id:      cast.ToString(sshValue[`id`]),
+			}
+			task.Add(callBack)
 		}
-		task.Add(callBack)
-	}
-	resultList := task.RunAll()
-	//填充链接状态
-	for _, result := range resultList {
-		for sshId, _ := range allSsh {
-			if sshId == cast.ToInt(result.Id) {
-				if result.Err != nil {
-					allSsh[sshId][`status`] = result.Err.Error()
-				} else {
-					allSsh[sshId][`status`] = `success`
+		resultList := task.RunAll()
+		//填充链接状态
+		for _, result := range resultList {
+			for sshId, _ := range allSsh {
+				if sshId == cast.ToInt(result.Id) {
+					if result.Err != nil {
+						allSsh[sshId][`status`] = result.Err.Error()
+					} else {
+						allSsh[sshId][`status`] = `success`
+					}
 				}
 			}
 		}
+	} else {
+		// 不检查连接状态，直接填充数据
+		for _, sshValue := range all {
+			allSsh[cast.ToInt(sshValue[`id`])] = sshValue
+		}
 	}
+
 	returnList := make([]map[string]any, 0)
 	for _, sshValue := range allSsh {
 		returnList = append(returnList, sshValue)
@@ -844,6 +859,8 @@ func SetMemoryConfigGet(c *gin.Context) {
 		`memory_arrange_model_id`:           cast.ToInt(arrangeModelID),
 		`home_task_daily_report_prompt`:     dailyReportPrompt,
 		`home_task_daily_report_model_id`:   cast.ToInt(dailyReportModelID),
+		`safe_password`:                     component.ConfigViper.GetString(`safe.password`),
+		`safe_session_expire_minutes`:       component.ConfigViper.GetInt(`safe.sessionExpireMinutes`),
 	})
 }
 
@@ -923,8 +940,12 @@ func SetRuntimeConfigSave(c *gin.Context) {
 		return
 	}
 
+	// 保存前读取当前密码，用于判断密码是否修改
+	oldSafePassword := component.ConfigViper.GetString(`safe.password`)
+
 	baseSection := cfg.Section(`base`)
 	pathSection := cfg.Section(`path`)
+	safeSection := cfg.Section(`safe`)
 
 	setIniKey(baseSection, `dbPath`, strings.TrimSpace(cast.ToString(dataMap[`db_path`])))
 	setIniKey(baseSection, `dbFileName`, strings.TrimSpace(cast.ToString(dataMap[`db_file_name`])))
@@ -936,6 +957,14 @@ func SetRuntimeConfigSave(c *gin.Context) {
 	setIniKey(pathSection, `webkit_driver_path`, strings.TrimSpace(cast.ToString(dataMap[`webkit_driver_path`])))
 	setIniKey(pathSection, `webkit_data_path`, strings.TrimSpace(cast.ToString(dataMap[`webkit_data_path`])))
 	setIniKey(pathSection, `webkit_download_path`, strings.TrimSpace(cast.ToString(dataMap[`webkit_download_path`])))
+
+	// 保存 safe 配置
+	newSafePassword := strings.TrimSpace(cast.ToString(dataMap[`safe_password`]))
+	setIniKey(safeSection, `password`, newSafePassword)
+	setIniKey(safeSection, `sessionExpireMinutes`, cast.ToString(cast.ToInt(dataMap[`safe_session_expire_minutes`])))
+
+	// 判断密码是否修改
+	safeChanged := oldSafePassword != newSafePassword
 
 	if err = cfg.SaveTo(configFile); err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
@@ -951,10 +980,15 @@ func SetRuntimeConfigSave(c *gin.Context) {
 	}
 	business.ReloadEditableRuntimeConfig()
 
+	// 如果密码修改了，需要重新登录
+	needRelogin := safeChanged && newSafePassword != ``
+
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
-		`config_file`:  configFile,
-		`reloaded`:     true,
-		`need_restart`: true,
+		`config_file`:   configFile,
+		`reloaded`:      true,
+		`need_restart`:  true,
+		`safe_changed`:  safeChanged,
+		`need_relogin`:  needRelogin,
 	})
 }
 

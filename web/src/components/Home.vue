@@ -89,12 +89,11 @@
           @click="openAsyncTaskDialog"
         >
           <span class="footer-action__title">
-            异步任务 {{ asyncTaskSummary.await_confirm_count || 0 }}/{{ asyncTaskSummary.running_count || 0 }}
+            任务 {{ asyncTaskSummary.await_confirm_count || 0 }}/{{ asyncTaskSummary.running_count || 0 }}
             <span v-if="hasRunningAsyncTask()" class="async-task-entry__spinner" aria-hidden="true"></span>
           </span>
-          <span class="footer-action__meta">待处理/运行中</span>
         </button>
-        <pl-button v-if="loginInfo.dialog" size="small" @click="loginInfo.dialog = true">登录</pl-button>
+
       </div>
     </aside>
 
@@ -406,19 +405,31 @@
     <tools></tools>
   </el-drawer>
 
-  <el-dialog v-model="loginInfo.dialog" title="登录" width="500">
-    <el-form>
-      <el-form-item :label-width="80" label="username">
-        <el-input v-model="loginInfo.username" autocomplete="off"/>
-      </el-form-item>
-      <el-form-item :label-width="80" label="password">
-        <el-input v-model="loginInfo.password" autocomplete="off" show-password/>
-      </el-form-item>
-    </el-form>
+  <!-- Safe 登录弹窗 -->
+  <el-dialog
+    v-model="safeLoginVisible"
+    title="后台登录"
+    width="420"
+    :close-on-click-modal="false"
+    :close-on-press-escape="false"
+    :show-close="false"
+    class="safe-login-dialog"
+    :modal-class="'safe-login-modal'"
+  >
+    <div class="safe-login-content">
+      <p class="safe-login-desc">{{ safeLoginMessage || '请输入后台访问密码' }}</p>
+      <el-input
+        v-model="safeLoginPassword"
+        type="password"
+        placeholder="请输入密码"
+        show-password
+        @keyup.enter="handleSafeLogin"
+      />
+      <p v-if="safeLoginError" class="safe-login-error">{{ safeLoginError }}</p>
+    </div>
     <template #footer>
       <div class="dialog-footer">
-        <pl-button @click="loginInfo.dialog = false">取消</pl-button>
-        <pl-button type="primary" @click="login">保存</pl-button>
+        <pl-button type="primary" :loading="safeLoginLoading" @click="handleSafeLogin">登录</pl-button>
       </div>
     </template>
   </el-dialog>
@@ -799,11 +810,13 @@ export default {
     return {
       drawerVisibleTools: false,
       drawerVisibleMarkdown: false,
-      loginInfo: {
-        dialog: false,
-        username: 'default',
-        password: '111',
-      },
+      // Safe 登录相关
+      safeLoginVisible: false,
+      safeLoginPassword: '',
+      safeLoginLoading: false,
+      safeLoginError: '',
+      safeLoginChecked: false,
+      safeLoginMessage: '',
       menuName: '/Dashboard',
       minHeightMap: {},
       showShellMap: ['/Git', '/Consumer', '/WechatKefu'],
@@ -921,13 +934,8 @@ export default {
   mounted: function () {
     let _that = this
     _that.openModuleList = module.GetOpenModuleList()
-    base.BaseLogin(_that.loginInfo.username, _that.loginInfo.password, function (response) {
-      if (response.ErrCode === 0) {
-        store.setStore('token', response.Data.token)
-      } else {
-        _that.$helperNotify.error('登录失败')
-      }
-    })
+    // Safe 登录检查
+    _that.checkSafeLoginStatus()
     this.forceIp(false)
     // 注册Shell连接状态SSE监听
     sseDistribute.RegisterReceive('shell_connections', function(data, type, distributeId) {
@@ -937,12 +945,20 @@ export default {
     sseDistribute.RegisterReceive('async_tasks', function(data) {
       _that.handleAsyncTasksUpdate(data)
     })
+    // 注册安全认证失效SSE监听
+    sseDistribute.RegisterReceive('safe_auth_required', function(data) {
+      _that.handleSafeAuthRequired(data)
+    })
     this.loadHomeTaskFragmentOptions()
     this.loadHomeTaskList(HOME_TASK_ARCHIVED_NO)
     this.loadHomeTaskList(HOME_TASK_ARCHIVED_YES)
     this.ensureAsyncTaskNotificationPermission()
     this.menuName = this.$route.path || '/Dashboard'
     window.addEventListener('resize', function () {});
+    // 监听全局登录失效事件
+    if (this.$eventBus) {
+      this.$eventBus.on('safe_auth_required', this.showSafeLogin)
+    }
   },
   provide() {
     return {
@@ -964,14 +980,82 @@ export default {
         _that.ip = ip
       }, forceIp)
     },
-    login: function () {
+    // Safe 登录检查
+    checkSafeLoginStatus: function () {
       let _that = this
-      base.BaseLogin(_that.loginInfo.username, _that.loginInfo.password, function (response) {
+      base.BaseLoginStatus(function (response) {
+        _that.safeLoginChecked = true
+        if (response.ErrCode !== 0) {
+          // 接口调用失败，但不阻止进入
+          return
+        }
+        const data = response.Data || {}
+        // enabled=false：未启用密码保护，直接进入
+        if (!data.enabled) {
+          return
+        }
+        // enabled=true && logged_in=true：已登录，直接进入
+        if (data.logged_in) {
+          return
+        }
+        // enabled=true && logged_in=false：未登录，显示登录框
+        _that.showSafeLogin()
+      })
+    },
+    // 显示 Safe 登录弹窗
+    showSafeLogin: function (options) {
+      // 防止重复弹窗：如果弹窗已经显示，不再重复弹出
+      if (this.safeLoginVisible) {
+        // 如果传入新的消息，更新提示文字
+        if (options && options.message) {
+          this.safeLoginMessage = options.message
+        }
+        return
+      }
+      this.safeLoginVisible = true
+      this.safeLoginPassword = ''
+      this.safeLoginError = ''
+      // 支持传入自定义提示消息
+      if (options && options.message) {
+        this.safeLoginMessage = options.message
+      } else {
+        this.safeLoginMessage = ''
+      }
+    },
+    // 处理 SSE 推送的安全认证失效事件
+    handleSafeAuthRequired: function (data) {
+      // 清除本地 token
+      base.ClearSafeToken()
+      // 显示登录弹窗
+      const message = data && data.message ? data.message : '登录态已失效，请重新登录'
+      this.showSafeLogin({ message: message })
+    },
+    // 处理 Safe 登录
+    handleSafeLogin: function () {
+      let _that = this
+      const password = _that.safeLoginPassword.trim()
+      if (!password) {
+        _that.safeLoginError = '请输入密码'
+        return
+      }
+      _that.safeLoginLoading = true
+      _that.safeLoginError = ''
+      base.BaseLogin(password, function (response) {
+        _that.safeLoginLoading = false
         if (response.ErrCode === 0) {
-          store.setStore('token', response.Data.token)
+          _that.safeLoginVisible = false
+          _that.safeLoginPassword = ''
+          _that.$helperNotify.success('登录成功')
+          // 登录成功后刷新页面，确保所有状态正确
           window.location.reload()
         } else {
-          _that.$helperNotify.error('登录失败')
+          const errMsg = response.ErrMsg || '登录失败'
+          if (response.Data && response.Data.enabled === false) {
+            // 未启用密码保护
+            _that.safeLoginVisible = false
+            return
+          }
+          _that.safeLoginError = errMsg
         }
       })
     },
@@ -2721,6 +2805,62 @@ export default {
 .home-task-dialog :deep(.el-dialog__body) {
   padding-top: 18px;
   padding-bottom: 12px;
+}
+
+/* Safe 登录弹窗样式 */
+.safe-login-dialog :deep(.el-dialog) {
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.2);
+}
+
+/* 登录弹窗背景模糊效果 */
+.safe-login-modal {
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  background-color: rgba(0, 0, 0, 0.35) !important;
+}
+
+.safe-login-content {
+  padding: 20px 10px;
+}
+
+.safe-login-desc {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  color: #5a6d5a;
+  text-align: center;
+}
+
+.safe-login-error {
+  margin: 12px 0 0 0;
+  font-size: 13px;
+  color: #d9534f;
+  text-align: center;
+  min-height: 20px;
+}
+
+.safe-login-dialog :deep(.el-input__wrapper) {
+  border-radius: 10px;
+}
+
+.safe-login-dialog :deep(.el-input__inner) {
+  height: 44px;
+  font-size: 15px;
+}
+
+.safe-login-dialog :deep(.el-dialog__header) {
+  padding: 20px 20px 10px;
+  margin-right: 0;
+}
+
+.safe-login-dialog :deep(.el-dialog__title) {
+  font-weight: 600;
+  color: #3a5a3a;
+}
+
+.safe-login-dialog :deep(.el-dialog__footer) {
+  padding: 10px 20px 20px;
 }
 
 @media (max-width: 900px) {

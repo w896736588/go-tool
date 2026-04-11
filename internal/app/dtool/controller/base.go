@@ -4,7 +4,6 @@ import (
 	"context"
 	"dev_tool/internal/app/dtool/common"
 	"dev_tool/internal/app/dtool/component"
-	_struct "dev_tool/internal/app/dtool/struct"
 	"dev_tool/internal/pkg/p_common"
 	"errors"
 	"fmt"
@@ -19,31 +18,107 @@ import (
 	"github.com/spf13/cast"
 )
 
-// BaseLogin 登录
+// getSafeTokenManager 创建 Safe Token 管理器（从配置读取）
+func getSafeTokenManager() *common.SafeTokenManager {
+	password := component.ConfigViper.GetString("safe.password")
+	expireMinutes := component.ConfigViper.GetInt("safe.sessionExpireMinutes")
+	appName := component.ConfigViper.GetString("app.name")
+	return common.NewSafeTokenManager(password, expireMinutes, appName)
+}
+
+// BaseLogin Safe 登录接口
+// 使用配置文件中的 safe.password 进行验证
 func BaseLogin(c *gin.Context) {
-	reqBody := &_struct.LoginStruct{}
-	err := gsgin.GinPostBody(c, reqBody)
+	// 获取请求参数（兼容旧字段和新字段）
+	reqMap := make(map[string]interface{})
+	err := gsgin.GinPostBody(c, &reqMap)
 	if err != nil {
-		gsgin.GinResponseSuccess(c, err.Error(), nil)
-		return
-	}
-	userId, loginErr := common.DbMain.Login(reqBody.UserName, reqBody.Password)
-	if loginErr != nil {
-		gsgin.GinResponseError(c, `登录失败（`+loginErr.Error()+`）`, map[string]string{
+		gsgin.GinResponseError(c, `请求参数错误`, map[string]any{
 			`token`: ``,
 		})
 		return
 	}
-	token, tokenErr := p_common.AesGcmClient.Encrypt([]byte(cast.ToString(userId)))
+
+	// 获取输入密码（兼容 password 和 Password 字段）
+	inputPassword := ``
+	if p, ok := reqMap[`password`]; ok {
+		inputPassword = cast.ToString(p)
+	} else if p, ok := reqMap[`Password`]; ok {
+		inputPassword = cast.ToString(p)
+	}
+
+	// 创建 Token 管理器
+	tokenManager := getSafeTokenManager()
+
+	// 检查是否启用了密码保护
+	if !tokenManager.IsEnabled() {
+		gsgin.GinResponseError(c, `未启用后台密码保护`, map[string]any{
+			`enabled`: false,
+			`token`:   ``,
+		})
+		return
+	}
+
+	// 验证密码
+	if !tokenManager.VerifyPassword(inputPassword) {
+		gsgin.GinResponseError(c, `密码错误`, map[string]any{
+			`token`: ``,
+		})
+		return
+	}
+
+	// 生成 Token
+	token, expireAt, tokenErr := tokenManager.GenerateToken()
 	if tokenErr != nil {
-		gsgin.GinResponseError(c, `登录失败（`+tokenErr.Error()+`）`, map[string]string{
+		gsgin.GinResponseError(c, `登录失败（`+tokenErr.Error()+`）`, map[string]any{
 			`token`: ``,
 		})
+		return
 	}
+
+	gsgin.GinResponseSuccess(c, `登录成功`, map[string]any{
+		`token`:          token,
+		`expire_minutes`: tokenManager.GetExpireMinutes(),
+		`expire_at`:      expireAt,
+		`ports`:          strings.Split(component.ConfigViper.GetString(`run.ports`), `,`),
+		`local_ip`:       GetLANIP(),
+	})
+}
+
+// BaseLoginStatus 检查登录状态接口
+// 前端启动时调用，判断是否需要弹出登录框
+func BaseLoginStatus(c *gin.Context) {
+	// 从请求头获取 Token
+	token := c.GetHeader("Token")
+
+	// 创建 Token 管理器
+	tokenManager := getSafeTokenManager()
+
+	// 检查是否启用了密码保护
+	if !tokenManager.IsEnabled() {
+		gsgin.GinResponseSuccess(c, `获取成功`, map[string]any{
+			`enabled`:        false,
+			`logged_in`:      true, // 未启用密码保护视为已登录
+			`expire_minutes`: tokenManager.GetExpireMinutes(),
+			`expire_at`:      0,
+		})
+		return
+	}
+
+	// 解析并验证 Token
+	claims, errCode, _ := tokenManager.ParseToken(token)
+
+	isLoggedIn := errCode == 0
+	expireAt := int64(0)
+	if claims != nil {
+		expireAt = claims.ExpireAt
+	}
+
 	gsgin.GinResponseSuccess(c, `获取成功`, map[string]any{
-		`token`:    token,
-		`ports`:    strings.Split(component.ConfigViper.GetString(`run.ports`), `,`),
-		`local_ip`: GetLANIP(),
+		`enabled`:        true,
+		`logged_in`:      isLoggedIn,
+		`expire_minutes`: tokenManager.GetExpireMinutes(),
+		`expire_at`:      expireAt,
 	})
 }
 
