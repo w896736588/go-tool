@@ -696,8 +696,6 @@ import {
 
 // SSH_CONNECTION_REFRESH_INTERVAL_MS 统一控制 SSH 连接轮询周期。
 const SSH_CONNECTION_REFRESH_INTERVAL_MS = 5000
-// ASYNC_TASK_REFRESH_INTERVAL_MS 统一控制异步任务轮询周期。
-const ASYNC_TASK_REFRESH_INTERVAL_MS = 5000
 // HOME_TASK_TAB_* 用于区分任务弹窗内的标签页。
 const HOME_TASK_TAB_ACTIVE = 'active'
 const HOME_TASK_TAB_ARCHIVED = 'archived'
@@ -871,7 +869,6 @@ export default {
       asyncTaskLoading: false,
       asyncTaskActing: false,
       asyncTaskDeleting: false,
-      asyncTaskTimer: null,
       asyncTaskSelectedId: 0,
       asyncTaskList: [],
       asyncTaskDetail: {},
@@ -936,15 +933,14 @@ export default {
     sseDistribute.RegisterReceive('shell_connections', function(data, type, distributeId) {
       _that.handleSshConnectionsUpdate(data)
     })
-    sseDistribute.RegisterReceive('async_tasks', function() {
-      _that.loadAsyncTaskSummary(false)
+    // 注册异步任务状态SSE监听
+    sseDistribute.RegisterReceive('async_tasks', function(data) {
+      _that.handleAsyncTasksUpdate(data)
     })
     this.loadHomeTaskFragmentOptions()
     this.loadHomeTaskList(HOME_TASK_ARCHIVED_NO)
     this.loadHomeTaskList(HOME_TASK_ARCHIVED_YES)
     this.ensureAsyncTaskNotificationPermission()
-    this.loadAsyncTaskSummary(false)
-    this.startAsyncTaskPolling()
     this.menuName = this.$route.path || '/Dashboard'
     window.addEventListener('resize', function () {});
   },
@@ -1191,15 +1187,7 @@ export default {
       this.asyncTaskDialogVisible = true
       this.loadAsyncTaskSummary(true)
     },
-    // startAsyncTaskPolling 启动异步任务轮询，沿用类似 shell_connections 的轻量刷新思路。
-    startAsyncTaskPolling() {
-      if (this.asyncTaskTimer) {
-        clearInterval(this.asyncTaskTimer)
-      }
-      this.asyncTaskTimer = setInterval(() => {
-        this.loadAsyncTaskSummary(false)
-      }, ASYNC_TASK_REFRESH_INTERVAL_MS)
-    },
+
     // loadAsyncTaskSummary 刷新异步任务摘要与最近任务列表。
     loadAsyncTaskSummary(showLoading) {
       if (showLoading) {
@@ -1758,6 +1746,33 @@ export default {
       this.sshConnectionCount = data.total || list.length
       this.sshConnections = list
     },
+    // 处理SSE推送的异步任务状态更新
+    handleAsyncTasksUpdate(data) {
+      if (!data || typeof data !== 'object') {
+        return
+      }
+      const list = Array.isArray(data.list) ? data.list : []
+      this.processAsyncTaskNotifications(list)
+      this.asyncTaskList = list
+      this.asyncTaskSummary = {
+        await_confirm_count: Number(data.await_confirm_count || 0),
+        running_count: Number(data.running_count || 0),
+        failed_count: Number(data.failed_count || 0),
+        total: Number(data.total || list.length),
+      }
+      // 如果当前有选中的任务，更新其详情
+      if (this.asyncTaskSelectedId) {
+        const activeTask = list.find(item => Number(item.id) === Number(this.asyncTaskSelectedId))
+        if (activeTask) {
+          // 更新当前详情中的状态字段，保持其他数据不变
+          this.asyncTaskDetail = {
+            ...this.asyncTaskDetail,
+            ...activeTask,
+            result_payload_map: this.asyncTaskDetail.result_payload_map || {}
+          }
+        }
+      }
+    },
     // 刷新SSH连接状态（仅用于显示loading状态）
     refreshSshConnections(showLoading) {
       if (showLoading) {
@@ -1782,10 +1797,6 @@ export default {
     if (this.sshConnectionTimer) {
       clearInterval(this.sshConnectionTimer)
       this.sshConnectionTimer = null
-    }
-    if (this.asyncTaskTimer) {
-      clearInterval(this.asyncTaskTimer)
-      this.asyncTaskTimer = null
     }
   },
   components: {

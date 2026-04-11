@@ -2,10 +2,8 @@
 import store from './base/store'
 import module from './module'
 import {globals} from '@/main'
-import apiHostRouter from './api_host_router.cjs'
 
-var ports = ["17170", "17171"]
-const ssePort = '17170'
+const DEV_PORT = '17170'
 
 //登录拿到 unikey
 function BaseLogin(userName, password, okFunc) {
@@ -19,14 +17,6 @@ function BaseLogin(userName, password, okFunc) {
             okFunc(response)
         }
     )
-}
-
-function Ports() {
-    BasePost('/api/ports', {}, function (response) {
-        if (response.Data && response.Data.ports) {
-            ports = response.Data.ports
-        }
-    })
 }
 
 
@@ -70,27 +60,27 @@ function BasePostForm(uri, params, callBack) {
     })
 }
 
-//拿到接口地址
+// 判断是否为开发环境
+function isDev() {
+    return process.env.NODE_ENV === 'development'
+}
+
+// 获取基础 API 地址
+// 开发环境：固定使用 localhost:17170
+// 生产环境：使用相对路径（同域）
 function GetApiHost() {
-    let port = GetApiPort()
-    return 'http://localhost:' + port
+    if (isDev()) {
+        return 'http://localhost:' + DEV_PORT
+    }
+    return ''  // 生产环境返回空字符串，使用相对路径
 }
 
+// 获取 SSE API 地址
 function GetSseApiHost() {
-    let port = GetSsePort()
-    return 'http://localhost:' + port
-}
-
-function GetApiPort() {
-    return apiHostRouter.getApiPort(ports, Math.random, ssePort)
-}
-
-function GetSsePort() {
-    return apiHostRouter.getSsePort(ports, Math.random, ssePort)
-}
-
-function GetRandPort() {
-    return GetApiPort()
+    if (isDev()) {
+        return 'http://localhost:' + DEV_PORT
+    }
+    return ''  // 生产环境返回空字符串，使用相对路径
 }
 
 //上面是mainCard 这个返回mainCard距离底部还剩余的高度px
@@ -198,11 +188,7 @@ export default {
     GetDivHeight2,
     IsBase64,
     GenerateId,
-    GetRandPort,
-    GetApiPort,
-    GetSsePort,
     Debounce,
-    Ports,
     DisableSaveShortcut,
     UploadFile,
     FormatEnterToMarkdown,

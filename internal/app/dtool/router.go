@@ -106,7 +106,6 @@ func baseRouter(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/BaseCheckUnikeyExist`, controller.BaseCheckUnikeyExist) //检查unikey是否已经登录注册
 	tGin.GinPost(`/api/BaseSshList`, controller.BaseSshList)                   //ssh列表
 	tGin.GinPost(`/api/Ip`, controller.Ip)                                     //登录
-	tGin.GinPost(`/api/ports`, controller.Ports)                               //获取支持的端口
 	tGin.GinPost(`/api/Upload`, controller.Upload)                             //上传文件
 }
 
@@ -418,6 +417,9 @@ func apiUse(tGin *p_gin.Gin) {
 		// 中文注释：Shell 连接状态复用普通 SSE 通道推送，无需单独订阅 shell_connections client_id。
 		// English comment: Shell connection status now rides on the normal SSE channel for this client.
 		controller.BindShellConnectionsSSE(sse, stopC, 5*time.Second)
+		// 中文注释：异步任务状态复用普通 SSE 通道推送，页面加载时初始化一次，后续后端主动推送。
+		// English comment: Async task status now rides on the normal SSE channel for this client.
+		controller.BindAsyncTasksSSE(sse, stopC, 5*time.Second)
 		return sse, nil
 	}
 	closeFunc := func(sse *gsgin.Sse) {

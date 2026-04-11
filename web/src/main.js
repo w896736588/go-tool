@@ -132,7 +132,3 @@ sse.CloseFunc(function (){
 })
 sse.ReceiveMessage()
 
-//初始化端口
-import base from '@/utils/base.js'
-base.Ports()
-

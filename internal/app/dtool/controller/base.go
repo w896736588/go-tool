@@ -162,12 +162,6 @@ func Ip(c *gin.Context) {
 	})
 }
 
-func Ports(c *gin.Context) {
-	gsgin.GinResponseSuccess(c, `获取成功`, map[string]any{
-		`ports`: component.EnvClient.Ports,
-	})
-}
-
 func Upload(c *gin.Context) {
 	file, err := c.FormFile(`file`)
 	if err != nil {

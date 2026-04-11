@@ -3,7 +3,9 @@ package controller
 import (
 	"dev_tool/internal/app/dtool/common"
 	"dev_tool/internal/app/dtool/component"
+	"dev_tool/internal/app/dtool/define"
 	_struct "dev_tool/internal/app/dtool/struct"
+	"dev_tool/internal/pkg/p_define"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -85,6 +87,9 @@ func AsyncTaskDelete(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
+	// 中文注释：任务删除成功，主动推送更新。
+	// English comment: Task deleted, broadcast update.
+	BroadcastAsyncTasksUpdate()
 	gsgin.GinResponseSuccess(c, ``, nil)
 }
 
@@ -110,6 +115,9 @@ func AsyncTaskAction(c *gin.Context) {
 			return
 		}
 		updatedInfo, _ := db.AsyncTaskInfo(request.ID)
+		// 中文注释：任务状态变化，主动推送更新。
+		// English comment: Task status changed, broadcast update.
+		BroadcastAsyncTasksUpdate()
 		gsgin.GinResponseSuccess(c, ``, updatedInfo)
 		return
 	case asyncTaskActionSaveDailyReport:
@@ -144,6 +152,9 @@ func AsyncTaskAction(c *gin.Context) {
 		}
 		updatedInfo, _ := db.AsyncTaskInfo(request.ID)
 		updatedInfo[`memory_fragment`] = memoryInfo
+		// 中文注释：任务状态变化，主动推送更新。
+		// English comment: Task status changed, broadcast update.
+		BroadcastAsyncTasksUpdate()
 		gsgin.GinResponseSuccess(c, ``, updatedInfo)
 		return
 	case asyncTaskActionOverwriteMemoryFragment:
@@ -184,6 +195,9 @@ func AsyncTaskAction(c *gin.Context) {
 		}
 		updatedInfo, _ := db.AsyncTaskInfo(request.ID)
 		updatedInfo[`memory_fragment`] = memoryInfo
+		// 中文注释：任务状态变化，主动推送更新。
+		// English comment: Task status changed, broadcast update.
+		BroadcastAsyncTasksUpdate()
 		gsgin.GinResponseSuccess(c, ``, updatedInfo)
 		return
 	default:
@@ -203,6 +217,9 @@ func createAsyncTask(taskType, title, sourceID string, requestPayload map[string
 		return nil, err
 	}
 	taskID := cast.ToInt(taskInfo[`id`])
+	// 中文注释：新任务创建成功，主动推送更新。
+	// English comment: New task created, broadcast update.
+	BroadcastAsyncTasksUpdate()
 	asyncTaskBackgroundRunner(taskID, func() {
 		execute(taskID)
 	})
@@ -217,15 +234,24 @@ func runAsyncTaskAndPersistResult(taskID int, builder func() (map[string]any, er
 	if err := common.DbLog.AsyncTaskMarkRunning(taskID); err != nil {
 		return
 	}
+	// 中文注释：任务状态变为 running，主动推送更新。
+	// English comment: Task status changed to running, broadcast update.
+	BroadcastAsyncTasksUpdate()
 	resultMap, err := builder()
 	if err != nil {
 		_ = common.DbLog.AsyncTaskMarkFailed(taskID, err.Error())
+		// 中文注释：任务状态变为 failed，主动推送更新。
+		// English comment: Task status changed to failed, broadcast update.
+		BroadcastAsyncTasksUpdate()
 		return
 	}
 	resultPayload := gstool.JsonEncode(resultMap)
 	if markErr := common.DbLog.AsyncTaskMarkAwaitConfirm(taskID, resultPayload); markErr != nil {
 		return
 	}
+	// 中文注释：任务状态变为 await_confirm，主动推送更新。
+	// English comment: Task status changed to await_confirm, broadcast update.
+	BroadcastAsyncTasksUpdate()
 }
 
 // asyncTaskDBOrResponse 返回日志库实例。 // asyncTaskDBOrResponse returns the log database instance or writes an error response.
@@ -247,6 +273,72 @@ func asyncTaskDecodePayload(payload string) (map[string]any, error) {
 		return nil, fmt.Errorf(`异步任务结果解析失败 %w`, err)
 	}
 	return result, nil
+}
+
+// buildAsyncTasksPayload 构造异步任务列表与汇总数据。
+// buildAsyncTasksPayload builds the async task summary and list payload.
+func buildAsyncTasksPayload(limit int) (map[string]any, error) {
+	if common.DbLog == nil || common.DbLog.Client == nil {
+		return nil, errors.New(`日志库未初始化`)
+	}
+	summary, err := common.DbLog.AsyncTaskSummary(limit)
+	if err != nil {
+		return nil, err
+	}
+	return summary, nil
+}
+
+// sendAsyncTasksSnapshot 向指定 SSE 连接发送一次异步任务状态快照。
+// sendAsyncTasksSnapshot sends one async-tasks snapshot to the provided SSE client.
+func sendAsyncTasksSnapshot(sse *gsgin.Sse) {
+	if sse == nil {
+		return
+	}
+	data, err := buildAsyncTasksPayload(20)
+	if err != nil {
+		gstool.FmtPrintlnLogTime(`AsyncTasks广播错误 %s`, err.Error())
+		return
+	}
+	err = sse.SendToChan(gstool.JsonEncode(p_define.SseData{
+		SseDistributeId: define.SseAsyncTasks,
+		Data:            data,
+		Type:            p_define.SseContentTypeMsg,
+	}))
+	if err != nil {
+		gstool.FmtPrintlnLogTime(`AsyncTasks广播错误 %s`, err.Error())
+	}
+}
+
+// BindAsyncTasksSSE 为普通 SSE client 绑定异步任务状态推送。
+// BindAsyncTasksSSE attaches async-tasks events to a normal SSE client_id stream.
+func BindAsyncTasksSSE(sse *gsgin.Sse, stopC chan int, interval time.Duration) {
+	if sse == nil {
+		return
+	}
+	if interval <= 0 {
+		interval = 5 * time.Second
+	}
+	// 中文注释：建连后立即推一次，避免前端初次打开时要等下一个周期。
+	// English comment: Push once immediately so the UI does not wait for the first ticker tick.
+	sendAsyncTasksSnapshot(sse)
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				sendAsyncTasksSnapshot(sse)
+			case <-stopC:
+				return
+			}
+		}
+	}()
+}
+
+// BroadcastAsyncTasksUpdate 主动广播异步任务状态更新。
+// BroadcastAsyncTasksUpdate broadcasts async task status update to all connected SSE clients.
+func BroadcastAsyncTasksUpdate() {
+	sendAsyncTasksSnapshot(gsgin.SseGetByClientId(define.SseAsyncTasks))
 }
 
 // defaultBuildAsyncHomeTaskDailyReportResult 构建日报异步任务结果。 // defaultBuildAsyncHomeTaskDailyReportResult builds the daily report async result.
