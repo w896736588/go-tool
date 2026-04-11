@@ -53,11 +53,15 @@ func SafeAuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// 4. 从请求头获取 Token
+		// 4. 从请求头获取 Token，如果没有则从 URL 查询参数获取（兼容 SSE）
 		token := c.GetHeader("Token")
 		if token == "" {
 			// 尝试从 Cookie 获取（兼容某些场景）
 			token, _ = c.Cookie("safe_token")
+		}
+		if token == "" {
+			// 尝试从 URL 查询参数获取（SSE 场景）
+			token = c.Query("token")
 		}
 
 		// 5. 解析并验证 Token

@@ -16,7 +16,7 @@ function GetSseClientId(){
 }
 function Create() {
     sseClientId = base.GenerateId(SseClientId)
-    let params = 'client_id=' + sseClientId
+    let params = 'client_id=' + sseClientId + '&token=' + encodeURIComponent(base.GetSafeToken())
     let url = base.GetSseApiHost() + '/sse?' + params
     SseConn = new EventSource(url)
 }
