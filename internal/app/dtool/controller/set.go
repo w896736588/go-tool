@@ -861,6 +861,7 @@ func SetMemoryConfigGet(c *gin.Context) {
 		`home_task_daily_report_model_id`:   cast.ToInt(dailyReportModelID),
 		`safe_password`:                     component.ConfigViper.GetString(`safe.password`),
 		`safe_session_expire_minutes`:       component.ConfigViper.GetInt(`safe.sessionExpireMinutes`),
+		`run_mode`:                          component.EnvClient.SmartLinkConfig.RunMode,
 	})
 }
 
@@ -989,6 +990,109 @@ func SetRuntimeConfigSave(c *gin.Context) {
 		`need_restart`:  true,
 		`safe_changed`:  safeChanged,
 		`need_relogin`:  needRelogin,
+	})
+}
+
+// SetRuntimeConfigItemSave 保存单个运行时配置项（用于独立编辑保存）。 // Save a single runtime config item for independent editing.
+func SetRuntimeConfigItemSave(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+
+	configKey := strings.TrimSpace(cast.ToString(dataMap[`key`]))
+	configValue := dataMap[`value`]
+	sectionName := strings.TrimSpace(cast.ToString(dataMap[`section`]))
+
+	if configKey == `` || sectionName == `` {
+		gsgin.GinResponseError(c, `配置项 key 和 section 不能为空`, nil)
+		return
+	}
+
+	configFile := memoryConfigFilePath()
+	if strings.TrimSpace(configFile) == `` {
+		gsgin.GinResponseError(c, `未找到配置文件路径`, nil)
+		return
+	}
+
+	cfg, err := ini.LoadSources(ini.LoadOptions{
+		Loose: true,
+	}, configFile)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+
+	section := cfg.Section(sectionName)
+
+	// 根据 key 处理不同类型的配置项
+	needRestart := false
+	switch configKey {
+	case `run_mode`:
+		value := strings.TrimSpace(cast.ToString(configValue))
+		if value != string(define.SmartLinkRunModeServer) && value != string(define.SmartLinkRunModeLocalClient) {
+			gsgin.GinResponseError(c, `run_mode 必须是 server 或 local_client`, nil)
+			return
+		}
+		setIniKey(section, configKey, value)
+		// 更新内存中的配置
+		component.EnvClient.SmartLinkConfig.RunMode = define.SmartLinkRunMode(value)
+		needRestart = false
+	case `db_path`, `dbFileName`, `logDbPath`, `memoryDbPath`:
+		setIniKey(section, configKey, strings.TrimSpace(cast.ToString(configValue)))
+		needRestart = true
+	case `db_is_git_repo`, `memoryDbIsGitRepo`:
+		setIniKey(section, configKey, cast.ToString(cast.ToBool(configValue)))
+		needRestart = true
+	case `memoryDbAutoPushDelayMinutes`:
+		setIniKey(section, configKey, cast.ToString(cast.ToInt(configValue)))
+		needRestart = false
+	case `webkit_driver_path`, `webkit_data_path`, `webkit_download_path`:
+		setIniKey(section, configKey, strings.TrimSpace(cast.ToString(configValue)))
+		needRestart = false
+	case `password`:
+		oldSafePassword := component.ConfigViper.GetString(`safe.password`)
+		newSafePassword := strings.TrimSpace(cast.ToString(configValue))
+		setIniKey(section, configKey, newSafePassword)
+		needRestart = false
+		// 如果密码修改了，需要重新登录
+		if oldSafePassword != newSafePassword && newSafePassword != `` {
+			if err = cfg.SaveTo(configFile); err != nil {
+				gsgin.GinResponseError(c, err.Error(), nil)
+				return
+			}
+			if component.ConfigViper != nil {
+				_ = component.ConfigViper.ReadInConfig()
+			}
+			business.ReloadEditableRuntimeConfig()
+			gsgin.GinResponseSuccess(c, ``, map[string]any{
+				`config_file`:  configFile,
+				`reloaded`:     true,
+				`need_restart`: false,
+				`need_relogin`: true,
+			})
+			return
+		}
+	case `sessionExpireMinutes`:
+		setIniKey(section, configKey, cast.ToString(cast.ToInt(configValue)))
+		needRestart = false
+	default:
+		// 通用字符串配置
+		setIniKey(section, configKey, strings.TrimSpace(cast.ToString(configValue)))
+	}
+
+	if err = cfg.SaveTo(configFile); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+
+	if component.ConfigViper != nil {
+		_ = component.ConfigViper.ReadInConfig()
+	}
+	business.ReloadEditableRuntimeConfig()
+
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`config_file`:  configFile,
+		`reloaded`:     true,
+		`need_restart`: needRestart,
 	})
 }
 

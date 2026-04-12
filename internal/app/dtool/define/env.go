@@ -22,24 +22,30 @@ type WebConfig struct {
 	WebPath string // dist 目录 dist path / dist directory
 }
 
+type SmartLinkConfig struct {
+	RunMode           SmartLinkRunMode // 运行模式 run mode / execution mode
+	ClientVersion     string           // 客户端版本要求 client version / required client version
+}
+
 type Env struct {
-	RootPath             string     // 项目根目录 root path / project root directory
-	PkgPath              string     // pkg 目录 pkg path / package directory
-	AppName              string     // 项目名称 app name / project name
-	ConfigFile           string     // 配置文件名 config file name / config file name
-	ConfigPath           string     // 配置文件目录 config path / config directory
-	DatabaseUpPath       string     // 主库升级目录 database upgrade path / main database migration directory
-	LogDatabaseUpPath    string     // 日志库升级目录 log database upgrade path / log database migration directory
-	MemoryDatabaseUpPath string     // 记忆库升级目录 memory database upgrade path / memory database migration directory
-	LogPath              string     // 日志目录 log path / log directory
-	NodePath             string     // Node 路径 node path / Node executable path
-	WebkitDriverPath     string     // 浏览器驱动目录 webkit driver path / browser driver directory
-	WebkitDownloadPath   string     // 浏览器下载目录 webkit download path / browser download directory
-	WebkitDataPath       string     // 浏览器数据目录 webkit data path / browser data directory
-	PythonCommand        string     // Python 命令 python command / Python executable command
-	Ports                []string   // gin 端口 ports / gin ports
-	ConfigBase           *Base      // 基础配置 base config / base configuration
-	DbConfig             *DbConfig  // 主库配置 main db config / main database configuration
-	LogDbConfig          *DbConfig  // 日志库配置 log db config / log database configuration
-	WebConfig            *WebConfig // Web 配置 web config / web configuration
+	RootPath             string           // 项目根目录 root path / project root directory
+	PkgPath              string           // pkg 目录 pkg path / package directory
+	AppName              string           // 项目名称 app name / project name
+	ConfigFile           string           // 配置文件名 config file name / config file name
+	ConfigPath           string           // 配置文件目录 config path / config directory
+	DatabaseUpPath       string           // 主库升级目录 database upgrade path / main database migration directory
+	LogDatabaseUpPath    string           // 日志库升级目录 log database upgrade path / log database migration directory
+	MemoryDatabaseUpPath string           // 记忆库升级目录 memory database upgrade path / memory database migration directory
+	LogPath              string           // 日志目录 log path / log directory
+	NodePath             string           // Node 路径 node path / Node executable path
+	WebkitDriverPath     string           // 浏览器驱动目录 webkit driver path / browser driver directory
+	WebkitDownloadPath   string           // 浏览器下载目录 webkit download path / browser download directory
+	WebkitDataPath       string           // 浏览器数据目录 webkit data path / browser data directory
+	PythonCommand        string           // Python 命令 python command / Python executable command
+	Ports                []string         // gin 端口 ports / gin ports
+	ConfigBase           *Base            // 基础配置 base config / base configuration
+	DbConfig             *DbConfig        // 主库配置 main db config / main database configuration
+	LogDbConfig          *DbConfig        // 日志库配置 log db config / log database configuration
+	WebConfig            *WebConfig       // Web 配置 web config / web configuration
+	SmartLinkConfig      *SmartLinkConfig // 自定义网页配置 smart link config / smart link configuration
 }

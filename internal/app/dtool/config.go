@@ -299,6 +299,15 @@ func InitEnv(appName, ConfigFile string, viper *viper.Viper) {
 	component.EnvClient.WebkitDriverPath = common.ResolvePlaywrightPath(viper.GetString(`path.webkit_driver_path`), `webkit_driver`, drive)
 	component.EnvClient.WebkitDataPath = common.ResolvePlaywrightPath(viper.GetString(`path.webkit_data_path`), `webkit_data`, drive)
 	component.EnvClient.WebkitDownloadPath = common.ResolvePlaywrightPath(viper.GetString(`path.webkit_download_path`), `webkit_download`, drive)
+	// 自定义网页配置
+	component.EnvClient.SmartLinkConfig = &define.SmartLinkConfig{
+		RunMode:       define.SmartLinkRunMode(viper.GetString(`smart_link.run_mode`)),
+		ClientVersion: viper.GetString(`smart_link.client_version`),
+	}
+	// 默认值为 server
+	if component.EnvClient.SmartLinkConfig.RunMode == `` {
+		component.EnvClient.SmartLinkConfig.RunMode = define.SmartLinkRunModeServer
+	}
 	//创建目录
 	_ = gstool.DirCreatePath(component.EnvClient.LogPath)
 	_ = gstool.DirCreatePath(component.EnvClient.DbConfig.DbPath)

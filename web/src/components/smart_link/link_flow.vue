@@ -11,7 +11,6 @@
       </div>
       <div class="add-btn">
         <GitActionButton @click="createNewProcess">鏂板鎵ц閫昏緫</GitActionButton>&nbsp;
-        <el-link type="primary" @click="changeToLinks">切换到执行</el-link>
       </div>
       <div class="process-list">
         <el-scrollbar>

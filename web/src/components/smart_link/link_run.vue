@@ -1,7 +1,25 @@
 ﻿<template>
-  <el-alert v-if="is_install === 1" :closable="false" show-icon title="正在安装中，看网速大约5-20分钟" type="warning"/>
+  <!-- 本地客户端模式状态卡片 -->
   <el-alert
-      v-if="node_install_tip.show"
+      v-if="runtimeConfig.run_mode === 'local_client'"
+      :closable="false"
+      :show-icon="true"
+      :type="clientStatusType"
+      style="margin-bottom: 8px;"
+  >
+    <template #title>{{ clientStatusTitle }}</template>
+    <div>{{ clientStatusMessage }}</div>
+    <div v-if="runtimeConfig.run_mode === 'local_client' && !clientStatus.client_connected" style="margin-top: 8px;">
+      <el-button type="primary" size="small" @click="downloadClient('windows')">下载 Windows 客户端</el-button>
+      <el-button type="primary" size="small" @click="downloadClient('darwin')">下载 macOS 客户端</el-button>
+      <el-button type="primary" size="small" @click="downloadClient('linux')">下载 Linux 客户端</el-button>
+      <el-button size="small" @click="refreshClientStatus">刷新状态</el-button>
+    </div>
+  </el-alert>
+
+  <el-alert v-if="is_install === 1 && runtimeConfig.run_mode === 'server'" :closable="false" show-icon title="正在安装中，看网速大约5-20分钟" type="warning"/>
+  <el-alert
+      v-if="node_install_tip.show && runtimeConfig.run_mode === 'server'"
       :closable="false"
       show-icon
       type="error"
@@ -27,20 +45,19 @@
         <GitActionButton @click="showCreateDialog">
           <el-icon><Plus /></el-icon>创建
         </GitActionButton>
-        <GitActionButton @click="install">
-          <el-icon><Tools /></el-icon>安装核心
-        </GitActionButton>
-        <GitActionButton variant="warning" @click="recycle">
-          <el-icon><Refresh /></el-icon>释放内存
-        </GitActionButton>
-        <GitActionButton variant="info" @click="downloadPath">
-          <el-icon><Download /></el-icon>下载目录
-        </GitActionButton>
+        <template v-if="runtimeConfig.run_mode === 'server'">
+          <GitActionButton @click="install">
+            <el-icon><Tools /></el-icon>安装核心
+          </GitActionButton>
+          <GitActionButton variant="warning" @click="recycle">
+            <el-icon><Refresh /></el-icon>释放内存
+          </GitActionButton>
+          <GitActionButton variant="info" @click="downloadPath">
+            <el-icon><Download /></el-icon>下载目录
+          </GitActionButton>
+        </template>
         <GitActionButton variant="info" @click="drawerVisibleMarkdown = true">
           <el-icon><QuestionFilled /></el-icon>帮助文档
-        </GitActionButton>
-        <GitActionButton variant="info" @click="changeToProcess">
-          <el-icon><EditPen /></el-icon>切换到编辑执行逻辑
         </GitActionButton>
       </div>
     </div>
@@ -279,9 +296,10 @@ import LinkConfigEditor from "@/components/smart_link/LinkConfigEditor.vue";
 import GitActionButton from "@/components/base/GitActionButton.vue";
 import SettingsDialog from '@/components/base/SettingsDialog.vue'
 import AccountSettingPage from '@/components/set/account.vue'
-import { Plus, Tools, Refresh, Download, QuestionFilled, EditPen, Setting, Notebook, Delete, User } from '@element-plus/icons-vue'
+import { Plus, Tools, Refresh, Download, QuestionFilled, Setting, Notebook, Delete, User } from '@element-plus/icons-vue'
 
 const { mergeSavedSmartLinkIntoList } = require('@/utils/smart_link_config_sync.cjs')
+const { DEFAULT_RUNTIME_CONFIG, buildRuntimeApiUrl, buildRuntimeRequestOptions, resolveRuntimeRefreshActions } = require('@/utils/smart_link_runtime.cjs')
 
 export default {
   props: {
@@ -297,7 +315,6 @@ export default {
     Refresh,
     Download,
     QuestionFilled,
-    EditPen,
     Setting,
     Notebook,
     Delete,
@@ -389,13 +406,68 @@ export default {
         install_tip: '请先安装 Node.js（建议 LTS 版本），安装完成后刷新当前页面。',
       },
       accountSettingsVisible: false,
+      // 本地客户端模式相关
+      runtimeConfig: {...DEFAULT_RUNTIME_CONFIG},
+      clientStatus: {
+        client_connected: false,
+        client_status: 'offline',
+        client_name: '',
+        client_version: '',
+        client_version_match: false,
+        client_last_seen_at: 0,
+        client_os: '',
+        client_arch: ''
+      },
+      clientStatusTimer: null,
+    }
+  },
+  computed: {
+    clientStatusType() {
+      if (this.runtimeConfig.run_mode !== 'local_client') return 'info'
+      if (this.clientStatus.client_connected && this.clientStatus.client_version_match) return 'success'
+      if (this.clientStatus.client_status === 'preparing_runtime') return 'warning'
+      return 'error'
+    },
+    clientStatusTitle() {
+      if (this.runtimeConfig.run_mode !== 'local_client') return '服务端执行模式'
+      if (this.clientStatus.client_connected && this.clientStatus.client_version_match) return '本地客户端在线'
+      if (this.clientStatus.client_status === 'preparing_runtime') return '运行环境准备中'
+      if (this.clientStatus.client_status === 'version_mismatch') return '客户端版本不匹配'
+      return '本地客户端未连接'
+    },
+    clientStatusMessage() {
+      if (this.runtimeConfig.run_mode !== 'local_client') {
+        return '当前使用服务端 Playwright 执行自定义网页'
+      }
+      if (this.clientStatus.client_connected && this.clientStatus.client_version_match) {
+        return `本地客户端 ${this.clientStatus.client_name} 在线，版本 ${this.clientStatus.client_version}，可执行自定义网页`
+      }
+      if (this.clientStatus.client_status === 'preparing_runtime') {
+        return '本地客户端正在准备运行环境，请稍后重试'
+      }
+      if (this.clientStatus.client_status === 'version_mismatch') {
+        return `当前客户端版本为 ${this.clientStatus.client_version}，要求版本为 ${this.runtimeConfig.required_client_version}，请重新下载并启动`
+      }
+      return '当前已启用本地客户端执行，但未检测到客户端连接，请下载安装并启动本地客户端'
+    },
+    canExecute() {
+      // 本地客户端模式下检查客户端状态
+      if (this.runtimeConfig.run_mode === 'local_client') {
+        return this.clientStatus.client_connected && this.clientStatus.client_version_match
+      }
+      // 服务端模式下检查 Node.js
+      return !this.node_install_tip.show
     }
   },
   mounted: function () {
     this.sse_distribute_id = sseDistribute.GetSseDistributeId('link')
     this.sseCreate()
     this.init()
-
+    this.startClientStatusTimer()
+    this.refreshRuntimeConfigState()
+  },
+  beforeUnmount() {
+    this.stopClientStatusTimer()
   },
   activated() {
     if (Init.GetIsInit('smart_link') === true) {
@@ -403,6 +475,9 @@ export default {
       _that.init()
       Init.DelInit('smart_link')
     }
+    // 页面从设置页切回时需要重新读取运行模式，否则会继续显示旧的 server 模式。
+    // Reload runtime mode when the page is re-activated so the UI does not stay on stale server mode after settings changes.
+    this.refreshRuntimeConfigState()
   },
   methods: {
     sseCreate: function () {
@@ -482,8 +557,142 @@ export default {
       _that.smartList[smartLinkIndex].chooseLinkIndex = linkIndex
       ticker_step.Active(_that.tickerKey)
     },
+    // loadRuntimeConfig 拉取最新运行模式，并决定是否补拉客户端状态。
+    // loadRuntimeConfig fetches the latest run mode and decides whether client status should be refreshed immediately.
+    loadRuntimeConfig: function () {
+      let _that = this
+      return fetch(
+        buildRuntimeApiUrl(base.GetApiHost(), '/api/smart-link/runtime-config'),
+        buildRuntimeRequestOptions(base.GetSafeToken())
+      )
+        .then(res => res.json())
+        .then(data => {
+          if (data.ErrCode === 0 && data.Data) {
+            const nextState = resolveRuntimeRefreshActions(_that.runtimeConfig, data.Data)
+            _that.runtimeConfig = nextState.runtimeConfig
+            if (nextState.shouldLoadClientStatus) {
+              _that.loadClientStatus()
+            }
+          }
+        })
+        .catch(() => {
+          // 使用默认值
+        })
+    },
+    // refreshRuntimeConfigState 在页面初始化和重新激活时同步运行模式。
+    // refreshRuntimeConfigState keeps runtime mode in sync on mount and when the kept-alive page is activated again.
+    refreshRuntimeConfigState: function () {
+      return this.loadRuntimeConfig()
+    },
+    // 加载客户端状态
+    loadClientStatus: function () {
+      let _that = this
+      if (_that.runtimeConfig.run_mode !== 'local_client') return
+      fetch(
+        buildRuntimeApiUrl(base.GetApiHost(), '/api/smart-link/client-status'),
+        buildRuntimeRequestOptions(base.GetSafeToken())
+      )
+        .then(res => res.json())
+        .then(data => {
+          if (data.ErrCode === 0 && data.Data) {
+            _that.clientStatus = data.Data
+          }
+        })
+        .catch(() => {
+          // 忽略错误
+        })
+    },
+    // 启动定时刷新客户端状态
+    startClientStatusTimer: function () {
+      let _that = this
+      _that.loadClientStatus()
+      _that.clientStatusTimer = setInterval(function () {
+        _that.loadClientStatus()
+      }, 5000)
+    },
+    // 停止定时刷新
+    stopClientStatusTimer: function () {
+      if (this.clientStatusTimer) {
+        clearInterval(this.clientStatusTimer)
+        this.clientStatusTimer = null
+      }
+    },
+    // 刷新客户端状态
+    refreshClientStatus: function () {
+      this.loadClientStatus()
+      this.$message.success('状态已刷新')
+    },
+    // resolveClientDownloadFileName 解析服务端返回的下载文件名，缺省时按平台回退。
+    // resolveClientDownloadFileName parses the server-provided filename and falls back to a platform default when missing.
+    resolveClientDownloadFileName: function (os, contentDisposition) {
+      const defaultFileNameMap = {
+        windows: 'dtool-agent.exe',
+        darwin: 'dtool-agent',
+        linux: 'dtool-agent',
+      }
+      const dispositionText = String(contentDisposition || '')
+      const utf8Match = dispositionText.match(/filename\*=UTF-8''([^;]+)/i)
+      if (utf8Match && utf8Match[1]) {
+        return decodeURIComponent(utf8Match[1])
+      }
+      const plainMatch = dispositionText.match(/filename="?([^";]+)"?/i)
+      if (plainMatch && plainMatch[1]) {
+        return plainMatch[1]
+      }
+      return defaultFileNameMap[os] || 'dtool-agent'
+    },
+    // triggerClientDownload 把 blob 转成浏览器下载，避免 window.open 无法携带 Token 头。
+    // triggerClientDownload turns a blob into a browser download so authenticated requests do not rely on window.open.
+    triggerClientDownload: function (blob, fileName) {
+      const downloadUrl = window.URL.createObjectURL(blob)
+      const linkElement = document.createElement('a')
+      linkElement.href = downloadUrl
+      linkElement.download = fileName
+      document.body.appendChild(linkElement)
+      linkElement.click()
+      document.body.removeChild(linkElement)
+      window.URL.revokeObjectURL(downloadUrl)
+    },
+    // 下载客户端
+    downloadClient: function (os) {
+      let url = this.runtimeConfig.download_urls[os]
+      if (url) {
+        fetch(
+          url,
+          buildRuntimeRequestOptions(base.GetSafeToken())
+        )
+          .then(async (response) => {
+            const contentType = String(response.headers.get('content-type') || '')
+            if (contentType.includes('application/json')) {
+              const result = await response.json()
+              throw new Error(result.ErrMsg || '下载地址不可用')
+            }
+            const downloadBlob = await response.blob()
+            const fileName = this.resolveClientDownloadFileName(os, response.headers.get('content-disposition'))
+            this.triggerClientDownload(downloadBlob, fileName)
+            this.$message.success('客户端下载已开始')
+          })
+          .catch((error) => {
+            this.$message.error(error.message || '下载地址不可用')
+          })
+      } else {
+        this.$message.error('下载地址不可用')
+      }
+    },
     smartLinkRun: function (smartLinkIndex, linkIndex) {
       let _that = this
+
+      // 本地客户端模式下检查执行权限
+      if (_that.runtimeConfig.run_mode === 'local_client') {
+        if (!_that.canExecute) {
+          _that.$message.error('本地客户端未连接或版本不匹配，无法执行')
+          return
+        }
+        // 本地客户端模式：创建任务
+        _that.createLocalClientTask(smartLinkIndex, linkIndex)
+        return
+      }
+
       if (smartLinkIndex !== null && smartLinkIndex !== undefined && linkIndex === null) {
         _that.chooseSmartLinkIndex = smartLinkIndex
         smartLinkIndex = _that.chooseSmartLinkIndex
@@ -517,6 +726,65 @@ export default {
         }
         ticker_step.Active(_that.tickerKey)
       });
+    },
+    // 创建本地客户端任务
+    createLocalClientTask: function (smartLinkIndex, linkIndex) {
+      let _that = this
+      if (smartLinkIndex !== null && smartLinkIndex !== undefined && linkIndex === null) {
+        _that.chooseSmartLinkIndex = smartLinkIndex
+        smartLinkIndex = _that.chooseSmartLinkIndex
+        linkIndex = _that.smartList[_that.chooseSmartLinkIndex].chooseLinkIndex
+      }
+
+      let chooseSmartLink = _that.smartList[smartLinkIndex]
+      let chooseLink = chooseSmartLink.linkList[linkIndex]
+
+      let chooseUser = {}
+      for (let i in chooseLink.userList) {
+        if (chooseLink.userList[i].user_name === chooseLink.chooseUserName) {
+          chooseUser = chooseLink.userList[i]
+        }
+      }
+
+      let taskData = {
+        smart_link_id: chooseSmartLink.id,
+        label: chooseLink.label,
+        user_name: chooseUser.user_name || '',
+        password: chooseUser.password || '',
+        open_num: chooseSmartLink.open_num_new,
+        open_type: chooseSmartLink.open_type_new,
+        run_params: JSON.stringify({
+          id: chooseSmartLink.id,
+          label: chooseLink.label,
+          user_name: chooseUser.user_name,
+          password: chooseUser.password,
+          open_num: chooseSmartLink.open_num_new,
+          open_type: chooseSmartLink.open_type_new
+        })
+      }
+
+      fetch(
+        buildRuntimeApiUrl(base.GetApiHost(), '/api/smart-link/task/create'),
+        buildRuntimeRequestOptions(base.GetSafeToken(), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(taskData)
+        })
+      )
+        .then(res => res.json())
+        .then(data => {
+          if (data.ErrCode === 0) {
+            _that.$message.success('任务已创建，等待本地客户端执行')
+            ticker_step.Active(_that.tickerKey)
+          } else {
+            _that.$message.error(data.ErrMsg || '创建任务失败')
+          }
+        })
+        .catch(err => {
+          _that.$message.error('创建任务失败: ' + err.message)
+        })
     },
     tickerRunList: function () {
       let _that = this

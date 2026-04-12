@@ -10,8 +10,7 @@
         />
       </div>
       <div class="add-btn">
-        <GitActionButton @click="createNewProcess">新增执行逻辑</GitActionButton>
-        <el-link type="primary" @click="changeToLinks">切换到执行</el-link>
+        <GitActionButton compact sizeMode="compact-small" @click="createNewProcess">新增执行逻辑</GitActionButton>
       </div>
       <div class="process-list">
         <el-scrollbar>
@@ -29,6 +28,7 @@
             <div class="process-item-actions">
               <GitActionButton
                   compact
+                  sizeMode="compact-small"
                   variant="info"
                   @click.stop="openCopyProcessDialog(process)"
               >复制
@@ -40,6 +40,7 @@
                 <template #reference>
                   <GitActionButton
                       compact
+                      sizeMode="compact-small"
                       variant="danger"
                       @click.stop
                   >删除
@@ -59,12 +60,18 @@
             <h2>{{ state.activeProcess.name }}</h2>
           </div>
           <div class="process-header-actions">
-            <GitActionButton variant="info" @click="editProcessName">编辑</GitActionButton>
-            <GitActionButton @click="addNewItem">新增执行逻辑子项</GitActionButton>
+            <GitActionButton compact sizeMode="compact-small" variant="info" @click="editProcessName">编辑</GitActionButton>
+            <GitActionButton compact sizeMode="compact-small" @click="addNewItem">新增执行逻辑子项</GitActionButton>
           </div>
         </div>
         <div class="process-items-wrapper">
           <el-scrollbar class="process-items-scroll">
+            <div class="process-table-header">
+              <div class="process-table-header__drag"></div>
+              <div class="process-table-header__name">节点</div>
+              <div class="process-table-header__detail">关键配置</div>
+              <div class="process-table-header__actions">操作</div>
+            </div>
             <draggable
                 v-model="state.processItems"
                 handle=".drag-handle"
@@ -72,63 +79,46 @@
                 @end="handleSortEnd"
             >
               <template #item="{ element }">
-                <div class="process-item-card">
-                  <div class="item-header">
+                <div class="process-table-row">
+                  <div class="process-table-row__drag">
                     <el-icon class="drag-handle">
                       <Menu/>
                     </el-icon>
-                    <div class="item-title-group">
-                      <div class="item-title-row">
-                        <span class="item-id">#{{ element.id }}</span>
-                        <span class="item-name">{{ element.name }}</span>
-                        <span class="item-type">{{ element.type }}</span>
-                      </div>
-                    </div>
-                    <div class="item-actions">
-                      <GitActionButton compact @click="addNewItem(element)">新增复制</GitActionButton>
-                      <GitActionButton compact variant="info" @click="openCopyFromProcessDialog(element)">复制其他流程节点</GitActionButton>
-                      <GitActionButton compact variant="info" @click="editItem(element)">编辑</GitActionButton>
-                      <el-popconfirm
-                          title="确定删除此执行逻辑子项吗？"
-                          @confirm="deleteItem(element.id)"
-                      >
-                        <template #reference>
-                          <GitActionButton
-                              compact
-                              variant="danger"
-                              @click.stop
-                          >删除
-                          </GitActionButton>
-                        </template>
-                      </el-popconfirm>
+                  </div>
+                  <div class="process-table-row__name">
+                    <div class="item-title-row">
+                      <span class="item-id">#{{ element.id }}</span>
+                      <span class="item-name">{{ element.name }}</span>
+                      <span class="item-type">{{ element.type }}</span>
                     </div>
                   </div>
-                  <div class="item-meta-list">
-                    <span v-if="element.tip" class="item-meta-chip item-meta-chip--info">提示: {{ element.tip }}</span>
-                    <span v-if="element.domain_limit" class="item-meta-chip">域名限制: {{ element.domain_limit }}</span>
-                  </div>
-                  <div class="item-details">
+                  <div class="process-table-row__detail">
                     <div
-                        v-for="detail in getProcessItemDetails(element)"
+                        v-for="detail in getCompactProcessItemDetails(element)"
                         :key="`${element.id}-${detail.key}`"
-                        :class="['item-detail-row', `item-detail-row--${detail.emphasis}`]"
+                        class="item-detail-inline"
                     >
-                      <div class="item-detail-label">{{ detail.label }}</div>
-                      <div class="item-detail-content">
-                        <template v-if="detail.lines.length === 1">
-                          <span>{{ detail.lines[0] }}</span>
-                        </template>
-                        <div v-else class="item-detail-multiline">
-                          <div
-                              v-for="(line, index) in detail.lines"
-                              :key="`${detail.key}-${index}`"
-                              class="item-detail-line"
-                          >
-                            {{ line }}
-                          </div>
-                        </div>
-                      </div>
+                      <span class="item-detail-inline__label">{{ detail.label }}</span>
+                      <span class="item-detail-inline__value">{{ detail.value }}</span>
                     </div>
+                  </div>
+                  <div class="process-table-row__actions">
+                    <el-dropdown
+                        trigger="click"
+                        @command="(command) => handleRowActionCommand(element, command)"
+                    >
+                      <GitActionButton compact sizeMode="compact-small" variant="info">
+                        操作
+                      </GitActionButton>
+                      <template #dropdown>
+                        <el-dropdown-menu>
+                          <el-dropdown-item command="copy_new">复制新增</el-dropdown-item>
+                          <el-dropdown-item command="copy_from">复制节点</el-dropdown-item>
+                          <el-dropdown-item command="edit">编辑</el-dropdown-item>
+                          <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
+                        </el-dropdown-menu>
+                      </template>
+                    </el-dropdown>
                   </div>
                 </div>
               </template>
@@ -215,7 +205,7 @@
 import {reactive, onMounted, ref} from 'vue'
 import draggable from 'vuedraggable'
 import {Menu} from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import API from '@/utils/base/smart_link_proces'
 import ProcessItemEditor from '@/components/smart_link/ProcessItemEditor.vue'
 import GitActionButton from '@/components/base/GitActionButton.vue'
@@ -594,6 +584,35 @@ export default {
       })
     }
 
+    // handleRowActionCommand 统一处理表格行下拉动作，避免右侧操作按钮过度占宽。
+    // Handle row action dropdown commands so the action column stays compact.
+    const handleRowActionCommand = async function (item, command) {
+      if (command === 'copy_new') {
+        addNewItem(item)
+        return
+      }
+      if (command === 'copy_from') {
+        openCopyFromProcessDialog(item)
+        return
+      }
+      if (command === 'edit') {
+        editItem(item)
+        return
+      }
+      if (command === 'delete') {
+        try {
+          await ElMessageBox.confirm('确定删除此执行逻辑子项吗？', '确认删除', {
+            type: 'warning',
+            confirmButtonText: '删除',
+            cancelButtonText: '取消',
+          })
+          deleteItem(item.id)
+        } catch (error) {
+          // 用户取消删除时无需额外提示。 // No extra feedback is needed when the user cancels.
+        }
+      }
+    }
+
     const handleSortEnd = function () {
       const itemIds = state.processItems.map(item => item.id).join(',')
       API.SmartProcessItemSort({
@@ -617,6 +636,15 @@ export default {
       state,
       processItemEditorRef,
       getProcessItemDetails: buildProcessItemDisplayDetails,
+      getCompactProcessItemDetails: function (item) {
+        return buildProcessItemDisplayDetails(item)
+          .slice(0, 3)
+          .map((detail) => ({
+            key: detail.key,
+            label: detail.label,
+            value: Array.isArray(detail.lines) ? detail.lines.join(' / ') : '',
+          }))
+      },
       searchList,
       createNewProcess,
       selectProcess,
@@ -632,6 +660,7 @@ export default {
       editItem,
       saveProcessItem,
       deleteItem,
+      handleRowActionCommand,
       handleSortEnd,
       changeToLinks,
       ProcessCancelRelation,
@@ -667,7 +696,7 @@ export default {
   padding: 0 16px 14px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
@@ -711,7 +740,7 @@ export default {
 .process-item-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   flex: 0 0 auto;
 }
 
@@ -782,46 +811,84 @@ export default {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  border: 1px solid #e6e8de;
+  border-radius: 10px;
+  background: #ffffff;
+  overflow: hidden;
 }
 
 .process-items-scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
-.process-item-card {
-  border: 1px solid #e6e8de;
-  border-radius: 10px;
-  padding: 14px;
-  margin-bottom: 12px;
-  background: #fff;
-  box-shadow: none;
-}
-
-.item-header {
-  display: flex;
-  align-items: center;
+.process-table-header {
+  display: grid;
+  grid-template-columns: 28px minmax(180px, 0.9fr) minmax(0, 2.1fr) 72px;
   gap: 10px;
-  margin-bottom: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  background: #f7f7f2;
+  border-bottom: 1px solid #eceee6;
+  color: #6f7f68;
+  font-size: 12px;
+  font-weight: 600;
 }
 
-.item-header .drag-handle {
+.process-table-row {
+  display: grid;
+  grid-template-columns: 28px minmax(180px, 0.9fr) minmax(0, 2.1fr) 72px;
+  gap: 10px;
+  align-items: start;
+  padding: 10px 12px;
+  border-bottom: 1px solid #eef0ea;
+  background: #fff;
+}
+
+.process-table-row:hover {
+  background: #fafbf8;
+}
+
+.process-table-row:last-child {
+  border-bottom: none;
+}
+
+.process-table-row__drag {
+  display: flex;
+  justify-content: center;
+  padding-top: 2px;
+}
+
+.process-table-row__name,
+.process-table-row__detail {
+  min-width: 0;
+}
+
+.process-table-row__actions {
+  display: flex;
+  justify-content: flex-end;
+  width: 72px;
+}
+
+.item-empty-text {
+  color: #9aa59a;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.drag-handle {
   color: #556655;
   cursor: move;
   font-size: 14px;
-}
-
-.item-title-group {
-  flex: 1;
-  min-width: 0;
 }
 
 .item-title-row {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
 .item-id {
@@ -832,7 +899,7 @@ export default {
 
 .item-name {
   color: #4a4a4a;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.35;
 }
@@ -848,90 +915,33 @@ export default {
   font-weight: 500;
 }
 
-.item-actions {
-  display: flex;
-  gap: 8px;
-  margin-left: auto;
-  flex-wrap: wrap;
-}
-
-.item-meta-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 10px;
-}
-
-.item-meta-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: #f4f6f1;
-  color: #5f7059;
-  font-size: 12px;
-  line-height: 1;
-  font-weight: 400;
-}
-
-.item-meta-chip--info {
-  background: #eef4ea;
-  color: #4c7048;
-}
-
-.item-details {
+.process-table-row__detail {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 6px;
+  gap: 6px;
 }
 
-.item-detail-row {
-  display: grid;
-  grid-template-columns: 96px minmax(0, 1fr);
-  gap: 10px;
-  align-items: start;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: #fafaf8;
-  border: 1px solid #f0f1ec;
+.item-detail-inline {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  min-width: 0;
 }
 
-.item-detail-row--accent .item-detail-content {
-  color: #4f804f;
-  font-weight: 500;
-}
-
-.item-detail-row--block {
-  background: #f8f9f6;
-}
-
-.item-detail-label {
+.item-detail-inline__label {
   color: #6f7f68;
   font-size: 12px;
   font-weight: 500;
-  line-height: 1.6;
+  line-height: 1.5;
+  flex: 0 0 auto;
 }
 
-.item-detail-content {
+.item-detail-inline__value {
   min-width: 0;
   color: #4a4a4a;
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: 12px;
+  line-height: 1.5;
   word-break: break-all;
-}
-
-.item-detail-multiline {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.item-detail-line {
-  padding: 6px 8px;
-  border-radius: 8px;
-  background: #ffffff;
-  border: 1px solid #eef0ea;
 }
 
 .copy-process-dialog__tip {
@@ -961,14 +971,21 @@ export default {
 
 :deep(.add-btn .git-action-button),
 :deep(.process-header-actions .git-action-button) {
-  height: 32px;
-  padding: 6px 12px;
-  font-size: 12px;
+  height: 28px;
+  padding: 4px 10px;
+  font-size: 11px;
 }
 
 :deep(.process-item .git-action-button),
 :deep(.item-actions .git-action-button) {
-  font-size: 12px;
+  font-size: 11px;
+}
+
+:deep(.process-table-row__actions .git-action-button) {
+  min-width: 58px;
+  width: 58px;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 :deep(.search-box .el-input__wrapper.is-focus),
@@ -1001,13 +1018,23 @@ export default {
     flex-wrap: wrap;
   }
 
-  .item-actions {
-    margin-left: 0;
+  .process-table-header {
+    display: none;
   }
 
-  .item-detail-row {
-    grid-template-columns: 1fr;
-    gap: 6px;
+  .process-table-row {
+    grid-template-columns: 24px 1fr;
+  }
+
+  .process-table-row__tip,
+  .process-table-row__detail,
+  .process-table-row__actions {
+    grid-column: 2 / -1;
+  }
+
+  .process-table-row__actions {
+    width: 100%;
+    justify-content: flex-start;
   }
 }
 </style>

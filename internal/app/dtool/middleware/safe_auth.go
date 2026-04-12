@@ -21,6 +21,10 @@ var SafeAuthWhiteList = map[string]bool{
 	"/api/BaseRegisterService":  true,
 	"/api/BaseCheckUnikeyExist": true,
 	"/api/Upload":               true, // 上传接口暂时放行，避免阻塞
+	"/api/agent/register":       true, // 本地客户端首次注册不依赖 Safe 登录态 / local agent bootstrap does not depend on Safe auth
+	"/api/agent/heartbeat":      true, // 本地客户端心跳需要持续上报 / local agent heartbeat must remain unauthenticated
+	"/api/agent/task/pull":      true, // 本地客户端轮询任务时不携带 Safe token / local agent task polling does not carry Safe auth token
+	"/api/agent/task/report":    true, // 本地客户端回传结果时不携带 Safe token / local agent reporting does not carry Safe auth token
 }
 
 // getSafeTokenManager 创建 Safe Token 管理器（从配置读取）

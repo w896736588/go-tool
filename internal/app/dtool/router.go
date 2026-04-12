@@ -244,6 +244,7 @@ func setRouter(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/Set/MemoryConfigSave`, controller.SetMemoryConfigSave)
 	tGin.GinPost(`/api/Set/RuntimeConfigSave`, controller.SetRuntimeConfigSave)
 	tGin.GinPost(`/api/Set/RuntimeDatabaseGitSync`, controller.SetRuntimeDatabaseGitSync)
+	tGin.GinPost(`/api/Set/RuntimeConfigItemSave`, controller.SetRuntimeConfigItemSave)
 }
 
 func setStar(tGin *p_gin.Gin) {
@@ -333,6 +334,15 @@ func smartLink(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/SmartLinkRecycle`, controller.SmartLinkRecycle)
 	tGin.GinPost(`/api/SmartLinkDownloadPath`, controller.SmartLinkDownloadPath)
 	tGin.GinPost(`/api/SmartLinkLocatorAutoExtract`, controller.SmartLinkLocatorAutoExtract)
+	// 本地客户端相关接口
+	tGin.GinGet(`/api/smart-link/runtime-config`, controller.SmartLinkRuntimeConfig)
+	tGin.GinGet(`/api/smart-link/client-status`, controller.SmartLinkClientStatus)
+	tGin.GinPost(`/api/smart-link/task/create`, controller.SmartLinkTaskCreate)
+	tGin.GinGet(`/api/agent/download`, controller.AgentDownload)
+	tGin.GinPost(`/api/agent/register`, controller.AgentRegister)
+	tGin.GinPost(`/api/agent/heartbeat`, controller.AgentHeartbeat)
+	tGin.GinGet(`/api/agent/task/pull`, controller.AgentTaskPull)
+	tGin.GinPost(`/api/agent/task/report`, controller.AgentTaskReport)
 	//执行逻辑
 	tGin.GinPost(`/api/SmartProcessList`, controller.SmartProcessList)
 	tGin.GinPost(`/api/SmartProcessAdd`, controller.SmartProcessAdd)

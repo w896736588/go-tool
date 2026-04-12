@@ -1,5 +1,16 @@
 <template>
   <div class="link-module-shell">
+    <div class="link-module-switch-card">
+      <div class="link-module-switch-card__title">自定义网页工作台</div>
+      <div class="link-module-switch-card__actions">
+        <pl-button :type="model === 'links' ? 'primary' : 'default'" @click="changeToLinks">
+          切换到执行
+        </pl-button>
+        <pl-button :type="model === 'process' ? 'warning' : 'default'" @click="changeToEditProcess">
+          切换到运行逻辑
+        </pl-button>
+      </div>
+    </div>
     <Links @changeModelToFlow="changeToFlow" @changeModelToEditProcess="changeToEditProcess" v-if="model === 'links'"/>
     <Process @changeModelToLinks="changeToLinks" v-if="model === 'process'"/>
     <Flow @changeModelToLinks="changeToLinks" @changeModelToFlow="changeToFlow" v-if="model === 'flow'"/>
@@ -49,6 +60,7 @@ export default {
     changeToFlow : function (){
       let _that = this
       _that.model = 'flow'
+      store.setStore('link_model' , _that.model)
     }
   }
 }
@@ -59,79 +71,105 @@ export default {
   width: 100%;
 }
 
+.link-module-switch-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid #e8e8e0;
+  border-radius: 12px;
+}
+
+.link-module-switch-card__title {
+  color: #4a4a4a;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.link-module-switch-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .link-module-shell :deep(.link-run-page),
 .link-module-shell :deep(.smart-process-container),
 .link-module-shell :deep(.smart-process-canvas-container) {
   color: #3f4a3f;
-  --el-color-primary: #6fa56f;
-  --el-color-primary-light-3: #8db88d;
-  --el-color-primary-light-5: #a7c8a7;
-  --el-color-primary-light-7: #c2dac2;
-  --el-color-primary-light-8: #d5e6d5;
-  --el-color-primary-light-9: #e7f1e7;
-  --el-color-primary-dark-2: #5f8f5f;
+  --el-color-primary: #5f7ea6;
+  --el-color-primary-light-3: #7f99bb;
+  --el-color-primary-light-5: #9eb1cd;
+  --el-color-primary-light-7: #c0ccde;
+  --el-color-primary-light-8: #d3dce8;
+  --el-color-primary-light-9: #e8eef5;
+  --el-color-primary-dark-2: #4c688c;
 }
 
 .link-module-shell :deep(.git-action-button--primary),
 .link-module-shell :deep(.pl-button--primary) {
-  --git-button-text-color: #ffffff;
-  --git-button-border-color: #4f804f;
-  --git-button-background-color: linear-gradient(180deg, #5a8a5a 0%, #4f804f 100%);
-  --git-button-hover-text-color: #ffffff;
-  --git-button-hover-border-color: #3f6f3f;
-  --git-button-hover-background-color: linear-gradient(180deg, #4f804f 0%, #3f6f3f 100%);
-  --pl-button-text-color: #ffffff;
-  --pl-button-border-color: #4f804f;
-  --pl-button-background-color: linear-gradient(180deg, #5a8a5a 0%, #4f804f 100%);
-  --pl-button-hover-text-color: #ffffff;
-  --pl-button-hover-border-color: #3f6f3f;
-  --pl-button-hover-background-color: linear-gradient(180deg, #4f804f 0%, #3f6f3f 100%);
-  color: #ffffff !important;
-  border-color: #4f804f !important;
-  background: linear-gradient(180deg, #5a8a5a 0%, #4f804f 100%) !important;
+  --git-button-text-color: #476487;
+  --git-button-border-color: #d5dfeb;
+  --git-button-background-color: #f4f7fb;
+  --git-button-hover-text-color: #35506f;
+  --git-button-hover-border-color: #bccbe0;
+  --git-button-hover-background-color: #eaf0f7;
+  --pl-button-text-color: #476487;
+  --pl-button-border-color: #d5dfeb;
+  --pl-button-background-color: #f4f7fb;
+  --pl-button-hover-text-color: #35506f;
+  --pl-button-hover-border-color: #bccbe0;
+  --pl-button-hover-background-color: #eaf0f7;
 }
 
 .link-module-shell :deep(.git-action-button--primary:hover),
 .link-module-shell :deep(.git-action-button--primary:focus-visible),
 .link-module-shell :deep(.pl-button--primary:hover),
 .link-module-shell :deep(.pl-button--primary:focus-visible) {
-  color: #ffffff !important;
-  border-color: #3f6f3f !important;
-  background: linear-gradient(180deg, #4f804f 0%, #3f6f3f 100%) !important;
+  color: #35506f !important;
+  border-color: #bccbe0 !important;
+  background: #eaf0f7 !important;
 }
 
 .link-module-shell :deep(.git-action-button--warning),
 .link-module-shell :deep(.git-action-button--info),
 .link-module-shell :deep(.pl-button--warning),
 .link-module-shell :deep(.pl-button--info) {
-  --git-button-text-color: #ffffff;
-  --git-button-border-color: #4f804f;
-  --git-button-background-color: linear-gradient(180deg, #5a8a5a 0%, #4f804f 100%);
-  --git-button-hover-text-color: #ffffff;
-  --git-button-hover-border-color: #3f6f3f;
-  --git-button-hover-background-color: linear-gradient(180deg, #4f804f 0%, #3f6f3f 100%);
-  --pl-button-text-color: #ffffff;
-  --pl-button-border-color: #4f804f;
-  --pl-button-background-color: linear-gradient(180deg, #5a8a5a 0%, #4f804f 100%);
-  --pl-button-hover-text-color: #ffffff;
-  --pl-button-hover-border-color: #3f6f3f;
-  --pl-button-hover-background-color: linear-gradient(180deg, #4f804f 0%, #3f6f3f 100%);
-  color: #ffffff !important;
-  border-color: #4f804f !important;
-  background: linear-gradient(180deg, #5a8a5a 0%, #4f804f 100%) !important;
+  color: inherit !important;
 }
 
-.link-module-shell :deep(.git-action-button--warning:hover),
-.link-module-shell :deep(.git-action-button--warning:focus-visible),
-.link-module-shell :deep(.git-action-button--info:hover),
-.link-module-shell :deep(.git-action-button--info:focus-visible),
-.link-module-shell :deep(.pl-button--warning:hover),
-.link-module-shell :deep(.pl-button--warning:focus-visible),
-.link-module-shell :deep(.pl-button--info:hover),
-.link-module-shell :deep(.pl-button--info:focus-visible) {
-  color: #ffffff !important;
-  border-color: #3f6f3f !important;
-  background: linear-gradient(180deg, #4f804f 0%, #3f6f3f 100%) !important;
+.link-module-shell :deep(.git-action-button--warning),
+.link-module-shell :deep(.pl-button--warning) {
+  --git-button-text-color: #8a5b22;
+  --git-button-border-color: #ead8bb;
+  --git-button-background-color: #fbf5ea;
+  --git-button-hover-text-color: #724816;
+  --git-button-hover-border-color: #ddc49e;
+  --git-button-hover-background-color: #f4ead7;
+  --pl-button-text-color: #8a5b22;
+  --pl-button-border-color: #ead8bb;
+  --pl-button-background-color: #fbf5ea;
+  --pl-button-hover-text-color: #724816;
+  --pl-button-hover-border-color: #ddc49e;
+  --pl-button-hover-background-color: #f4ead7;
+}
+
+.link-module-shell :deep(.git-action-button--info),
+.link-module-shell :deep(.pl-button--info) {
+  --git-button-text-color: #4b627a;
+  --git-button-border-color: #d3dbe5;
+  --git-button-background-color: #f4f7fa;
+  --git-button-hover-text-color: #384d63;
+  --git-button-hover-border-color: #bcc8d6;
+  --git-button-hover-background-color: #e9eef4;
+  --pl-button-text-color: #4b627a;
+  --pl-button-border-color: #d3dbe5;
+  --pl-button-background-color: #f4f7fa;
+  --pl-button-hover-text-color: #384d63;
+  --pl-button-hover-border-color: #bcc8d6;
+  --pl-button-hover-background-color: #e9eef4;
 }
 
 .link-module-shell :deep(.git-action-button--danger),
@@ -165,8 +203,19 @@ export default {
 .link-module-shell :deep(.git-action-button.pl-button--plain),
 .link-module-shell :deep(.pl-button--plain.pl-button--primary),
 .link-module-shell :deep(.pl-button--plain.pl-button--warning),
-.link-module-shell :deep(.pl-button--plain.pl-button--info),
+.link-module-shell :deep(.pl-button--plain.pl-button--info) {
+  color: inherit !important;
+}
+
+.link-module-shell :deep(.git-action-button--danger),
 .link-module-shell :deep(.pl-button--plain.pl-button--danger) {
+  color: #ffffff !important;
+}
+
+.link-module-shell :deep(.git-action-button--danger span),
+.link-module-shell :deep(.pl-button--danger span),
+.link-module-shell :deep(.git-action-button--danger .el-button__text),
+.link-module-shell :deep(.pl-button--danger .el-button__text) {
   color: #ffffff !important;
 }
 
@@ -209,8 +258,8 @@ export default {
 }
 
 .link-module-shell :deep(.process-item.active) {
-  background: #dcedc8 !important;
-  color: #3a7a3a;
+  background: #edf3fa !important;
+  color: #35506f;
 }
 
 .link-module-shell :deep(.process-item-card),
@@ -223,8 +272,8 @@ export default {
 }
 
 .link-module-shell :deep(.custom-node.selected) {
-  border-color: #7cb87c;
-  box-shadow: 0 0 0 2px rgba(124, 184, 124, 0.2);
+  border-color: #9fb5d1;
+  box-shadow: 0 0 0 2px rgba(95, 126, 166, 0.16);
 }
 
 .link-module-shell :deep(.node-type) {
@@ -234,6 +283,13 @@ export default {
 
 .link-module-shell :deep(.el-link.el-link--primary),
 .link-module-shell :deep(a) {
-  color: #4a8b4a;
+  color: #4b627a;
+}
+
+@media (max-width: 768px) {
+  .link-module-switch-card {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 </style>
