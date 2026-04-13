@@ -1,7 +1,10 @@
 package controller
 
 import (
+	"archive/zip"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,6 +21,7 @@ import (
 type agentDownloadSpec struct {
 	Goos     string
 	FileName string
+	IsZip    bool
 }
 
 // resolveAgentDownloadSpec 根据 os 查询参数解析目标平台，避免下载请求打到未知平台。
@@ -27,34 +31,61 @@ func resolveAgentDownloadSpec(rawOS string) (agentDownloadSpec, bool) {
 	case "windows":
 		return agentDownloadSpec{
 			Goos:     "windows",
-			FileName: "dtool-agent.exe",
+			FileName: "dtool-agent.zip",
+			IsZip:    true,
 		}, true
 	case "darwin":
 		return agentDownloadSpec{
 			Goos:     "darwin",
 			FileName: "dtool-agent",
+			IsZip:    false,
 		}, true
 	case "linux":
 		return agentDownloadSpec{
 			Goos:     "linux",
 			FileName: "dtool-agent",
+			IsZip:    false,
 		}, true
 	default:
 		return agentDownloadSpec{}, false
 	}
 }
 
+// buildAgentDefaultServerURL 根据下载请求推导客户端默认回连地址，避免远程访问时仍写死到 localhost。
+func buildAgentDefaultServerURL(req *http.Request) string {
+	proto := strings.TrimSpace(req.Header.Get("X-Forwarded-Proto"))
+	if proto == "" {
+		if req.TLS != nil {
+			proto = "https"
+		} else {
+			proto = "http"
+		}
+	}
+
+	host := strings.TrimSpace(req.Host)
+	if host == "" {
+		host = "localhost:17170"
+	}
+
+	return proto + "://" + host
+}
+
 // buildAgentDownloadBinary 按目标平台现编 dtool-agent，确保下载入口至少能返回可执行文件。
 // buildAgentDownloadBinary builds the dtool-agent binary on demand so the download endpoint can return a runnable artifact.
-func buildAgentDownloadBinary(spec agentDownloadSpec) (string, error) {
+func buildAgentDownloadBinary(spec agentDownloadSpec, defaultServerURL string) (string, error) {
 	rootPath := component.EnvClient.RootPath
 	outputDir := filepath.Join(rootPath, "tmp", "agent_download")
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return "", err
 	}
 
-	outputPath := filepath.Join(outputDir, spec.FileName)
-	buildCmd := exec.Command("go", "build", "-ldflags", "-s -w", "-o", outputPath, "./cmd/dtool-agent")
+	binaryName := "dtool-agent"
+	if spec.Goos == "windows" {
+		binaryName = "dtool-agent.exe"
+	}
+	outputPath := filepath.Join(outputDir, binaryName)
+	ldflags := fmt.Sprintf("-s -w -X main.defaultServerURL=%s", defaultServerURL)
+	buildCmd := exec.Command("go", "build", "-ldflags", ldflags, "-o", outputPath, "./cmd/dtool-agent")
 	buildCmd.Dir = rootPath
 	buildCmd.Env = append(
 		os.Environ(),
@@ -68,7 +99,56 @@ func buildAgentDownloadBinary(spec agentDownloadSpec) (string, error) {
 		return "", fmt.Errorf("build dtool-agent failed: %w, output: %s", buildErr, string(buildOutput))
 	}
 
+	// Windows 平台打包成 zip
+	if spec.IsZip {
+		zipPath := filepath.Join(outputDir, spec.FileName)
+		if err := createZipFile(zipPath, binaryName, outputPath); err != nil {
+			return "", fmt.Errorf("create zip failed: %w", err)
+		}
+		// 删除原始 exe 文件，只保留 zip
+		os.Remove(outputPath)
+		return zipPath, nil
+	}
+
 	return outputPath, nil
+}
+
+// createZipFile 创建 zip 文件，将 sourcePath 文件打包到 zip 中的 entryName
+func createZipFile(zipPath, entryName, sourcePath string) error {
+	zipFile, err := os.Create(zipPath)
+	if err != nil {
+		return err
+	}
+	defer zipFile.Close()
+
+	zipWriter := zip.NewWriter(zipFile)
+	defer zipWriter.Close()
+
+	sourceFile, err := os.Open(sourcePath)
+	if err != nil {
+		return err
+	}
+	defer sourceFile.Close()
+
+	fileInfo, err := sourceFile.Stat()
+	if err != nil {
+		return err
+	}
+
+	header, err := zip.FileInfoHeader(fileInfo)
+	if err != nil {
+		return err
+	}
+	header.Name = entryName
+	header.Method = zip.Deflate
+
+	writer, err := zipWriter.CreateHeader(header)
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(writer, sourceFile)
+	return err
 }
 
 // AgentDownload 提供本地客户端安装包下载，当前实现为按目标平台即时构建二进制。
@@ -80,7 +160,7 @@ func AgentDownload(c *gin.Context) {
 		return
 	}
 
-	binaryPath, err := buildAgentDownloadBinary(spec)
+	binaryPath, err := buildAgentDownloadBinary(spec, buildAgentDefaultServerURL(c.Request))
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return

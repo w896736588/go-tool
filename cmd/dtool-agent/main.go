@@ -9,13 +9,17 @@ import (
 	"os/exec"
 	"runtime"
 	"time"
+
+	"gitee.com/Sxiaobai/gs/v2/gstool"
 )
+
+var defaultServerURL = "http://localhost:17170"
 
 // Config 客户端配置
 type Config struct {
-	ServerURL       string
-	ClientID        string
-	ClientVersion   string
+	ServerURL         string
+	ClientID          string
+	ClientVersion     string
 	HeartbeatInterval time.Duration
 	TaskPollInterval  time.Duration
 }
@@ -50,11 +54,15 @@ func (a *Agent) Register() error {
 
 	resp, err := a.post("/api/agent/register", data)
 	if err != nil {
-		return fmt.Errorf("注册失败: %w", err)
+		return fmt.Errorf("请求注册接口失败: %w", err)
 	}
 
 	if resp["ErrCode"] != 0 {
-		return fmt.Errorf("注册失败: %v", resp["ErrMsg"])
+		errMsg := "未知错误"
+		if resp["ErrMsg"] != nil {
+			errMsg = fmt.Sprintf("%v", resp["ErrMsg"])
+		}
+		return fmt.Errorf("服务端返回错误: %s (错误码: %v)", errMsg, resp["ErrCode"])
 	}
 
 	fmt.Printf("注册成功，服务端要求版本: %v\n", resp["Data"].(map[string]any)["required_client_version"])
@@ -64,10 +72,10 @@ func (a *Agent) Register() error {
 // Heartbeat 发送心跳
 func (a *Agent) Heartbeat() error {
 	data := map[string]any{
-		"client_id":      a.config.ClientID,
-		"client_version": a.config.ClientVersion,
-		"status":         "online",
-		"hostname":       getHostname(),
+		"client_id":       a.config.ClientID,
+		"client_version":  a.config.ClientVersion,
+		"status":          "online",
+		"hostname":        getHostname(),
 		"current_task_id": "",
 	}
 
@@ -199,7 +207,7 @@ func (a *Agent) Run() {
 
 	// 注册
 	if err := a.Register(); err != nil {
-		fmt.Printf("注册失败: %v\n", err)
+		gstool.FmtPrintlnLogTime(`注册失败 %s`, err.Error())
 		return
 	}
 
@@ -249,7 +257,7 @@ func main() {
 	// 从环境变量或命令行参数读取配置
 	serverURL := os.Getenv("DTOOL_SERVER_URL")
 	if serverURL == "" {
-		serverURL = "http://localhost:17170"
+		serverURL = defaultServerURL
 	}
 
 	clientID := os.Getenv("DTOOL_CLIENT_ID")

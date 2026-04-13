@@ -21,7 +21,7 @@ func SmartLinkRuntimeConfig(c *gin.Context) {
 		}
 	}
 
-	baseURL := "http://" + c.Request.Host
+	baseURL := buildAgentDefaultServerURL(c.Request)
 	downloadURLs := map[string]string{
 		"windows": baseURL + "/api/agent/download?os=windows",
 		"darwin":  baseURL + "/api/agent/download?os=darwin",
@@ -91,7 +91,7 @@ func SmartLinkClientStatus(c *gin.Context) {
 func AgentRegister(c *gin.Context) {
 	var req map[string]any
 	if err := gsgin.GinPostBody(c, &req); err != nil {
-		gsgin.GinResponseError(c, "请求参数错误", nil)
+		gsgin.GinResponseError(c, "请求参数错误: "+err.Error(), nil)
 		return
 	}
 

@@ -626,7 +626,7 @@ export default {
     // resolveClientDownloadFileName parses the server-provided filename and falls back to a platform default when missing.
     resolveClientDownloadFileName: function (os, contentDisposition) {
       const defaultFileNameMap = {
-        windows: 'dtool-agent.exe',
+        windows: 'dtool-agent.zip',
         darwin: 'dtool-agent',
         linux: 'dtool-agent',
       }
