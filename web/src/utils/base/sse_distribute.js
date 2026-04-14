@@ -74,6 +74,7 @@ function Close() {
 
 //获取分发id
 function GetSseDistributeId(businessId){
+    return businessId
     const prefix = String(businessId || 'sse').trim() || 'sse'
     sseDistributeSeq += 1
     return `${prefix}_${Date.now()}_${sseDistributeSeq}`

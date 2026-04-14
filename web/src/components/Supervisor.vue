@@ -416,6 +416,14 @@ export default {
       let ret = search.SearchListObj(_that.configMap, _that.searchKey)
       _that.searchNum = ret[0]
       _that.configMap = ret[1]
+      // 清除非显示字段的搜索高亮 HTML，防止污染 API 请求参数（supervisor_name、supervisor_config 等）
+      for (let i in _that.configMap) {
+        _that.configMap[i].supervisor_name = _that.resetHtmlTag(_that.configMap[i].supervisor_name)
+        _that.configMap[i].supervisor_config = _that.resetHtmlTag(_that.configMap[i].supervisor_config)
+        if (_that.configMap[i].supervisor_restart_name) {
+          _that.configMap[i].supervisor_restart_name = _that.resetHtmlTag(_that.configMap[i].supervisor_restart_name)
+        }
+      }
     },
     //重启所有的消费者
     restartSupervisorAll: function () {
@@ -531,6 +539,10 @@ export default {
       for (let n in this.configMap) {
         this.configMap[n].processNum = 0
         this.configMap[n].running_status = ''
+        // 清除搜索高亮残留的 HTML 标签，防止 supervisor_name 等关键字段被污染导致匹配失败
+        this.configMap[n].supervisor_name = this.resetHtmlTag(this.configMap[n].supervisor_name)
+        this.configMap[n].name = this.resetHtmlTag(this.configMap[n].name)
+        this.configMap[n].showName = this.resetHtmlTag(this.configMap[n].showName)
       }
       //分析结果
       let supervisorStatusList = this.getExecResultText(this.execResult).split('\n')
@@ -564,6 +576,11 @@ export default {
         }
       }
       this.configMap = array.SortByKey(this.configMap , 'running_status' , 'asc')
+    },
+    //清除搜索高亮残留的 HTML 标签
+    resetHtmlTag: function (value) {
+      if (typeof value !== 'string') return value
+      return value.replace(/<span[^>]*>(.*?)<\/span>/g, '$1')
     },
     //过滤数组空数据
     filterArray: function (array) {
