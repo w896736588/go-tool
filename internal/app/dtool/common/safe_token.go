@@ -52,8 +52,13 @@ func (m *SafeTokenManager) GenerateToken() (string, int64, error) {
 	// 生成随机会话ID
 	sessionID := generateRandomSessionID()
 
-	// 计算过期时间
-	expireAt := time.Now().Add(time.Duration(m.sessionExpireMinutes) * time.Minute).Unix()
+	// 计算过期时间（0 表示永不过期）
+	var expireAt int64
+	if m.sessionExpireMinutes > 0 {
+		expireAt = time.Now().Add(time.Duration(m.sessionExpireMinutes) * time.Minute).Unix()
+	} else {
+		expireAt = 0 // 永不过期
+	}
 
 	// 构建 Token 数据
 	tokenData := SafeTokenData{
@@ -101,8 +106,8 @@ func (m *SafeTokenManager) ParseToken(token string) (*SafeTokenClaims, int, erro
 
 	claims := &tokenData.Claims
 
-	// 检查过期时间
-	if time.Now().Unix() > claims.ExpireAt {
+	// 检查过期时间（expireAt == 0 表示永不过期）
+	if claims.ExpireAt > 0 && time.Now().Unix() > claims.ExpireAt {
 		return nil, 40102, fmt.Errorf("token expired")
 	}
 
@@ -117,8 +122,13 @@ func (m *SafeTokenManager) ParseToken(token string) (*SafeTokenClaims, int, erro
 // RenewToken 续期 Token
 // 每次请求成功时调用，返回新的 token 和过期时间
 func (m *SafeTokenManager) RenewToken(claims *SafeTokenClaims) (string, int64, error) {
-	// 生成新的过期时间
-	expireAt := time.Now().Add(time.Duration(m.sessionExpireMinutes) * time.Minute).Unix()
+	// 生成新的过期时间（0 表示永不过期）
+	var expireAt int64
+	if m.sessionExpireMinutes > 0 {
+		expireAt = time.Now().Add(time.Duration(m.sessionExpireMinutes) * time.Minute).Unix()
+	} else {
+		expireAt = 0 // 永不过期
+	}
 
 	// 构建新的 Token 数据（保留相同的 sessionID）
 	tokenData := SafeTokenData{

@@ -328,7 +328,7 @@
             <div class="config-item-wrapper">
               <template v-if="editingItem.key === 'safe_session_expire_minutes'">
                 <div class="config-edit-row">
-                  <el-input-number v-model="editingItem.value" :min="1" :step="10" />
+                  <el-input-number v-model="editingItem.value" :min="0" :step="10" />
                   <div class="config-edit-actions">
                     <GitActionButton compact size="small" :loading="saving" @click="saveItem('safe', 'sessionExpireMinutes', editingItem.value)">保存</GitActionButton>
                     <GitActionButton compact size="small" @click="cancelEdit">取消</GitActionButton>
@@ -341,7 +341,7 @@
                   <GitActionButton compact size="small" @click="startEdit('safe_session_expire_minutes', form.safe_session_expire_minutes)">编辑</GitActionButton>
                 </div>
               </template>
-              <div class="config-item-help">会话有效期（分钟），默认 120 分钟。每次请求成功会自动续期。</div>
+              <div class="config-item-help">会话有效期（分钟），默认 120 分钟。设为 0 表示永不过期。每次请求成功会自动续期。</div>
             </div>
           </el-descriptions-item>
         </el-descriptions>

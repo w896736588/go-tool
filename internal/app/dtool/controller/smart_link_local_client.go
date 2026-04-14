@@ -4,9 +4,12 @@ import (
 	"dev_tool/internal/app/dtool/common"
 	"dev_tool/internal/app/dtool/component"
 	"dev_tool/internal/app/dtool/define"
+	"dev_tool/internal/pkg/p_define"
+	"strings"
 	"time"
 
 	"gitee.com/Sxiaobai/gs/v2/gsgin"
+	"gitee.com/Sxiaobai/gs/v2/gstool"
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/cast"
 )
@@ -45,11 +48,13 @@ func SmartLinkClientStatus(c *gin.Context) {
 		}
 	}
 
-	client, _ := common.DbMain.Client.QueryBySql(`
+	client, queryErr := common.DbMain.Client.QueryBySql(`
 		SELECT * FROM tbl_smart_link_client 
 		ORDER BY last_seen_time DESC 
-		LIMIT 1
 	`).One()
+	if queryErr != nil {
+		gstool.FmtPrintlnLogTime(`SmartLinkClientStatus 查询失败: %s`, queryErr.Error())
+	}
 
 	if len(client) == 0 {
 		gsgin.GinResponseSuccess(c, "", map[string]any{
@@ -85,6 +90,119 @@ func SmartLinkClientStatus(c *gin.Context) {
 		"client_os":            cast.ToString(client["os"]),
 		"client_arch":          cast.ToString(client["arch"]),
 	})
+}
+
+// buildSmartLinkClientStatusPayload 构建客户端状态快照数据。
+func buildSmartLinkClientStatusPayload() map[string]any {
+	cfg := component.EnvClient.SmartLinkConfig
+	if cfg == nil {
+		cfg = &define.SmartLinkConfig{
+			RunMode:       define.SmartLinkRunModeServer,
+			ClientVersion: "1.0.0",
+		}
+	}
+
+	client, queryErr := common.DbMain.Client.QueryBySql(`
+		SELECT * FROM tbl_smart_link_client 
+		ORDER BY last_seen_time DESC 
+	`).One()
+	if queryErr != nil {
+		gstool.FmtPrintlnLogTime(`buildSmartLinkClientStatusPayload 查询失败: %s`, queryErr.Error())
+	}
+
+	if len(client) == 0 {
+		return map[string]any{
+			"client_connected":     false,
+			"client_status":        define.SmartLinkClientStatusOffline,
+			"client_name":          "",
+			"client_version":       "",
+			"client_version_match": false,
+			"client_last_seen_at":  0,
+			"client_os":            "",
+			"client_arch":          "",
+		}
+	}
+
+	lastSeen := cast.ToInt64(client["last_seen_time"])
+	clientVersion := cast.ToString(client["client_version"])
+	now := time.Now().Unix()
+	isConnected := (now - lastSeen) < 30
+	clientStatus := define.SmartLinkClientStatus(cast.ToString(client["status"]))
+
+	if !isConnected {
+		clientStatus = define.SmartLinkClientStatusOffline
+	}
+
+	return map[string]any{
+		"client_connected":     isConnected,
+		"client_status":        clientStatus,
+		"client_name":          cast.ToString(client["client_name"]),
+		"client_version":       clientVersion,
+		"client_version_match": clientVersion == cfg.ClientVersion,
+		"client_last_seen_at":  lastSeen,
+		"client_os":            cast.ToString(client["os"]),
+		"client_arch":          cast.ToString(client["arch"]),
+	}
+}
+
+// sendSmartLinkClientStatusSnapshot 向指定 SSE 连接发送一次客户端状态快照。
+func sendSmartLinkClientStatusSnapshot(sse *gsgin.Sse) {
+	if sse == nil {
+		return
+	}
+	data := buildSmartLinkClientStatusPayload()
+	err := sse.SendToChan(gstool.JsonEncode(p_define.SseData{
+		SseDistributeId: define.SseSmartLinkClientStatus,
+		Data:            data,
+		Type:            p_define.SseContentTypeMsg,
+	}))
+	if err != nil {
+		gstool.FmtPrintlnLogTime(`SmartLinkClientStatus广播错误 %s`, err.Error())
+	}
+}
+
+// BindSmartLinkClientStatusSSE 为普通 SSE client 绑定本地客户端状态推送。
+func BindSmartLinkClientStatusSSE(sse *gsgin.Sse, stopC chan int, interval time.Duration) {
+	if sse == nil {
+		return
+	}
+	if interval <= 0 {
+		interval = 5 * time.Second
+	}
+	// 建连后立即推一次，避免前端初次打开时要等下一个周期。
+	sendSmartLinkClientStatusSnapshot(sse)
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				sendSmartLinkClientStatusSnapshot(sse)
+			case <-stopC:
+				return
+			}
+		}
+	}()
+}
+
+// BroadcastSmartLinkClientStatusUpdate 主动广播客户端状态更新。
+func BroadcastSmartLinkClientStatusUpdate() {
+	msg := gstool.JsonEncode(p_define.SseData{
+		SseDistributeId: define.SseSmartLinkClientStatus,
+		Data:            buildSmartLinkClientStatusPayload(),
+		Type:            p_define.SseContentTypeMsg,
+	})
+	for _, item := range gsgin.SseStatus() {
+		clientID := strings.TrimSpace(strings.TrimPrefix(item, "ClientId:"))
+		if clientID == "" || clientID == item {
+			continue
+		}
+		sse := gsgin.SseGetByClientId(clientID)
+		if sse == nil {
+			continue
+		}
+		_ = sse.SendToChan(msg)
+	}
 }
 
 // AgentRegister 客户端注册
@@ -134,6 +252,9 @@ func AgentRegister(c *gin.Context) {
 		}, clientData).Exec()
 	}
 
+	// 客户端注册后主动推送状态变更
+	go BroadcastSmartLinkClientStatusUpdate()
+
 	gsgin.GinResponseSuccess(c, "", map[string]any{
 		"accepted":                true,
 		"required_client_version": cfg.ClientVersion,
@@ -162,6 +283,9 @@ func AgentHeartbeat(c *gin.Context) {
 	_, _ = common.DbMain.Client.QuickUpdate("tbl_smart_link_client", map[string]any{
 		"client_id": cast.ToString(req["client_id"]),
 	}, updateData).Exec()
+
+	// 心跳后主动推送状态变更
+	go BroadcastSmartLinkClientStatusUpdate()
 
 	gsgin.GinResponseSuccess(c, "", nil)
 }

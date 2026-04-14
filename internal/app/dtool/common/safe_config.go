@@ -9,8 +9,8 @@ import (
 const (
 	// SafeSessionExpireMinutesDefault 默认会话有效期（分钟）
 	SafeSessionExpireMinutesDefault = 120
-	// SafeSessionExpireMinutesMin 最小会话有效期（分钟）
-	SafeSessionExpireMinutesMin = 1
+	// SafeSessionExpireMinutesMin 最小会话有效期（分钟），0 表示永不过期
+	SafeSessionExpireMinutesMin = 0
 	// SafePasswordVersionSalt 密码版本计算盐值
 	SafePasswordVersionSalt = "dtool_safe_login_v1"
 )
@@ -35,10 +35,10 @@ func BuildSafePasswordVersion(password string, appName string) string {
 }
 
 // NormalizeSafeSessionExpireMinutes 规范化会话过期时间
-// 小于1时按1处理，避免生成立刻过期的会话
+// 0 表示永不过期，负数按 0 处理，正数按原值返回
 func NormalizeSafeSessionExpireMinutes(minutes int) int {
-	if minutes < SafeSessionExpireMinutesMin {
-		return SafeSessionExpireMinutesMin
+	if minutes < 0 {
+		return 0
 	}
 	return minutes
 }

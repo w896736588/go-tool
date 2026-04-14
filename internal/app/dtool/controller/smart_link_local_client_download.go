@@ -31,8 +31,8 @@ func resolveAgentDownloadSpec(rawOS string) (agentDownloadSpec, bool) {
 	case "windows":
 		return agentDownloadSpec{
 			Goos:     "windows",
-			FileName: "dtool-agent.zip",
-			IsZip:    true,
+			FileName: "dtool-agent.exe",
+			IsZip:    false,
 		}, true
 	case "darwin":
 		return agentDownloadSpec{

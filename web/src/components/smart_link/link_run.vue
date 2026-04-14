@@ -418,7 +418,6 @@ export default {
         client_os: '',
         client_arch: ''
       },
-      clientStatusTimer: null,
     }
   },
   computed: {
@@ -463,11 +462,12 @@ export default {
     this.sse_distribute_id = sseDistribute.GetSseDistributeId('link')
     this.sseCreate()
     this.init()
-    this.startClientStatusTimer()
     this.refreshRuntimeConfigState()
+    // 注册 SSE 客户端状态推送
+    sseDistribute.RegisterReceive('smart_link_client_status', this.handleClientStatusSSE)
   },
   beforeUnmount() {
-    this.stopClientStatusTimer()
+    sseDistribute.UnRegisterReceive('smart_link_client_status')
   },
   activated() {
     if (Init.GetIsInit('smart_link') === true) {
@@ -557,8 +557,8 @@ export default {
       _that.smartList[smartLinkIndex].chooseLinkIndex = linkIndex
       ticker_step.Active(_that.tickerKey)
     },
-    // loadRuntimeConfig 拉取最新运行模式，并决定是否补拉客户端状态。
-    // loadRuntimeConfig fetches the latest run mode and decides whether client status should be refreshed immediately.
+    // loadRuntimeConfig 拉取最新运行模式。
+    // loadRuntimeConfig fetches the latest run mode.
     loadRuntimeConfig: function () {
       let _that = this
       return fetch(
@@ -570,8 +570,10 @@ export default {
           if (data.ErrCode === 0 && data.Data) {
             const nextState = resolveRuntimeRefreshActions(_that.runtimeConfig, data.Data)
             _that.runtimeConfig = nextState.runtimeConfig
+            // 本地客户端模式下，runtimeConfig 加载完毕后立即拉取一次客户端状态，避免 SSE 推送时序问题。
+            // Immediately fetch client status after runtimeConfig is loaded in local_client mode.
             if (nextState.shouldLoadClientStatus) {
-              _that.loadClientStatus()
+              _that.refreshClientStatus()
             }
           }
         })
@@ -584,8 +586,14 @@ export default {
     refreshRuntimeConfigState: function () {
       return this.loadRuntimeConfig()
     },
-    // 加载客户端状态
-    loadClientStatus: function () {
+    // handleClientStatusSSE 处理 SSE 推送的客户端状态。
+    handleClientStatusSSE: function (data) {
+      if (data && this.runtimeConfig.run_mode === 'local_client') {
+        this.clientStatus = data
+      }
+    },
+    // 刷新客户端状态（手动触发一次 HTTP 拉取兜底）
+    refreshClientStatus: function () {
       let _that = this
       if (_that.runtimeConfig.run_mode !== 'local_client') return
       fetch(
@@ -598,35 +606,14 @@ export default {
             _that.clientStatus = data.Data
           }
         })
-        .catch(() => {
-          // 忽略错误
-        })
-    },
-    // 启动定时刷新客户端状态
-    startClientStatusTimer: function () {
-      let _that = this
-      _that.loadClientStatus()
-      _that.clientStatusTimer = setInterval(function () {
-        _that.loadClientStatus()
-      }, 5000)
-    },
-    // 停止定时刷新
-    stopClientStatusTimer: function () {
-      if (this.clientStatusTimer) {
-        clearInterval(this.clientStatusTimer)
-        this.clientStatusTimer = null
-      }
-    },
-    // 刷新客户端状态
-    refreshClientStatus: function () {
-      this.loadClientStatus()
-      this.$message.success('状态已刷新')
+        .catch(() => {})
+      _that.$message.success('状态已刷新')
     },
     // resolveClientDownloadFileName 解析服务端返回的下载文件名，缺省时按平台回退。
     // resolveClientDownloadFileName parses the server-provided filename and falls back to a platform default when missing.
     resolveClientDownloadFileName: function (os, contentDisposition) {
       const defaultFileNameMap = {
-        windows: 'dtool-agent.zip',
+        windows: 'dtool-agent.exe',
         darwin: 'dtool-agent',
         linux: 'dtool-agent',
       }

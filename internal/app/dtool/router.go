@@ -23,10 +23,10 @@ func InitRouter(tGin *p_gin.Gin) {
 	// 但白名单接口需要在中间件之前注册，所以这里采用另一种方式：
 	// 1. 先注册白名单接口
 	baseRouter(tGin)
-	
+
 	// 2. 注册 SafeAuth 中间件到所有后续路由
 	tGin.UseMiddleware(middleware.SafeAuthMiddleware())
-	
+
 	toolRouter(tGin)
 	redisRouter(tGin)
 	phpRouter(tGin)
@@ -447,6 +447,9 @@ func apiUse(tGin *p_gin.Gin) {
 		// 中文注释：记忆库状态复用普通 SSE 通道推送，替代原来的轮询方式。
 		// English comment: Memory fragment status now rides on the normal SSE channel for this client.
 		controller.BindMemoryFragmentStatusSSE(sse, stopC, 10*time.Second)
+		// 中文注释：本地客户端状态复用普通 SSE 通道推送，替代前端 5s 轮询。
+		// English comment: Smart-link client status now rides on the normal SSE channel for this client.
+		controller.BindSmartLinkClientStatusSSE(sse, stopC, 5*time.Second)
 		return sse, nil
 	}
 	closeFunc := func(sse *gsgin.Sse) {

@@ -57,12 +57,21 @@ func (a *Agent) Register() error {
 		return fmt.Errorf("请求注册接口失败: %w", err)
 	}
 
-	if resp["ErrCode"] != 0 {
+	errCode := 0
+	if v, ok := resp["ErrCode"]; ok && v != nil {
+		switch val := v.(type) {
+		case float64:
+			errCode = int(val)
+		case int:
+			errCode = val
+		}
+	}
+	if errCode != 0 {
 		errMsg := "未知错误"
 		if resp["ErrMsg"] != nil {
 			errMsg = fmt.Sprintf("%v", resp["ErrMsg"])
 		}
-		return fmt.Errorf("服务端返回错误: %s (错误码: %v)", errMsg, resp["ErrCode"])
+		return fmt.Errorf("服务端返回错误: %s (错误码: %d)", errMsg, errCode)
 	}
 
 	fmt.Printf("注册成功，服务端要求版本: %v\n", resp["Data"].(map[string]any)["required_client_version"])
