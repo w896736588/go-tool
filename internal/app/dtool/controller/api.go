@@ -143,6 +143,13 @@ func ApiCreateCollection(c *gin.Context) {
 		info[`type`] = define.ApiTypeCollection
 		info[`uniqueid`] = fmt.Sprintf(`collection%d`, info[`id`])
 	}
+	changeType := `collection_updated`
+	if cast.ToInt(dataMap[`id`]) == 0 {
+		changeType = `collection_created`
+	}
+	go BroadcastApiChange(c.GetHeader("SseClientId"), changeType, map[string]any{
+		`collection_id`: cast.ToInt(id),
+	})
 	gsgin.GinResponseSuccess(c, ``, info)
 }
 
@@ -158,6 +165,9 @@ func ApiDeleteCollection(c *gin.Context) {
 				`id`: dataMap[`id`],
 			}).Exec()
 	}
+	go BroadcastApiChange(c.GetHeader("SseClientId"), `collection_deleted`, map[string]any{
+		`collection_id`: cast.ToInt(dataMap[`id`]),
+	})
 	gsgin.GinResponseSuccess(c, ``, nil)
 }
 
@@ -173,6 +183,11 @@ func ApiDeleteApi(c *gin.Context) {
 				`id`: dataMap[`id`],
 			}).Exec()
 	}
+	go BroadcastApiChange(c.GetHeader("SseClientId"), `api_deleted`, map[string]any{
+		`collection_id`: cast.ToInt(dataMap[`collection_id`]),
+		`folder_id`:     cast.ToInt(dataMap[`folder_id`]),
+		`api_id`:        cast.ToInt(dataMap[`id`]),
+	})
 	gsgin.GinResponseSuccess(c, ``, nil)
 }
 
@@ -188,6 +203,10 @@ func ApiDeleteDir(c *gin.Context) {
 				`id`: dataMap[`id`],
 			}).Exec()
 	}
+	go BroadcastApiChange(c.GetHeader("SseClientId"), `folder_deleted`, map[string]any{
+		`collection_id`: cast.ToInt(dataMap[`collection_id`]),
+		`folder_id`:     cast.ToInt(dataMap[`id`]),
+	})
 	gsgin.GinResponseSuccess(c, ``, nil)
 }
 
@@ -487,6 +506,14 @@ func ApiCreateDir(c *gin.Context) {
 		info[`type`] = define.ApiTypeFolder
 		info[`uniqueid`] = fmt.Sprintf(`folder%d`, info[`id`])
 	}
+	changeType := `folder_updated`
+	if cast.ToInt(dataMap[`id`]) == 0 {
+		changeType = `folder_created`
+	}
+	go BroadcastApiChange(c.GetHeader("SseClientId"), changeType, map[string]any{
+		`collection_id`: cast.ToInt(info[`collection_id`]),
+		`folder_id`:     cast.ToInt(id),
+	})
 	gsgin.GinResponseSuccess(c, ``, info)
 }
 
@@ -577,10 +604,19 @@ func ApiCreateApi(c *gin.Context) {
 		info[`type`] = define.ApiTypeApi
 		info[`uniqueid`] = fmt.Sprintf(`api%d`, info[`id`])
 	}
+	changeType := `api_updated`
+	if cast.ToInt(dataMap[`id`]) == 0 {
+		changeType = `api_created`
+	}
+	go BroadcastApiChange(c.GetHeader("SseClientId"), changeType, map[string]any{
+		`collection_id`: cast.ToInt(info[`collection_id`]),
+		`folder_id`:     cast.ToInt(info[`folder_id`]),
+		`api_id`:        cast.ToInt(id),
+	})
 	gsgin.GinResponseSuccess(c, ``, info)
 }
 
-// normalizedIntegerType 中文：接口参数保存时唯一允许的整数类型名。 English: The only accepted integer type name in API parameter definitions.
+const normalizedIntegerType = `integer
 const normalizedIntegerType = `integer`
 
 // validateArrayItemTypes 中文：校验数组参数项中的类型字段，禁止继续写入旧的 int 类型名。 English: Validate array item types and reject the legacy int type name.
@@ -714,6 +750,11 @@ func ApiWeightDown(c *gin.Context) {
 	}, map[string]any{
 		`weight`: cast.ToInt(apiInfo[`weight`]) + 1,
 	}).Exec()
+	go BroadcastApiChange(c.GetHeader("SseClientId"), `api_weight_changed`, map[string]any{
+		`collection_id`: cast.ToInt(apiInfo[`collection_id`]),
+		`folder_id`:     cast.ToInt(apiInfo[`folder_id`]),
+		`api_id`:        cast.ToInt(id),
+	})
 	gsgin.GinResponseSuccess(c, ``, map[string]any{})
 	return
 }
@@ -814,6 +855,9 @@ func ApiBatchImport(c *gin.Context) {
 		}
 	}
 
+	go BroadcastApiChange(c.GetHeader("SseClientId"), `batch_imported`, map[string]any{
+		`collection_id`: collectionId,
+	})
 	gsgin.GinResponseSuccess(c, `导入完成`, map[string]any{
 		`result`: importResult,
 	})
@@ -1052,6 +1096,13 @@ func ApiMoveApi(c *gin.Context) {
 		gsgin.GinResponseError(c, `移动失败: `+err.Error(), nil)
 		return
 	}
+
+	go BroadcastApiChange(c.GetHeader("SseClientId"), `api_moved`, map[string]any{
+		`collection_id`: folderCollectionId,
+		`folder_id`:     newFolderId,
+		`api_id`:        apiId,
+		`old_folder_id`: cast.ToInt(apiInfo[`folder_id`]),
+	})
 
 	gsgin.GinResponseSuccess(c, `移动成功`, nil)
 }

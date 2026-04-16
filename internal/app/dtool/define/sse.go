@@ -9,6 +9,7 @@ const (
 	SseAsyncTasks            = `async_tasks`              //异步任务状态推送
 	SseSafeAuthRequired      = `safe_auth_required`       //安全认证失效通知
 	SseSmartLinkClientStatus = `smart_link_client_status` //本地客户端状态推送
+	SseApiDataChange         = `api_data_change`          //API数据变更推送
 )
 
 const (

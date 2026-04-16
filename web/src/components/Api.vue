@@ -449,6 +449,7 @@ import Api from '@/utils/base/api'
 import ArrayUtil from '@/utils/base/array'
 import KeyDebounceDetector from "@/utils/base/keyup"
 import store from "@/utils/base/store";
+import sseDistribute from '@/utils/base/sse_distribute'
 
 export default {
   name: 'CollectionManager',
@@ -606,12 +607,55 @@ export default {
     this.loadSidebarWidthCache()
     this.loadCollectionData()
     this.loadArchivedItems()
+    // 注册 API 数据变更 SSE 回调
+    sseDistribute.RegisterReceive('api_data_change', this.handleApiChangeSSE)
   },
   beforeUnmount() {
     // 组件销毁时兜底移除拖拽事件
     this.stopSidebarResize()
+    // 注销 API 数据变更 SSE 回调
+    sseDistribute.UnRegisterReceive('api_data_change')
   },
   methods: {
+
+    // ==================== SSE 数据变更回调 ====================
+
+    handleApiChangeSSE(data) {
+      if (!data || !data.change_type) {
+        return
+      }
+      // 跳过自身触发的变更，避免重复刷新
+      if (data.source_client_id && data.source_client_id === sseDistribute.GetSseClientId()) {
+        return
+      }
+      const changeType = data.change_type
+      const collectionId = data.collection_id
+      const folderId = data.folder_id
+
+      if (changeType === 'collection_created' || changeType === 'collection_updated' || changeType === 'collection_deleted') {
+        this.loadCollectionData()
+      } else if (changeType === 'folder_created' || changeType === 'folder_updated' || changeType === 'folder_deleted') {
+        if (collectionId) {
+          this.refreshCollectionFolders(collectionId)
+        }
+      } else if (changeType === 'api_created' || changeType === 'api_updated' || changeType === 'api_deleted' || changeType === 'api_weight_changed') {
+        if (collectionId && folderId) {
+          this.refreshFolderApis(collectionId, folderId)
+        }
+      } else if (changeType === 'api_moved') {
+        // 刷新源文件夹和目标文件夹
+        if (data.old_folder_id && collectionId) {
+          this.refreshFolderApis(collectionId, data.old_folder_id)
+        }
+        if (folderId && collectionId) {
+          this.refreshFolderApis(collectionId, folderId)
+        }
+      } else if (changeType === 'batch_imported') {
+        if (collectionId) {
+          this.refreshCollectionFolders(collectionId)
+        }
+      }
+    },
 
     // ==================== 工作区 Tab 方法 ====================
 
