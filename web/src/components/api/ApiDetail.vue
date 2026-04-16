@@ -56,6 +56,9 @@
             <json-editor-vue v-model="apiForm.body_json_data" class="json-box" @blur="handleBlurSave"/>
           </div>
           <div v-else-if="['application/x-www-form-urlencoded', 'multipart/form-data'].includes(apiForm.content_type)" class="body-editor">
+            <div style="display: flex; justify-content: flex-end; margin-bottom: 8px;">
+              <pl-button size="small" @click="openBodyJsonImportDialog">通过JSON导入</pl-button>
+            </div>
             <key-value-editor @update="handleSaveBodyFormData" :list="apiForm.body_form_data"/>
           </div>
           <div v-else-if="['text/plain', 'raw'].includes(apiForm.content_type)" class="body-editor">
@@ -279,6 +282,20 @@
         <el-empty description="尚未执行请求"/>
       </div>
     </el-drawer>
+
+    <el-dialog v-model="bodyJsonImportVisible" title="通过JSON导入" width="600" @keydown.enter.prevent="handleBodyJsonImport">
+      <el-alert title="请输入JSON对象，键值将自动转换为表单参数。支持嵌套对象（自动展平为 key.subkey 格式）" type="info" :closable="false" style="margin-bottom: 12px;"/>
+      <el-input
+          v-model="bodyJsonImportText"
+          type="textarea"
+          :rows="12"
+          placeholder='例如：{"username":"admin","password":"123456"}'
+      />
+      <template #footer>
+        <pl-button @click="bodyJsonImportVisible = false">取消</pl-button>
+        <pl-button type="primary" @click="handleBodyJsonImport">导入</pl-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -358,6 +375,9 @@ export default {
         isTabNavigating: false,
         drawerHistoryShow: false,
         takeResultActiveTabName : 'take_result_data',
+        bodyJsonImportVisible: false,
+        bodyJsonImportText: '',
+        bodyFormNextId: 1,
     }
   },
   computed: {
@@ -436,6 +456,64 @@ export default {
     handleSaveBodyFormData(bodyFormData){
       this.apiForm.body_form_data = bodyFormData
       this.handleBlurSave()
+    },
+    openBodyJsonImportDialog() {
+      this.bodyJsonImportText = ''
+      this.bodyJsonImportVisible = true
+    },
+    handleBodyJsonImport() {
+      if (!this.bodyJsonImportText.trim()) {
+        this.$message.warning('请输入JSON数据')
+        return
+      }
+      let parsed
+      try {
+        parsed = JSON.parse(this.bodyJsonImportText)
+      } catch (e) {
+        this.$message.error('JSON格式错误，请检查输入')
+        return
+      }
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        this.$message.error('请输入JSON对象，而非数组或其他类型')
+        return
+      }
+      const flattened = this.flattenJsonObject(parsed)
+      const maxId = this.apiForm.body_form_data.reduce((max, item) => {
+        return item.id && item.id > max ? item.id : max
+      }, 0)
+      this.bodyFormNextId = maxId + 1
+      const newItems = flattened.map(([key, value]) => ({
+        id: this.bodyFormNextId++,
+        field: key,
+        type: this.detectFormValueType(value),
+        value: typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value),
+        description: '',
+      }))
+      this.apiForm.body_form_data = newItems
+      this.handleBlurSave()
+      this.bodyJsonImportVisible = false
+      this.$message.success(`已导入 ${newItems.length} 个参数`)
+    },
+    flattenJsonObject(obj, prefix = '') {
+      const result = []
+      for (const [key, value] of Object.entries(obj)) {
+        const fullKey = prefix ? `${prefix}.${key}` : key
+        if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+          result.push(...this.flattenJsonObject(value, fullKey))
+        } else if (Array.isArray(value)) {
+          result.push([fullKey, JSON.stringify(value)])
+        } else {
+          result.push([fullKey, value])
+        }
+      }
+      return result
+    },
+    detectFormValueType(value) {
+      if (typeof value === 'number') {
+        return Number.isInteger(value) ? 'integer' : 'float'
+      }
+      if (typeof value === 'boolean') return 'boolean'
+      return 'string'
     },
 
     handleKeyUp: function (event) {
