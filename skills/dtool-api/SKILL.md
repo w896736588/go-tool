@@ -13,7 +13,8 @@ description: Use when operating the dtool 接口开发模块 and the task involv
 
 1. 交互必须使用简体中文。
 2. AI 在操作 dtool 接口开发模块的所有接口时，必须使用 UTF-8 编码处理请求与响应，避免中文字段、错误信息、描述信息出现乱码。
-3. 使用 PowerShell 或其他终端前，必须先切换 UTF-8 编码：
+3. 使用 PowerShell 或其他终端前，必须先切换 UTF-8 编码.
+4. 改动或创建文件夹或接口时，统一使用 Python 脚本发送请求，避免 bash 环境的编码问题
 
 ```powershell
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
