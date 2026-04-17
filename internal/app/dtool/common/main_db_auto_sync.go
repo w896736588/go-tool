@@ -320,7 +320,7 @@ func (h *MainDBAutoSync) syncWithAsyncTaskInternal() error {
 	if err != nil {
 		gstool.FmtPrintlnLogTime(`主库自动同步准备待处理任务失败 dir=%s file=%s err=%s`, config.Dir, config.DBName, err.Error())
 		syncErr := h.syncNow()
-		h.clearPendingTaskID()
+		h.clearPendingTaskIDIfMatch(taskID)
 		if syncErr != nil {
 			return syncErr
 		}
@@ -351,7 +351,7 @@ func (h *MainDBAutoSync) syncWithAsyncTaskInternal() error {
 		}
 		h.notifyStatusChange()
 	}
-	h.clearPendingTaskID()
+	h.clearPendingTaskIDIfMatch(taskID)
 	return syncErr
 }
 
@@ -536,12 +536,14 @@ func (h *MainDBAutoSync) ensurePendingTask(config MainDBAutoSyncConfig) (int, er
 	return taskID, nil
 }
 
-// clearPendingTaskID 清理当前防抖窗口对应的待处理任务标记。 // Clear the pending async task id for the current debounce window.
-func (h *MainDBAutoSync) clearPendingTaskID() {
+// clearPendingTaskIDIfMatch 仅当内存中的 pendingTaskID 与 taskID 一致时才清零，避免误清新创建的任务 ID。 // Clear pendingTaskID only when it matches taskID to prevent overwriting a newly created task.
+func (h *MainDBAutoSync) clearPendingTaskIDIfMatch(taskID int) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.pendingTaskID = 0
-	h.pendingTaskRecovered = false
+	if h.pendingTaskID == taskID {
+		h.pendingTaskID = 0
+		h.pendingTaskRecovered = false
+	}
 }
 
 // defaultCreateAsyncTask 创建主库自动同步待处理任务。 // Create the pending async task for main db auto sync.
@@ -550,6 +552,13 @@ func (h *MainDBAutoSync) defaultCreateAsyncTask(config MainDBAutoSyncConfig) (in
 	if DbLog == nil || DbLog.Client == nil {
 		gstool.FmtPrintlnLogTime(`主库自动同步日志库未初始化，跳过任务记录`)
 		return 0, nil
+	}
+	affected, delErr := DbLog.AsyncTaskDeleteByType(mainDBAutoSyncTaskType)
+	if delErr != nil {
+		gstool.FmtPrintlnLogTime(`主库自动同步清理旧任务失败 err=%s`, delErr.Error())
+	} else if affected > 0 {
+		gstool.FmtPrintlnLogTime(`主库自动同步已清理旧任务 count=%d`, affected)
+		h.notifyStatusChange()
 	}
 	scheduledAt := time.Now().Add(time.Duration(config.AutoSyncMinutes) * time.Minute).Unix()
 	taskInfo, err := DbLog.AsyncTaskCreate(mainDBAutoSyncTaskType, taskTitle, ``, h.buildTaskPayload(config, scheduledAt))

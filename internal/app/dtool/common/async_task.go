@@ -144,6 +144,19 @@ func (h *CSqlite) AsyncTaskUpdateRequestPayload(id int, requestPayload string) e
 	})
 }
 
+// AsyncTaskDeleteByType 删除指定类型的全部异步任务记录。 // AsyncTaskDeleteByType removes all async task records for the given type.
+func (h *CSqlite) AsyncTaskDeleteByType(taskType string) (int64, error) {
+	taskType = strings.TrimSpace(taskType)
+	if taskType == `` {
+		return 0, errors.New(`任务类型不能为空`)
+	}
+	result, err := h.Client.ExecBySql(`delete from tbl_async_task where task_type = ?`, taskType).Exec()
+	if err != nil {
+		return 0, err
+	}
+	return result, nil
+}
+
 // AsyncTaskDelete 删除异步任务记录。 // AsyncTaskDelete removes the async task record.
 func (h *CSqlite) AsyncTaskDelete(id int) error {
 	if id <= 0 {
