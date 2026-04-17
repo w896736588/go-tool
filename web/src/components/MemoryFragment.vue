@@ -2,18 +2,15 @@
   <div class="memory-page">
     <aside v-if="memoryConfigured && !sidebarCollapsed" class="memory-sidebar">
       <div class="sidebar-header">
-        <span v-show="!sidebarCollapsed" class="sidebar-title">知识片段</span>
-        <div v-show="!sidebarCollapsed" class="sidebar-header-actions">
+        <div class="sidebar-header-actions">
           <pl-button type="primary" plain size="small" @click="createFragment">
             <el-icon><Plus /></el-icon>
             新建
           </pl-button>
-          <GitActionButton variant="warning" compact @click="openTrashTab">
-            <template #icon>
-              <el-icon><Delete /></el-icon>
-            </template>
+          <pl-button plain size="small" @click="openTrashTab">
+            <el-icon><Delete /></el-icon>
             回收站
-          </GitActionButton>
+          </pl-button>
           <pl-button plain size="small" @click="openSettingsDialog">
             设置
           </pl-button>
@@ -41,11 +38,11 @@
           </el-radio-group>
         </div>
         <div class="search-actions">
-          <pl-button type="primary" @click="submitSearch">
+          <pl-button type="primary" size="small" @click="submitSearch">
             <el-icon><Search /></el-icon>
             搜索
           </pl-button>
-          <pl-button plain @click="clearFilter">清空条件</pl-button>
+          <pl-button plain size="small" @click="clearFilter">清空条件</pl-button>
         </div>
       </div>
 
@@ -357,7 +354,7 @@ export default {
       globalSaveShortcutBound: false,
       routeFragmentHandled: false,
       routeFragmentHandledPath: '',
-      sidebarCollapsed: false,
+      sidebarCollapsed: localStorage.getItem('memorySidebarCollapsed') === 'true',
     }
   },
   computed: {
@@ -438,6 +435,7 @@ export default {
     // toggleSidebar 切换左侧列表的折叠/展开状态。
     toggleSidebar() {
       this.sidebarCollapsed = !this.sidebarCollapsed
+      localStorage.setItem('memorySidebarCollapsed', this.sidebarCollapsed)
     },
     // registerMemoryFragmentUpdatesSse 注册知识片段实时同步推送。
     registerMemoryFragmentUpdatesSse() {
@@ -1251,7 +1249,7 @@ export default {
 .sidebar-header-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
@@ -1675,7 +1673,7 @@ export default {
 .sidebar-search-card .search-mode-row {
   margin-top: 10px;
   display: flex;
-  justify-content: flex-start;
+  justify-content: center;
 }
 
 /* 搜索模式切换按钮自定义样式 - 绿色主题 */
@@ -1783,6 +1781,7 @@ export default {
 
 .search-actions {
   display: flex;
+  justify-content: center;
   gap: 10px;
   margin-top: 12px;
 }
@@ -1935,6 +1934,25 @@ export default {
 
 .memory-tabs :deep(.el-tab-pane) {
   height: 100%;
+}
+
+/* 选中tab：主色调背景白字 */
+.memory-tabs :deep(.el-tabs__header .el-tabs__item.is-active) {
+  background-color: #5a8a5a;
+  color: #fff;
+  border-color: #5a8a5a;
+  border-radius: 6px 6px 0 0;
+}
+
+.memory-tabs :deep(.el-tabs__header .el-tabs__item.is-active:hover) {
+  color: #fff;
+}
+
+/* tab标题高度缩小 */
+.memory-tabs :deep(.el-tabs__header .el-tabs__item) {
+  height: 32px;
+  line-height: 32px;
+  border-radius: 6px 6px 0 0;
 }
 
 .tab-label {
