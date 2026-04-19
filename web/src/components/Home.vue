@@ -566,7 +566,10 @@
               title="正文差异"
             />
           </div>
-          <div v-else-if="asyncTaskDetail.task_type === ASYNC_TASK_TYPE_MAIN_DB_SYNC" class="async-task-detail__content">
+          <div
+            v-else-if="asyncTaskDetail.task_type === ASYNC_TASK_TYPE_MAIN_DB_SYNC || asyncTaskDetail.task_type === ASYNC_TASK_TYPE_MEMORY_DB_SYNC"
+            class="async-task-detail__content"
+          >
             <div class="async-task-detail__section-title">任务说明</div>
             <div class="async-task-detail__note">{{ getAsyncTaskDescription(asyncTaskDetail) }}</div>
             <div v-if="getAsyncTaskScheduledTime(asyncTaskDetail)" class="async-task-detail__sub-meta">
@@ -791,6 +794,7 @@ const ASYNC_TASK_STATUS_REJECTED = 'rejected'
 const ASYNC_TASK_TYPE_DAILY_REPORT = 'home_task_daily_report'
 const ASYNC_TASK_TYPE_MEMORY_ARRANGE = 'memory_fragment_arrange'
 const ASYNC_TASK_TYPE_MAIN_DB_SYNC = 'main_db_sync'
+const ASYNC_TASK_TYPE_MEMORY_DB_SYNC = 'memory_db_sync'
 // HOME_TASK_ACTION_COMMAND_STATUS_PREFIX 标识状态切换指令前缀。
 const HOME_TASK_ACTION_COMMAND_STATUS_PREFIX = 'status:'
 // HOME_DASHBOARD_PAGE_* 标识首页双屏结构中的页索引。
@@ -879,6 +883,7 @@ export default {
       ASYNC_TASK_TYPE_DAILY_REPORT,
       ASYNC_TASK_TYPE_MEMORY_ARRANGE,
       ASYNC_TASK_TYPE_MAIN_DB_SYNC,
+      ASYNC_TASK_TYPE_MEMORY_DB_SYNC,
       HOME_TASK_TAB_ACTIVE,
       HOME_TASK_TAB_ARCHIVED,
       HOME_TASK_ARCHIVED_NO,
@@ -1494,6 +1499,9 @@ export default {
       if (taskType === ASYNC_TASK_TYPE_MAIN_DB_SYNC) {
         return '主库同步'
       }
+      if (taskType === ASYNC_TASK_TYPE_MEMORY_DB_SYNC) {
+        return '记忆库同步'
+      }
       return '异步任务'
     },
     // getAsyncTaskStatusText 统一格式化异步任务状态文案。
@@ -1599,8 +1607,11 @@ export default {
     },
     getAsyncTaskDescription(task) {
       let desc = String(task?.request_payload_map?.task_description || '').trim()
+      // 中文注释：主库/记忆库同步任务在完成态都补充“已于 xx 完成”，统一详情文案。
+      // English comment: Append the finished-at suffix for both main-db and memory-db sync tasks once confirmed.
       if (
-        String(task?.task_type || '') === ASYNC_TASK_TYPE_MAIN_DB_SYNC &&
+        (String(task?.task_type || '') === ASYNC_TASK_TYPE_MAIN_DB_SYNC ||
+          String(task?.task_type || '') === ASYNC_TASK_TYPE_MEMORY_DB_SYNC) &&
         String(task?.task_status || '') === ASYNC_TASK_STATUS_CONFIRMED
       ) {
         const finishTime = this.formatAsyncTaskTime(task?.finish_time)

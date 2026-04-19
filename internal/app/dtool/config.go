@@ -180,6 +180,7 @@ func initComponent(appName, ConfigFile string) {
 	component.EnvClient = &define.Env{}
 	component.TGins = make([]*p_gin.Gin, 0)
 	component.MemoryRuntime = common.NewMemoryStore()
+	component.MemoryRuntime.OnStatusChange = controller.BroadcastAsyncTasksUpdate
 	component.MainDBAutoSyncRuntime = common.NewMainDBAutoSync()
 	component.MainDBAutoSyncRuntime.OnStatusChange = controller.BroadcastAsyncTasksUpdate
 	component.RedisClient = &p_db.TRedis{RedisClientMap: make(map[string]*gsdb.GsRedis)}
@@ -482,7 +483,12 @@ func Stop() {
 		})
 	}
 	task.RunAll()
-	if err := component.MemoryRuntime.SyncNow(); err != nil && !errors.Is(err, common.ErrMemoryNotConfigured) {
+	if component.MemoryRuntime.HasPendingTask() {
+		component.MemoryRuntime.Stop()
+		if err := component.MemoryRuntime.SyncPendingTaskNow(); err != nil && !errors.Is(err, common.ErrMemoryNotConfigured) {
+			gstool.FmtPrintlnLogTime(`记忆库关闭前同步待处理任务失败 %s`, err.Error())
+		}
+	} else if err := component.MemoryRuntime.SyncNow(); err != nil && !errors.Is(err, common.ErrMemoryNotConfigured) {
 		gstool.FmtPrintlnLogTime(`记忆库关闭前同步失败 %s`, err.Error())
 	}
 	business.StopMainDBAutoSync()

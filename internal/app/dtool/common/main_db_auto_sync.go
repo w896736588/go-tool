@@ -498,42 +498,50 @@ func (h *MainDBAutoSync) ensurePendingTask(config MainDBAutoSyncConfig) (int, er
 
 	createTask := h.createAsyncTask
 	loadPendingTask := h.loadPendingTask
+	h.mu.Unlock()
 
+	// 中文注释：load/create 过程中可能触发查库或 SSE 广播，必须放到 h.mu 外执行，避免状态回调反向读锁造成自锁。
+	// English comment: load/create may trigger DB reads or SSE callbacks, so they must run outside h.mu to avoid self-deadlock from re-entrant lock access.
 	if loadPendingTask != nil {
 		// 在写锁内执行 DB 查询，确保只有一个 goroutine 能进入此分支。 // DB query inside write lock ensures only one goroutine enters.
 		taskID, _, err := loadPendingTask(config)
 		if err != nil {
-			h.mu.Unlock()
 			return 0, err
 		}
 		if taskID > 0 {
-			h.pendingTaskID = taskID
+			h.mu.Lock()
+			if h.pendingTaskID == 0 {
+				h.pendingTaskID = taskID
+				h.pendingTaskRecovered = false
+			}
+			resultTaskID := h.pendingTaskID
 			h.mu.Unlock()
 			h.notifyStatusChange()
-			return taskID, nil
+			return resultTaskID, nil
 		}
 	}
 
 	if createTask == nil {
-		h.mu.Unlock()
 		return 0, nil
 	}
 	// 在写锁内创建任务，保证同一时刻只创建一条 pending 记录。 // Create task inside write lock to guarantee only one pending record.
 	taskID, err := createTask(config)
 	if err != nil {
-		h.mu.Unlock()
 		return 0, err
 	}
 	if taskID <= 0 {
-		h.mu.Unlock()
 		return 0, nil
 	}
 
-	h.pendingTaskID = taskID
-	h.pendingTaskRecovered = false
+	h.mu.Lock()
+	if h.pendingTaskID == 0 {
+		h.pendingTaskID = taskID
+		h.pendingTaskRecovered = false
+	}
+	resultTaskID := h.pendingTaskID
 	h.mu.Unlock()
 	h.notifyStatusChange()
-	return taskID, nil
+	return resultTaskID, nil
 }
 
 // clearPendingTaskIDIfMatch 仅当内存中的 pendingTaskID 与 taskID 一致时才清零，避免误清新创建的任务 ID。 // Clear pendingTaskID only when it matches taskID to prevent overwriting a newly created task.
