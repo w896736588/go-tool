@@ -510,7 +510,8 @@ func (h *MainDBAutoSync) ensurePendingTask(config MainDBAutoSyncConfig) (int, er
 	// 中文注释：load/create 过程中可能触发查库或 SSE 广播，必须放到 h.mu 外执行，避免状态回调反向读锁造成自锁。
 	// English comment: load/create may trigger DB reads or SSE callbacks, so they must run outside h.mu to avoid self-deadlock from re-entrant lock access.
 	if loadPendingTask != nil {
-		// 在写锁内执行 DB 查询，确保只有一个 goroutine 能进入此分支。 // DB query inside write lock ensures only one goroutine enters.
+		// 中文注释：loadPendingTask 在 pendingTaskInitMu 保护下执行，确保只有一个 goroutine 能进入此分支。
+		// English comment: loadPendingTask runs under pendingTaskInitMu so only one goroutine enters this branch.
 		taskID, _, err := loadPendingTask(config)
 		if err != nil {
 			return 0, err
