@@ -53,6 +53,8 @@ type MainDBAutoSync struct {
 	pendingTaskID int
 	// pendingTaskRecovered 标记当前待处理任务是否来自启动恢复。 // Mark whether the current pending task was restored during startup.
 	pendingTaskRecovered bool
+	// pendingTaskInitMu 串行化 pending 任务的加载与创建，避免并发慢速路径产生孤立任务。 // Serialize pending-task load/create so concurrent slow paths cannot create orphan tasks.
+	pendingTaskInitMu sync.Mutex
 	// afterFunc 允许测试替换防抖计时器实现。 // Allow tests to replace the debounce timer implementation.
 	afterFunc func(time.Duration, func()) stoppableTimer
 	// createAsyncTask 允许测试替换异步任务创建流程。 // Allow tests to replace async task creation.
@@ -487,9 +489,14 @@ func (h *MainDBAutoSync) ensurePendingTask(config MainDBAutoSyncConfig) (int, er
 	}
 	h.mu.RUnlock()
 
-	// 慢速路径：升级为写锁，防止并发创建重复任务。 // Slow path: acquire write lock to prevent concurrent duplicate creation.
+	// 慢速路径：使用独立初始化锁串行化 load/create，避免两个 goroutine 同时创建孤立任务。
+	// English comment: Serialize load/create with a dedicated init lock so concurrent goroutines cannot create orphan pending tasks.
+	h.pendingTaskInitMu.Lock()
+	defer h.pendingTaskInitMu.Unlock()
+
+	// 双重检查：进入慢速路径后再次确认，避免等待初始化锁期间其他 goroutine 已完成创建。
+	// English comment: Re-check after entering the serialized slow path in case another goroutine already created the task.
 	h.mu.Lock()
-	// 双重检查：获取写锁后再次确认，避免另一个 goroutine 刚创建完任务。 // Double-check after acquiring write lock.
 	if h.pendingTaskID > 0 {
 		taskID := h.pendingTaskID
 		h.mu.Unlock()
@@ -524,7 +531,8 @@ func (h *MainDBAutoSync) ensurePendingTask(config MainDBAutoSyncConfig) (int, er
 	if createTask == nil {
 		return 0, nil
 	}
-	// 在写锁内创建任务，保证同一时刻只创建一条 pending 记录。 // Create task inside write lock to guarantee only one pending record.
+	// 中文注释：createTask 在 pendingTaskInitMu 保护下执行，保证同一时刻只会创建一条 pending 记录。
+	// English comment: createTask runs under pendingTaskInitMu so only one pending record can be created at a time.
 	taskID, err := createTask(config)
 	if err != nil {
 		return 0, err
