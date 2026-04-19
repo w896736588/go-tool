@@ -28,9 +28,8 @@ var SafeAuthWhiteList = map[string]bool{
 // getSafeTokenManager 创建 Safe Token 管理器（从配置读取）
 func getSafeTokenManager() *common.SafeTokenManager {
 	password := component.ConfigViper.GetString("safe.password")
-	expireMinutes := component.ConfigViper.GetInt("safe.sessionExpireMinutes")
 	appName := component.ConfigViper.GetString("app.name")
-	return common.NewSafeTokenManager(password, expireMinutes, appName)
+	return common.NewSafeTokenManager(password, appName)
 }
 
 // SafeAuthContextKey 存储在 gin.Context 中的认证信息 key
@@ -76,12 +75,6 @@ func SafeAuthMiddleware() gin.HandlerFunc {
 
 		// 6. 将认证信息存入 Context，便于后续使用
 		c.Set(SafeAuthContextKey, claims)
-
-		// 7. 续期 Token：生成新 token 并通过响应头返回
-		newToken, _, renewErr := tokenManager.RenewToken(claims)
-		if renewErr == nil {
-			c.Header("X-Renewed-Token", newToken)
-		}
 
 		c.Next()
 	}

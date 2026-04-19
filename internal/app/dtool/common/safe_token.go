@@ -23,42 +23,28 @@ type SafeTokenData struct {
 
 // SafeTokenManager Safe Token 管理器
 type SafeTokenManager struct {
-	password             string
-	sessionExpireMinutes int
-	passwordVersion      string
+	password        string
+	passwordVersion string
 }
 
 // NewSafeTokenManager 创建 Token 管理器
-func NewSafeTokenManager(password string, expireMinutes int, appName string) *SafeTokenManager {
-	expireMinutes = NormalizeSafeSessionExpireMinutes(expireMinutes)
+func NewSafeTokenManager(password string, appName string) *SafeTokenManager {
 	passwordVersion := BuildSafePasswordVersion(password, appName)
 
 	return &SafeTokenManager{
-		password:             password,
-		sessionExpireMinutes: expireMinutes,
-		passwordVersion:      passwordVersion,
+		password:        password,
+		passwordVersion: passwordVersion,
 	}
 }
 
-// RefreshConfig 刷新配置（配置变更后调用）
-func (m *SafeTokenManager) RefreshConfig(password string, expireMinutes int, appName string) {
-	m.password = password
-	m.sessionExpireMinutes = NormalizeSafeSessionExpireMinutes(expireMinutes)
-	m.passwordVersion = BuildSafePasswordVersion(password, appName)
-}
-
 // GenerateToken 生成新的 Safe Token
+// 过期时间为当天 23:59:59，即密码登录后当天有效
 func (m *SafeTokenManager) GenerateToken() (string, int64, error) {
 	// 生成随机会话ID
 	sessionID := generateRandomSessionID()
 
-	// 计算过期时间（0 表示永不过期）
-	var expireAt int64
-	if m.sessionExpireMinutes > 0 {
-		expireAt = time.Now().Add(time.Duration(m.sessionExpireMinutes) * time.Minute).Unix()
-	} else {
-		expireAt = 0 // 永不过期
-	}
+	// 过期时间为当天 23:59:59
+	expireAt := getTodayEndOfDay()
 
 	// 构建 Token 数据
 	tokenData := SafeTokenData{
@@ -106,8 +92,8 @@ func (m *SafeTokenManager) ParseToken(token string) (*SafeTokenClaims, int, erro
 
 	claims := &tokenData.Claims
 
-	// 检查过期时间（expireAt == 0 表示永不过期）
-	if claims.ExpireAt > 0 && time.Now().Unix() > claims.ExpireAt {
+	// 检查过期时间
+	if time.Now().Unix() > claims.ExpireAt {
 		return nil, 40102, fmt.Errorf("token expired")
 	}
 
@@ -117,41 +103,6 @@ func (m *SafeTokenManager) ParseToken(token string) (*SafeTokenClaims, int, erro
 	}
 
 	return claims, 0, nil
-}
-
-// RenewToken 续期 Token
-// 每次请求成功时调用，返回新的 token 和过期时间
-func (m *SafeTokenManager) RenewToken(claims *SafeTokenClaims) (string, int64, error) {
-	// 生成新的过期时间（0 表示永不过期）
-	var expireAt int64
-	if m.sessionExpireMinutes > 0 {
-		expireAt = time.Now().Add(time.Duration(m.sessionExpireMinutes) * time.Minute).Unix()
-	} else {
-		expireAt = 0 // 永不过期
-	}
-
-	// 构建新的 Token 数据（保留相同的 sessionID）
-	tokenData := SafeTokenData{
-		Claims: SafeTokenClaims{
-			SessionID:       claims.SessionID,
-			PasswordVersion: m.passwordVersion,
-			ExpireAt:        expireAt,
-		},
-	}
-
-	// 序列化为 JSON
-	jsonData, err := json.Marshal(tokenData)
-	if err != nil {
-		return "", 0, fmt.Errorf("token json marshal failed: %w", err)
-	}
-
-	// 使用 AES-GCM 加密
-	encrypted, err := p_common.AesGcmClient.Encrypt(jsonData)
-	if err != nil {
-		return "", 0, fmt.Errorf("token encrypt failed: %w", err)
-	}
-
-	return encrypted, expireAt, nil
 }
 
 // VerifyPassword 验证登录密码
@@ -166,11 +117,6 @@ func (m *SafeTokenManager) VerifyPassword(inputPassword string) bool {
 // IsEnabled 是否启用了后台密码保护
 func (m *SafeTokenManager) IsEnabled() bool {
 	return m.password != ""
-}
-
-// GetExpireMinutes 获取会话过期时间（分钟）
-func (m *SafeTokenManager) GetExpireMinutes() int {
-	return m.sessionExpireMinutes
 }
 
 // generateRandomSessionID 生成随机会话ID

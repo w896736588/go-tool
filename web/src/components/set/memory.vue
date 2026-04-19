@@ -276,27 +276,7 @@
                   <GitActionButton compact size="small" @click="startEdit('safe_password', form.safe_password)">编辑</GitActionButton>
                 </div>
               </template>
-              <div class="config-item-help">后台访问密码，留空表示不启用密码保护。</div>
-            </div>
-          </el-descriptions-item>
-          <el-descriptions-item label="sessionExpireMinutes">
-            <div class="config-item-wrapper">
-              <template v-if="editingItem.key === 'safe_session_expire_minutes'">
-                <div class="config-edit-row">
-                  <el-input-number v-model="editingItem.value" :min="0" :step="10" />
-                  <div class="config-edit-actions">
-                    <GitActionButton compact size="small" :loading="saving" @click="saveItem('safe', 'sessionExpireMinutes', editingItem.value)">保存</GitActionButton>
-                    <GitActionButton compact size="small" @click="cancelEdit">取消</GitActionButton>
-                  </div>
-                </div>
-              </template>
-              <template v-else>
-                <div class="config-display-row">
-                  <div class="config-value">{{ form.safe_session_expire_minutes }} 分钟</div>
-                  <GitActionButton compact size="small" @click="startEdit('safe_session_expire_minutes', form.safe_session_expire_minutes)">编辑</GitActionButton>
-                </div>
-              </template>
-              <div class="config-item-help">会话有效期（分钟），默认 120 分钟。设为 0 表示永不过期。每次请求成功会自动续期。</div>
+              <div class="config-item-help">后台访问密码，留空表示不启用密码保护。密码设置后登录当天有效，次日需重新登录。</div>
             </div>
           </el-descriptions-item>
         </el-descriptions>
@@ -400,7 +380,6 @@ export default {
         home_task_daily_report_model_id: null,
         home_task_daily_report_prompt: DEFAULT_HOME_TASK_DAILY_REPORT_PROMPT,
         safe_password: '',
-        safe_session_expire_minutes: 120,
         run_mode: 'server',
       },
       RUNTIME_DATABASE_SYNC_TARGET_MAIN,
@@ -495,7 +474,6 @@ export default {
         this.form.home_task_daily_report_model_id = response.Data.home_task_daily_report_model_id || null
         this.form.home_task_daily_report_prompt = response.Data.home_task_daily_report_prompt || DEFAULT_HOME_TASK_DAILY_REPORT_PROMPT
         this.form.safe_password = response.Data.safe_password || ''
-        this.form.safe_session_expire_minutes = Number(response.Data.safe_session_expire_minutes ?? 120)
         this.form.run_mode = response.Data.run_mode || 'server'
       })
     },

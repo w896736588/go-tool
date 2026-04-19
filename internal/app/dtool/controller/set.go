@@ -859,7 +859,6 @@ func SetMemoryConfigGet(c *gin.Context) {
 		`home_task_daily_report_prompt`:     dailyReportPrompt,
 		`home_task_daily_report_model_id`:   cast.ToInt(dailyReportModelID),
 		`safe_password`:                     component.ConfigViper.GetString(`safe.password`),
-		`safe_session_expire_minutes`:       component.ConfigViper.GetInt(`safe.sessionExpireMinutes`),
 		`run_mode`:                          component.EnvClient.SmartLinkConfig.RunMode,
 	})
 }
@@ -957,7 +956,6 @@ func SetRuntimeConfigSave(c *gin.Context) {
 	// 保存 safe 配置
 	newSafePassword := strings.TrimSpace(cast.ToString(dataMap[`safe_password`]))
 	setIniKey(safeSection, `password`, newSafePassword)
-	setIniKey(safeSection, `sessionExpireMinutes`, cast.ToString(cast.ToInt(dataMap[`safe_session_expire_minutes`])))
 
 	// 判断密码是否修改
 	safeChanged := oldSafePassword != newSafePassword
@@ -1083,9 +1081,6 @@ func SetRuntimeConfigItemSave(c *gin.Context) {
 			})
 			return
 		}
-	case `sessionExpireMinutes`:
-		setIniKey(section, configKey, cast.ToString(cast.ToInt(configValue)))
-		needRestart = false
 	default:
 		// 通用字符串配置
 		setIniKey(section, configKey, strings.TrimSpace(cast.ToString(configValue)))

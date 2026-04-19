@@ -21,9 +21,8 @@ import (
 // getSafeTokenManager 创建 Safe Token 管理器（从配置读取）
 func getSafeTokenManager() *common.SafeTokenManager {
 	password := component.ConfigViper.GetString("safe.password")
-	expireMinutes := component.ConfigViper.GetInt("safe.sessionExpireMinutes")
 	appName := component.ConfigViper.GetString("app.name")
-	return common.NewSafeTokenManager(password, expireMinutes, appName)
+	return common.NewSafeTokenManager(password, appName)
 }
 
 // BaseLogin Safe 登录接口
@@ -53,12 +52,11 @@ func BaseLogin(c *gin.Context) {
 	// 检查是否启用了密码保护
 	if !tokenManager.IsEnabled() {
 		gsgin.GinResponseSuccess(c, `未启用密码保护，无需登录`, map[string]any{
-			`enabled`:        false,
-			`token`:          ``,
-			`expire_minutes`: tokenManager.GetExpireMinutes(),
-			`expire_at`:      0,
-			`ports`:          strings.Split(component.ConfigViper.GetString(`run.ports`), `,`),
-			`local_ip`:       GetLANIP(),
+			`enabled`:   false,
+			`token`:     ``,
+			`expire_at`: 0,
+			`ports`:     strings.Split(component.ConfigViper.GetString(`run.ports`), `,`),
+			`local_ip`:  GetLANIP(),
 		})
 		return
 	}
@@ -81,11 +79,10 @@ func BaseLogin(c *gin.Context) {
 	}
 
 	gsgin.GinResponseSuccess(c, `登录成功`, map[string]any{
-		`token`:          token,
-		`expire_minutes`: tokenManager.GetExpireMinutes(),
-		`expire_at`:      expireAt,
-		`ports`:          strings.Split(component.ConfigViper.GetString(`run.ports`), `,`),
-		`local_ip`:       GetLANIP(),
+		`token`:     token,
+		`expire_at`: expireAt,
+		`ports`:     strings.Split(component.ConfigViper.GetString(`run.ports`), `,`),
+		`local_ip`:  GetLANIP(),
 	})
 }
 
@@ -101,10 +98,9 @@ func BaseLoginStatus(c *gin.Context) {
 	// 检查是否启用了密码保护
 	if !tokenManager.IsEnabled() {
 		gsgin.GinResponseSuccess(c, `获取成功`, map[string]any{
-			`enabled`:        false,
-			`logged_in`:      true, // 未启用密码保护视为已登录
-			`expire_minutes`: tokenManager.GetExpireMinutes(),
-			`expire_at`:      0,
+			`enabled`:   false,
+			`logged_in`: true, // 未启用密码保护视为已登录
+			`expire_at`: 0,
 		})
 		return
 	}
@@ -119,10 +115,9 @@ func BaseLoginStatus(c *gin.Context) {
 	}
 
 	gsgin.GinResponseSuccess(c, `获取成功`, map[string]any{
-		`enabled`:        true,
-		`logged_in`:      isLoggedIn,
-		`expire_minutes`: tokenManager.GetExpireMinutes(),
-		`expire_at`:      expireAt,
+		`enabled`:   true,
+		`logged_in`: isLoggedIn,
+		`expire_at`: expireAt,
 	})
 }
 
