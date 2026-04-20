@@ -263,6 +263,7 @@ func setMarkdown(tGin *p_gin.Gin) {
 }
 
 func setMemoryFragment(tGin *p_gin.Gin) {
+	tGin.GinPost(`/api/GitPendingStatus`, controller.GitPendingStatus)
 	tGin.GinPost(`/api/MemoryFragmentStatus`, controller.MemoryFragmentStatus)
 	tGin.GinPost(`/api/MemoryFragmentList`, controller.MemoryFragmentList)
 	tGin.GinPost(`/api/MemoryFragmentInfo`, controller.MemoryFragmentInfo)

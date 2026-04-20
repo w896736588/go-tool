@@ -232,8 +232,8 @@
             :name="tab.name"
           >
             <template #label>
-              <span class="tab-label">
-                {{ tab.fragment.title || '未命名片段' }}<span v-if="tab.dirty"> *</span>
+              <span class="tab-label" :title="tab.fragment.title || '未命名片段'">
+                {{ truncateTabLabel(tab.fragment.title) }}<span v-if="tab.dirty"> *</span>
               </span>
             </template>
             <MemoryEditor
@@ -432,6 +432,16 @@ export default {
     },
   },
   methods: {
+    // truncateTabLabel 截断tab标签，最多显示maxWidth个字符宽度（中文算2，英文算1）。
+    truncateTabLabel(text, maxWidth = 15) {
+      if (!text) return '未命名片段'
+      let width = 0
+      for (let i = 0; i < text.length; i++) {
+        width += text.charCodeAt(i) > 127 ? 2 : 1
+        if (width > maxWidth) return text.slice(0, i) + '…'
+      }
+      return text
+    },
     // toggleSidebar 切换左侧列表的折叠/展开状态。
     toggleSidebar() {
       this.sidebarCollapsed = !this.sidebarCollapsed
@@ -1203,7 +1213,7 @@ export default {
 }
 
 .memory-sidebar {
-  width: 320px;
+  width: 260px;
   flex-shrink: 0;
   border: 1px solid #e8e8e0;
   border-radius: 14px;

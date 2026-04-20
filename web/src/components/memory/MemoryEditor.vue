@@ -17,16 +17,6 @@
                 :class="{ 'title-input--search-hit': titleSearchMatchCount > 0 }"
                 :placeholder="titlePlaceholderText"
               />
-              <div class="editor-title-inline-meta">
-                <el-tag
-                  size="small"
-                  :type="dirty ? statusTagWarningType : statusTagSuccessType"
-                  effect="light"
-                >
-                  {{ dirty ? unsavedStatusText : savedStatusText }}
-                </el-tag>
-                <span class="editor-save-time">{{ lastSaveLabelText }}{{ draftFragment.update_time_desc || emptyTimeText }}</span>
-              </div>
             </div>
             <div class="editor-body-toolbar-right">
               <div class="editor-body-actions">
@@ -1430,9 +1420,9 @@ export default {
 }
 
 .editor-toolbar-title-input {
-  max-width: 520px;
+  max-width: 360px;
   width: 100%;
-  flex: 1 1 320px;
+  flex: 1 1 200px;
 }
 
 .editor-body-toolbar-right {

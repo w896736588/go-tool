@@ -47,6 +47,7 @@
         <el-menu-item v-if="checkModuleOpen('memory_fragment')" index="/MemoryFragment">
           <el-icon><Memo /></el-icon>
           <span>知识片段</span>
+          <span v-if="gitPendingStatus.memoryPending" class="menu-badge-dot"></span>
         </el-menu-item>
         <el-menu-item v-if="checkModuleOpen('docker')" index="/Docker">
           <el-icon><Box /></el-icon>
@@ -63,6 +64,7 @@
         <el-menu-item index="/Set" class="menu-item-settings">
           <el-icon><Setting /></el-icon>
           <span>配置</span>
+          <span v-if="gitPendingStatus.mainDBPending" class="menu-badge-dot"></span>
         </el-menu-item>
       </el-menu>
 
@@ -933,6 +935,11 @@ export default {
         failed_count: 0,
         total: 0,
       },
+      gitPendingStatus: {
+        mainDBPending: false,
+        memoryPending: false,
+      },
+      gitPendingTimer: null,
     }
   },
   computed: {
@@ -999,6 +1006,9 @@ export default {
     if (this.$eventBus) {
       this.$eventBus.on('safe_auth_required', this.showSafeLogin)
     }
+    // 启动 git 待提交状态定时检测
+    this.checkGitPendingStatus()
+    this.gitPendingTimer = setInterval(this.checkGitPendingStatus, 10000)
   },
   provide() {
     return {
@@ -1007,6 +1017,16 @@ export default {
     };
   },
   methods: {
+    // 检测主库和记忆库是否有待 commit 的 git 变更
+    checkGitPendingStatus: function () {
+      let _that = this
+      memoryFragmentApi.GitPendingStatus(function (response) {
+        if (response.ErrCode === 0 && response.Data) {
+          _that.gitPendingStatus.mainDBPending = !!response.Data.main_db_pending
+          _that.gitPendingStatus.memoryPending = !!response.Data.memory_pending
+        }
+      })
+    },
     OpenNewBlank: function () {
       window.open(window.location.href, '_blank');
     },
@@ -1985,6 +2005,10 @@ export default {
       clearInterval(this.sshConnectionTimer)
       this.sshConnectionTimer = null
     }
+    if (this.gitPendingTimer) {
+      clearInterval(this.gitPendingTimer)
+      this.gitPendingTimer = null
+    }
   },
   components: {
     HomeFilled,
@@ -2387,6 +2411,18 @@ export default {
   border-radius: 999px;
   background: radial-gradient(circle, #ffd66b 0%, #f29f38 70%, rgba(242, 159, 56, 0) 100%);
   box-shadow: 0 0 10px rgba(255, 214, 107, 0.7);
+}
+
+/* Git 待提交变更红点 */
+.menu-badge-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #f56c6c;
+  margin-left: 4px;
+  vertical-align: middle;
+  box-shadow: 0 0 6px rgba(245, 108, 108, 0.6);
 }
 
 .sidebar-menu .el-menu-item span {

@@ -86,7 +86,13 @@ function MemoryFragmentTagList(callBack) {
   callBack({ ErrCode: 0, Data: [] })
 }
 
+// GitPendingStatus 检测主库和记忆库是否有待 commit 的 git 变更。
+function GitPendingStatus(callBack) {
+  base.BasePost('/api/GitPendingStatus', {}, callBack)
+}
+
 export default {
+  GitPendingStatus,
   MemoryFragmentStatus,
   MemoryFragmentList,
   MemoryFragmentInfo,
