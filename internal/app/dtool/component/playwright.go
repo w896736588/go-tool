@@ -31,6 +31,24 @@ type TPlaywright struct {
 
 var lookPathFunc = exec.LookPath
 var statFunc = os.Stat
+var playwrightInstallFunc = func(h *TPlaywright, version string) {
+	go h.Install(nil, version)
+}
+var newDriverVersionFunc = func() (string, error) {
+	pw, err := playwright.NewDriver()
+	if err != nil {
+		return ``, err
+	}
+	return pw.Version, nil
+}
+var playwrightInstallRunOptionsFunc = func() error {
+	return playwright.Install(&playwright.RunOptions{
+		Browsers: []string{`chromium`},
+	})
+}
+var initPlaywrightBrowserFunc = func(h *TPlaywright) {
+	h.InitPlaywright()
+}
 
 func NewTPlaywright() *TPlaywright {
 	gsLog := gstool.NewSlog2(EnvClient.LogPath, `playwright`)
@@ -160,20 +178,16 @@ func (h *TPlaywright) AddTipMsg(page *playwright.Page, tip string) {
 
 func (h *TPlaywright) SmartCheckAndUpdate(sse *p_sse.SseShell) {
 	gstool.FmtPrintlnLogTime(`检查并更新核心`)
-	pw, _ := playwright.NewDriver()
-	if !gstool.FileIsExisted(h.LockFileFullPath) {
-		go h.Install(sse, pw.Version)
-	} else {
-		content, contentErr := gstool.FileGetContent(h.LockFileFullPath)
-		if contentErr != nil {
-			gstool.FmtPrintlnLogTime(`获取文件内容失败 %s`, contentErr.Error())
-		} else if content != pw.Version {
-			go h.Install(sse, pw.Version)
-		} else {
-			gstool.FmtPrintlnLogTime(`浏览器核心最新版本为：%s ，当前安装版本为：%s,不需要进行更新`, pw.Version, content)
-			go h.InitPlaywright()
-		}
+	if gstool.FileIsExisted(h.LockFileFullPath) {
+		gstool.FmtPrintlnLogTime(`浏览器核心正在安装中，跳过本次重复安装`)
+		return
 	}
+	version, versionErr := newDriverVersionFunc()
+	if versionErr != nil {
+		gstool.FmtPrintlnLogTime(`获取浏览器核心版本失败 %s`, versionErr.Error())
+		return
+	}
+	playwrightInstallFunc(h, version)
 }
 
 func (h *TPlaywright) InitPlaywright() {
@@ -192,17 +206,19 @@ func (h *TPlaywright) InitPlaywright() {
 }
 
 func (h *TPlaywright) Install(sse *p_sse.SseShell, version string) {
+	_ = version
 	sse.Send(`开始安装浏览器核心(只安装chrome),大约几分钟时间` + "\n")
-	err := playwright.Install(&playwright.RunOptions{
-		Browsers: []string{`chromium`},
-	})
+	// 安装锁用于避免并发重复安装，安装结束后删除，方便下次启动重新安装更新。
+	_ = gstool.FilePutContentCover(h.LockFileFullPath, `installing`)
+	defer func() {
+		_ = gstool.FileDelete(h.LockFileFullPath)
+	}()
+	err := playwrightInstallRunOptionsFunc()
 	if err != nil {
 		sse.Send(fmt.Sprintf(`安装浏览器核心失败 %s`, err.Error()) + "\n")
-		_ = gstool.FileDelete(h.LockFileFullPath)
 	} else {
-		_ = gstool.FilePutContentCover(h.LockFileFullPath, version)
 		sse.Send(`安装完成` + "\n")
-		h.InitPlaywright()
+		initPlaywrightBrowserFunc(h)
 	}
 }
 

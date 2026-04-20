@@ -13,7 +13,6 @@ import (
 	"dev_tool/internal/pkg/p_gin"
 	"dev_tool/internal/pkg/p_shell"
 	"dev_tool/internal/pkg/p_sse"
-	"encodin
 	"errors"
 	"fmt"
 	"html/template"
@@ -418,7 +417,7 @@ func initGin() {
 			tGin.GinStatic(`/css`, component.EnvClient.WebConfig.WebPath+`/css`)
 			tGin.GinLoadHTMLFiles(component.EnvClient.WebConfig.WebPath + `/index.html`)
 			tGin.GinGet(`/`, func(context *gin.Context) {
-				cfg, _ := json.Marshal(map[string]string{
+				cfg := gstool.JsonEncode(map[string]string{
 					"port": port,
 					"host": host,
 				})

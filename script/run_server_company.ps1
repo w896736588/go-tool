@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Continue'
 
 function Test-IsWindowsHost {
     return $env:OS -eq 'Windows_NT'
