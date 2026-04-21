@@ -216,7 +216,7 @@
 
         <el-tabs v-model="responseActiveTab" class="detail-tabs" @tab-change="handleSave">
           <el-tab-pane label="返回结果" name="body">
-            <div class="response-body-container">
+            <div class="response-body-container" ref="responseContainerRef" @scroll="handleResponseScroll">
               <div class="response-toolbar">
                 <pl-button class="response-toolbar-btn" @click="copyTextToClipboard(responseResultText)">
                   复制
@@ -246,6 +246,14 @@
                   sandbox=""
               />
               <pre v-else class="response-body">{{ responseResultText }}</pre>
+              <div
+                v-if="showScrollBtn"
+                class="scroll-to-btn"
+                @click="handleScrollTo"
+                :title="isScrolledToBottom ? '回到顶部' : '滚动到底部'"
+              >
+                <el-icon :size="20"><ArrowUp v-if="isScrolledToBottom" /><ArrowDown v-else /></el-icon>
+              </div>
             </div>
           </el-tab-pane>
           <el-tab-pane label="请求头" name="headers">
@@ -300,7 +308,7 @@
 </template>
 
 <script>
-import {Link, Radio, RadioButton, CopyDocument, VideoPlay} from '@element-plus/icons-vue'
+import {Link, Radio, RadioButton, CopyDocument, VideoPlay, ArrowUp, ArrowDown} from '@element-plus/icons-vue'
 import KeyValueEditor from './KeyValueEditor.vue'
 import KeyValueView from './KeyValueView.vue'
 import typ from '@/utils/base/type'
@@ -327,7 +335,9 @@ export default {
     JsonEditorVue,
     ResponseTakeEditor,
     CopyDocument,
-    VideoPlay
+    VideoPlay,
+    ArrowUp,
+    ArrowDown
   },
   props: {
     environment: {
@@ -378,6 +388,8 @@ export default {
         bodyJsonImportVisible: false,
         bodyJsonImportText: '',
         bodyFormNextId: 1,
+        isScrolledToBottom: false,
+        showScrollBtn: false,
     }
   },
   computed: {
@@ -684,6 +696,25 @@ export default {
       _that.drawerHistoryShow = true
       _that.mainActiveTab = 'response'
       _that.responseViewMode = 'auto'
+      _that.$nextTick(() => {
+        _that.showScrollBtn = false
+        _that.isScrolledToBottom = false
+      })
+    },
+    handleResponseScroll(e) {
+      const el = e.target
+      const threshold = 50
+      this.isScrolledToBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold
+      this.showScrollBtn = el.scrollHeight > el.clientHeight
+    },
+    handleScrollTo() {
+      const el = this.$refs.responseContainerRef
+      if (!el) return
+      if (this.isScrolledToBottom) {
+        el.scrollTo({ top: 0, behavior: 'smooth' })
+      } else {
+        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+      }
     },
     handleExecute() {
       let _that = this
@@ -1145,6 +1176,7 @@ export default {
   box-shadow: none;
   scrollbar-width: auto;
   scrollbar-color: #8ea88f #dbe7d8;
+  position: relative;
 }
 
 .response-toolbar {
@@ -1153,6 +1185,35 @@ export default {
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 12px;
+  position: sticky;
+  top: -16px;
+  z-index: 10;
+  background: #eef3ea;
+  padding: 8px 0;
+  margin-top: -8px;
+}
+
+.scroll-to-btn {
+  position: sticky;
+  bottom: 8px;
+  float: right;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(126, 172, 123, 0.85);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: background 0.2s, transform 0.2s;
+  z-index: 10;
+}
+
+.scroll-to-btn:hover {
+  background: rgba(101, 159, 97, 0.95);
+  transform: scale(1.1);
 }
 
 .response-view-mode {
