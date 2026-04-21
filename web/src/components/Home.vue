@@ -2418,10 +2418,12 @@ export default {
   display: inline-block;
   width: 12px;
   height: 12px;
+  min-width: 12px;
   border-radius: 50%;
   background: #f56c6c;
   margin-left: 4px;
   vertical-align: middle;
+  flex-shrink: 0;
   box-shadow: 0 0 6px rgba(245, 108, 108, 0.6);
 }
 
