@@ -173,7 +173,7 @@ func (h *Shell) createShellClient(sshConfig map[string]any, shellClientId string
 		h.RmClient(shellClientId)
 	})
 
-	gsShell.SetPtyConfig(gsssh.PtyConfig{Echo: 1})
+	gsShell.SetPtyConfig(gsssh.PtyConfig{Echo: 0})
 	gsShell.SetMaxBufferSize(2 * 1024 * 1024)
 	if canSendSse(sse) {
 		sse.Send(" [ssh] 正在建立SSH连接 " + cast.ToString(sshConfig["host"]) + ":" + cast.ToString(sshConfig["port"]) + "\n")
