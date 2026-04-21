@@ -129,35 +129,29 @@
       </div>
 
       <div v-if="contentEditMode" class="editor-body-content">
-        <div class="editor-edit-layout" :class="{ 'editor-edit-layout--with-outline': hasOutline }">
+        <div class="editor-edit-layout">
           <div ref="editorScrollShell" class="editor-scroll-shell">
             <MdEditor
               ref="editorRef"
               v-model="draftFragment.content"
               preview-theme="github"
+              :preview="false"
               :toolbars="toolbars"
               :style="editorContentStyle"
             />
           </div>
-          <aside v-if="hasOutline" class="preview-outline">
-            <div class="preview-outline-card">
-              <div class="preview-outline-title">目录</div>
-              <button
-                v-for="item in outlineItems"
-                :key="item.slug"
-                type="button"
-                class="preview-outline-item"
-                :class="{
-                  active: activeOutlineSlug === item.slug,
-                  'preview-outline-item--child': item.level > 1,
-                  'preview-outline-item--grandchild': item.level > 2,
-                }"
-                @click="scrollToOutline(item.slug)"
-              >
-                {{ item.text }}
-              </button>
+          <div class="editor-preview-shell">
+            <div
+              ref="previewBody"
+              class="preview-renderer"
+              @scroll="handlePreviewScroll"
+            >
+              <MdPreview
+                :model-value="draftFragment.content"
+                preview-theme="github"
+              />
             </div>
-          </aside>
+          </div>
         </div>
       </div>
       <div v-else class="preview-body" :class="{ 'preview-body--with-outline': hasOutline }">
@@ -419,6 +413,7 @@ export default {
       highlightedTagIndex: 0,
       activeOutlineSlug: '',
       editorScrollElement: null,
+      previewScrollSyncRafId: 0,
       draftFragment: {
         id: 0,
         title: '',
@@ -449,6 +444,7 @@ export default {
   beforeUnmount() {
     this.unregisterOrganizeSse()
     this.detachEditorScrollListener()
+    this.cancelPreviewScrollSync()
   },
   watch: {
     // fragment.id 变化时重置本地草稿，避免旧数据残留。
@@ -648,11 +644,14 @@ export default {
         window.setTimeout(() => {
           if (this.contentEditMode) {
             this.attachEditorScrollListener()
-            this.syncActiveOutlineByEditorScroll()
-            return
           }
           this.decoratePreviewHeadings()
           this.decoratePreviewSearchMatches()
+          if (this.contentEditMode) {
+            this.syncPreviewScrollByEditor()
+            this.syncActiveOutlineByEditorScroll()
+            return
+          }
           this.syncActiveOutlineByScroll()
         }, 0)
       })
@@ -699,9 +698,7 @@ export default {
         this.clearPreviewSearchMarks()
         return
       }
-      if (!this.contentEditMode) {
-        this.decoratePreviewSearchMatches()
-      }
+      this.decoratePreviewSearchMatches()
       if (!this.activeSearchMatch) {
         return
       }
@@ -709,9 +706,7 @@ export default {
         this.focusTitleSearchMatch()
         return
       }
-      if (!this.contentEditMode) {
-        this.scrollToActiveSearchMark(shouldScroll)
-      }
+      this.scrollToActiveSearchMark(shouldScroll)
     },
     // clearPreviewSearchMarks 移除预览区内已有的搜索高亮。
     clearPreviewSearchMarks() {
@@ -881,7 +876,40 @@ export default {
     },
     // handleEditorScroll 在编辑模式滚动 textarea 时同步当前目录高亮。
     handleEditorScroll() {
+      this.syncPreviewScrollByEditor()
       this.syncActiveOutlineByEditorScroll()
+    },
+    // syncPreviewScrollByEditor 在编辑模式下按滚动比例同步右侧预览区。
+    syncPreviewScrollByEditor() {
+      const editorView = this.getEditorView()
+      const previewBody = this.$refs.previewBody
+      if (!this.contentEditMode || !editorView || !editorView.scrollDOM || !previewBody) {
+        return
+      }
+      const editorScrollElement = editorView.scrollDOM
+      const editorScrollableHeight = Math.max(editorScrollElement.scrollHeight - editorScrollElement.clientHeight, 0)
+      const previewScrollableHeight = Math.max(previewBody.scrollHeight - previewBody.clientHeight, 0)
+      if (previewScrollableHeight <= 0) {
+        previewBody.scrollTop = 0
+        return
+      }
+      const scrollRatio = editorScrollableHeight <= 0
+        ? 0
+        : Math.min(Math.max(editorScrollElement.scrollTop / editorScrollableHeight, 0), 1)
+      const nextPreviewScrollTop = previewScrollableHeight * scrollRatio
+      this.cancelPreviewScrollSync()
+      this.previewScrollSyncRafId = window.requestAnimationFrame(() => {
+        previewBody.scrollTop = nextPreviewScrollTop
+        this.previewScrollSyncRafId = 0
+      })
+    },
+    // cancelPreviewScrollSync 取消尚未执行的预览滚动同步帧，避免重复排队。
+    cancelPreviewScrollSync() {
+      if (!this.previewScrollSyncRafId) {
+        return
+      }
+      window.cancelAnimationFrame(this.previewScrollSyncRafId)
+      this.previewScrollSyncRafId = 0
     },
     // scrollEditorToOutline 通过 EditorView 直接滚动到对应标题行。
     scrollEditorToOutline(outlineItem) {
@@ -904,6 +932,7 @@ export default {
       }
       editorView.focus()
       this.$nextTick(() => {
+        this.syncPreviewScrollByEditor()
         this.syncActiveOutlineByEditorScroll()
       })
     },
@@ -1553,15 +1582,24 @@ export default {
   background: #fff;
 }
 
-.editor-edit-layout--with-outline {
-  align-items: stretch;
-}
-
 .editor-scroll-shell {
   flex: 1;
   height: 100%;
   min-height: 0;
   overflow: auto;
+}
+
+.editor-preview-shell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 16px 18px;
+  border: 1px solid var(--memory-toolbar-border-color);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fbfcf8 0%, #f6f8f2 100%);
 }
 
 .editor-body-content :deep(.md-editor) {
@@ -1572,8 +1610,7 @@ export default {
   min-height: 0;
 }
 
-.editor-body-content :deep(.md-editor-input-wrapper),
-.editor-body-content :deep(.md-editor-preview-wrapper) {
+.editor-body-content :deep(.md-editor-input-wrapper) {
   overflow: auto;
 }
 
@@ -1592,6 +1629,7 @@ export default {
 
 .preview-renderer {
   flex: 1;
+  height: 100%;
   min-width: 0;
   min-height: 0;
   overflow: auto;
