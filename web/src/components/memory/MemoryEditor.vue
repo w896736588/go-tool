@@ -1599,7 +1599,6 @@ export default {
   padding: 16px 18px;
   border: 1px solid var(--memory-toolbar-border-color);
   border-radius: 14px;
-  background: linear-gradient(180deg, #fbfcf8 0%, #f6f8f2 100%);
 }
 
 .editor-body-content :deep(.md-editor) {
