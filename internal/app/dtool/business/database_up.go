@@ -2,6 +2,7 @@ package business
 
 import (
 	"dev_tool/internal/app/dtool/common"
+	"dev_tool/internal/app/dtool/define"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,6 +16,8 @@ type TDataBaseUp struct {
 	db             *common.CSqlite
 	databaseUpPath string
 	tableName      string
+	// databaseDesc 统一标识当前迁移对应的数据库，便于日志快速定位失败库。
+	databaseDesc string
 }
 
 // log 库中的 smart link 最近使用目录表名。
@@ -29,9 +32,9 @@ func NewMemoryDataBaseUp(db *common.CSqlite, databaseUpPath string) *TDataBaseUp
 	return newDatabaseUp(db, databaseUpPath, `tbl_memory_database_up`)
 }
 
-// NewLogDataBaseUp 创建 log 库迁移执行器，使用与主库相同的 tbl_database_up 表名。
+// NewLogDataBaseUp 创建 log 库迁移执行器，沿用历史 tbl_log_database_up 记录表避免重复迁移。
 func NewLogDataBaseUp(db *common.CSqlite, databaseUpPath string) *TDataBaseUp {
-	return newDatabaseUp(db, databaseUpPath, `tbl_database_up`)
+	return newDatabaseUp(db, databaseUpPath, `tbl_log_database_up`)
 }
 
 func newDatabaseUp(db *common.CSqlite, databaseUpPath, tableName string) *TDataBaseUp {
@@ -39,6 +42,7 @@ func newDatabaseUp(db *common.CSqlite, databaseUpPath, tableName string) *TDataB
 		db:             db,
 		databaseUpPath: databaseUpPath,
 		tableName:      tableName,
+		databaseDesc:   resolveMigrationDatabaseDesc(db, databaseUpPath),
 	}
 }
 
@@ -109,7 +113,7 @@ func (h *TDataBaseUp) Up() {
 
 	gstool.ArraySort(files, gsdefine.SortAsc)
 	for _, file := range files {
-		gstool.FmtPrintlnLogTime(`开始处理升级文件 %s`, file)
+		gstool.FmtPrintlnLogTime(`开始处理升级文件 db=%s file=%s`, h.databaseDesc, file)
 		sql, err := gstool.FileGetContent(file)
 		if err != nil {
 			gstool.FmtPrintlnLogTime(`读取文件内容失败%s %s`, file, err.Error())
@@ -117,7 +121,7 @@ func (h *TDataBaseUp) Up() {
 		}
 		_, err = h.db.Client.ExecBySql(sql).Exec()
 		if err != nil {
-			gstool.FmtPrintlnLogTime(`数据库升级文件执行失败 %s %s`, file, err.Error())
+			gstool.FmtPrintlnLogTime(`数据库升级文件执行失败 db=%s file=%s err=%s`, h.databaseDesc, file, err.Error())
 			continue
 		}
 		_, err = h.db.Client.QuickCreate(h.tableName, map[string]any{
@@ -128,4 +132,42 @@ func (h *TDataBaseUp) Up() {
 			return
 		}
 	}
+}
+
+// resolveMigrationDatabaseDesc 根据升级目录和环境配置生成数据库描述，方便日志定位。
+func resolveMigrationDatabaseDesc(db *common.CSqlite, databaseUpPath string) string {
+	if db == nil || db.Env == nil {
+		return databaseUpPath
+	}
+
+	databaseType := `unknown`
+	databaseFile := ``
+	if db.Env.LogDatabaseUpPath == databaseUpPath {
+		databaseType = `log`
+		databaseFile = buildDatabaseFullPath(db.Env.LogDbConfig)
+	} else if db.Env.MemoryDatabaseUpPath == databaseUpPath {
+		databaseType = `memory`
+		if db.Env.ConfigBase != nil {
+			databaseFile = buildDatabaseFullPath(&define.DbConfig{
+				DbPath: db.Env.ConfigBase.MemoryDBPath,
+				DbName: db.Env.ConfigBase.MemoryDBName,
+			})
+		}
+	} else if db.Env.DatabaseUpPath == databaseUpPath {
+		databaseType = `main`
+		databaseFile = buildDatabaseFullPath(db.Env.DbConfig)
+	}
+
+	if databaseFile == `` {
+		return fmt.Sprintf(`%s path=%s`, databaseType, databaseUpPath)
+	}
+	return fmt.Sprintf(`%s path=%s`, databaseType, databaseFile)
+}
+
+// buildDatabaseFullPath 统一拼接数据库完整路径，缺项时返回空字符串。
+func buildDatabaseFullPath(config *define.DbConfig) string {
+	if config == nil || config.DbPath == `` || config.DbName == `` {
+		return ``
+	}
+	return filepath.Join(config.DbPath, config.DbName)
 }
