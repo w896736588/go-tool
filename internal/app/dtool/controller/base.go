@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -264,4 +266,51 @@ func Upload(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, `上传成功`, map[string]string{
 		`url`: dst,
 	})
+}
+
+// DownloadWebFile 下载 web/download 目录下的单个文件。
+func DownloadWebFile(c *gin.Context) {
+	fileName := strings.TrimSpace(c.Param(`name`))
+	if !isValidWebDownloadFileName(fileName) {
+		gsgin.GinResponseError(c, `文件名不合法`, ``)
+		return
+	}
+
+	targetPath := buildWebDownloadFilePath(fileName)
+	fileInfo, err := os.Stat(targetPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			gsgin.GinResponseError(c, `文件不存在`, ``)
+			return
+		}
+		gsgin.GinResponseError(c, `读取文件失败:`+err.Error(), ``)
+		return
+	}
+	if fileInfo.IsDir() {
+		gsgin.GinResponseError(c, `文件不存在`, ``)
+		return
+	}
+
+	c.FileAttachment(targetPath, fileName)
+	c.Status(http.StatusOK)
+}
+
+// isValidWebDownloadFileName 校验下载文件名只能是 web/download 下的顶层文件。
+func isValidWebDownloadFileName(fileName string) bool {
+	if fileName == `` || fileName == `.` || fileName == `..` {
+		return false
+	}
+	if strings.Contains(fileName, `/`) || strings.Contains(fileName, `\`) {
+		return false
+	}
+	return filepath.Base(fileName) == fileName
+}
+
+// buildWebDownloadFilePath 拼接 web/download 目录中的目标文件路径。
+func buildWebDownloadFilePath(fileName string) string {
+	rootPath := ``
+	if component.EnvClient != nil {
+		rootPath = component.EnvClient.RootPath
+	}
+	return filepath.Join(rootPath, `web`, `download`, fileName)
 }

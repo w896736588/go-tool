@@ -117,6 +117,8 @@ func baseRouter(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/Ip`, controller.Ip)                                     //外网IP
 	tGin.GinPost(`/api/GetLocalIP`, controller.GetLocalIP)                     //局域网IP
 	tGin.GinPost(`/api/Upload`, controller.Upload)                             //上传文件
+	tGin.GinGet(`/api/download/:name`, controller.DownloadWebFile)             //下载 web/download 目录文件
+	tGin.GinGet(`/web/download/:name`, controller.DownloadWebFile)             //兼容 web/download 直链下载
 }
 
 // redis相关

@@ -299,6 +299,7 @@ import { Plus, Tools, Refresh, Download, QuestionFilled, Setting, Notebook, Dele
 
 const { mergeSavedSmartLinkIntoList } = require('@/utils/smart_link_config_sync.cjs')
 const { DEFAULT_RUNTIME_CONFIG, buildRuntimeApiUrl, buildRuntimeRequestOptions, resolveRuntimeRefreshActions } = require('@/utils/smart_link_runtime.cjs')
+const { buildDownloadUrlWithToken } = require('@/utils/download_url.cjs')
 
 export default {
   props: {
@@ -619,6 +620,8 @@ export default {
         this.$message.error('下载地址不可用')
         return
       }
+      // downloadClient 下载客户端时将当前登录 token 带到地址栏，便于新标签页直接通过后端鉴权。
+      url = buildDownloadUrlWithToken(url, base.GetSafeToken())
       window.open(url, '_blank')
       this.$message.success('已打开客户端下载链接')
     },
