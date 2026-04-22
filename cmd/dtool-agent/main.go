@@ -20,6 +20,7 @@ import (
 )
 
 var defaultServerURL = "http://localhost:17170"
+var defaultClientVersion = "2.0.0"
 
 // Config Agent 配置
 type Config struct {
@@ -41,7 +42,7 @@ func main() {
 	}
 	clientVersion := os.Getenv("DTOOL_CLIENT_VERSION")
 	if clientVersion == "" {
-		clientVersion = "2.0.0"
+		clientVersion = defaultClientVersion
 	}
 
 	cfg := Config{
