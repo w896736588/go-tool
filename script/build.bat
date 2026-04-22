@@ -61,7 +61,7 @@ if not exist "%PKG_DIR%\config\dtool" mkdir "%PKG_DIR%\config\dtool" || goto :er
 REM Copy only company.ini and rename it to config.ini
 copy /Y "%ROOT_DIR%\config\dtool\company.ini" "%PKG_DIR%\config\dtool\config.ini" >nul || goto :error
 copy /Y "%ROOT_DIR%\config\dtool\frog.db" "%PKG_DIR%\config\dtool\frog.db" >nul || goto :error
-xcopy "%ROOT_DIR%\web\dist" "%PKG_DIR%\web\dist" /E /I /Y >nul || goto :error
+xcopy "%ROOT_DIR%\web\dist" "%PKG_DIR%\web\" /E /I /Y >nul || goto :error
 xcopy "%ROOT_DIR%\internal\pkg\p_js" "%PKG_DIR%\internal\pkg\p_js" /E /I /Y >nul || goto :error
 xcopy "%ROOT_DIR%\internal\app\dtool\database" "%PKG_DIR%\internal\app\dtool\database" /E /I /Y >nul || goto :error
 xcopy "%ROOT_DIR%\internal\app\dtool\database_log" "%PKG_DIR%\internal\app\dtool\database_log" /E /I /Y >nul || goto :error
