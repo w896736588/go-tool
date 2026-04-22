@@ -15,7 +15,6 @@ import (
 	"gitee.com/Sxiaobai/gs/v2/gstool"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
-	"github.com/spf13/cast"
 )
 
 // getSafeTokenManager 创建 Safe Token 管理器（从配置读取）
@@ -38,51 +37,9 @@ func BaseLogin(c *gin.Context) {
 		return
 	}
 
-	// 获取输入密码（兼容 password 和 Password 字段）
-	inputPassword := ``
-	if p, ok := reqMap[`password`]; ok {
-		inputPassword = cast.ToString(p)
-	} else if p, ok := reqMap[`Password`]; ok {
-		inputPassword = cast.ToString(p)
-	}
-
-	// 创建 Token 管理器
-	tokenManager := getSafeTokenManager()
-
-	// 检查是否启用了密码保护
-	if !tokenManager.IsEnabled() {
-		gsgin.GinResponseSuccess(c, `未启用密码保护，无需登录`, map[string]any{
-			`enabled`:   false,
-			`token`:     ``,
-			`expire_at`: 0,
-			`ports`:     strings.Split(component.ConfigViper.GetString(`run.ports`), `,`),
-			`local_ip`:  GetLANIP(),
-		})
-		return
-	}
-
-	// 验证密码
-	if !tokenManager.VerifyPassword(inputPassword) {
-		gsgin.GinResponseError(c, `密码错误`, map[string]any{
-			`token`: ``,
-		})
-		return
-	}
-
-	// 生成 Token
-	token, expireAt, tokenErr := tokenManager.GenerateToken()
-	if tokenErr != nil {
-		gsgin.GinResponseError(c, `登录失败（`+tokenErr.Error()+`）`, map[string]any{
-			`token`: ``,
-		})
-		return
-	}
-
 	gsgin.GinResponseSuccess(c, `登录成功`, map[string]any{
-		`token`:     token,
-		`expire_at`: expireAt,
-		`ports`:     strings.Split(component.ConfigViper.GetString(`run.ports`), `,`),
-		`local_ip`:  GetLANIP(),
+		`ports`:    strings.Split(component.ConfigViper.GetString(`run.ports`), `,`),
+		`local_ip`: GetLANIP(),
 	})
 }
 
