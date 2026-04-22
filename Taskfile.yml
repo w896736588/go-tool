@@ -50,20 +50,20 @@ tasks:
       - powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; if (Test-Path './build') { Remove-Item './build' -Recurse -Force }; New-Item -ItemType Directory -Path './build' | Out-Null"
 
   package-windows:
-    desc: Build Windows release package
+    desc: "Build Windows release package. Usage: task package-windows -- <name> (e.g. task package-windows -- frog => build/release_windows/package_frog)"
     platforms: [windows]
     deps:
       - build-frontend
       - build-web-windows
     cmds:
-      - powershell -NoProfile -ExecutionPolicy Bypass -File ./script/package_windows.ps1
+      - powershell -NoProfile -ExecutionPolicy Bypass -File ./script/package_windows.ps1 {{.CLI_ARGS}}
 
   package-linux:
-    desc: Build Linux release package
+    desc: "Build Linux release package. Usage: task package-linux -- <name> (e.g. task package-linux -- frog => build/release_linux/package_frog)"
     cmds:
-      - bash ./script/package_unix.sh linux
+      - bash ./script/package_unix.sh linux {{.CLI_ARGS}}
 
   package-macos:
-    desc: Build macOS release package
+    desc: "Build macOS release package. Usage: task package-macos -- <name> (e.g. task package-macos -- frog => build/release_macos/package_frog)"
     cmds:
-      - bash ./script/package_unix.sh macos
+      - bash ./script/package_unix.sh macos {{.CLI_ARGS}}

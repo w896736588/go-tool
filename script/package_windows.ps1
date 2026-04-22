@@ -20,10 +20,19 @@ function Assert-PathExists {
     }
 }
 
+$PackageName = if ($args.Count -gt 0) { $args[0] } else { "" }
+if ($PackageName -match '[\\/:*?"<>|]') {
+    throw "包名包含非法字符：$PackageName"
+}
+
 $RootDir = Split-Path -Parent $PSScriptRoot
 $BuildDir = Join-Path $RootDir "build"
 $StageDir = Join-Path $BuildDir "release_windows"
-$PackageDir = Join-Path $StageDir "package"
+$PackageDir = if ($PackageName -ne "") {
+    Join-Path $StageDir "package_$PackageName"
+} else {
+    Join-Path $StageDir "package"
+}
 $ZipFile = Join-Path $BuildDir "dtool_release_windows.zip"
 $FrontendDistDir = Join-Path $RootDir "web/dist"
 $WebExe = Join-Path $BuildDir "dtool.exe"

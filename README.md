@@ -64,11 +64,11 @@ http://localhost:17170
 
 ```bash
 # Windows Web 发行包
-task package-windows
+task package-windows -- 20260101
 
 # Linux Web 发行包
-task package-linux
+task package-linux -- 20260101
 
 # macOS Web 发行包
-task package-macos
+task package-macos -- 20260101
 ```

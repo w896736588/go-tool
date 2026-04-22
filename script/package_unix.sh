@@ -25,11 +25,20 @@ case "${TARGET_OS}" in
     ;;
 esac
 
+PACKAGE_NAME="${2:-}"
+if [[ -n "${PACKAGE_NAME}" && "${PACKAGE_NAME}" =~ [\\/:*?\"\<\>\|[:space:]] ]]; then
+  echo "[ERROR] package name contains illegal characters: ${PACKAGE_NAME}"
+  exit 1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BUILD_DIR="${ROOT_DIR}/build"
 STAGE_DIR="${BUILD_DIR}/release_${TARGET_OS}"
 PACKAGE_DIR="${STAGE_DIR}/package"
+if [[ -n "${PACKAGE_NAME}" ]]; then
+  PACKAGE_DIR="${STAGE_DIR}/package_${PACKAGE_NAME}"
+fi
 ARCHIVE_FILE="${BUILD_DIR}/dtool_release_${TARGET_OS}.${ARCHIVE_EXT}"
 HOST_UNAME="$(uname -s)"
 BUILD_GOOS=""

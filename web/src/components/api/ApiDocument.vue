@@ -175,10 +175,8 @@ export default {
   methods: {
     loadLocalIp() {
       const _this = this
-      Base.BasePost('/api/BaseLogin', {}, function (res) {
-        console.log('BaseLogin response:', res)
+      Base.BasePost('/api/GetLocalIP', {}, function (res) {
         if (res.ErrCode === 0 && res.Data && res.Data.local_ip) {
-          console.log('Setting localIp:', res.Data.local_ip)
           _this.localIp = res.Data.local_ip
         }
       })
