@@ -21,7 +21,6 @@ var SafeAuthWhiteList = map[string]bool{
 	"/api/BaseRegisterService":  true,
 	"/api/BaseCheckUnikeyExist": true,
 	"/api/Upload":               true, // 上传接口暂时放行，避免阻塞
-	"/api/agent/download":       true, // 本地客户端下载安装包 / local agent download
 	"/api/agent/ws":             true, // WebSocket 连接 / agent ws
 }
 

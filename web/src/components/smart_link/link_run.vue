@@ -11,8 +11,7 @@
     <div>{{ clientStatusMessage }}</div>
     <div v-if="runtimeConfig.run_mode === 'local_client' && !clientStatus.client_connected" style="margin-top: 8px;">
       <el-button type="primary" size="small" @click="downloadClient('windows')">下载 Windows 客户端</el-button>
-      <el-button type="primary" size="small" @click="downloadClient('darwin')">下载 macOS 客户端</el-button>
-      <el-button type="primary" size="small" @click="downloadClient('linux')">下载 Linux 客户端</el-button>
+      <el-button type="primary" size="small" @click="downloadClient('macos')">下载 macOS 客户端</el-button>
       <el-button size="small" @click="refreshClientStatus">刷新状态</el-button>
     </div>
   </el-alert>
@@ -609,88 +608,19 @@ export default {
         .catch(() => {})
       _that.$message.success('状态已刷新')
     },
-    // resolveClientDownloadFileName 解析服务端返回的下载文件名，缺省时按平台回退。
-    // resolveClientDownloadFileName parses the server-provided filename and falls back to a platform default when missing.
-    resolveClientDownloadFileName: function (os, contentDisposition) {
-      const defaultFileNameMap = {
-        windows: 'dtool-agent.exe',
-        darwin: 'dtool-agent',
-        linux: 'dtool-agent',
-      }
-      const dispositionText = String(contentDisposition || '')
-      const utf8Match = dispositionText.match(/filename\*=UTF-8''([^;]+)/i)
-      if (utf8Match && utf8Match[1]) {
-        return decodeURIComponent(utf8Match[1])
-      }
-      const plainMatch = dispositionText.match(/filename="?([^";]+)"?/i)
-      if (plainMatch && plainMatch[1]) {
-        return plainMatch[1]
-      }
-      return defaultFileNameMap[os] || 'dtool-agent'
-    },
-    // triggerClientDownload 把 blob 转成浏览器下载，避免 window.open 无法携带 Token 头。
-    // triggerClientDownload turns a blob into a browser download so authenticated requests do not rely on window.open.
-    triggerClientDownload: function (blob, fileName) {
-      const downloadUrl = window.URL.createObjectURL(blob)
-      const linkElement = document.createElement('a')
-      linkElement.href = downloadUrl
-      linkElement.download = fileName
-      document.body.appendChild(linkElement)
-      linkElement.click()
-      document.body.removeChild(linkElement)
-      window.URL.revokeObjectURL(downloadUrl)
-    },
-    // parseClientDownloadError 尝试从下载响应中解析结构化错误，避免把错误页保存成可执行文件。
-    parseClientDownloadError: async function (response) {
-      const contentType = String(response.headers.get('content-type') || '').toLowerCase()
-      if (contentType.includes('application/json')) {
-        const result = await response.json()
-        return result && result.ErrMsg ? result.ErrMsg : '下载地址不可用'
-      }
-
-      const responseText = await response.text()
-      const trimmedText = String(responseText || '').trim()
-      if (trimmedText.startsWith('{') && trimmedText.includes('"ErrCode"')) {
-        try {
-          const result = JSON.parse(trimmedText)
-          if (result && result.ErrMsg) {
-            return result.ErrMsg
-          }
-        } catch (error) {
-          // 保留原始文本兜底，避免 JSON 解析失败时吞掉错误信息。
-        }
-      }
-
-      if (trimmedText) {
-        return trimmedText
-      }
-      return '下载地址不可用'
-    },
     // 下载客户端
-    downloadClient: function (os) {
-      let url = this.runtimeConfig.download_urls[os]
-      if (url) {
-        fetch(
-          url,
-          buildRuntimeRequestOptions(base.GetSafeToken())
-        )
-          .then(async (response) => {
-            const contentType = String(response.headers.get('content-type') || '')
-            if (!response.ok || contentType.includes('application/json') || contentType.includes('text/plain')) {
-              const errorMessage = await this.parseClientDownloadError(response)
-              throw new Error(errorMessage)
-            }
-            const downloadBlob = await response.blob()
-            const fileName = this.resolveClientDownloadFileName(os, response.headers.get('content-disposition'))
-            this.triggerClientDownload(downloadBlob, fileName)
-            this.$message.success('客户端下载已开始')
-          })
-          .catch((error) => {
-            this.$message.error(error.message || '下载地址不可用')
-          })
-      } else {
-        this.$message.error('下载地址不可用')
+    downloadClient: function (platform) {
+      const downloadUrlMap = {
+        windows: this.runtimeConfig.download_windows_url,
+        macos: this.runtimeConfig.download_macos_url,
       }
+      let url = String(downloadUrlMap[platform] || '').trim()
+      if (!url) {
+        this.$message.error('下载地址不可用')
+        return
+      }
+      window.open(url, '_blank')
+      this.$message.success('已打开客户端下载链接')
     },
     smartLinkRun: function (smartLinkIndex, linkIndex) {
       let _that = this

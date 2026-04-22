@@ -860,6 +860,9 @@ func SetMemoryConfigGet(c *gin.Context) {
 		`home_task_daily_report_model_id`:   cast.ToInt(dailyReportModelID),
 		`safe_password`:                     component.ConfigViper.GetString(`safe.password`),
 		`run_mode`:                          component.EnvClient.SmartLinkConfig.RunMode,
+		`client_version`:                    component.EnvClient.SmartLinkConfig.ClientVersion,
+		`download_windows_url`:              component.EnvClient.SmartLinkConfig.DownloadWindowsURL,
+		`download_macos_url`:                component.EnvClient.SmartLinkConfig.DownloadMacOSURL,
 	})
 }
 
@@ -1033,6 +1036,16 @@ func SetRuntimeConfigItemSave(c *gin.Context) {
 		value := strings.TrimSpace(cast.ToString(configValue))
 		setIniKey(section, configKey, value)
 		component.EnvClient.SmartLinkConfig.ClientVersion = value
+		needRestart = false
+	case `download_windows_url`:
+		value := strings.TrimSpace(cast.ToString(configValue))
+		setIniKey(section, configKey, value)
+		component.EnvClient.SmartLinkConfig.DownloadWindowsURL = value
+		needRestart = false
+	case `download_macos_url`:
+		value := strings.TrimSpace(cast.ToString(configValue))
+		setIniKey(section, configKey, value)
+		component.EnvClient.SmartLinkConfig.DownloadMacOSURL = value
 		needRestart = false
 	case `db_path`:
 		setIniKey(section, configKey, strings.TrimSpace(cast.ToString(configValue)))

@@ -3,7 +3,8 @@
 const DEFAULT_RUNTIME_CONFIG = {
   run_mode: 'server',
   required_client_version: '1.0.0',
-  download_urls: {},
+  download_windows_url: '',
+  download_macos_url: '',
 }
 
 // normalizeRuntimeConfig 统一接口返回，避免缺字段时前端状态判断失真。
@@ -12,7 +13,8 @@ function normalizeRuntimeConfig(nextRuntimeConfig) {
   return {
     ...DEFAULT_RUNTIME_CONFIG,
     ...(nextRuntimeConfig || {}),
-    download_urls: (nextRuntimeConfig && nextRuntimeConfig.download_urls) || {},
+    download_windows_url: (nextRuntimeConfig && nextRuntimeConfig.download_windows_url) || '',
+    download_macos_url: (nextRuntimeConfig && nextRuntimeConfig.download_macos_url) || '',
   }
 }
 

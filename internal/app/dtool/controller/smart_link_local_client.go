@@ -20,8 +20,10 @@ func getSmartLinkConfig() *define.SmartLinkConfig {
 	cfg := component.EnvClient.SmartLinkConfig
 	if cfg == nil {
 		return &define.SmartLinkConfig{
-			RunMode:       define.SmartLinkRunModeServer,
-			ClientVersion: "1.0.0",
+			RunMode:            define.SmartLinkRunModeServer,
+			ClientVersion:      "1.0.0",
+			DownloadWindowsURL: "",
+			DownloadMacOSURL:   "",
 		}
 	}
 	return cfg
@@ -32,22 +34,18 @@ func SmartLinkRuntimeConfig(c *gin.Context) {
 	cfg := component.EnvClient.SmartLinkConfig
 	if cfg == nil {
 		cfg = &define.SmartLinkConfig{
-			RunMode:       define.SmartLinkRunModeServer,
-			ClientVersion: "1.0.0",
+			RunMode:            define.SmartLinkRunModeServer,
+			ClientVersion:      "1.0.0",
+			DownloadWindowsURL: "",
+			DownloadMacOSURL:   "",
 		}
-	}
-
-	baseURL := buildAgentDefaultServerURL(c.Request)
-	downloadURLs := map[string]string{
-		"windows": baseURL + "/api/agent/download?os=windows",
-		"darwin":  baseURL + "/api/agent/download?os=darwin",
-		"linux":   baseURL + "/api/agent/download?os=linux",
 	}
 
 	gsgin.GinResponseSuccess(c, "", map[string]any{
 		"run_mode":                cfg.RunMode,
 		"required_client_version": cfg.ClientVersion,
-		"download_urls":           downloadURLs,
+		"download_windows_url":    cfg.DownloadWindowsURL,
+		"download_macos_url":      cfg.DownloadMacOSURL,
 	})
 }
 
