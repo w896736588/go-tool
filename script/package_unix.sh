@@ -105,7 +105,7 @@ cp -R "${ROOT_DIR}/web/dist" "${PACKAGE_DIR}/web/dist"
 mkdir -p "${PACKAGE_DIR}/internal/pkg" "${PACKAGE_DIR}/internal/app/dtool"
 cp -R "${ROOT_DIR}/internal/pkg/p_js" "${PACKAGE_DIR}/internal/pkg/p_js"
 cp -R "${ROOT_DIR}/internal/app/dtool/database" "${PACKAGE_DIR}/internal/app/dtool/database"
-cp -R "${ROOT_DIR}/internal/app/dtool/database_memory" "${PACKAGE_DIR}/internal/app/dtool/database_memory"
+cp -R "${ROOT_DIR}/internal/app/dtool/database_log" "${PACKAGE_DIR}/internal/app/dtool/database_log"
 
 write_step "[4/5] Generate launch scripts and readme"
 cat > "${PACKAGE_DIR}/${WEB_LAUNCHER}" <<'EOF'

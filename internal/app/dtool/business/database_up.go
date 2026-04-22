@@ -145,14 +145,6 @@ func resolveMigrationDatabaseDesc(db *common.CSqlite, databaseUpPath string) str
 	if db.Env.LogDatabaseUpPath == databaseUpPath {
 		databaseType = `log`
 		databaseFile = buildDatabaseFullPath(db.Env.LogDbConfig)
-	} else if db.Env.MemoryDatabaseUpPath == databaseUpPath {
-		databaseType = `memory`
-		if db.Env.ConfigBase != nil {
-			databaseFile = buildDatabaseFullPath(&define.DbConfig{
-				DbPath: db.Env.ConfigBase.MemoryDBPath,
-				DbName: db.Env.ConfigBase.MemoryDBName,
-			})
-		}
 	} else if db.Env.DatabaseUpPath == databaseUpPath {
 		databaseType = `main`
 		databaseFile = buildDatabaseFullPath(db.Env.DbConfig)
