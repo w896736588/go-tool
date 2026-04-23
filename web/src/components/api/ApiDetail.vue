@@ -27,7 +27,7 @@
       </div>
     </div>
 
-    <el-tabs v-model="configActiveTab" class="detail-tabs" style="min-height: 500px;" @tab-change="responseTabChange">
+    <el-tabs v-model="configActiveTab" class="detail-tabs" @tab-change="responseTabChange">
       <el-tab-pane label="备注" name="desc">
         <MdEditor  v-model="apiForm.desc" @blur="handleBlurSave" :onSave="handleSave" />
       </el-tab-pane>
@@ -110,45 +110,48 @@
         </div>
       </el-tab-pane>
       <el-tab-pane :label="'结果字段备注(' + (isArray(apiForm.take_result_data) ? apiForm.take_result_data.length : 0) + ')'" lazy name="result_field_desc">
-        <el-table
-            :data="apiForm.take_result_data"
-            style="width: 100%"
-        >
-          <el-table-column label="字段" width="400" align="center" fixed="right">
-            <template #default="{ row }">
-              <el-input
-                  v-model="row.key"
-                  placeholder=""
-                  @blur="handleBlurSave"
-              />
-            </template>
-          </el-table-column>
-          <el-table-column label="类型" width="200" align="center" fixed="right">
-            <template #default="{ row }">
-              <el-select v-model="row.type" placeholder="请选择" @change="handleSave">
-                <el-option label="string" value="string"/>
-                <el-option label="number" value="number"/>
-                <el-option label="boolean" value="boolean"/>
-                <el-option label="object" value="object"/>
-                <el-option label="array" value="array"/>
-              </el-select>
-            </template>
-          </el-table-column>
-          <el-table-column label="备注" align="center" fixed="right">
-            <template #default="{ row }">
-              <el-input
-                  v-model="row.desc"
-                  placeholder=""
-                  @blur="handleBlurSave"
-              />
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="200" align="center" fixed="right">
-            <template #default="{ row }">
-              <pl-button link type="danger" @click="removeTakeResult(row.key)">删除</pl-button>
-            </template>
-          </el-table-column>
-        </el-table>
+        <div class="result-field-desc-panel">
+          <el-table
+              :data="apiForm.take_result_data"
+              class="result-field-desc-table"
+              style="width: 100%"
+          >
+            <el-table-column label="字段" width="400" align="center" fixed="right">
+              <template #default="{ row }">
+                <el-input
+                    v-model="row.key"
+                    placeholder=""
+                    @blur="handleBlurSave"
+                />
+              </template>
+            </el-table-column>
+            <el-table-column label="类型" width="200" align="center" fixed="right">
+              <template #default="{ row }">
+                <el-select v-model="row.type" placeholder="请选择" @change="handleSave">
+                  <el-option label="string" value="string"/>
+                  <el-option label="number" value="number"/>
+                  <el-option label="boolean" value="boolean"/>
+                  <el-option label="object" value="object"/>
+                  <el-option label="array" value="array"/>
+                </el-select>
+              </template>
+            </el-table-column>
+            <el-table-column label="备注" align="center" fixed="right">
+              <template #default="{ row }">
+                <el-input
+                    v-model="row.desc"
+                    placeholder=""
+                    @blur="handleBlurSave"
+                />
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="200" align="center" fixed="right">
+              <template #default="{ row }">
+                <pl-button link type="danger" @click="removeTakeResult(row.key)">删除</pl-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
       </el-tab-pane>
     </el-tabs>
 
@@ -952,11 +955,11 @@ export default {
 <style scoped>
 .api-detail {
   padding: 12px 0;
-  height: 100vh;
+  height: 100%;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  min-height: 720px;
+  min-height: 0;
 }
 
 .json-box {
@@ -1178,8 +1181,8 @@ export default {
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   font-size: 14px;
   box-shadow: none;
-  scrollbar-width: auto;
-  scrollbar-color: #8ea88f #dbe7d8;
+  scrollbar-width: thin;
+  scrollbar-color: #6ea46b #dbe7d8;
   position: relative;
 }
 
@@ -1246,6 +1249,20 @@ export default {
   color: inherit;
 }
 
+.result-field-desc-panel {
+  max-height: min(62vh, calc(100vh - 260px));
+  min-height: 320px;
+  overflow: auto;
+  border: 1px solid #dbe7d8;
+  border-radius: 12px;
+  background: #fdfefd;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+
+.result-field-desc-table {
+  min-width: 980px;
+}
+
 .response-html-preview {
   width: 100%;
   min-height: 360px;
@@ -1276,9 +1293,8 @@ export default {
   padding: 10px 0;
 }
 
-:deep(.el-tabs__content) {
+:deep(.detail-tabs > .el-tabs__content) {
   padding: 12px;
-  overflow: auto;
 }
 
 :deep(.detail-tabs > .el-tabs__header) {
@@ -1457,49 +1473,69 @@ export default {
 
 /* 滚动条样式 */
 .config-section::-webkit-scrollbar,
-.response-section::-webkit-scrollbar {
-  width: 6px;
+.response-section::-webkit-scrollbar,
+.result-field-desc-panel::-webkit-scrollbar,
+:deep(.detail-tabs > .el-tabs__content::-webkit-scrollbar) {
+  width: 10px;
+  height: 10px;
+  display: block;
 }
 
 .config-section::-webkit-scrollbar-track,
-.response-section::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 3px;
+.response-section::-webkit-scrollbar-track,
+.result-field-desc-panel::-webkit-scrollbar-track,
+:deep(.detail-tabs > .el-tabs__content::-webkit-scrollbar-track) {
+  background: #dbe7d8;
+  border-radius: 999px;
 }
 
 .config-section::-webkit-scrollbar-thumb,
-.response-section::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
-  border-radius: 3px;
+.response-section::-webkit-scrollbar-thumb,
+.result-field-desc-panel::-webkit-scrollbar-thumb,
+:deep(.detail-tabs > .el-tabs__content::-webkit-scrollbar-thumb) {
+  background: #6ea46b;
+  border-radius: 999px;
+  border: 2px solid #dbe7d8;
 }
 
 .config-section::-webkit-scrollbar-thumb:hover,
-.response-section::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
+.response-section::-webkit-scrollbar-thumb:hover,
+.result-field-desc-panel::-webkit-scrollbar-thumb:hover,
+:deep(.detail-tabs > .el-tabs__content::-webkit-scrollbar-thumb:hover) {
+  background: #4f8c4c;
 }
 
 .response-body-container::-webkit-scrollbar,
-.body-editor::-webkit-scrollbar {
+.body-editor::-webkit-scrollbar,
+:deep(.el-table__body-wrapper::-webkit-scrollbar),
+:deep(.el-scrollbar__wrap::-webkit-scrollbar) {
   width: 10px;
   height: 10px;
+  display: block;
 }
 
 .response-body-container::-webkit-scrollbar-track,
-.body-editor::-webkit-scrollbar-track {
+.body-editor::-webkit-scrollbar-track,
+:deep(.el-table__body-wrapper::-webkit-scrollbar-track),
+:deep(.el-scrollbar__wrap::-webkit-scrollbar-track) {
   background: #dbe7d8;
   border-radius: 999px;
 }
 
 .response-body-container::-webkit-scrollbar-thumb,
-.body-editor::-webkit-scrollbar-thumb {
-  background: #8ea88f;
+.body-editor::-webkit-scrollbar-thumb,
+:deep(.el-table__body-wrapper::-webkit-scrollbar-thumb),
+:deep(.el-scrollbar__wrap::-webkit-scrollbar-thumb) {
+  background: #6ea46b;
   border-radius: 999px;
   border: 2px solid #dbe7d8;
 }
 
 .response-body-container::-webkit-scrollbar-thumb:hover,
-.body-editor::-webkit-scrollbar-thumb:hover {
-  background: #6f8f72;
+.body-editor::-webkit-scrollbar-thumb:hover,
+:deep(.el-table__body-wrapper::-webkit-scrollbar-thumb:hover),
+:deep(.el-scrollbar__wrap::-webkit-scrollbar-thumb:hover) {
+  background: #4f8c4c;
 }
 
 .body-editor-json::-webkit-scrollbar,
@@ -1508,6 +1544,7 @@ export default {
 :deep(.body-editor-json .jsoneditor::-webkit-scrollbar) {
   width: 8px;
   height: 8px;
+  display: block;
 }
 
 .body-editor-json::-webkit-scrollbar-track,
@@ -1522,15 +1559,29 @@ export default {
 :deep(.body-editor-json .cm-scroller::-webkit-scrollbar-thumb),
 :deep(.body-editor-json .jse-contents::-webkit-scrollbar-thumb),
 :deep(.body-editor-json .jsoneditor::-webkit-scrollbar-thumb) {
-  background: #bfd0b9;
+  background: #6ea46b;
   border-radius: 999px;
+  border: 1px solid #eef4ea;
 }
 
 .body-editor-json::-webkit-scrollbar-thumb:hover,
 :deep(.body-editor-json .cm-scroller::-webkit-scrollbar-thumb:hover),
 :deep(.body-editor-json .jse-contents::-webkit-scrollbar-thumb:hover),
 :deep(.body-editor-json .jsoneditor::-webkit-scrollbar-thumb:hover) {
-  background: #a9bda3;
+  background: #4f8c4c;
+}
+
+.api-detail,
+:deep(.detail-tabs > .el-tabs__content),
+.config-section,
+.response-section,
+.response-body-container,
+.body-editor,
+.result-field-desc-panel,
+:deep(.el-table__body-wrapper),
+:deep(.el-scrollbar__wrap) {
+  scrollbar-width: thin;
+  scrollbar-color: #6ea46b #dbe7d8;
 }
 
 .dialog-env-name {
