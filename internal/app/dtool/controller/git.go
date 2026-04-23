@@ -39,19 +39,24 @@ func sendGitSse(sse *p_sse.SseShell, msg string) {
 func GitCurrentBranch(c *gin.Context) {
 	reqMap, sshClient, sse, err := getGitComponent(c)
 	if err != nil {
+		gstool.FmtPrintlnLogTime(`[GitCurrentBranch][01] 获取Git组件失败 err=%s`, err.Error())
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
 	codePath := cast.ToString(reqMap[`code_path`])
 	if codePath == `` {
+		gstool.FmtPrintlnLogTime(`[GitCurrentBranch][02] code_path为空 req=%#v`, reqMap)
 		gsgin.GinResponseError(c, `git未配置目录`, nil)
 		return
 	}
+	gstool.FmtPrintlnLogTime(`[GitCurrentBranch][03] 开始前置环境处理 code_path=%s ssh_id=%s sse_distribute_id=%s`, codePath, cast.ToString(reqMap[`ssh_id`]), cast.ToString(reqMap[`sse_distribute_id`]))
 	// 所有通过 SSH 的 Git 操作前，默认先执行"目录安全 + 保存账号密码"。
 	if prepareErr := prepareGitOperationEnv(sshClient, codePath); prepareErr != nil {
+		gstool.FmtPrintlnLogTime(`[GitCurrentBranch][04] 前置环境处理失败 code_path=%s err=%s`, codePath, prepareErr.Error())
 		gsgin.GinResponseError(c, prepareErr.Error(), nil)
 		return
 	}
+	gstool.FmtPrintlnLogTime(`[GitCurrentBranch][05] 前置环境处理完成，准备查询当前分支 code_path=%s`, codePath)
 	sendGitSse(sse, fmt.Sprintf("[ssh] 查询 %s 当前分支...", codePath))
 	command := p_shell.NewCommand()
 	//command.Sudo()
@@ -60,8 +65,16 @@ func GitCurrentBranch(c *gin.Context) {
 	command.GitShowBranch()
 	command.Echo(`远程分支：`)
 	command.GitShowOriginBranch()
-	result, _ := sshClient.RunCommandWait(command.GetCommand().ToStr(), time.Second*4)
-	sendGitSse(sse, "[ssh] 查询完成")
+	commandText := command.GetCommand().ToStr()
+	gstool.FmtPrintlnLogTime(`[GitCurrentBranch][06] 执行当前分支查询命令 timeout=%s command=%s`, (time.Second * 4).String(), commandText)
+	result, runErr := sshClient.RunCommandWait(commandText, time.Second*4)
+	if runErr != nil {
+		gstool.FmtPrintlnLogTime(`[GitCurrentBranch][07] 当前分支查询失败 result_len=%d result=%q err=%s`, len(result), result, runErr.Error())
+		sendGitSse(sse, fmt.Sprintf("[ssh] 查询失败 %s", runErr.Error()))
+	} else {
+		gstool.FmtPrintlnLogTime(`[GitCurrentBranch][08] 当前分支查询完成 result_len=%d result=%q`, len(result), result)
+		sendGitSse(sse, "[ssh] 查询完成")
+	}
 	gsgin.GinResponseSuccess(c, ``, result)
 }
 
@@ -860,26 +873,39 @@ func CreateMerge(c *gin.Context) {
 }
 
 func getGitComponent(c *gin.Context) (map[string]interface{}, *gsssh.SshTerminal, *p_sse.SseShell, error) {
+	sseClientId := c.GetHeader(`SseClientId`)
+	gstool.FmtPrintlnLogTime(`[getGitComponent][01] 开始解析Git请求 sse_client_id=%s`, sseClientId)
 	dataMap := make(map[string]interface{})
 	err := gsgin.GinPostBody(c, &dataMap)
 	if err != nil {
+		gstool.FmtPrintlnLogTime(`[getGitComponent][02] 解析body失败 err=%s`, err.Error())
 		return nil, nil, nil, err
 	}
 	sshId := dataMap[`ssh_id`]
 	if cast.ToString(sshId) == `` {
+		gstool.FmtPrintlnLogTime(`[getGitComponent][03] 缺少ssh_id req=%#v`, dataMap)
 		return nil, nil, nil, errors.New(`缺少ssh_id参数`)
 	}
 	sseDistributeId := cast.ToString(dataMap[`sse_distribute_id`])
-	sshConfig, _ := common.DbMain.GetSshConfig(sshId)
+	sshConfig, sshConfigErr := common.DbMain.GetSshConfig(sshId)
+	if sshConfigErr != nil {
+		gstool.FmtPrintlnLogTime(`[getGitComponent][04] 获取SSH配置失败 ssh_id=%s err=%s`, cast.ToString(sshId), sshConfigErr.Error())
+	} else if len(sshConfig) == 0 {
+		gstool.FmtPrintlnLogTime(`[getGitComponent][04] SSH配置为空 ssh_id=%s`, cast.ToString(sshId))
+	}
 	uniqueKey := p_common.TBaseClient.GetCombineKey(sshId, sseDistributeId)
+	gstool.FmtPrintlnLogTime(`[getGitComponent][05] 请求参数解析完成 ssh_id=%s unique_key=%s sse_distribute_id=%s code_path=%s`, cast.ToString(sshId), uniqueKey, sseDistributeId, cast.ToString(dataMap[`code_path`]))
 	sse := &p_sse.SseShell{
-		Sse:             gsgin.SseGetByClientId(c.GetHeader(`SseClientId`)),
+		Sse:             gsgin.SseGetByClientId(sseClientId),
 		SseDistributeId: sseDistributeId,
 	}
+	gstool.FmtPrintlnLogTime(`[getGitComponent][06] SSE绑定状态 sse_client_id=%s sse_distribute_id=%s can_send=%v`, sseClientId, sseDistributeId, sse.Sse != nil)
 	globalMap, err := common.DbMain.AllGlobalMap()
 	if err != nil {
+		gstool.FmtPrintlnLogTime(`[getGitComponent][07] 获取global map失败 err=%s`, err.Error())
 		return nil, nil, nil, err
 	}
+	gstool.FmtPrintlnLogTime(`[getGitComponent][08] global map加载完成 count=%d`, len(globalMap))
 	//输出格式化 去除特殊符号
 	formatFunc := func(s string) []string {
 		return []string{p_common.TBaseClient.FilterTerminalChars(s)}
@@ -933,8 +959,10 @@ func getGitComponent(c *gin.Context) (map[string]interface{}, *gsssh.SshTerminal
 	}
 	sshClient, sshClientErr := component.ShellClient.GetClient(sshConfig, uniqueKey, sse, formatFunc, promptKeywords, promptFunc)
 	if sshClientErr != nil {
+		gstool.FmtPrintlnLogTime(`[getGitComponent][09] 获取SSH客户端失败 unique_key=%s err=%s`, uniqueKey, sshClientErr.Error())
 		return nil, nil, nil, sshClientErr
 	}
+	gstool.FmtPrintlnLogTime(`[getGitComponent][10] 获取SSH客户端成功 unique_key=%s`, uniqueKey)
 	return dataMap, sshClient, sse, nil
 }
 

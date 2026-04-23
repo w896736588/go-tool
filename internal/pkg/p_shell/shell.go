@@ -3,6 +3,7 @@ package p_shell
 import (
 	"dev_tool/internal/pkg/p_sse"
 	"errors"
+	"fmt"
 	"io"
 	"reflect"
 	"runtime/debug"
@@ -27,6 +28,12 @@ type Shell struct {
 
 const shellIdleTimeout = 3 * time.Minute
 const shellIdleCleanTicker = 30 * time.Second
+
+// shellConnectTimeout 控制单次 SSH 建连探活的最长等待时间。
+const shellConnectTimeout = 3 * time.Second
+
+// shellConnectMaxAttempts 控制 SSH 建连失败后的最大重试次数。
+const shellConnectMaxAttempts = 3
 
 // canSendSse 判断当前 SSE 是否仍然可用，避免向空连接发送消息。
 func canSendSse(sse *p_sse.SseShell) bool {
@@ -122,7 +129,11 @@ func (h *Shell) cleanupIdleClients() {
 func (h *Shell) GetClient(sshConfig map[string]any, shellClientId string, sse *p_sse.SseShell,
 	formatStream func(string) []string, promptKeywords []string, promptFunc func(string, io.WriteCloser, *ssh.Session) string) (*gsssh.SshTerminal, error) {
 	sshId := cast.ToString(sshConfig["id"])
+	host := cast.ToString(sshConfig["host"])
+	port := cast.ToString(sshConfig["port"])
+	gstool.FmtPrintlnLogTime(`[Shell.GetClient][01] 开始获取SSH客户端 shell_client_id=%s ssh_id=%s host=%s port=%s can_send_sse=%v`, shellClientId, sshId, host, port, canSendSse(sse))
 	if sshId == "" {
+		gstool.FmtPrintlnLogTime(`[Shell.GetClient][02] SSH配置错误，ssh_id为空 shell_client_id=%s host=%s port=%s`, shellClientId, host, port)
 		return nil, errors.New("ssh config error, GetClient " + cast.ToString(debug.Stack()))
 	}
 
@@ -131,6 +142,7 @@ func (h *Shell) GetClient(sshConfig map[string]any, shellClientId string, sse *p
 		h.ShellClientLastUsed[client] = time.Now().Unix()
 		bindReceiveHandler(client, sse, formatStream)
 		h.lock.Unlock()
+		gstool.FmtPrintlnLogTime(`[Shell.GetClient][03] 命中已有SSH客户端 shell_client_id=%s`, shellClientId)
 		if canSendSse(sse) {
 			sse.Send(" [ssh] 复用已有连接: " + shellClientId + "\n")
 		}
@@ -138,11 +150,13 @@ func (h *Shell) GetClient(sshConfig map[string]any, shellClientId string, sse *p
 	}
 	h.lock.Unlock()
 
+	gstool.FmtPrintlnLogTime(`[Shell.GetClient][04] 未命中已有SSH客户端，准备创建 shell_client_id=%s`, shellClientId)
 	if canSendSse(sse) {
 		sse.Send(" [ssh] 创建新连接: " + shellClientId + "\n")
 	}
 	client, err := h.createShellClient(sshConfig, shellClientId, sse, formatStream, promptKeywords, promptFunc)
 	if err != nil {
+		gstool.FmtPrintlnLogTime(`[Shell.GetClient][05] 创建SSH客户端失败 shell_client_id=%s err=%s`, shellClientId, err.Error())
 		return nil, err
 	}
 
@@ -150,55 +164,80 @@ func (h *Shell) GetClient(sshConfig map[string]any, shellClientId string, sse *p
 	h.ShellClientMap[shellClientId] = client
 	h.ShellClientStartMap[client] = time.Now().Unix()
 	h.ShellClientLastUsed[client] = time.Now().Unix()
+	activeCount := len(h.ShellClientMap)
 	h.lock.Unlock()
 
+	gstool.FmtPrintlnLogTime(`[Shell.GetClient][06] SSH客户端已加入连接表 shell_client_id=%s active_count=%d`, shellClientId, activeCount)
 	return client, nil
 }
 
 // createShellClient 创建一个新的交互式 SSH 终端，并绑定断线与消息转发处理。
 func (h *Shell) createShellClient(sshConfig map[string]any, shellClientId string, sse *p_sse.SseShell,
 	formatStream func(string) []string, promptKeywords []string, promptFunc func(string, io.WriteCloser, *ssh.Session) string) (*gsssh.SshTerminal, error) {
-	gsShell := gsssh.NewSshTerminal(gsssh.NewSsh(&gsssh.SshConfig{
-		Name:     "",
-		Host:     cast.ToString(sshConfig["host"]),
-		Port:     cast.ToString(sshConfig["port"]),
-		UserName: cast.ToString(sshConfig["username"]),
-		Password: cast.ToString(sshConfig["password"]),
-	}))
+	var lastErr error
+	host := cast.ToString(sshConfig["host"])
+	port := cast.ToString(sshConfig["port"])
+	username := cast.ToString(sshConfig["username"])
+	for attempt := 1; attempt <= shellConnectMaxAttempts; attempt++ {
+		gstool.FmtPrintlnLogTime(`[Shell.createShellClient][01] 开始创建SSH终端 shell_client_id=%s host=%s port=%s username=%s attempt=%d/%d`, shellClientId, host, port, username, attempt, shellConnectMaxAttempts)
+		gsShell := gsssh.NewSshTerminal(gsssh.NewSsh(&gsssh.SshConfig{
+			Name:     "",
+			Host:     host,
+			Port:     port,
+			UserName: username,
+			Password: cast.ToString(sshConfig["password"]),
+		}))
 
-	gsShell.SetFuncBroken(func(msg string) {
+		gsShell.SetPtyConfig(gsssh.PtyConfig{Echo: 0})
+		gsShell.SetMaxBufferSize(2 * 1024 * 1024)
+		gstool.FmtPrintlnLogTime(`[Shell.createShellClient][02] 准备执行SSH探活命令 shell_client_id=%s command=pwd timeout=%s attempt=%d/%d`, shellClientId, shellConnectTimeout.String(), attempt, shellConnectMaxAttempts)
 		if canSendSse(sse) {
-			sse.Send(" connection broken, will reconnect on next action: " + msg + "\n")
+			sse.Send(fmt.Sprintf(" [ssh] 正在建立SSH连接 %s:%s（第%d/%d次）\n",
+				host, port, attempt, shellConnectMaxAttempts))
 		}
-		h.RmClient(shellClientId)
-	})
+		pwdResult, err := gsShell.RunCommandWait("pwd", shellConnectTimeout)
+		if err != nil {
+			gstool.FmtPrintlnLogTime(`[Shell.createShellClient][03] SSH探活失败 shell_client_id=%s attempt=%d/%d result_len=%d result=%q err=%s`, shellClientId, attempt, shellConnectMaxAttempts, len(pwdResult), pwdResult, err.Error())
+			lastErr = err
+			if canSendSse(sse) {
+				sse.Send(fmt.Sprintf(" [ssh] 连接建立失败（第%d/%d次）: %s\n", attempt, shellConnectMaxAttempts, err.Error()))
+			}
+			gsShell.CloseTerminal()
+			continue
+		}
+		gstool.FmtPrintlnLogTime(`[Shell.createShellClient][04] SSH探活成功 shell_client_id=%s attempt=%d/%d result_len=%d result=%q`, shellClientId, attempt, shellConnectMaxAttempts, len(pwdResult), pwdResult)
 
-	gsShell.SetPtyConfig(gsssh.PtyConfig{Echo: 0})
-	gsShell.SetMaxBufferSize(2 * 1024 * 1024)
-	if canSendSse(sse) {
-		sse.Send(" [ssh] 正在建立SSH连接 " + cast.ToString(sshConfig["host"]) + ":" + cast.ToString(sshConfig["port"]) + "\n")
-	}
-	_, err := gsShell.RunCommandWait("pwd", 40*time.Second)
-	if err != nil {
+		gsShell.SetFuncBroken(func(msg string) {
+			gstool.FmtPrintlnLogTime(`[Shell.createShellClient][05] SSH连接断开 shell_client_id=%s msg=%s`, shellClientId, msg)
+			if canSendSse(sse) {
+				sse.Send(" connection broken, will reconnect on next action: " + msg + "\n")
+			}
+			h.RmClient(shellClientId)
+		})
+		gstool.FmtPrintlnLogTime(`[Shell.createShellClient][06] SSH终端初始化完成 shell_client_id=%s`, shellClientId)
 		if canSendSse(sse) {
-			sse.Send(" [ssh] 连接建立失败: " + err.Error() + "\n")
+			sse.Send(" [ssh] SSH连接建立成功\n")
 		}
-		return nil, err
+
+		bindReceiveHandler(gsShell, sse, formatStream)
+
+		if len(promptKeywords) == 0 {
+			promptKeywords = []string{"Username for", "Password for", "passphrase", "Passphrase"}
+		}
+		gsShell.SetAuthPromptKeywords(promptKeywords)
+		if promptFunc != nil {
+			gsShell.SetFuncAuthPrompt(promptFunc)
+		}
+		return gsShell, nil
 	}
+	if lastErr == nil {
+		lastErr = errors.New("ssh connect failed")
+	}
+	gstool.FmtPrintlnLogTime(`[Shell.createShellClient][07] SSH终端创建最终失败 shell_client_id=%s host=%s port=%s err=%s`, shellClientId, host, port, lastErr.Error())
 	if canSendSse(sse) {
-		sse.Send(" [ssh] SSH连接建立成功\n")
+		sse.Send(" [ssh] 连接建立失败: " + lastErr.Error() + "\n")
 	}
-
-	bindReceiveHandler(gsShell, sse, formatStream)
-
-	if len(promptKeywords) == 0 {
-		promptKeywords = []string{"Username for", "Password for", "passphrase", "Passphrase"}
-	}
-	gsShell.SetAuthPromptKeywords(promptKeywords)
-	if promptFunc != nil {
-		gsShell.SetFuncAuthPrompt(promptFunc)
-	}
-	return gsShell, nil
+	return nil, lastErr
 }
 
 // GetClientMarkdown 获取旧版一对一终端连接，供 markdown/sftp 等独占场景使用。
