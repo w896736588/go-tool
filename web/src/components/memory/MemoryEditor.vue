@@ -1449,7 +1449,6 @@ export default {
 }
 
 .editor-toolbar-title-input {
-  max-width: 360px;
   width: 100%;
   flex: 1 1 200px;
 }
