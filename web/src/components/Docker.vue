@@ -89,18 +89,28 @@
             <code class="path-text" v-html="scope.row.env_file"></code>
           </template>
         </el-table-column>
-        <el-table-column fixed="right" label="操作" min-width="620">
+        <el-table-column fixed="right" label="操作" min-width="360">
           <template #default="scope">
             <div class="operation-block">
-              <span class="operation-title">常用操作：</span>
+              <span class="operation-title">项目操作：</span>
               <div class="operation-buttons">
-                <pl-button size="small" type="primary" plain @click="dialogServices(scope.row)">服务列表</pl-button>
-                <pl-button size="small" type="primary" plain @click="status(scope.row)">运行状态</pl-button>
-                <pl-button size="small" type="success" plain @click="start(scope.row)">启动（up -d）</pl-button>
-                <pl-button size="small" type="success" plain @click="restart(scope.row)">重启（restart）</pl-button>
-                <pl-button size="small" type="warning" plain @click="stop(scope.row)">停止(stop)</pl-button>
-                <pl-button size="small" type="primary" plain @click="configShow(scope.row)">查看compose.yml</pl-button>
-                <pl-button size="small" type="primary" plain @click="envShow(scope.row)">查看env</pl-button>
+                <el-dropdown @command="(command) => handleComposeRowActionCommand(scope.row, command)">
+                  <pl-button size="small" type="primary" plain class="operation-dropdown-trigger">
+                    更多操作
+                    <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+                  </pl-button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item :command="COMPOSE_ROW_ACTION_SERVICE_LIST">服务列表</el-dropdown-item>
+                      <el-dropdown-item :command="COMPOSE_ROW_ACTION_STATUS">运行状态</el-dropdown-item>
+                      <el-dropdown-item :command="COMPOSE_ROW_ACTION_SHOW_CONFIG" divided>查看 compose.yml</el-dropdown-item>
+                      <el-dropdown-item :command="COMPOSE_ROW_ACTION_SHOW_ENV">查看 env</el-dropdown-item>
+                      <el-dropdown-item :command="COMPOSE_ROW_ACTION_RESTART" divided>重启（restart）</el-dropdown-item>
+                      <el-dropdown-item :command="COMPOSE_ROW_ACTION_STOP">停止（stop）</el-dropdown-item>
+                      <el-dropdown-item :command="COMPOSE_ROW_ACTION_START">启动（up -d）</el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
               </div>
             </div>
             <div class="operation-block">
@@ -249,6 +259,15 @@ const TRUNCATE_CONTAINER_LOG_TITLE = '确认清理容器日志'
 const TRUNCATE_CONTAINER_LOG_MESSAGE = '确定清理当前环境下全部容器日志吗？该操作会执行 truncate -s 0 /var/lib/docker/containers/*/*-json.log。'
 const TRUNCATE_CONTAINER_LOG_SUCCESS = '容器日志已清理'
 const TRUNCATE_CONTAINER_LOG_ERROR = '容器日志清理失败'
+// COMPOSE_ROW_ACTION_* 统一定义表格行下拉动作命令，避免模板里散落魔法字符串。
+// COMPOSE_ROW_ACTION_* centralizes row dropdown commands to avoid magic strings in the template.
+const COMPOSE_ROW_ACTION_SERVICE_LIST = 'service_list'
+const COMPOSE_ROW_ACTION_STATUS = 'status'
+const COMPOSE_ROW_ACTION_SHOW_CONFIG = 'show_config'
+const COMPOSE_ROW_ACTION_SHOW_ENV = 'show_env'
+const COMPOSE_ROW_ACTION_RESTART = 'restart'
+const COMPOSE_ROW_ACTION_STOP = 'stop'
+const COMPOSE_ROW_ACTION_START = 'start'
 
 export default {
   props: {},
@@ -307,6 +326,13 @@ export default {
       sseThrottleStringFunc: null,
       defaultServiceLoadingMap: {},
       composeSettingsVisible: false,
+      COMPOSE_ROW_ACTION_SERVICE_LIST,
+      COMPOSE_ROW_ACTION_STATUS,
+      COMPOSE_ROW_ACTION_SHOW_CONFIG,
+      COMPOSE_ROW_ACTION_SHOW_ENV,
+      COMPOSE_ROW_ACTION_RESTART,
+      COMPOSE_ROW_ACTION_STOP,
+      COMPOSE_ROW_ACTION_START,
     }
   },
   inject: ["showTerminal", "resizeTerminal"],
@@ -351,6 +377,37 @@ export default {
     },
   },
   methods: {
+    // handleComposeRowActionCommand 统一分发项目级下拉操作，保持模板简洁且便于后续扩展。
+    // handleComposeRowActionCommand routes compose row dropdown actions to keep the template compact and extensible.
+    handleComposeRowActionCommand: function (row, command) {
+      // switch 分支只做动作分发，不改变原有接口调用语义。
+      // The switch only dispatches actions and preserves existing API behavior.
+      switch (command) {
+        case COMPOSE_ROW_ACTION_SERVICE_LIST:
+          this.dialogServices(row)
+          return
+        case COMPOSE_ROW_ACTION_STATUS:
+          this.status(row)
+          return
+        case COMPOSE_ROW_ACTION_SHOW_CONFIG:
+          this.configShow(row)
+          return
+        case COMPOSE_ROW_ACTION_SHOW_ENV:
+          this.envShow(row)
+          return
+        case COMPOSE_ROW_ACTION_RESTART:
+          this.restart(row)
+          return
+        case COMPOSE_ROW_ACTION_STOP:
+          this.stop(row)
+          return
+        case COMPOSE_ROW_ACTION_START:
+          this.start(row)
+          return
+        default:
+          return
+      }
+    },
     prepareActionSse: function (action) {
       let _that = this
       if (_that.sse_distribute_id) {
@@ -1097,6 +1154,10 @@ export default {
 .operation-buttons .el-button,
 .quick-actions .el-button {
   border-radius: 8px;
+}
+
+.operation-dropdown-trigger {
+  min-width: 108px;
 }
 
 .quick-actions {
