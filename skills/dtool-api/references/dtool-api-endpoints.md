@@ -2,17 +2,18 @@
 
 ## 使用前置要求
 
-1. 默认服务地址：`http://localhost:17170`
+1. 服务请求地址必须由用户明确提供，不得假设默认地址。
 2. 路由前缀：`/api`
 3. 除 `ApiBatchImport` 外，均为 `POST + application/json`
-4. AI 在调用这些接口时，必须使用 UTF-8 编码处理请求与响应，尤其是 `name`、`desc`、错误信息、目录名、集合名等中文字段。
-5. 使用 PowerShell 或其他终端前，必须先切换 UTF-8 编码：
+4. 所有请求都必须携带 Header 头 `Token`，具体值必须由用户明确提供。
+5. AI 在调用这些接口时，必须使用 UTF-8 编码处理请求与响应，尤其是 `name`、`desc`、错误信息、目录名、集合名等中文字段。
+6. 使用 PowerShell 或其他终端前，必须先切换 UTF-8 编码：
 
 ```powershell
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 ```
 
-6. 如果通过脚本、终端或手工请求这些接口，默认都要按 UTF-8 发送请求体，并按 UTF-8 解读接口返回内容。
+7. 如果通过脚本、终端或手工请求这些接口，默认都要按 UTF-8 发送请求体，并按 UTF-8 解读接口返回内容。
 
 ## 一、集合相关
 

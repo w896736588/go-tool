@@ -15,15 +15,17 @@ description: Use when operating the dtool 接口开发模块 and the task involv
 2. AI 在操作 dtool 接口开发模块的所有接口时，必须使用 UTF-8 编码处理请求与响应，避免中文字段、错误信息、描述信息出现乱码。
 3. 使用 PowerShell 或其他终端前，必须先切换 UTF-8 编码.
 4. 改动或创建文件夹或接口时，统一使用 Python 脚本发送请求，避免 bash 环境的编码问题
+5. 调用 dtool 接口前，必须向用户确认请求地址，不得假设默认地址。
+6. 调用 dtool 接口前，必须向用户确认 Header 头 `Token` 的具体值；所有请求都必须携带 `Token`。
 
 ```powershell
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 ```
 
-4. 调用接口、拼装 JSON、读取接口返回、整理错误信息时，都要默认按 UTF-8 处理。
-5. 读取接口说明时，必须先看 [接口说明](references/dtool-api-endpoints.md)。
-6. 未确认集合、文件夹或风险边界前，不得直接写入接口数据。
-7. 需要批量覆盖、删除、移动时，必须先提示影响范围。
+7. 调用接口、拼装 JSON、读取接口返回、整理错误信息时，都要默认按 UTF-8 处理。
+8. 读取接口说明时，必须先看 [接口说明](references/dtool-api-endpoints.md)。
+9. 未确认集合、文件夹或风险边界前，不得直接写入接口数据。
+10. 需要批量覆盖、删除、移动时，必须先提示影响范围。
 
 ## 推荐工作流
 
