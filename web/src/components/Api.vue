@@ -841,12 +841,20 @@ export default {
       if (!tab) {
         return
       }
-      
+
       // 同步 selectedItem
       this.syncSelectedItemFromActiveTab()
-      
+
       // 同步左侧树高亮
       await this.highlightWorkspaceTreeNode(tab)
+
+      // 同步接口详情数据（已加载的接口 tab 需要手动触发 InitApiDetail，否则 Vue 复用组件导致内容不变）
+      if (tab.type === 'api' && tab.loaded && tab.data) {
+        await this.$nextTick()
+        if (this.$refs.refApiDetail) {
+          this.$refs.refApiDetail.InitApiDetail(tab.data)
+        }
+      }
     },
 
     // 高亮左侧树节点
