@@ -841,6 +841,11 @@ func SetMemoryConfigGet(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
+	fragmentPrompt, err := memoryConfigValue(define.GlobalHomeTaskFragmentPrompt)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`db_dir`:                            mainDBConfig.Dir,
 		`db_name`:                           mainDBConfig.DBName,
@@ -858,6 +863,7 @@ func SetMemoryConfigGet(c *gin.Context) {
 		`memory_arrange_model_id`:           cast.ToInt(arrangeModelID),
 		`home_task_daily_report_prompt`:     dailyReportPrompt,
 		`home_task_daily_report_model_id`:   cast.ToInt(dailyReportModelID),
+		`home_task_fragment_prompt`:         fragmentPrompt,
 		`safe_password`:                     component.ConfigViper.GetString(`safe.password`),
 		`run_mode`:                          component.EnvClient.SmartLinkConfig.RunMode,
 		`client_version`:                    component.EnvClient.SmartLinkConfig.ClientVersion,
@@ -915,6 +921,11 @@ func SetMemoryConfigSave(c *gin.Context) {
 		return
 	}
 	if err := common.DbMain.SetGlobalValue(`工作日报模型`, define.GlobalHomeTaskDailyReportModelID, cast.ToString(homeTaskDailyReportModelID), `首页任务工作日报所用模型 id`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskFragmentPrompt := strings.TrimSpace(cast.ToString(dataMap[`home_task_fragment_prompt`]))
+	if err := common.DbMain.SetGlobalValue(`任务知识片段提示词`, define.GlobalHomeTaskFragmentPrompt, homeTaskFragmentPrompt, `新建任务时自动创建知识片段的提示词模板`); err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}

@@ -7,6 +7,9 @@ type HomeTaskSaveRequest struct {
 	TaskStatus       string `json:"task_status"`
 	StartTime        int64  `json:"start_time"`
 	MemoryFragmentID any    `json:"memory_fragment_id"`
+	TapdUrl          string `json:"tapd_url"`
+	ApiHost          string `json:"api_host"`
+	ApiToken         string `json:"api_token"`
 }
 
 // HomeTaskListRequest 查询首页任务列表请求。

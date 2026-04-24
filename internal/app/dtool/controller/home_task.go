@@ -33,12 +33,15 @@ func HomeTaskList(c *gin.Context) {
 func HomeTaskSave(c *gin.Context) {
 	request := _struct.HomeTaskSaveRequest{}
 	_ = gsgin.GinPostBody(c, &request)
-	memoryFragmentID, err := ensureHomeTaskMemoryFragment(request.ID, request.Name, normalizeHomeTaskMemoryFragmentID(request.MemoryFragmentID))
+	memoryFragmentID, err := ensureHomeTaskMemoryFragment(
+		request.ID, request.Name, normalizeHomeTaskMemoryFragmentID(request.MemoryFragmentID),
+		request.TapdUrl, request.ApiHost, request.ApiToken,
+	)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	info, err := common.DbMain.HomeTaskSave(request.ID, request.Name, request.TaskStatus, request.StartTime, memoryFragmentID)
+	info, err := common.DbMain.HomeTaskSave(request.ID, request.Name, request.TaskStatus, request.StartTime, memoryFragmentID, request.TapdUrl)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
@@ -131,7 +134,7 @@ func HomeTaskDailyReportGenerate(c *gin.Context) {
 	})
 }
 
-func ensureHomeTaskMemoryFragment(taskID int, taskName string, memoryFragmentID string) (string, error) {
+func ensureHomeTaskMemoryFragment(taskID int, taskName string, memoryFragmentID string, tapdUrl string, apiHost string, apiToken string) (string, error) {
 	taskName = strings.TrimSpace(taskName)
 	if taskName == `` {
 		return ``, gstool.Error(`任务名称不能为空`)
@@ -152,7 +155,8 @@ func ensureHomeTaskMemoryFragment(taskID int, taskName string, memoryFragmentID 
 	if !shouldAutoCreateHomeTaskMemoryFragment(taskID, memoryFragmentID) {
 		return ``, nil
 	}
-	fragmentInfo, saveErr := memoryDB.MemoryFragmentSave(0, taskName, "# "+taskName+"\n\n", []string{`需求`})
+	fragmentContent := buildHomeTaskFragmentContent(taskName, tapdUrl, apiHost, apiToken)
+	fragmentInfo, saveErr := memoryDB.MemoryFragmentSave(0, taskName, fragmentContent, []string{`需求`})
 	if saveErr != nil {
 		return ``, saveErr
 	}
@@ -166,6 +170,21 @@ func ensureHomeTaskMemoryFragment(taskID int, taskName string, memoryFragmentID 
 
 func shouldAutoCreateHomeTaskMemoryFragment(taskID int, memoryFragmentID string) bool {
 	return taskID <= 0 && strings.TrimSpace(memoryFragmentID) == ``
+}
+
+func buildHomeTaskFragmentContent(taskName string, tapdUrl string, apiHost string, apiToken string) string {
+	content := "# " + taskName + "\n\n"
+	promptTemplate, _ := common.DbMain.GlobalValue(define.GlobalHomeTaskFragmentPrompt)
+	promptTemplate = strings.TrimSpace(promptTemplate)
+	if promptTemplate == `` {
+		return content
+	}
+	resolved := promptTemplate
+	resolved = strings.ReplaceAll(resolved, "{tapd_url}", tapdUrl)
+	resolved = strings.ReplaceAll(resolved, "{api_host}", apiHost)
+	resolved = strings.ReplaceAll(resolved, "{api_token}", apiToken)
+	content += resolved + "\n"
+	return content
 }
 
 func normalizeHomeTaskMemoryFragmentID(raw any) string {

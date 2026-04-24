@@ -185,6 +185,7 @@
                               <div class="home-task-card__meta">
                                 <span>开始时间：{{ task.start_time_desc || '-' }}</span>
                                 <span>最后操作：{{ task.last_operated_at_desc || '-' }}</span>
+                                <a v-if="task.tapd_url" :href="task.tapd_url" target="_blank" class="home-task-card__tapd-link">TAPD需求</a>
                                 <span class="home-task-card__status-group">
                                   <el-tag size="small" effect="light" :type="getHomeTaskStatusTagType(task.task_status)">
                                     {{ task.task_status }}
@@ -249,12 +250,12 @@
                               </GitActionButton>
                             </div>
                           </div>
-                          <!-- <div v-if="task.memory_fragment_id > 0" class="home-task-card__memory"> -->
-                            <!-- <div class="home-task-card__memory-label">关联知识片段</div> -->
-                            <!-- <div class="home-task-card__memory-title"> -->
-                              <!-- {{ task.memory_fragment?.title || `#${task.memory_fragment_id}` }} -->
-                            <!-- </div> -->
-                            <!-- <div v-if="hasHomeTaskMemoryFragment(task) && task.memory_fragment?.content" class="home-task-card__memory-content">
+                          <div v-if="hasHomeTaskMemoryFragment(task)" class="home-task-card__memory">
+                            <div class="home-task-card__memory-label">关联知识片段</div>
+                            <div class="home-task-card__memory-title">
+                              {{ task.memory_fragment?.title || `#${task.memory_fragment_id}` }}
+                            </div>
+                            <div v-if="task.memory_fragment?.content" class="home-task-card__memory-content">
                               <pre class="memory-content-text">{{ getFragmentPreview(task.memory_fragment.content, task.id) }}</pre>
                               <button
                                 v-if="isFragmentExpandable(task.memory_fragment.content)"
@@ -264,8 +265,8 @@
                               >
                                 {{ homeTaskExpandedFragments[task.id] ? '收起' : '展开' }}
                               </button>
-                            </div> -->
-                            <!-- <div v-if="Array.isArray(task.memory_fragment?.tags) && task.memory_fragment.tags.length > 0" class="home-task-card__memory-tags">
+                            </div>
+                            <div v-if="Array.isArray(task.memory_fragment?.tags) && task.memory_fragment.tags.length > 0" class="home-task-card__memory-tags">
                               <el-tag
                                 v-for="tag in task.memory_fragment.tags"
                                 :key="`${task.id}-${tag}`"
@@ -274,8 +275,8 @@
                               >
                                 {{ tag }}
                               </el-tag>
-                            </div> -->
-                          <!-- </div> -->
+                            </div>
+                          </div>
                           
                         </div>
                       </div>
@@ -297,6 +298,7 @@
                               <div class="home-task-card__meta">
                                 <span>开始时间：{{ task.start_time_desc || '-' }}</span>
                                 <span>最后操作：{{ task.last_operated_at_desc || '-' }}</span>
+                                <a v-if="task.tapd_url" :href="task.tapd_url" target="_blank" class="home-task-card__tapd-link">TAPD需求</a>
                               </div>
                             </div>
                             <div class="home-task-card__status-group">
@@ -635,6 +637,14 @@
             />
           </el-form-item>
         </el-col>
+        <el-col :span="24">
+          <el-form-item label="tapd需求地址">
+            <el-input
+              v-model="homeTaskForm.tapd_url"
+              placeholder="例如：https://www.tapd.cn/123456"
+            />
+          </el-form-item>
+        </el-col>
         <el-col :xs="24" :sm="12" :md="12">
           <el-form-item label="任务状态">
             <el-select v-model="homeTaskForm.task_status" style="width: 100%">
@@ -696,7 +706,7 @@
   <SettingsDialog
     v-model="homeTaskReportSettingsDialogVisible"
     title="工作日报 AI 设置"
-    width="760px"
+    width="80%"
     @closed="refreshHomeTaskReportSettings"
   >
     <HomeTaskReportSetting ref="homeTaskReportSetting" />
@@ -844,6 +854,7 @@ function createHomeTaskDefaultForm() {
     task_status: HOME_TASK_STATUS_TODO,
     start_date: getTodayDateText(),
     memory_fragment_id: '',
+    tapd_url: '',
   }
 }
 
@@ -1716,6 +1727,7 @@ export default {
         task_status: task.task_status || HOME_TASK_STATUS_TODO,
         start_date: task.start_time_desc || getTodayDateText(),
         memory_fragment_id: fragmentID,
+        tapd_url: task.tapd_url || '',
       }
       this.loadHomeTaskFragmentOptions(task.memory_fragment)
       this.homeTaskDialogVisible = true
@@ -1776,6 +1788,9 @@ export default {
         task_status: this.homeTaskForm.task_status,
         start_time: this.convertHomeTaskDateToUnix(this.homeTaskForm.start_date),
         memory_fragment_id: String(this.homeTaskForm.memory_fragment_id || '').trim(),
+        tapd_url: String(this.homeTaskForm.tapd_url || '').trim(),
+        api_host: base.GetApiHost() || window.location.origin,
+        api_token: base.GetSafeToken(),
       }, (response) => {
         this.homeTaskSaving = false
         this.homeTaskOperatingType = ''
@@ -2970,6 +2985,15 @@ export default {
   align-items: flex-start;
 }
 
+
+.home-task-card__tapd-link {
+  color: #3a7a3a;
+  text-decoration: none;
+  margin-left: 8px;
+}
+.home-task-card__tapd-link:hover {
+  text-decoration: underline;
+}
 .home-task-card__memory {
   margin-top: 14px;
   padding: 12px 14px;
