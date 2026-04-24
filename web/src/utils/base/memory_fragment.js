@@ -91,6 +91,13 @@ function GitPendingStatus(callBack) {
   base.BasePost('/api/GitPendingStatus', {}, callBack)
 }
 
+// MemoryFragmentImageUpload 上传图片到记忆库，返回可访问的 URL。
+function MemoryFragmentImageUpload(file, callBack) {
+  const form = new FormData()
+  form.append('file', file)
+  base.BasePostForm('/api/MemoryFragmentImageUpload', form, callBack)
+}
+
 export default {
   GitPendingStatus,
   MemoryFragmentStatus,
@@ -105,4 +112,5 @@ export default {
   MemoryFragmentTagList,
   MemoryFragmentSearch,
   MemoryFragmentOrganize,
+  MemoryFragmentImageUpload,
 }

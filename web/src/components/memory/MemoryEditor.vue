@@ -138,6 +138,7 @@
               :preview="false"
               :toolbars="toolbars"
               :style="editorContentStyle"
+              :onUploadImg="handleUploadImg"
             />
           </div>
           <div class="editor-preview-shell">
@@ -1244,6 +1245,23 @@ export default {
           this.$helperNotify.success(ORGANIZE_SUCCESS_TEXT)
         }
       )
+    },
+    // handleUploadImg 处理编辑器中的图片上传（粘贴、拖拽、工具栏上传）。
+    handleUploadImg(files, callback) {
+      const uploadPromises = Array.from(files).map((file) => {
+        return new Promise((resolve) => {
+          MemoryFragmentApi.MemoryFragmentImageUpload(file, (response) => {
+            if (response.ErrCode === 0 && response.Data && response.Data.url) {
+              resolve(base.GetApiHost() + response.Data.url)
+            } else {
+              resolve('')
+            }
+          })
+        })
+      })
+      Promise.all(uploadPromises).then((urls) => {
+        callback(urls.filter(Boolean))
+      })
     },
     // handleDelete 删除当前片段。
     handleDelete() {

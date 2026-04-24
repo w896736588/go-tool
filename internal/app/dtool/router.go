@@ -119,6 +119,7 @@ func baseRouter(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/Upload`, controller.Upload)                             //上传文件
 	tGin.GinGet(`/api/download/:name`, controller.DownloadWebFile)             //下载 web/download 目录文件
 	tGin.GinGet(`/web/download/:name`, controller.DownloadWebFile)             //兼容 web/download 直链下载
+	tGin.GinGet(`/memory/images/:name`, controller.MemoryFragmentImageServe)   //记忆库图片静态服务
 }
 
 // redis相关
@@ -281,6 +282,7 @@ func setMemoryFragment(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/MemoryFragmentTagList`, controller.MemoryFragmentTagList)
 	tGin.GinPost(`/api/MemoryFragmentSearch`, controller.MemoryFragmentSearch)
 	tGin.GinPost(`/api/MemoryFragmentOrganize`, controller.MemoryFragmentOrganize)
+	tGin.GinPost(`/api/MemoryFragmentImageUpload`, controller.MemoryFragmentImageUpload)
 	tGin.GinPost(`/api/AsyncTaskList`, controller.AsyncTaskList)
 	tGin.GinPost(`/api/AsyncTaskInfo`, controller.AsyncTaskInfo)
 	tGin.GinPost(`/api/AsyncTaskAction`, controller.AsyncTaskAction)

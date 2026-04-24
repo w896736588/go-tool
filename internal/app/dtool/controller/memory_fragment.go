@@ -5,6 +5,9 @@ import (
 	"dev_tool/internal/app/dtool/component"
 	"dev_tool/internal/app/dtool/define"
 	"dev_tool/internal/pkg/p_define"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -519,4 +522,58 @@ func stripMarkdownCodeFence(content string) string {
 		return strings.TrimSpace(strings.Join(lineList[1:len(lineList)-1], "\n"))
 	}
 	return content
+}
+
+// allowedImageExts 记忆库图片上传允许的文件扩展名。
+var allowedImageExts = map[string]bool{
+	`.png`: true, `.jpg`: true, `.jpeg`: true, `.gif`: true, `.webp`: true, `.bmp`: true, `.svg`: true,
+}
+
+// MemoryFragmentImageUpload 上传图片到记忆库 images 目录。
+func MemoryFragmentImageUpload(c *gin.Context) {
+	if err := component.MemoryRuntime.EnsureConfigured(); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	file, err := c.FormFile(`file`)
+	if err != nil {
+		gsgin.GinResponseError(c, `上传失败:`+err.Error(), nil)
+		return
+	}
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	if !allowedImageExts[ext] {
+		gsgin.GinResponseError(c, `不支持的图片格式: `+ext, nil)
+		return
+	}
+	imageDir := filepath.Join(component.MemoryRuntime.Config().Dir, `images`)
+	_ = gstool.DirCreatePath(imageDir)
+	newName := fmt.Sprintf(`%d%s`, time.Now().UnixMicro(), ext)
+	dst := filepath.Join(imageDir, newName)
+	if err := c.SaveUploadedFile(file, dst); err != nil {
+		gsgin.GinResponseError(c, `保存图片失败:`+err.Error(), nil)
+		return
+	}
+	urlPath := `/memory/images/` + newName
+	gsgin.GinResponseSuccess(c, ``, map[string]string{
+		`url`: urlPath,
+	})
+}
+
+// MemoryFragmentImageServe 提供记忆库图片的静态文件服务。
+func MemoryFragmentImageServe(c *gin.Context) {
+	if err := component.MemoryRuntime.EnsureConfigured(); err != nil {
+		c.Status(404)
+		return
+	}
+	imageName := strings.TrimSpace(c.Param(`name`))
+	if imageName == `` || strings.ContainsAny(imageName, `/\`) {
+		c.Status(404)
+		return
+	}
+	imagePath := filepath.Join(component.MemoryRuntime.Config().Dir, `images`, imageName)
+	if _, err := os.Stat(imagePath); err != nil {
+		c.Status(404)
+		return
+	}
+	c.File(imagePath)
 }
