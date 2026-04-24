@@ -250,33 +250,7 @@
                               </GitActionButton>
                             </div>
                           </div>
-                          <div v-if="hasHomeTaskMemoryFragment(task)" class="home-task-card__memory">
-                            <div class="home-task-card__memory-label">关联知识片段</div>
-                            <div class="home-task-card__memory-title">
-                              {{ task.memory_fragment?.title || `#${task.memory_fragment_id}` }}
-                            </div>
-                            <div v-if="task.memory_fragment?.content" class="home-task-card__memory-content">
-                              <pre class="memory-content-text">{{ getFragmentPreview(task.memory_fragment.content, task.id) }}</pre>
-                              <button
-                                v-if="isFragmentExpandable(task.memory_fragment.content)"
-                                type="button"
-                                class="memory-content-toggle"
-                                @click="toggleFragmentExpand(task.id)"
-                              >
-                                {{ homeTaskExpandedFragments[task.id] ? '收起' : '展开' }}
-                              </button>
-                            </div>
-                            <div v-if="Array.isArray(task.memory_fragment?.tags) && task.memory_fragment.tags.length > 0" class="home-task-card__memory-tags">
-                              <el-tag
-                                v-for="tag in task.memory_fragment.tags"
-                                :key="`${task.id}-${tag}`"
-                                size="small"
-                                effect="plain"
-                              >
-                                {{ tag }}
-                              </el-tag>
-                            </div>
-                          </div>
+
                           
                         </div>
                       </div>

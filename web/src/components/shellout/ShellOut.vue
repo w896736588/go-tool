@@ -191,6 +191,52 @@
       </el-table>
     </el-dialog>
 
+    <!-- 告警规则详情弹窗 -->
+    <el-dialog
+        v-model="alertRuleDetailDialogVisible"
+        :title="`告警详情 - ${currentAlertRuleName} - 共${currentAlertRuleErrors.length}条`"
+        width="80%"
+    >
+      <div class="error-list">
+        <div
+            v-for="(error) in currentAlertRuleErrors"
+            :key="error.line_number"
+            class="error-item card-item"
+            :data-line="error.line_number"
+        >
+          <div class="error-header">
+            <span class="error-time">{{ error.time }}</span>
+            <div class="error-tag-group">
+              <el-tag :type="getErrorTagType(error.level)" size="small" effect="plain">{{ error.level || 'warning' }}</el-tag>
+              <el-tag v-if="error.category" size="small" effect="plain">{{ error.category }}</el-tag>
+            </div>
+          </div>
+          <div class="error-content">
+            <span style="line-height:1.6" v-html="highlightErrors(error.error_line)"></span>
+          </div>
+          <div class="error-actions">
+            <pl-button
+                type="primary"
+                link
+                size="small"
+                @click="getErrorContent(error.line_number)"
+                class="context-btn"
+            >
+              <span class="btn-icon">📋</span>
+              查看上下文
+            </pl-button>
+          </div>
+        </div>
+        <div v-if="currentAlertRuleErrors.length === 0" class="no-errors">
+          <div class="no-data-icon">✅</div>
+          <div>该规则暂无触发记录</div>
+        </div>
+      </div>
+      <template #footer>
+        <pl-button @click="alertRuleDetailDialogVisible = false">关闭</pl-button>
+      </template>
+    </el-dialog>
+
     <!-- 过滤规则列表弹窗 -->
     <el-dialog
         v-model="filterRulesDialogVisible"
@@ -349,6 +395,9 @@ export default {
       filterDialogVisible: false,
       alertRulesDialogVisible: false,
       filterRulesDialogVisible: false,
+      alertRuleDetailDialogVisible: false,
+      currentAlertRuleName: '',
+      currentAlertRuleErrors: [],
       currentErrorTabId: '',
       currentErrorTabName: '',
 
@@ -816,21 +865,12 @@ export default {
     },
     // 查看告警规则详情
     viewAlertRuleDetails(rule) {
-      this.$alert(
-        `<div style="max-height: 400px; overflow-y: auto;">
-          <p><strong>规则名称：</strong>${rule.name}</p>
-          <p><strong>触发次数：</strong>${rule.triggerCount}</p>
-          <p><strong>匹配方式：</strong>${rule.matchType}</p>
-          <p><strong>匹配内容：</strong><code style="background: #f5f7fa; padding: 2px 6px; border-radius: 4px;">${rule.pattern}</code></p>
-          <p><strong>告警级别：</strong>${rule.level || 'warning'}</p>
-          ${rule.category ? `<p><strong>分类：</strong>${rule.category}</p>` : ''}
-        </div>`,
-        '规则详情',
-        {
-          dangerouslyUseHTMLString: true,
-          confirmButtonText: '关闭'
-        }
-      )
+      const tabId = this.currentErrorTabId
+      const alerts = Array.isArray(this.errorMapList[tabId]) ? this.errorMapList[tabId] : []
+      const ruleErrors = alerts.filter(item => (item.rule_name || '未命名规则') === rule.name)
+      this.currentAlertRuleName = rule.name
+      this.currentAlertRuleErrors = ruleErrors
+      this.alertRuleDetailDialogVisible = true
     },
     // 查看过滤规则详情
     viewFilterRuleDetails(rule) {
