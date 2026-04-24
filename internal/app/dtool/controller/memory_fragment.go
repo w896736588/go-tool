@@ -466,8 +466,8 @@ func memoryArrangeSystemPrompt() string {
 }
 
 func memoryArrangeConfig() (int, string, error) {
-	modelIDText, err := common.DbMain.GlobalValue(define.GlobalMemoryArrangeModelID)
-	if err != nil && !memoryConfigValueMissing(err) {
+	modelIDText, err := common.DbMain.MemoryConfigValue(define.MemoryConfigArrangeModelID)
+	if err != nil && !common.DbRowMissing(err) {
 		return 0, ``, err
 	}
 	modelID := cast.ToInt(modelIDText)
@@ -481,8 +481,8 @@ func memoryArrangeConfig() (int, string, error) {
 	if strings.ToLower(cast.ToString(modelInfo[`model_type`])) != `llm` {
 		return 0, ``, gstool.Error(`记忆整理仅支持 LLM 模型`)
 	}
-	prompt, err := common.DbMain.GlobalValue(define.GlobalMemoryArrangePrompt)
-	if err != nil && !memoryConfigValueMissing(err) {
+	prompt, err := common.DbMain.MemoryConfigValue(define.MemoryConfigArrangePrompt)
+	if err != nil && !common.DbRowMissing(err) {
 		return 0, ``, err
 	}
 	prompt = strings.TrimSpace(prompt)

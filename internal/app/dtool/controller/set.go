@@ -821,12 +821,12 @@ func SetGlobalDelete(c *gin.Context) {
 func SetMemoryConfigGet(c *gin.Context) {
 	mainDBConfig := business.ReadMainDBConfig()
 	memoryConfig := business.ReadMemoryConfigFromINI()
-	arrangePrompt, err := memoryConfigValue(define.GlobalMemoryArrangePrompt)
+	arrangePrompt, err := memoryConfigValue(define.MemoryConfigArrangePrompt)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	arrangeModelID, err := memoryConfigValue(define.GlobalMemoryArrangeModelID)
+	arrangeModelID, err := memoryConfigValue(define.MemoryConfigArrangeModelID)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
@@ -854,7 +854,6 @@ func SetMemoryConfigGet(c *gin.Context) {
 		`db_auto_push_delay_minutes`:        business.ReadMainDBAutoSyncConfig().AutoSyncMinutes,
 		`log_db_path`:                       component.EnvClient.LogDbConfig.DbPath,
 		`memory_dir`:                        memoryConfig.Dir,
-		`memory_db_name`:                    ``,
 		`memory_db_configured`:              memoryConfig.Dir != ``,
 		`memory_db_is_git_repo`:             memoryConfig.GitRepoEnabled,
 		`memory_db_auto_push_delay_minutes`: memoryConfig.AutoPushDelayMinutes,
@@ -891,11 +890,11 @@ func SetMemoryConfigSave(c *gin.Context) {
 			return
 		}
 	}
-	if err := common.DbMain.SetGlobalValue(`记忆整理提示词`, define.GlobalMemoryArrangePrompt, memoryArrangePrompt, `知识片段 AI 整理提示词`); err != nil {
+	if err := common.DbMain.MemoryConfigSave(`记忆整理提示词`, define.MemoryConfigArrangePrompt, memoryArrangePrompt, `知识片段 AI 整理提示词`); err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	if err := common.DbMain.SetGlobalValue(`记忆整理模型`, define.GlobalMemoryArrangeModelID, cast.ToString(memoryArrangeModelID), `知识片段 AI 整理所用模型 id`); err != nil {
+	if err := common.DbMain.MemoryConfigSave(`记忆整理模型`, define.MemoryConfigArrangeModelID, cast.ToString(memoryArrangeModelID), `知识片段 AI 整理所用模型 id`); err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
@@ -1220,19 +1219,14 @@ func homeTaskConfigValue(key string) (string, error) {
 }
 
 func memoryConfigValue(key string) (string, error) {
-	value, err := common.DbMain.GlobalValue(key)
+	value, err := common.DbMain.MemoryConfigValue(key)
 	if err != nil {
-		if memoryConfigValueMissing(err) {
+		if common.DbRowMissing(err) {
 			return ``, nil
 		}
 		return ``, err
 	}
 	return value, nil
-}
-
-func memoryConfigValueMissing(err error) bool {
-	errText := strings.ToLower(err.Error())
-	return strings.Contains(errText, `not found`) || strings.Contains(errText, `no rows`)
 }
 
 func SetAccountList(c *gin.Context) {

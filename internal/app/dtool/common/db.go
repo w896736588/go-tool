@@ -423,6 +423,44 @@ func (h *CSqlite) HomeTaskConfigSave(name, key, value, desc string) error {
 	return err
 }
 
+// MemoryConfigValue 按 key 从 tbl_memory_config 读取配置值。
+func (h *CSqlite) MemoryConfigValue(key string) (string, error) {
+	one, err := h.Client.QuickQuery(`tbl_memory_config`, `*`, map[string]any{
+		`key`: key,
+	}).Order(`id asc`).One()
+	if err != nil {
+		return ``, err
+	}
+	return cast.ToString(one[`value`]), nil
+}
+
+// MemoryConfigSave 按 key 保存记忆配置（upsert）。
+func (h *CSqlite) MemoryConfigSave(name, key, value, desc string) error {
+	now := time.Now().Unix()
+	one, err := h.Client.QuickQuery(`tbl_memory_config`, `*`, map[string]any{
+		`key`: key,
+	}).Order(`id asc`).One()
+	if err != nil && !DbRowMissing(err) {
+		return err
+	}
+	updateData := map[string]any{
+		`name`:        name,
+		`key`:         key,
+		`value`:       value,
+		`desc`:        desc,
+		`update_time`: now,
+	}
+	if cast.ToInt(one[`id`]) > 0 {
+		_, err = h.Client.QuickUpdate(`tbl_memory_config`, map[string]any{
+			`id`: one[`id`],
+		}, updateData).Exec()
+		return err
+	}
+	updateData[`create_time`] = now
+	_, err = h.Client.QuickCreate(`tbl_memory_config`, updateData).Exec()
+	return err
+}
+
 func (h *CSqlite) CmdList(variableId any) ([]map[string]any, error) {
 	return h.Client.QuickQuery(`tbl_variable_cmd`, `*`, map[string]any{
 		`variable_id`: variableId,
