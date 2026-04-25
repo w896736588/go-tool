@@ -904,15 +904,6 @@ export default {
         user_name: chooseUser.user_name || '',
         password: chooseUser.password || '',
         open_num: chooseSmartLink.open_num_new,
-        open_type: chooseSmartLink.open_type_new,
-        run_params: JSON.stringify({
-          id: chooseSmartLink.id,
-          label: chooseLink.label,
-          user_name: chooseUser.user_name,
-          password: chooseUser.password,
-          open_num: chooseSmartLink.open_num_new,
-          open_type: chooseSmartLink.open_type_new
-        })
       }
 
       fetch(

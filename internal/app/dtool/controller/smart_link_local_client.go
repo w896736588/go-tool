@@ -232,11 +232,11 @@ func SmartLinkTaskCreate(c *gin.Context) {
 	label := cast.ToString(req["label"])
 	userName := cast.ToString(req["user_name"])
 	password := cast.ToString(req["password"])
-	openType := cast.ToInt(req["open_type"])
 	openNum := cast.ToInt(req["open_num"])
 	replaceList := make(map[string]string)
 
-	runParams, runParamsErr := plw.GetRunParams(id, label, userName, password, openType, openNum, replaceList)
+	// open_type 由后端从数据库 tbl_smart_link.open_type 获取，openType 传 0 表示使用数据库值
+	runParams, runParamsErr := plw.GetRunParams(id, label, userName, password, 0, openNum, replaceList)
 	if runParamsErr != nil {
 		gsgin.GinResponseError(c, "构建运行参数失败: "+runParamsErr.Error(), nil)
 		return
