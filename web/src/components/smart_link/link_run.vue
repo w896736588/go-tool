@@ -220,8 +220,9 @@
 
   <shellResult ref="shellRef" :btnName="'运行日志'" :isRunning="shellController.isRunning" :shellShowResult="shellController.sshResult" :show-model="shellController.showModel"></shellResult>
   <el-dialog v-model="dialogShowUserPass" title="账号密码列表" width="90%">
+    <el-input v-model="userPassSearchKeyword" clearable placeholder="搜索环境、用户名或密码" style="margin-bottom: 12px" />
     <el-table
-        :data="showUserPassList"
+        :data="filteredUserPassList"
         border
         highlight-current-row
         stripe
@@ -339,6 +340,7 @@ export default {
       dialogShowUserPass: false,
       dialogSsePushLog: false,
       showUserPassList: [],
+      userPassSearchKeyword: '',
       dialogSmartLink: false,
       openTypeList: [
         {label: '通过js直接打开', value: 1},
@@ -472,7 +474,16 @@ export default {
       }
       // 服务端模式下检查 Node.js
       return !this.node_install_tip.show
-    }
+    },
+    filteredUserPassList() {
+      const keyword = this.userPassSearchKeyword.trim().toLowerCase()
+      if (!keyword) return this.showUserPassList
+      return this.showUserPassList.filter(item =>
+        (item.label || '').toLowerCase().includes(keyword) ||
+        (item.username || '').toLowerCase().includes(keyword) ||
+        (item.password || '').toLowerCase().includes(keyword)
+      )
+    },
   },
   mounted: function () {
     this.sse_distribute_id = sseDistribute.GetSseDistributeId('link')

@@ -159,6 +159,17 @@
             placeholder='可选，例如 {"Authorization":"Bearer xxx"}'
           />
         </el-form-item>
+        <el-form-item label="执行流程">
+          <el-alert :closable="false" show-icon title="留空则使用总链接配置的执行流程" type="info" />
+          <el-select v-model="linkItemDraft.process_id" clearable placeholder="使用默认流程" style="width: 100%">
+            <el-option
+              v-for="proc in processOptions"
+              :key="proc.id"
+              :label="proc.name"
+              :value="proc.id"
+            />
+          </el-select>
+        </el-form-item>
       </el-form>
       <template #footer>
         <GitActionButton @click="closeLinkDialog">取消</GitActionButton>
@@ -170,6 +181,7 @@
 
 <script>
 import accountSet from '@/utils/base/account_set'
+import Process from '@/utils/base/smart_link_proces'
 import GitActionButton from '@/components/base/GitActionButton.vue'
 
 const createUid = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
@@ -183,6 +195,7 @@ const createLinkItem = () => ({
   account_group_name: '',
   cookie: '',
   headers: '',
+  process_id: 0,
 })
 const createCookieItem = () => ({
   uid: createUid('cookie'),
@@ -219,6 +232,7 @@ export default {
   data() {
     return {
       accountGroupOptions: [],
+      processOptions: [],
       linkItems: [],
       linkSearchKeyword: '',
       linkItemDialogVisible: false,
@@ -248,6 +262,7 @@ export default {
   mounted() {
     // 加载账号分组选项 / Load account group options for the single-select field.
     this.loadAccountGroupOptions()
+    this.loadProcessOptions()
   },
   watch: {
     modelValue: {
@@ -282,6 +297,14 @@ export default {
         }
       })
     },
+    loadProcessOptions() {
+      const _that = this
+      Process.SmartProcessList(function (response) {
+        if (response && response.ErrCode === 0 && response.Data && Array.isArray(response.Data.list)) {
+          _that.processOptions = response.Data.list
+        }
+      })
+    },
     // 复制链接项草稿，避免弹窗内联动列表 / Clone draft data so dialog edits do not mutate the list before save.
     cloneLinkItem(item = {}) {
       return {
@@ -294,6 +317,7 @@ export default {
         account_group_name: item.account_group_name || this.parseAccountGroupName(item.account_list),
         cookie: item.cookie || '',
         headers: typeof item.headers === 'string' ? item.headers : JSON.stringify(item.headers || {}, null, 2),
+        process_id: item.process_id || 0,
       }
     },
     // 生成编辑器受控字段快照 / Build normalized payload for loop-safe sync.
@@ -306,6 +330,7 @@ export default {
         account_list: this.formatAccountListValue(item.account_group_name),
         cookie: item.cookie,
         headers: safeParseJson(item.headers, {}),
+        process_id: item.process_id || 0,
       }))
       const showCookies = this.cookieItems.map(item => ({
         find_type: item.find_type,
