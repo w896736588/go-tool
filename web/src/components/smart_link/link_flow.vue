@@ -448,7 +448,7 @@ export default {
         state.editingItem.x = currentNode.position.x
         state.editingItem.y = currentNode.position.y
       }
-
+      state.editingItem.smart_link_process_id = state.activeProcess.id
       API.SmartProcessItemAdd(state.editingItem, function () {
         state.dialogProcessItem = false
         fetchProcessItems(state.activeProcess.id)

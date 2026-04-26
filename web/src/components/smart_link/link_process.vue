@@ -572,6 +572,7 @@ export default {
         ElMessage.error('请先修正表单中的格式问题，再保存流程项。')
         return
       }
+      state.editingItem.smart_link_process_id = state.activeProcess.id
       API.SmartProcessItemAdd(state.editingItem, function () {
         state.dialogProcessItem = false
         fetchProcessItems(state.activeProcess.id)
