@@ -2,6 +2,7 @@ package common
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -55,7 +56,7 @@ func (h *CSqlite) AsyncTaskCreate(taskType, title, sourceID string, requestPaylo
 // AsyncTaskList 查询异步任务列表，默认按 id 倒序返回。 // AsyncTaskList returns async tasks ordered by newest first.
 func (h *CSqlite) AsyncTaskList(limit int) ([]map[string]any, error) {
 	query := h.Client.QueryBySql(`
-select id,task_type,task_status,title,source_id,request_payload,result_payload,error_message,create_time,start_time,finish_time,update_time
+select id,task_type,task_status,title,source_id,request_payload,result_payload,error_message,run_logs,create_time,start_time,finish_time,update_time
 from tbl_async_task
 order by id desc`)
 	if limit > 0 {
@@ -88,7 +89,7 @@ func (h *CSqlite) AsyncTaskLatestPendingByType(taskType string) (map[string]any,
 		return nil, errors.New(`任务类型不能为空`)
 	}
 	list, err := h.Client.QueryBySql(`
-select id,task_type,task_status,title,source_id,request_payload,result_payload,error_message,create_time,start_time,finish_time,update_time
+select id,task_type,task_status,title,source_id,request_payload,result_payload,error_message,run_logs,create_time,start_time,finish_time,update_time
 from tbl_async_task
 where task_type = ? and task_status = ?
 order by id desc
@@ -141,6 +142,32 @@ func (h *CSqlite) AsyncTaskMarkFinal(id int, status string) error {
 func (h *CSqlite) AsyncTaskUpdateRequestPayload(id int, requestPayload string) error {
 	return h.asyncTaskUpdateStatus(id, ``, map[string]any{
 		`request_payload`: requestPayload,
+	})
+}
+
+// AsyncTaskAppendRunLog 追加一条异步任务运行日志，便于前端展示后台执行进度。
+func (h *CSqlite) AsyncTaskAppendRunLog(id int, step, message string) error {
+	if id <= 0 {
+		return errors.New(`异步任务id不能为空`)
+	}
+	info, err := h.AsyncTaskInfo(id)
+	if err != nil {
+		return err
+	}
+	step = strings.TrimSpace(step)
+	message = strings.TrimSpace(message)
+	if step == `` && message == `` {
+		return nil
+	}
+	line := fmt.Sprintf("[%s] %s %s", time.Now().Format("2006-01-02 15:04:05"), step, message)
+	line = strings.TrimSpace(line)
+	existing := strings.TrimSpace(cast.ToString(info[`run_logs`]))
+	nextLogs := line
+	if existing != `` {
+		nextLogs = existing + "\n" + line
+	}
+	return h.asyncTaskUpdateStatus(id, ``, map[string]any{
+		`run_logs`: nextLogs,
 	})
 }
 

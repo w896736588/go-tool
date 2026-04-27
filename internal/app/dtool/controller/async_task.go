@@ -284,20 +284,24 @@ func runAsyncTaskAndPersistResult(taskID int, builder func() (map[string]any, er
 	if common.DbLog == nil || common.DbLog.Client == nil {
 		return
 	}
+	appendAsyncTaskRunLog(taskID, "调度任务", "准备进入后台执行")
 	if err := common.DbLog.AsyncTaskMarkRunning(taskID); err != nil {
 		return
 	}
+	appendAsyncTaskRunLog(taskID, "调度任务", "任务已标记为运行中")
 	// 中文注释：任务状态变为 running，主动推送更新。
 	// English comment: Task status changed to running, broadcast update.
 	BroadcastAsyncTasksUpdate()
 	resultMap, err := builder()
 	if err != nil {
+		appendAsyncTaskRunLog(taskID, "执行结果", "失败: "+err.Error())
 		_ = common.DbLog.AsyncTaskMarkFailed(taskID, err.Error())
 		// 中文注释：任务状态变为 failed，主动推送更新。
 		// English comment: Task status changed to failed, broadcast update.
 		BroadcastAsyncTasksUpdate()
 		return
 	}
+	appendAsyncTaskRunLog(taskID, "执行结果", "执行成功，等待用户确认")
 	resultPayload := gstool.JsonEncode(resultMap)
 	if markErr := common.DbLog.AsyncTaskMarkAwaitConfirm(taskID, resultPayload); markErr != nil {
 		return
@@ -305,6 +309,15 @@ func runAsyncTaskAndPersistResult(taskID int, builder func() (map[string]any, er
 	// 中文注释：任务状态变为 await_confirm，主动推送更新。
 	// English comment: Task status changed to await_confirm, broadcast update.
 	BroadcastAsyncTasksUpdate()
+}
+
+func appendAsyncTaskRunLog(taskID int, step, message string) {
+	if common.DbLog == nil || common.DbLog.Client == nil {
+		return
+	}
+	if err := common.DbLog.AsyncTaskAppendRunLog(taskID, step, message); err != nil {
+		gstool.FmtPrintlnLogTime(`[AsyncTaskRunLog] 写入运行日志失败 task_id=%d step=%s err=%s`, taskID, step, err.Error())
+	}
 }
 
 // asyncTaskDBOrResponse 返回日志库实例。 // asyncTaskDBOrResponse returns the log database instance or writes an error response.
@@ -442,6 +455,13 @@ func defaultBuildAsyncMemoryArrangeResult(title, content string) (map[string]any
 
 // buildAsyncHomeTaskTapdScrapeResult 构建首页 TAPD 网页抓取异步任务结果。
 func buildAsyncHomeTaskTapdScrapeResult(tapdURL, memoryFragmentID string) (map[string]any, error) {
+	return buildAsyncHomeTaskTapdScrapeResultWithLog(tapdURL, memoryFragmentID, nil)
+}
+
+func buildAsyncHomeTaskTapdScrapeResultWithLog(tapdURL, memoryFragmentID string, logStep func(string, string)) (map[string]any, error) {
+	if logStep != nil {
+		logStep("读取配置", "开始读取 TAPD 抓取配置")
+	}
 	smartLinkIDStr, err := homeTaskConfigValue(define.HomeTaskConfigTapdSmartLinkID)
 	if err != nil {
 		return nil, fmt.Errorf("读取 TAPD 自定义网页配置失败: %w", err)
@@ -479,14 +499,24 @@ func buildAsyncHomeTaskTapdScrapeResult(tapdURL, memoryFragmentID string) (map[s
 		waitSeconds = maxSmartLinkScrapeWaitSeconds
 	}
 
+	if logStep != nil {
+		logStep("下发任务", fmt.Sprintf("准备下发 Agent 抓取任务 smart_link_id=%d label=%s wait_seconds=%d", smartLinkID, linkLabel, waitSeconds))
+	}
 	resultFile, dispatchErr := dispatchScrapeTaskAndAwait(smartLinkID, linkLabel, tapdURL, cssSelector, waitSeconds)
 	if dispatchErr != nil {
 		return nil, dispatchErr
+	}
+	if logStep != nil {
+		logStep("下发任务", "Agent 已返回抓取结果: "+resultFile.FileName)
+		logStep("处理结果", "开始解压 ZIP 并转换图片路径")
 	}
 
 	zipResult, zipErr := processScrapeZipResult(resultFile.DownloadURL, memoryFragmentID)
 	if zipErr != nil {
 		return nil, zipErr
+	}
+	if logStep != nil {
+		logStep("处理结果", "ZIP 处理完成")
 	}
 
 	return zipResult, nil

@@ -62,7 +62,10 @@ func HomeTaskSave(c *gin.Context) {
 			},
 			func(asyncTaskID int) {
 				runAsyncTaskAndPersistResult(asyncTaskID, func() (map[string]any, error) {
-					return buildAsyncHomeTaskTapdScrapeResultFn(request.TapdUrl, memoryFragmentID)
+					return buildAsyncHomeTaskTapdScrapeResultWithLog(request.TapdUrl, memoryFragmentID, func(step, message string) {
+						appendAsyncTaskRunLog(asyncTaskID, step, message)
+						BroadcastAsyncTasksUpdate()
+					})
 				})
 			},
 		)

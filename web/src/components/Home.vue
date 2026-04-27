@@ -536,6 +536,10 @@
           <div v-if="asyncTaskDetail.error_message" class="async-task-detail__error">
             {{ asyncTaskDetail.error_message }}
           </div>
+          <div v-if="asyncTaskDetail.run_logs" class="async-task-detail__logs">
+            <div class="async-task-detail__logs-title">运行日志</div>
+            <pre class="async-task-detail__logs-pre">{{ asyncTaskDetail.run_logs }}</pre>
+          </div>
           <div v-if="asyncTaskDetail.task_type === ASYNC_TASK_TYPE_DAILY_REPORT" class="async-task-detail__content">
             <div class="async-task-detail__section-title">日报预览</div>
             <pre class="async-task-detail__pre">{{ asyncTaskDetail.result_payload_map?.markdown || '' }}</pre>
@@ -2746,13 +2750,36 @@ export default {
 .async-task-detail__pre {
   margin: 0;
   padding: 14px;
-  border-radius: 12px;
+  border-radius: 8px;
   background: #f5f6ef;
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 420px;
   overflow: auto;
   min-height: 220px;
+}
+
+.async-task-detail__logs {
+  margin-bottom: 14px;
+}
+
+.async-task-detail__logs-title {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #4a5441;
+}
+
+.async-task-detail__logs-pre {
+  margin: 0;
+  padding: 12px;
+  border-radius: 8px;
+  background: #eef4ff;
+  color: #34425c;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 180px;
+  overflow: auto;
 }
 
 /* TAPD 抓取预览：查看/源码切换按钮区 */
@@ -2799,7 +2826,7 @@ export default {
 .async-task-detail__error,
 .async-task-empty {
   padding: 18px;
-  border-radius: 12px;
+  border-radius: 8px;
   background: #f7f4ea;
   color: #705e42;
 }
