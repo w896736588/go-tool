@@ -49,8 +49,20 @@
       </div>
 
       <el-scrollbar v-show="!sidebarCollapsed" class="sidebar-scroll">
+        <div class="sidebar-filter-row">
+          <el-input
+            v-model="sidebarFilterQuery"
+            clearable
+            placeholder="过滤列表"
+            size="small"
+          >
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
+        </div>
         <button
-          v-for="item in fragmentList"
+          v-for="item in filteredFragmentList"
           :key="sidebarItemKey(item)"
           :class="[
             'sidebar-item',
@@ -358,6 +370,7 @@ export default {
       routeFragmentHandled: false,
       routeFragmentHandledPath: '',
       sidebarCollapsed: localStorage.getItem('memorySidebarCollapsed') === 'true',
+      sidebarFilterQuery: '',
     }
   },
   computed: {
@@ -401,6 +414,17 @@ export default {
         return '输入想要查询的内容，自然语言描述，回车打开结果页'
       }
       return '输入关键词，多个关键词使用空格分隔，回车打开结果页'
+    },
+    // filteredFragmentList 根据侧边栏搜索框过滤片段列表，多关键词空格分隔且全部匹配。
+    filteredFragmentList() {
+      const raw = this.sidebarFilterQuery.trim().toLowerCase()
+      if (!raw) return this.fragmentList
+      const keywords = raw.split(/\s+/)
+      return this.fragmentList.filter(item => {
+        const title = (item.title || '').toLowerCase()
+        const filePath = (item.file_path || '').toLowerCase()
+        return keywords.every(kw => title.includes(kw) || filePath.includes(kw))
+      })
     }
   },
   mounted() {
@@ -684,6 +708,28 @@ export default {
       }
       MemoryFragmentApi.MemoryFragmentList(0, (response) => {
         this.fragmentList = Array.isArray(response.Data) ? response.Data : []
+        this.ensureDefaultFragmentTab()
+      })
+    },
+    // loadFragmentListPreservingOrder 加载最新数据但保持侧边栏列表的原有顺序，避免过滤状态下保存后顺序跳动。
+    loadFragmentListPreservingOrder() {
+      if (!this.memoryConfigured) {
+        return
+      }
+      const currentOrderIds = this.fragmentList.map(item => this.normalizeFragmentId(item.id || item.file_id))
+      MemoryFragmentApi.MemoryFragmentList(0, (response) => {
+        const newList = Array.isArray(response.Data) ? response.Data : []
+        const newMap = new Map(newList.map(item => [this.normalizeFragmentId(item.id || item.file_id), item]))
+        const ordered = []
+        currentOrderIds.forEach(id => {
+          const item = newMap.get(id)
+          if (item) {
+            ordered.push(item)
+            newMap.delete(id)
+          }
+        })
+        newMap.forEach(item => ordered.push(item))
+        this.fragmentList = ordered
         this.ensureDefaultFragmentTab()
       })
     },
@@ -1123,7 +1169,11 @@ export default {
       target.savedFragment = this.cloneFragment(target.fragment)
       target.dirty = false
       this.triggerFragmentSaveFeedback(target.fragment.id)
-      this.loadFragmentList()
+      if (this.sidebarFilterQuery.trim()) {
+        this.loadFragmentListPreservingOrder()
+      } else {
+        this.loadFragmentList()
+      }
       this.loadTrashList()
       this.rerunSubmittedSearch()
     },
@@ -1281,6 +1331,10 @@ export default {
 
 .sidebar-scroll {
   flex: 1;
+}
+
+.sidebar-filter-row {
+  padding: 6px 10px 0;
 }
 
 .sidebar-footer {
