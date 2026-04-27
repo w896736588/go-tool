@@ -228,10 +228,4 @@ export default {
 }
 </script>
 
-<style scoped>
-@import "@/css/set_module_unified.css";
-
-.memory-config-form {
-  margin-bottom: 0;
-}
-</style>
+<style scoped src="@/css/components/set/home_task_report.css"></style>

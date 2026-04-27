@@ -105,16 +105,4 @@ export default {
 }
 </script>
 
-<style scoped>
-@import "@/css/set_module_unified.css";
-
-.memory-config-form {
-  margin-bottom: 0;
-}
-
-.cron-field-help {
-  margin-top: 4px;
-  color: #7a7a6a;
-  font-size: 12px;
-}
-</style>
+<style scoped src="@/css/components/set/cron_setting.css"></style>

@@ -261,26 +261,7 @@
     <AccountSettingPage @changed="handleAccountSettingsChanged" />
   </SettingsDialog>
 </template>
-<style>
-
-.demo-form-inline .el-input {
-  --el-input-width: 220px;
-}
-
-
-.demo-form-inline {
-  display: flex;
-  justify-content: center; /* 水平居中 */
-}
-
-.el-alert {
-  margin: 3px;
-}
-
-.demo-form-inline .el-select {
-  --el-select-width: 220px;
-}
-</style>
+<style scoped src="@/css/components/smart_link/link_run.css"></style>
 <script>
 import smart_link_set from "@/utils/base/smart_link_set"
 import base from "@/utils/base";
