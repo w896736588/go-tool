@@ -306,7 +306,7 @@ export default {
     },
 
     hasLastResult(api) {
-      return api && (api.last_result !== '') && api.last_result !== '{}'
+      return api && api.last_result && api.last_result !== '{}'
     },
 
     formatJsonBody(body) {
@@ -320,6 +320,26 @@ export default {
         return body
       } catch (e) {
         return body
+      }
+    },
+
+    formatMarkdownBlockquote(content) {
+      if (content === undefined || content === null) return ''
+      const text = String(content)
+      return text.split('\n').map(line => line === '' ? '>' : `> ${line}`).join('\n')
+    },
+
+    getLastResultExample(api) {
+      if (!this.hasLastResult(api)) return ''
+
+      try {
+        const lastResultData = JSON.parse(api.last_result)
+        if (lastResultData && Object.prototype.hasOwnProperty.call(lastResultData, 'result')) {
+          return this.formatJsonBody(lastResultData.result)
+        }
+        return this.formatJsonBody(lastResultData)
+      } catch {
+        return this.formatJsonBody(api.last_result)
       }
     },
 
@@ -382,9 +402,10 @@ export default {
         markdownLines.push('');
 
         //描述
-        if(api.desc !== ''){
-          markdownLines.push(`备注 `);
-          markdownLines.push(...api.desc.split('\n'));
+        if(api.desc){
+          markdownLines.push('备注');
+          markdownLines.push('');
+          markdownLines.push(this.formatMarkdownBlockquote(api.desc));
           markdownLines.push('');
         }
 
@@ -462,16 +483,13 @@ export default {
           markdownLines.push('');
         }
 
-        // 请求结果
-        // if (this.hasLastResult(api)) {
-        //   api.last_result_data = JSON.parse(api.last_result)
-        //   markdownLines.push('### 请求结果');
-        //   markdownLines.push('');
-        //   markdownLines.push('```json');
-        //   markdownLines.push(this.formatJsonBody(api.last_result_data.result));
-        //   markdownLines.push('```');
-        //   markdownLines.push('');
-        // }
+        // 返回结果示例
+        if (this.hasLastResult(api)) {
+          markdownLines.push('返回结果示例');
+          markdownLines.push('');
+          markdownLines.push(this.formatMarkdownBlockquote(this.getLastResultExample(api)));
+          markdownLines.push('');
+        }
 
         // 分隔线（除最后一个API外）
         if (index < this.apis.length - 1) {
