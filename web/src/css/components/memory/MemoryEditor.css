@@ -275,23 +275,29 @@
 
 .editor-body-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
   flex-shrink: 0;
 }
 
-.toolbar-icon-button {
+.editor-body-actions > .el-tooltip__trigger {
+  margin: 0;
+  padding: 0;
+}
+
+.editor-body-actions :deep(.toolbar-icon-button),
+.editor-body-actions :deep(.toolbar-icon-button.git-action-button--compact) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 30px;
   min-width: 30px;
   height: 30px;
-  padding: 0;
+  padding: 0 !important;
   line-height: 1;
 }
 
-.toolbar-icon-button :deep(span) {
+.editor-body-actions :deep(.toolbar-icon-button span) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -299,7 +305,7 @@
   height: 100%;
 }
 
-.toolbar-icon-button :deep(.el-icon) {
+.editor-body-actions :deep(.toolbar-icon-button .el-icon) {
   margin: 0;
   font-size: 15px;
   line-height: 1;

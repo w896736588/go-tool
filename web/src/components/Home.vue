@@ -18,7 +18,11 @@
       >
         <el-menu-item index="/Dashboard">
           <el-icon><HomeFilled /></el-icon>
-          <span>首页</span>
+          <span>Command</span>
+        </el-menu-item>
+        <el-menu-item index="/HomeTask">
+          <el-icon><List /></el-icon>
+          <span>Task</span>
         </el-menu-item>
         <el-menu-item v-if="checkModuleOpen('redis')" index="/Redis">
           <el-icon><Coin /></el-icon>
@@ -38,15 +42,15 @@
         <!-- </el-menu-item> -->
         <el-menu-item v-if="checkModuleOpen('login')" index="/Link">
           <el-icon><Link /></el-icon>
-          <span>自定义网页</span>
+          <span>Playwright</span>
         </el-menu-item>
         <el-menu-item v-if="checkModuleOpen('variable')" index="/Variable">
           <el-icon><Document /></el-icon>
-          <span>自定义脚本</span>
+          <span>Script</span>
         </el-menu-item>
         <el-menu-item v-if="checkModuleOpen('memory_fragment')" index="/MemoryFragment">
           <el-icon><Memo /></el-icon>
-          <span>知识片段</span>
+          <span>Knowlange</span>
           <div v-if="gitPendingStatus.memoryPending" class="menu-countdown-bar">
             <div class="menu-countdown-bar__fill" :style="{ width: memoryCountdownPercent + '%' }"></div>
           </div>
@@ -57,15 +61,15 @@
         </el-menu-item>
         <el-menu-item v-if="checkModuleOpen('api')" index="/Api">
           <el-icon><Connection /></el-icon>
-          <span>接口开发</span>
+          <span>Api Manage</span>
         </el-menu-item>
         <el-menu-item v-if="checkModuleOpen('shellout')" index="/shellout">
           <el-icon><Monitor /></el-icon>
-          <span>终端输出</span>
+          <span>Log Witch</span>
         </el-menu-item>
         <el-menu-item index="/Set" class="menu-item-settings">
           <el-icon><Setting /></el-icon>
-          <span>配置</span>
+          <span>Setting</span>
           <div v-if="gitPendingStatus.mainDBPending" class="menu-countdown-bar">
             <div class="menu-countdown-bar__fill" :style="{ width: mainDBCountdownPercent + '%' }"></div>
           </div>
@@ -127,268 +131,7 @@
     <!-- 主内容区域 -->
     <main class="main-content">
       <div class="main-content__body">
-        <div
-          v-if="isDashboardRoute"
-          class="home-dashboard-stage"
-          @wheel="handleDashboardWheel"
-        >
-          <div
-            class="home-dashboard-track"
-            :class="{ 'home-dashboard-track--animating': homeDashboardAnimating }"
-            :style="homeDashboardTrackStyle"
-          >
-            <section class="home-dashboard-screen home-dashboard-screen--command">
-              <div class="main-content__view main-content__view--dashboard">
-                <router-view v-slot="{ Component, route }" name="home">
-                  <keep-alive>
-                    <component :is="Component" ref="currentRef"/>
-                  </keep-alive>
-                </router-view>
-              </div>
-            </section>
-
-            <section class="home-dashboard-screen home-dashboard-screen--task">
-              <div ref="homeTaskPanelScroll" class="home-task-panel-scroll">
-                <section class="home-task-panel">
-                  <div class="home-task-panel__header">
-                    <div class="home-task-panel__heading">
-                      <div class="home-task-panel__title">任务清单</div>
-                    </div>
-                    <div class="home-task-toolbar__actions">
-                      <GitActionButton compact variant="warning" @click="openHomeTaskReportSettingsDialog">
-                        设置
-                      </GitActionButton>
-                      <GitActionButton compact variant="info" :loading="homeTaskGeneratingDailyReport" @click="generateHomeTaskDailyReport">
-                        {{ HOME_TASK_DAILY_REPORT_BUTTON_TEXT }}
-                      </GitActionButton>
-                      <GitActionButton compact @click="openCreateHomeTaskDialog">
-                        新增任务
-                      </GitActionButton>
-                    </div>
-                  </div>
-
-                  <el-tabs v-model="homeTaskActiveTab" class="home-task-tabs" @tab-change="handleHomeTaskTabChange">
-                    <el-tab-pane label="活跃中" :name="HOME_TASK_TAB_ACTIVE">
-                      <div v-loading="homeTaskLoadingActive" class="home-task-list">
-                        <div v-if="homeTaskActiveList.length === 0" class="home-task-empty">
-                          当前没有未归档任务
-                        </div>
-                        <div
-                          v-for="task in homeTaskActiveList"
-                          :key="task.id"
-                          class="home-task-card"
-                          :class="{ 'edit-success': !!homeTaskEditFeedbackMap[task.id] }"
-                        >
-                          <div class="home-task-card__header">
-                            <div>
-                              <div class="home-task-card__title">{{ task.name }}</div>
-                              <div class="home-task-card__meta">
-                                <span>开始时间：{{ task.start_time_desc || '-' }}</span>
-                                <span>最后操作：{{ task.last_operated_at_desc || '-' }}</span>
-                                <a v-if="task.tapd_url" :href="task.tapd_url" target="_blank" class="home-task-card__tapd-link">TAPD需求</a>
-                                <span class="home-task-card__status-group">
-                                  <el-tag size="small" effect="light" :type="getHomeTaskStatusTagType(task.task_status)">
-                                    {{ task.task_status }}
-                                  </el-tag>
-                                  <el-tag
-                                    v-if="hasHomeTaskMemoryFragment(task)"
-                                    size="small"
-                                    effect="plain"
-                                    class="home-task-memory-link-tag"
-                                    @click.stop="openHomeTaskMemoryFragment(task)"
-                                  >
-                                    {{ getHomeTaskMemoryTagText(task) }}
-                                  </el-tag>
-                                </span>
-                              </div>
-                            </div>
-                            <div class="home-task-card__actions">
-                              <el-dropdown
-                                trigger="click"
-                                :disabled="isHomeTaskBusy(task.id)"
-                                @command="handleHomeTaskActionCommand(task, $event)"
-                              >
-                                <GitActionButton
-                                  compact
-                                  :loading="isHomeTaskBusy(task.id, HOME_TASK_OPERATE_STATUS) || isHomeTaskBusy(task.id, HOME_TASK_OPERATE_ARCHIVE)"
-                                  :variant="getHomeTaskActionButtonVariant(task.task_status)"
-                                >
-                                  状态变更
-                                </GitActionButton>
-                                <template #dropdown>
-                                  <el-dropdown-menu>
-                                    <el-dropdown-item
-                                      v-for="status in homeTaskStatusOptions"
-                                      :key="status"
-                                      :command="buildHomeTaskStatusCommand(status)"
-                                      :disabled="task.task_status === status"
-                                    >
-                                      {{ status }}
-                                    </el-dropdown-item>
-                                    <el-dropdown-item :command="HOME_TASK_ACTION_COMMAND_ARCHIVE">
-                                      归档任务
-                                    </el-dropdown-item>
-                                  </el-dropdown-menu>
-                                </template>
-                              </el-dropdown>
-                              <GitActionButton
-                                compact
-                                variant="info"
-                                :disabled="isHomeTaskBusy(task.id)"
-                                @click="editHomeTask(task)"
-                              >
-                                {{ HOME_TASK_EDIT_BUTTON_TEXT }}
-                              </GitActionButton>
-                              <GitActionButton
-                                compact
-                                variant="danger"
-                                :loading="isHomeTaskBusy(task.id, HOME_TASK_OPERATE_DELETE)"
-                                :disabled="isHomeTaskBusy(task.id) && !isHomeTaskBusy(task.id, HOME_TASK_OPERATE_DELETE)"
-                                @click="deleteHomeTask(task)"
-                              >
-                                删除任务
-                              </GitActionButton>
-                            </div>
-                          </div>
-
-                          
-                        </div>
-                      </div>
-                    </el-tab-pane>
-                    <el-tab-pane label="归档" :name="HOME_TASK_TAB_ARCHIVED">
-                      <div v-loading="homeTaskLoadingArchived" class="home-task-list">
-                        <div v-if="homeTaskArchivedList.length === 0" class="home-task-empty">
-                          当前没有归档任务
-                        </div>
-                        <div
-                          v-for="task in homeTaskArchivedList"
-                          :key="task.id"
-                          class="home-task-card home-task-card--archived"
-                          :class="{ 'edit-success': !!homeTaskEditFeedbackMap[task.id] }"
-                        >
-                          <div class="home-task-card__header">
-                            <div>
-                              <div class="home-task-card__title">{{ task.name }}</div>
-                              <div class="home-task-card__meta">
-                                <span>开始时间：{{ task.start_time_desc || '-' }}</span>
-                                <span>最后操作：{{ task.last_operated_at_desc || '-' }}</span>
-                                <a v-if="task.tapd_url" :href="task.tapd_url" target="_blank" class="home-task-card__tapd-link">TAPD需求</a>
-                              </div>
-                            </div>
-                            <div class="home-task-card__status-group">
-                              <el-tag size="small" effect="light" :type="getHomeTaskStatusTagType(task.task_status)">
-                                {{ task.task_status }}
-                              </el-tag>
-                              <el-tag
-                                v-if="hasHomeTaskMemoryFragment(task)"
-                                size="small"
-                                effect="plain"
-                                class="home-task-memory-link-tag"
-                                @click.stop="openHomeTaskMemoryFragment(task)"
-                              >
-                                {{ getHomeTaskMemoryTagText(task) }}
-                              </el-tag>
-                            </div>
-                          </div>
-                          <div v-if="hasHomeTaskMemoryFragment(task)" class="home-task-card__memory">
-                            <div class="home-task-card__memory-label">关联知识片段</div>
-                            <div class="home-task-card__memory-title">
-                              {{ task.memory_fragment?.title || `#${task.memory_fragment_id}` }}
-                            </div>
-                            <div v-if="task.memory_fragment?.content" class="home-task-card__memory-content">
-                              <pre class="memory-content-text">{{ getFragmentPreview(task.memory_fragment.content, task.id) }}</pre>
-                              <button
-                                v-if="isFragmentExpandable(task.memory_fragment.content)"
-                                type="button"
-                                class="memory-content-toggle"
-                                @click="toggleFragmentExpand(task.id)"
-                              >
-                                {{ homeTaskExpandedFragments[task.id] ? '收起' : '展开' }}
-                              </button>
-                            </div>
-                            <div v-if="Array.isArray(task.memory_fragment?.tags) && task.memory_fragment.tags.length > 0" class="home-task-card__memory-tags">
-                              <el-tag
-                                v-for="tag in task.memory_fragment.tags"
-                                :key="`${task.id}-${tag}`"
-                                size="small"
-                                effect="plain"
-                              >
-                                {{ tag }}
-                              </el-tag>
-                            </div>
-                          </div>
-                          <div class="home-task-card__actions">
-                            <el-dropdown
-                              trigger="click"
-                              :disabled="isHomeTaskBusy(task.id)"
-                              @command="handleHomeTaskActionCommand(task, $event)"
-                            >
-                              <GitActionButton
-                                compact
-                                :loading="isHomeTaskBusy(task.id, HOME_TASK_OPERATE_STATUS) || isHomeTaskBusy(task.id, HOME_TASK_OPERATE_ARCHIVE)"
-                                :variant="getHomeTaskActionButtonVariant(task.task_status)"
-                              >
-                                状态变更
-                              </GitActionButton>
-                              <template #dropdown>
-                                <el-dropdown-menu>
-                                  <el-dropdown-item
-                                    v-for="status in homeTaskStatusOptions"
-                                    :key="status"
-                                    :command="buildHomeTaskStatusCommand(status)"
-                                    :disabled="task.task_status === status"
-                                  >
-                                    {{ status }}
-                                  </el-dropdown-item>
-                                  <el-dropdown-item :command="HOME_TASK_ACTION_COMMAND_UNARCHIVE">
-                                    取消归档
-                                  </el-dropdown-item>
-                                </el-dropdown-menu>
-                              </template>
-                            </el-dropdown>
-                            <GitActionButton
-                              compact
-                              variant="info"
-                              :disabled="isHomeTaskBusy(task.id)"
-                              @click="editHomeTask(task)"
-                            >
-                              {{ HOME_TASK_EDIT_BUTTON_TEXT }}
-                            </GitActionButton>
-                            <GitActionButton
-                              compact
-                              variant="danger"
-                              :loading="isHomeTaskBusy(task.id, HOME_TASK_OPERATE_DELETE)"
-                              :disabled="isHomeTaskBusy(task.id) && !isHomeTaskBusy(task.id, HOME_TASK_OPERATE_DELETE)"
-                              @click="deleteHomeTask(task)"
-                            >
-                              删除任务
-                            </GitActionButton>
-                          </div>
-                        </div>
-                      </div>
-                    </el-tab-pane>
-                  </el-tabs>
-                </section>
-              </div>
-            </section>
-          </div>
-
-          <div class="home-dashboard-pager">
-            <button
-              type="button"
-              class="home-dashboard-pager__dot"
-              :class="{ 'home-dashboard-pager__dot--active': homeDashboardPageIndex === 0 }"
-              @click="switchHomeDashboardPage(0)"
-            />
-            <button
-              type="button"
-              class="home-dashboard-pager__dot"
-              :class="{ 'home-dashboard-pager__dot--active': homeDashboardPageIndex === 1 }"
-              @click="switchHomeDashboardPage(1)"
-            />
-          </div>
-        </div>
-        <div v-else class="main-content__view">
+        <div class="main-content__view">
           <router-view v-slot="{ Component, route }" name="home">
             <keep-alive>
               <component :is="Component" ref="currentRef"/>
@@ -633,101 +376,6 @@
     </div>
   </el-dialog>
 
-  <el-dialog
-    v-model="homeTaskDialogVisible"
-    :title="homeTaskDialogTitle"
-    width="920px"
-    top="5vh"
-    class="home-task-dialog"
-    destroy-on-close
-  >
-    <el-form label-width="88px" class="home-task-form" @submit.prevent>
-      <el-row :gutter="12">
-        <el-col :span="24">
-          <el-form-item label="任务名称">
-            <el-input
-              v-model="homeTaskForm.name"
-              maxlength="80"
-              show-word-limit
-              placeholder="例如：整理缓存淘汰策略"
-              @keyup.enter="saveHomeTask"
-            />
-          </el-form-item>
-        </el-col>
-        <el-col :span="24">
-          <el-form-item label="tapd需求地址">
-            <el-input
-              v-model="homeTaskForm.tapd_url"
-              placeholder="例如：https://www.tapd.cn/123456"
-            />
-          </el-form-item>
-        </el-col>
-        <el-col :xs="24" :sm="12" :md="12">
-          <el-form-item label="任务状态">
-            <el-select v-model="homeTaskForm.task_status" style="width: 100%">
-              <el-option
-                v-for="status in homeTaskStatusOptions"
-                :key="status"
-                :label="status"
-                :value="status"
-              />
-            </el-select>
-          </el-form-item>
-        </el-col>
-        <el-col :xs="24" :sm="12" :md="12">
-          <el-form-item label="开始日期">
-            <el-date-picker
-              v-model="homeTaskForm.start_date"
-              type="date"
-              value-format="YYYY-MM-DD"
-              placeholder="选择开始日期"
-              style="width: 100%"
-            />
-          </el-form-item>
-        </el-col>
-      </el-row>
-      <el-row :gutter="12">
-        <el-col :span="24">
-          <el-form-item label="知识片段">
-            <el-select
-              v-model="homeTaskForm.memory_fragment_id"
-              filterable
-              clearable
-              style="width: 100%"
-              placeholder="可选择已有知识片段；留空则保存时自动新建"
-              :loading="homeTaskFragmentLoading"
-            >
-              <el-option
-                v-for="fragment in homeTaskFragmentOptions"
-                :key="fragment.id"
-                :label="buildHomeTaskFragmentOptionLabel(fragment)"
-                :value="fragment.id"
-              />
-            </el-select>
-          </el-form-item>
-        </el-col>
-      </el-row>
-    </el-form>
-    <template #footer>
-      <div class="home-task-dialog__footer">
-        <GitActionButton compact variant="info" @click="closeHomeTaskDialog">
-          取消
-        </GitActionButton>
-        <GitActionButton compact :loading="homeTaskSaving" @click="saveHomeTask">
-          {{ homeTaskForm.id > 0 ? '保存修改' : '添加任务' }}
-        </GitActionButton>
-      </div>
-    </template>
-  </el-dialog>
-
-  <SettingsDialog
-    v-model="homeTaskReportSettingsDialogVisible"
-    title="任务清单设置"
-    width="80%"
-    @closed="refreshHomeTaskReportSettings"
-  >
-    <HomeTaskReportSetting ref="homeTaskReportSetting" />
-  </SettingsDialog>
 </template>
 
 <script>
@@ -741,24 +389,14 @@ import copy from "@/utils/base/copy"
 import module from "@/utils/module"
 import baseApi from '@/utils/base/base_api'
 import sshSet from '@/utils/base/ssh_set'
-import homeTaskApi from '@/utils/base/home_task'
-import memoryFragmentApi from '@/utils/base/memory_fragment'
 import asyncTaskApi from '@/utils/base/async_task'
 import sseDistribute from '@/utils/base/sse_distribute'
-const { mergeHomeTaskFragmentOptions } = require('@/utils/home_task_fragment_options.cjs')
-const {
-  HOME_DASHBOARD_PAGE_SWITCH_HOT_ZONE_WIDTH,
-  resolveHomeDashboardPageSwitchBlocker,
-  isHomeDashboardPageSwitchHotZone,
-} = require('@/utils/home_dashboard_wheel.cjs')
 import Tools from "@/components/Tools.vue";
 import Markdown from '@/components/Markdown.vue'
 import GitActionButton from "@/components/base/GitActionButton.vue";
-import SettingsDialog from '@/components/base/SettingsDialog.vue'
-import HomeTaskReportSetting from '@/components/set/home_task_report.vue'
 import DiffMarkdown from '@/components/base/diff_markwodn.vue'
 import MarkdownRenderer from '@/components/base/markdown.vue'
-import { 
+import {
   HomeFilled,
   Coin,
   Setting,
@@ -769,50 +407,12 @@ import {
   Box,
   Connection,
   Monitor,
+  List,
   Tools as ToolsIcon
 } from "@element-plus/icons-vue";
 
 // SSH_CONNECTION_REFRESH_INTERVAL_MS 统一控制 SSH 连接轮询周期。
 const SSH_CONNECTION_REFRESH_INTERVAL_MS = 5000
-// HOME_TASK_TAB_* 用于区分任务弹窗内的标签页。
-const HOME_TASK_TAB_ACTIVE = 'active'
-const HOME_TASK_TAB_ARCHIVED = 'archived'
-// HOME_ROUTE_DASHBOARD 标识首页路由路径。
-const HOME_ROUTE_DASHBOARD = '/Dashboard'
-// HOME_TASK_ARCHIVED_* 对应后端归档状态常量。
-const HOME_TASK_ARCHIVED_NO = 0
-const HOME_TASK_ARCHIVED_YES = 1
-// HOME_TASK_STATUS_* 与后端状态常量保持一致。
-const HOME_TASK_STATUS_TODO = '待开始'
-const HOME_TASK_STATUS_DEVELOPING = '开发中'
-const HOME_TASK_STATUS_SELF_TESTING = '自测中'
-const HOME_TASK_STATUS_SELF_TESTED = '自测完'
-const HOME_TASK_STATUS_PENDING_INTEGRATION = '待对接'
-const HOME_TASK_STATUS_INTEGRATING = '对接中'
-const HOME_TASK_STATUS_TESTING = '测试中'
-const HOME_TASK_STATUS_RELEASING = '上线中'
-const HOME_TASK_STATUS_ONLINE = '已上线'
-// HOME_TASK_OPERATE_* 标识当前任务操作类型，便于按钮精确展示 loading。
-const HOME_TASK_OPERATE_SAVE = 'save'
-const HOME_TASK_OPERATE_STATUS = 'status'
-const HOME_TASK_OPERATE_ARCHIVE = 'archive'
-const HOME_TASK_OPERATE_DELETE = 'delete'
-// HOME_TASK_ACTION_COMMAND_* 用于统一处理任务卡片下拉操作。
-const HOME_TASK_ACTION_COMMAND_EDIT = 'edit'
-const HOME_TASK_ACTION_COMMAND_ARCHIVE = 'archive'
-const HOME_TASK_ACTION_COMMAND_UNARCHIVE = 'unarchive'
-// HOME_TASK_DELETE_CONFIRM_* 统一任务删除确认文案，避免危险操作提示分散。
-const HOME_TASK_DELETE_CONFIRM_TITLE = '确认删除'
-const HOME_TASK_DELETE_CONFIRM_MESSAGE_PREFIX = '确定要删除任务"'
-const HOME_TASK_DELETE_CONFIRM_MESSAGE_SUFFIX = '"吗？该操作不可恢复。'
-const HOME_TASK_DELETE_SUCCESS_MESSAGE = '任务已删除'
-// HOME_TASK_EDIT_BUTTON_TEXT 统一定义任务编辑按钮文案。
-const HOME_TASK_EDIT_BUTTON_TEXT = '编辑任务'
-// HOME_TASK_DAILY_REPORT_BUTTON_TEXT 统一定义日报生成按钮文案。
-const HOME_TASK_DAILY_REPORT_BUTTON_TEXT = 'AI 生成工作日报'
-// HOME_TASK_DAILY_REPORT_* 统一定义日报生成提示文案。
-const HOME_TASK_DAILY_REPORT_SUCCESS_MESSAGE = '工作日报任务已加入异步任务列表'
-const HOME_TASK_DAILY_REPORT_FAILED_MESSAGE = '工作日报生成失败'
 // ASYNC_TASK_ACTION_* 统一定义异步任务动作常量。
 const ASYNC_TASK_ACTION_SAVE_DAILY_REPORT = 'save_daily_report'
 const ASYNC_TASK_ACTION_OVERWRITE_MEMORY_FRAGMENT = 'overwrite_memory_fragment'
@@ -831,52 +431,6 @@ const ASYNC_TASK_TYPE_MEMORY_ARRANGE = 'memory_fragment_arrange'
 const ASYNC_TASK_TYPE_MAIN_DB_SYNC = 'main_db_sync'
 const ASYNC_TASK_TYPE_MEMORY_DB_SYNC = 'memory_db_sync'
 const ASYNC_TASK_TYPE_TAPD_SCRAPE = 'home_task_tapd_scrape'
-// HOME_TASK_ACTION_COMMAND_STATUS_PREFIX 标识状态切换指令前缀。
-const HOME_TASK_ACTION_COMMAND_STATUS_PREFIX = 'status:'
-// HOME_DASHBOARD_PAGE_* 标识首页双屏结构中的页索引。
-const HOME_DASHBOARD_PAGE_COMMAND = 0
-const HOME_DASHBOARD_PAGE_TASK = 1
-// HOME_DASHBOARD_PAGE_TOTAL 表示首页双屏总页数。
-const HOME_DASHBOARD_PAGE_TOTAL = 2
-// HOME_DASHBOARD_RUNNING_SELECTOR 用于识别首页命令面板是否仍有执行中的任务标记。
-const HOME_DASHBOARD_RUNNING_SELECTOR = '.message-list .command-status-running, .message-list .result-line-running'
-// HOME_DASHBOARD_WHEEL_SWITCH_THRESHOLD 控制翻屏触发的滚轮阈值，避免轻微触控板抖动误切屏。
-const HOME_DASHBOARD_WHEEL_SWITCH_THRESHOLD = 24
-// HOME_DASHBOARD_ANIMATION_DURATION_MS 与 CSS 动画时长保持一致。
-const HOME_DASHBOARD_ANIMATION_DURATION_MS = 560
-// HOME_TASK_EMPTY_START_DATE 表示未设置开始日期。
-const HOME_TASK_EMPTY_START_DATE = ''
-// HOME_TASK_STATUS_OPTIONS 用于渲染状态选择和快捷状态按钮。
-const HOME_TASK_STATUS_OPTIONS = [
-  HOME_TASK_STATUS_TODO,
-  HOME_TASK_STATUS_DEVELOPING,
-  HOME_TASK_STATUS_SELF_TESTING,
-  HOME_TASK_STATUS_SELF_TESTED,
-  HOME_TASK_STATUS_PENDING_INTEGRATION,
-  HOME_TASK_STATUS_INTEGRATING,
-  HOME_TASK_STATUS_TESTING,
-  HOME_TASK_STATUS_RELEASING,
-  HOME_TASK_STATUS_ONLINE,
-]
-
-function getTodayDateText() {
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = String(now.getMonth() + 1).padStart(2, '0')
-  const day = String(now.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-function createHomeTaskDefaultForm() {
-  return {
-    id: 0,
-    name: '',
-    task_status: HOME_TASK_STATUS_TODO,
-    start_date: getTodayDateText(),
-    memory_fragment_id: '',
-    tapd_url: '',
-  }
-}
 
 export default {
   data() {
@@ -923,39 +477,6 @@ export default {
       ASYNC_TASK_TYPE_MAIN_DB_SYNC,
       ASYNC_TASK_TYPE_MEMORY_DB_SYNC,
       ASYNC_TASK_TYPE_TAPD_SCRAPE,
-      HOME_TASK_TAB_ACTIVE,
-      HOME_TASK_TAB_ARCHIVED,
-      HOME_TASK_ARCHIVED_NO,
-      HOME_TASK_ARCHIVED_YES,
-      HOME_TASK_OPERATE_STATUS,
-      HOME_TASK_OPERATE_ARCHIVE,
-      HOME_TASK_OPERATE_DELETE,
-      HOME_TASK_ACTION_COMMAND_EDIT,
-      HOME_TASK_ACTION_COMMAND_ARCHIVE,
-      HOME_TASK_ACTION_COMMAND_UNARCHIVE,
-      HOME_TASK_EDIT_BUTTON_TEXT,
-      HOME_TASK_DAILY_REPORT_BUTTON_TEXT,
-      homeTaskActiveTab: HOME_TASK_TAB_ACTIVE,
-      homeTaskDialogVisible: false,
-      homeTaskReportSettingsDialogVisible: false,
-      homeDashboardPageIndex: HOME_DASHBOARD_PAGE_COMMAND,
-      homeDashboardAnimating: false,
-      homeTaskLoadingActive: false,
-      homeTaskLoadingArchived: false,
-      homeTaskGeneratingDailyReport: false,
-      homeTaskSaving: false,
-      homeTaskFragmentLoading: false,
-      homeTaskOperatingId: 0,
-      homeTaskOperatingType: '',
-      homeTaskActiveList: [],
-      homeTaskArchivedList: [],
-      homeTaskFragmentOptions: [],
-      homeTaskStatusOptions: HOME_TASK_STATUS_OPTIONS,
-      homeTaskForm: createHomeTaskDefaultForm(),
-      homeTaskExpandedFragments: {},
-      homeTaskEditFeedbackMap: {},
-      homeTaskEditFeedbackTimers: {},
-      homeTaskEditFeedbackDurationMs: 1000,
       asyncTaskDialogVisible: false,
       asyncTaskLoading: false,
       asyncTaskActing: false,
@@ -991,20 +512,6 @@ export default {
     hideAppSidebar() {
       return String(this.$route.query.hide_menu || '') === '1'
     },
-    // isDashboardRoute 控制任务清单只在首页底部展示。
-    isDashboardRoute() {
-      return this.$route.path === HOME_ROUTE_DASHBOARD
-    },
-    // homeDashboardTrackStyle 控制首页双屏容器的整体位移。
-    homeDashboardTrackStyle() {
-      return {
-        transform: `translate3d(0, -${this.homeDashboardPageIndex * 50}%, 0)`,
-      }
-    },
-    // homeTaskDialogTitle 统一控制新增和编辑弹窗标题。
-    homeTaskDialogTitle() {
-      return this.homeTaskForm.id > 0 ? '编辑任务' : '新增任务'
-    },
     // memoryCountdownPercent 计算记忆库倒计时进度百分比（0~100）。
     memoryCountdownPercent() {
       if (!this.gitPendingStatus.memoryPending || !this.gitPendingStatus.memoryNextPush || !this.gitPendingStatus.memoryInterval) return 0
@@ -1025,16 +532,8 @@ export default {
     },
   },
   watch: {
-    // 当用户切回首页时主动刷新任务，避免跨页面停留后数据过期。
     '$route.path'(newPath) {
       this.menuName = newPath || '/Dashboard'
-      if (newPath !== HOME_ROUTE_DASHBOARD) {
-        this.homeDashboardPageIndex = HOME_DASHBOARD_PAGE_COMMAND
-        return
-      }
-      this.homeDashboardPageIndex = HOME_DASHBOARD_PAGE_COMMAND
-      this.loadHomeTaskList(HOME_TASK_ARCHIVED_NO)
-      this.loadHomeTaskList(HOME_TASK_ARCHIVED_YES)
     },
   },
   created() {
@@ -1062,9 +561,6 @@ export default {
     sseDistribute.RegisterReceive('git_pending_status', function(data) {
       _that.handleGitPendingStatusUpdate(data)
     })
-    this.loadHomeTaskFragmentOptions()
-    this.loadHomeTaskList(HOME_TASK_ARCHIVED_NO)
-    this.loadHomeTaskList(HOME_TASK_ARCHIVED_YES)
     this.ensureAsyncTaskNotificationPermission()
     this.menuName = this.$route.path || '/Dashboard'
     window.addEventListener('resize', function () {});
@@ -1225,179 +721,6 @@ export default {
       this.sshConnectionsDialogVisible = true
       this.refreshSshConnections(true)
     },
-    handleHomeTaskTabChange(tabName) {
-      if (tabName === HOME_TASK_TAB_ACTIVE) {
-        this.loadHomeTaskList(HOME_TASK_ARCHIVED_NO)
-        return
-      }
-      this.loadHomeTaskList(HOME_TASK_ARCHIVED_YES)
-    },
-    // isDashboardCommandRunning 判断首页命令区是否存在执行中的命令，执行中时滚轮不触发整屏切换。
-    isDashboardCommandRunning() {
-      const dashboardRef = this.$refs.currentRef
-      const dashboardIsExecuting = dashboardRef?.isExecuting
-      if (dashboardIsExecuting === true) {
-        return true
-      }
-      if (
-        dashboardIsExecuting &&
-        typeof dashboardIsExecuting === 'object' &&
-        dashboardIsExecuting.value === true
-      ) {
-        return true
-      }
-      if (!(this.$el instanceof HTMLElement)) {
-        return false
-      }
-      return !!this.$el.querySelector(HOME_DASHBOARD_RUNNING_SELECTOR)
-    },
-    // handleDashboardWheel 只在首页双屏区域接管滚轮，实现整屏切换。
-    handleDashboardWheel(event) {
-      if (!this.isDashboardRoute || this.homeDashboardAnimating) {
-        return
-      }
-      const deltaY = Number(event.deltaY || 0)
-      if (Math.abs(deltaY) < HOME_DASHBOARD_WHEEL_SWITCH_THRESHOLD) {
-        return
-      }
-      const currentTarget = event.currentTarget
-      const currentTargetRect = currentTarget instanceof HTMLElement ? currentTarget.getBoundingClientRect() : null
-      const isRightHotZone = isHomeDashboardPageSwitchHotZone(event.clientX, currentTargetRect, HOME_DASHBOARD_PAGE_SWITCH_HOT_ZONE_WIDTH)
-      const blockingScrollableAncestor = resolveHomeDashboardPageSwitchBlocker(event.target, deltaY, currentTarget)
-      if (!isRightHotZone && blockingScrollableAncestor) {
-        return
-      }
-      if (this.homeDashboardPageIndex === HOME_DASHBOARD_PAGE_COMMAND) {
-        if (!isRightHotZone && this.isDashboardCommandRunning()) {
-          return
-        }
-        if (deltaY > 0) {
-          event.preventDefault()
-          this.switchHomeDashboardPage(HOME_DASHBOARD_PAGE_TASK)
-        }
-        return
-      }
-      const panelScroll = this.$refs.homeTaskPanelScroll
-      if (!(panelScroll instanceof HTMLElement)) {
-        return
-      }
-      const scrollTop = panelScroll.scrollTop
-      const maxScrollTop = Math.max(panelScroll.scrollHeight - panelScroll.clientHeight, 0)
-      // 在任务清单页面向上滚动时，只有在右侧热区内才允许切换到首页
-      if (deltaY < 0 && scrollTop <= 0) {
-        if (isRightHotZone) {
-          event.preventDefault()
-          this.switchHomeDashboardPage(HOME_DASHBOARD_PAGE_COMMAND)
-        }
-        return
-      }
-      if (deltaY > 0 && scrollTop >= maxScrollTop) {
-        event.preventDefault()
-      }
-    },
-    // switchHomeDashboardPage 切换首页双屏页码，并锁定动画期间的重复操作。
-    switchHomeDashboardPage(pageIndex) {
-      const nextPageIndex = Math.min(Math.max(pageIndex, HOME_DASHBOARD_PAGE_COMMAND), HOME_DASHBOARD_PAGE_TOTAL - 1)
-      if (nextPageIndex === this.homeDashboardPageIndex) {
-        return
-      }
-      this.homeDashboardAnimating = true
-      this.homeDashboardPageIndex = nextPageIndex
-      window.setTimeout(() => {
-        this.homeDashboardAnimating = false
-      }, HOME_DASHBOARD_ANIMATION_DURATION_MS)
-    },
-    // loadHomeTaskList 按归档状态刷新任务列表，避免前端本地状态和后端脱节。
-    loadHomeTaskList(isArchived) {
-      if (isArchived === HOME_TASK_ARCHIVED_YES) {
-        this.homeTaskLoadingArchived = true
-      } else {
-        this.homeTaskLoadingActive = true
-      }
-      homeTaskApi.HomeTaskList(isArchived, (response) => {
-        if (isArchived === HOME_TASK_ARCHIVED_YES) {
-          this.homeTaskLoadingArchived = false
-        } else {
-          this.homeTaskLoadingActive = false
-        }
-        if (!(response && response.ErrCode === 0)) {
-          this.$helperNotify.error(response?.ErrMsg || '任务列表加载失败')
-          return
-        }
-        const taskList = Array.isArray(response.Data?.task_list) ? response.Data.task_list : []
-        if (isArchived === HOME_TASK_ARCHIVED_YES) {
-          this.homeTaskArchivedList = taskList
-        } else {
-          this.homeTaskActiveList = taskList
-        }
-      })
-    },
-    // refreshAllHomeTaskList 统一刷新活跃和归档列表，避免各操作分散重复调用。
-    refreshAllHomeTaskList() {
-      this.loadHomeTaskList(HOME_TASK_ARCHIVED_NO)
-      this.loadHomeTaskList(HOME_TASK_ARCHIVED_YES)
-      this.loadHomeTaskFragmentOptions()
-    },
-    resetHomeTaskForm() {
-      this.homeTaskForm = createHomeTaskDefaultForm()
-    },
-    loadHomeTaskFragmentOptions(selectedFragment = null) {
-      this.homeTaskFragmentLoading = true
-      memoryFragmentApi.MemoryFragmentList(200, (response) => {
-        this.homeTaskFragmentLoading = false
-        if (!(response && response.ErrCode === 0 && Array.isArray(response.Data))) {
-          return
-        }
-        this.homeTaskFragmentOptions = mergeHomeTaskFragmentOptions(response.Data, selectedFragment)
-      })
-    },
-    ensureHomeTaskFragmentOption(fragment) {
-      this.homeTaskFragmentOptions = mergeHomeTaskFragmentOptions(this.homeTaskFragmentOptions, fragment)
-    },
-    buildHomeTaskFragmentOptionLabel(fragment) {
-      const tagText = Array.isArray(fragment?.tags) && fragment.tags.length > 0 ? ` [${fragment.tags.join('、')}]` : ''
-      return `${fragment.title || `#${fragment.id}`}${tagText}`
-    },
-    // openCreateHomeTaskDialog 打开新增任务弹窗，并重置为默认表单。
-    openCreateHomeTaskDialog() {
-      this.resetHomeTaskForm()
-      this.loadHomeTaskFragmentOptions()
-      this.homeTaskDialogVisible = true
-    },
-    // openHomeTaskReportSettingsDialog 打开工作日报 AI 设置弹窗。
-    openHomeTaskReportSettingsDialog() {
-      this.homeTaskReportSettingsDialogVisible = true
-      this.$nextTick(() => {
-        if (this.$refs.homeTaskReportSetting && this.$refs.homeTaskReportSetting.loadConfig) {
-          this.$refs.homeTaskReportSetting.loadConfig()
-        }
-        if (this.$refs.homeTaskReportSetting && this.$refs.homeTaskReportSetting.loadAiModelList) {
-          this.$refs.homeTaskReportSetting.loadAiModelList()
-        }
-      })
-    },
-    // refreshHomeTaskReportSettings 在弹窗关闭时兜底刷新设置组件状态。
-    refreshHomeTaskReportSettings() {
-      if (this.$refs.homeTaskReportSetting && this.$refs.homeTaskReportSetting.loadConfig) {
-        this.$refs.homeTaskReportSetting.loadConfig()
-      }
-    },
-    // generateHomeTaskDailyReport 调用后端基于活跃任务生成日报并写入记忆。
-    generateHomeTaskDailyReport() {
-      if (this.homeTaskGeneratingDailyReport) {
-        return
-      }
-      this.homeTaskGeneratingDailyReport = true
-      homeTaskApi.HomeTaskDailyReportGenerate((response) => {
-        this.homeTaskGeneratingDailyReport = false
-        if (!(response && response.ErrCode === 0)) {
-          this.$helperNotify.error(response?.ErrMsg || HOME_TASK_DAILY_REPORT_FAILED_MESSAGE)
-          return
-        }
-        this.$helperNotify.success(HOME_TASK_DAILY_REPORT_SUCCESS_MESSAGE)
-        this.loadAsyncTaskSummary(false)
-      })
-    },
     // openAsyncTaskDialog 打开异步任务弹窗，并刷新摘要与详情。
     openAsyncTaskDialog() {
       this.asyncTaskSelectedId = 0
@@ -1552,11 +875,6 @@ export default {
         }
         this.asyncTaskDetail = this.normalizeAsyncTaskDetail(response.Data)
         this.loadAsyncTaskSummary(false)
-        if (action === ASYNC_TASK_ACTION_SAVE_DAILY_REPORT || action === ASYNC_TASK_ACTION_OVERWRITE_MEMORY_FRAGMENT || action === ASYNC_TASK_ACTION_OVERWRITE_FRAGMENT_WITH_SCRAPE) {
-          // 中文注释：首页任务卡片会内嵌知识片段摘要，这里立即刷新避免覆盖原文后还显示旧内容。
-          // English comment: Home task cards embed fragment previews, so refresh right away after async writes.
-          this.refreshAllHomeTaskList()
-        }
         this.$helperNotify.success(action === ASYNC_TASK_ACTION_DISCARD ? '异步任务结果已丢弃' : '异步任务结果已处理')
       })
     },
@@ -1747,281 +1065,6 @@ export default {
       })
       window.open(routeInfo.href, '_blank')
     },
-    // closeHomeTaskDialog 关闭任务弹窗，并清空临时表单内容。
-    closeHomeTaskDialog() {
-      this.homeTaskDialogVisible = false
-      this.resetHomeTaskForm()
-    },
-    editHomeTask(task) {
-      this.ensureHomeTaskFragmentOption(task.memory_fragment)
-      const fragmentID = this.normalizeHomeTaskMemoryFragmentId(task?.memory_fragment?.file_id || task?.memory_fragment_id)
-      this.homeTaskForm = {
-        id: Number(task.id || 0),
-        name: task.name || '',
-        task_status: task.task_status || HOME_TASK_STATUS_TODO,
-        start_date: task.start_time_desc || getTodayDateText(),
-        memory_fragment_id: fragmentID,
-        tapd_url: task.tapd_url || '',
-      }
-      this.loadHomeTaskFragmentOptions(task.memory_fragment)
-      this.homeTaskDialogVisible = true
-    },
-    // openHomeTaskMemoryFragment 在新页卡中打开单独的知识片段详情页。
-    openHomeTaskMemoryFragment(task) {
-      const fragmentId = this.normalizeHomeTaskMemoryFragmentId(task?.memory_fragment?.file_id || task?.memory_fragment_id)
-      if (!fragmentId) {
-        this.$helperNotify.error('当前任务还没有关联知识片段')
-        return
-      }
-      const routeInfo = this.$router.resolve({
-        path: '/MemoryFragment',
-        query: {
-          fragment_id: String(fragmentId),
-          hide_menu: '1',
-        },
-      })
-      window.open(routeInfo.href, '_blank')
-    },
-    // getHomeTaskMemoryTagText 生成任务状态右侧的知识片段标签文案。
-    getHomeTaskMemoryTagText(task) {
-      const fragmentId = this.normalizeHomeTaskMemoryFragmentId(task?.memory_fragment?.file_id || task?.memory_fragment_id)
-      if (!fragmentId) {
-        return ''
-      }
-      const fragmentTitle = String(task?.memory_fragment?.title || '').trim()
-      const displayTitle = fragmentTitle || `#${fragmentId}`
-      return `已关联知识片段 "${displayTitle}"`
-    },
-    // normalizeHomeTaskMemoryFragmentId 统一规范任务关联知识片段ID，避免数字转换导致 UUID 丢失。
-    normalizeHomeTaskMemoryFragmentId(rawId) {
-      const fragmentId = String(rawId || '').trim()
-      if (!fragmentId || fragmentId === '0') {
-        return ''
-      }
-      return fragmentId
-    },
-    // hasHomeTaskMemoryFragment 判断任务是否已关联知识片段。
-    hasHomeTaskMemoryFragment(task) {
-      return this.normalizeHomeTaskMemoryFragmentId(task?.memory_fragment?.file_id || task?.memory_fragment_id) !== ''
-    },
-    // saveHomeTask 保存表单任务，新增和编辑共用同一个入口。
-    saveHomeTask() {
-      if (this.homeTaskSaving) {
-        return
-      }
-      const taskName = String(this.homeTaskForm.name || '').trim()
-      if (!taskName) {
-        this.$helperNotify.error('任务名称不能为空')
-        return
-      }
-      this.homeTaskSaving = true
-      this.homeTaskOperatingType = HOME_TASK_OPERATE_SAVE
-      homeTaskApi.HomeTaskSave({
-        id: Number(this.homeTaskForm.id || 0),
-        name: taskName,
-        task_status: this.homeTaskForm.task_status,
-        start_time: this.convertHomeTaskDateToUnix(this.homeTaskForm.start_date),
-        memory_fragment_id: String(this.homeTaskForm.memory_fragment_id || '').trim(),
-        tapd_url: String(this.homeTaskForm.tapd_url || '').trim(),
-        api_host: base.GetApiHost() || window.location.origin,
-        api_token: base.GetSafeToken(),
-      }, (response) => {
-        this.homeTaskSaving = false
-        this.homeTaskOperatingType = ''
-        if (!(response && response.ErrCode === 0)) {
-          this.$helperNotify.error(response?.ErrMsg || '任务保存失败')
-          return
-        }
-        const isEdit = this.homeTaskForm.id > 0
-        this.$helperNotify.success(isEdit ? '任务已更新' : '任务已创建')
-        this.closeHomeTaskDialog()
-        // 编辑任务时触发边框环绕特效
-        if (isEdit) {
-          const taskId = Number(this.homeTaskForm.id)
-          this.triggerHomeTaskEditFeedback(taskId)
-        }
-        this.refreshAllHomeTaskList()
-      })
-    },
-    // isHomeTaskBusy 判断指定任务是否正处于某个操作中，避免多个危险操作并发触发。
-    isHomeTaskBusy(taskId, operateType = '') {
-      const normalizedTaskId = Number(taskId || 0)
-      if (normalizedTaskId <= 0 || this.homeTaskOperatingId !== normalizedTaskId) {
-        return false
-      }
-      if (!operateType) {
-        return true
-      }
-      return this.homeTaskOperatingType === operateType
-    },
-    quickUpdateHomeTaskStatus(task, taskStatus) {
-      if (this.homeTaskOperatingId > 0) {
-        return
-      }
-      this.homeTaskOperatingId = Number(task.id || 0)
-      this.homeTaskOperatingType = HOME_TASK_OPERATE_STATUS
-      homeTaskApi.HomeTaskStatusQuickUpdate(this.homeTaskOperatingId, taskStatus, (response) => {
-        this.homeTaskOperatingId = 0
-        this.homeTaskOperatingType = ''
-        if (!(response && response.ErrCode === 0)) {
-          this.$helperNotify.error(response?.ErrMsg || '状态切换失败')
-          return
-        }
-        // 只更新本地任务状态，不刷新整个列表，避免任务位置更换
-        // 后端返回的任务数据直接在 response.Data 中
-        const updatedTask = response.Data
-        if (updatedTask && updatedTask.id) {
-          this.updateHomeTaskInList(updatedTask)
-        }
-      })
-    },
-    // updateHomeTaskInList 更新本地列表中的任务数据，保持位置不变
-    updateHomeTaskInList(updatedTask) {
-      const taskId = Number(updatedTask.id || 0)
-      const activeIndex = this.homeTaskActiveList.findIndex(t => Number(t.id) === taskId)
-      if (activeIndex >= 0) {
-        this.homeTaskActiveList[activeIndex] = { ...this.homeTaskActiveList[activeIndex], ...updatedTask }
-        return
-      }
-      const archivedIndex = this.homeTaskArchivedList.findIndex(t => Number(t.id) === taskId)
-      if (archivedIndex >= 0) {
-        this.homeTaskArchivedList[archivedIndex] = { ...this.homeTaskArchivedList[archivedIndex], ...updatedTask }
-      }
-    },
-    // triggerHomeTaskEditFeedback 触发任务编辑成功后的边框环绕特效
-    triggerHomeTaskEditFeedback(taskId) {
-      const normalizedId = Number(taskId || 0)
-      if (normalizedId <= 0) {
-        return
-      }
-      if (this.homeTaskEditFeedbackTimers[normalizedId]) {
-        window.clearTimeout(this.homeTaskEditFeedbackTimers[normalizedId])
-      }
-      // 使用 Vue 的响应式方式更新对象
-      this.homeTaskEditFeedbackMap = { ...this.homeTaskEditFeedbackMap, [normalizedId]: Date.now() }
-      this.homeTaskEditFeedbackTimers[normalizedId] = window.setTimeout(() => {
-        const { [normalizedId]: _, ...rest } = this.homeTaskEditFeedbackMap
-        this.homeTaskEditFeedbackMap = rest
-        delete this.homeTaskEditFeedbackTimers[normalizedId]
-      }, this.homeTaskEditFeedbackDurationMs)
-    },
-    // buildHomeTaskStatusCommand 生成状态切换菜单命令，避免状态值和其它动作混淆。
-    buildHomeTaskStatusCommand(taskStatus) {
-      return `${HOME_TASK_ACTION_COMMAND_STATUS_PREFIX}${taskStatus}`
-    },
-    // handleHomeTaskActionCommand 统一处理任务卡片上的下拉操作。
-    handleHomeTaskActionCommand(task, command) {
-      if (typeof command !== 'string') {
-        return
-      }
-      if (command === HOME_TASK_ACTION_COMMAND_EDIT) {
-        this.editHomeTask(task)
-        return
-      }
-      if (command === HOME_TASK_ACTION_COMMAND_ARCHIVE) {
-        this.toggleHomeTaskArchive(task, HOME_TASK_ARCHIVED_YES)
-        return
-      }
-      if (command === HOME_TASK_ACTION_COMMAND_UNARCHIVE) {
-        this.toggleHomeTaskArchive(task, HOME_TASK_ARCHIVED_NO)
-        return
-      }
-      if (!command.startsWith(HOME_TASK_ACTION_COMMAND_STATUS_PREFIX)) {
-        return
-      }
-      this.quickUpdateHomeTaskStatus(task, command.slice(HOME_TASK_ACTION_COMMAND_STATUS_PREFIX.length))
-    },
-    toggleHomeTaskArchive(task, isArchived) {
-      if (this.homeTaskOperatingId > 0) {
-        return
-      }
-      this.homeTaskOperatingId = Number(task.id || 0)
-      this.homeTaskOperatingType = HOME_TASK_OPERATE_ARCHIVE
-      homeTaskApi.HomeTaskArchiveToggle(this.homeTaskOperatingId, isArchived, (response) => {
-        this.homeTaskOperatingId = 0
-        this.homeTaskOperatingType = ''
-        if (!(response && response.ErrCode === 0)) {
-          this.$helperNotify.error(response?.ErrMsg || '归档状态更新失败')
-          return
-        }
-        this.refreshAllHomeTaskList()
-      })
-    },
-    // deleteHomeTask 删除首页任务，使用确认弹窗降低误删风险。
-    deleteHomeTask(task) {
-      if (this.homeTaskOperatingId > 0) {
-        return
-      }
-      const taskId = Number(task?.id || 0)
-      const taskName = String(task?.name || '').trim() || `#${taskId}`
-      this.$confirm(
-        `${HOME_TASK_DELETE_CONFIRM_MESSAGE_PREFIX}${taskName}${HOME_TASK_DELETE_CONFIRM_MESSAGE_SUFFIX}`,
-        HOME_TASK_DELETE_CONFIRM_TITLE,
-        {
-          type: 'warning',
-          confirmButtonText: '确认删除',
-          cancelButtonText: '取消',
-        }
-      ).then(() => {
-        this.homeTaskOperatingId = taskId
-        this.homeTaskOperatingType = HOME_TASK_OPERATE_DELETE
-        homeTaskApi.HomeTaskDelete(taskId, (response) => {
-          this.homeTaskOperatingId = 0
-          this.homeTaskOperatingType = ''
-          if (!(response && response.ErrCode === 0)) {
-            this.$helperNotify.error(response?.ErrMsg || '任务删除失败')
-            return
-          }
-          this.$helperNotify.success(HOME_TASK_DELETE_SUCCESS_MESSAGE)
-          this.refreshAllHomeTaskList()
-        })
-      }).catch(() => {})
-    },
-    convertHomeTaskDateToUnix(dateText) {
-      const normalizedDateText = String(dateText || '').trim() || getTodayDateText()
-      return Math.floor(new Date(`${normalizedDateText}T00:00:00`).getTime() / 1000)
-    },
-    getHomeTaskStatusTagType(taskStatus) {
-      if (taskStatus === HOME_TASK_STATUS_DEVELOPING) {
-        return 'success'
-      }
-      if (taskStatus === HOME_TASK_STATUS_SELF_TESTING || taskStatus === HOME_TASK_STATUS_TESTING) {
-        return 'warning'
-      }
-      if (taskStatus === HOME_TASK_STATUS_SELF_TESTED) {
-        return 'success'
-      }
-      if (taskStatus === HOME_TASK_STATUS_PENDING_INTEGRATION) {
-        return 'info'
-      }
-      if (taskStatus === HOME_TASK_STATUS_INTEGRATING || taskStatus === HOME_TASK_STATUS_RELEASING) {
-        return 'primary'
-      }
-      if (taskStatus === HOME_TASK_STATUS_ONLINE) {
-        return 'info'
-      }
-      return ''
-    },
-    // getHomeTaskActionButtonVariant 根据当前任务状态返回操作按钮视觉类型。
-    getHomeTaskActionButtonVariant(taskStatus) {
-        return 'primary'
-    },
-    toggleFragmentExpand(taskId) {
-      this.homeTaskExpandedFragments[taskId] = !this.homeTaskExpandedFragments[taskId]
-    },
-    getFragmentPreview(content, taskId) {
-      const maxLength = 100
-      if (!content) return ''
-      const isExpanded = this.homeTaskExpandedFragments[taskId]
-      if (isExpanded || content.length <= maxLength) {
-        return content
-      }
-      return content.slice(0, maxLength) + '...'
-    },
-    isFragmentExpandable(content) {
-      const maxLength = 100
-      return content && content.length > maxLength
-    },
     // 处理SSE推送的Shell连接状态更新
     handleSshConnectionsUpdate(data) {
       if (!data || typeof data !== 'object') {
@@ -2110,10 +1153,9 @@ export default {
     Box,
     Connection,
     Monitor,
+    List,
     ToolsIcon,
     GitActionButton,
-    SettingsDialog,
-    HomeTaskReportSetting,
     Markdown,
     DiffMarkdown,
     MarkdownRenderer,

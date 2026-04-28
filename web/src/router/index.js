@@ -125,6 +125,14 @@ const router = createRouter({
           },
           meta: { keepAlive: true },
         },
+        {
+          path: '/HomeTask',
+          name: 'HomeTask',
+          components: {
+            home: () => import('../components/HomeTask'),
+          },
+          meta: { keepAlive: true },
+        },
       ],
     },
     {

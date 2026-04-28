@@ -77,17 +77,18 @@
                     <el-icon><Share /></el-icon>
                   </GitActionButton>
                 </el-tooltip>
-                <GitActionButton
-                  variant="warning"
-                  compact
-                  :loading="organizing"
-                  @click="handleOrganize"
-                >
-                  <template #icon>
+                <el-tooltip :content="organizeButtonText" placement="top">
+                  <GitActionButton
+                    variant="warning"
+                    compact
+                    class="toolbar-icon-button"
+                    :loading="organizing"
+                    :aria-label="organizeButtonText"
+                    @click="handleOrganize"
+                  >
                     <el-icon><MagicStick /></el-icon>
-                  </template>
-                  {{ organizeButtonText }}
-                </GitActionButton>
+                  </GitActionButton>
+                </el-tooltip>
                 <el-dropdown
                   trigger="click"
                   class="editor-action-dropdown"
