@@ -225,7 +225,9 @@ func (w *WsClient) Send(msg define.AgentWsMessage) error {
 	if err != nil {
 		return err
 	}
-	gstool.FmtPrintlnLogTime(`发送消息到服务端 type=%s task_id=%s sse_distribute_id=%s`, msg.Type, msg.TaskID, msg.SseDistributeId)
+	if msg.Type != define.AgentWsMsgHeartbeat {
+		gstool.FmtPrintlnLogTime(`发送消息到服务端 type=%s task_id=%s sse_distribute_id=%s`, msg.Type, msg.TaskID, msg.SseDistributeId)
+	}
 	return w.conn.WriteMessage(websocket.TextMessage, data)
 }
 
