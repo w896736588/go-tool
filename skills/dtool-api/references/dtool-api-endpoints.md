@@ -524,6 +524,85 @@
 }
 ```
 
+参数说明：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | int | 要运行的接口 ID（必填） |
+
+完整响应示例：
+
+```json
+{
+  "code": 0,
+  "msg": "",
+  "data": {
+    "url": "https://example.com/v1/login",
+    "status_code": 200,
+    "errmsg": "",
+    "result": "{\"code\":0,\"data\":{\"token\":\"abc123\",\"user_id\":1001}}",
+    "status": "success",
+    "millisecond": 156,
+    "request_headers": {
+      "Content-Type": "application/json",
+      "Token": "***"
+    },
+    "response_headers": {
+      "Content-Type": "application/json; charset=utf-8",
+      "Date": "Tue, 29 Apr 2026 08:00:00 GMT"
+    },
+    "body_forms": [],
+    "body_raw": "{\"username\":\"demo\",\"password\":\"123456\"}",
+    "response_take": [
+      {
+        "description": "状态码，0表示成功",
+        "item_key": "code",
+        "value": "0",
+        "take_value": "0"
+      },
+      {
+        "description": "认证令牌",
+        "item_key": "data.token",
+        "value": "abc123",
+        "take_value": "abc123"
+      }
+    ],
+    "request_time": "2026-04-29 16:00:00"
+  }
+}
+```
+
+响应字段说明：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `url` | string | 实际请求的完整 URL（环境变量已替换） |
+| `status_code` | int | HTTP 状态码；未发出请求时为 0 |
+| `errmsg` | string | 请求错误描述（成功时为空） |
+| `result` | string | 接口返回的原始响应体（JSON 字符串） |
+| `status` | string | 请求状态（success / error） |
+| `millisecond` | int | 请求耗时（毫秒） |
+| `request_headers` | object | 实际发送的请求头 |
+| `response_headers` | object | 服务端返回的响应头 |
+| `body_forms` | array | 提交的 Form 参数（POST form 时） |
+| `body_raw` | string | 提交的原始请求体（JSON/raw 时） |
+| `response_take` | array | 按 take_result 配置自动提取的字段值 |
+| `request_time` | string | 发起请求的时间 |
+
+`response_take` 每项结构：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `description` | string | 字段描述（来自 take_result 的 desc） |
+| `item_key` | string | 字段路径（如 `data.token`） |
+| `value` | string | 实际值 |
+| `take_value` | string | 提取后的值 |
+
+> **注意**：
+> - 运行接口会实际发送 HTTP 请求，对写接口（POST/PUT/DELETE）请确认不会影响生产数据
+> - 接口自身未配置 `env_id` 时，会自动继承所属文件夹的 `env_id`
+> - 运行结果会自动保存到接口的 `last_result` 字段
+
 ### 2. 生成代码：`/api/ApiCode`
 
 请求：
@@ -532,6 +611,25 @@
 {
   "id": 201,
   "code_type": "curl bash(chrome)"
+}
+```
+
+参数说明：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | int | 接口 ID（必填） |
+| `code_type` | string | 代码类型，如 `"curl bash(chrome)"`（必填） |
+
+完整响应示例：
+
+```json
+{
+  "code": 0,
+  "msg": "",
+  "data": {
+    "code": "curl 'https://example.com/v1/login' \\\n  -H 'Content-Type: application/json' \\\n  --data-raw '{\"username\":\"demo\",\"password\":\"123456\"}'"
+  }
 }
 ```
 
@@ -552,9 +650,32 @@
 ```json
 {
   "id": 201,
-  "json": "{\"code\":0,\"data\":{\"token\":\"abc\"}}"
+  "json": "{\"code\":0,\"data\":{\"token\":\"abc\",\"user_id\":1001}}"
 }
 ```
+
+参数说明：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | int | 接口 ID（必填），用于匹配已有的 take_result 描述 |
+| `json` | string | JSON 字符串（必填），会自动提取所有叶子节点路径 |
+
+完整响应示例：
+
+```json
+{
+  "code": 0,
+  "msg": "",
+  "data": [
+    {"key": "code", "type": "number", "desc": "状态码，0表示成功"},
+    {"key": "data.token", "type": "string", "desc": "认证令牌"},
+    {"key": "data.user_id", "type": "number", "desc": ""}
+  ]
+}
+```
+
+> **用途**：分析接口返回的 JSON 结构，提取所有可用的字段路径，辅助完善 `take_result` 配置。已配置 `take_result` 的字段会自动带上 `desc`。
 
 ### 5. 批量导入接口：`/api/ApiBatchImport`
 
@@ -683,4 +804,49 @@ curl -X POST "http://localhost:17170/api/CreateApi" \
 curl -X POST "http://localhost:17170/api/ApiBatchImport" \
   -F "collection_id=1" \
   -F "json={\"collection_id\":1,\"items\":[{\"type\":\"folder\",\"name\":\"用户中心\",\"children\":[]}]}"
+```
+
+### 8. 运行接口
+
+```bash
+curl -X POST "http://localhost:17170/api/ApiRun" \
+  -H "Content-Type: application/json" \
+  -H "Token: 用户Token值" \
+  -d "{\"id\":201}"
+```
+
+### 9. 生成接口调用代码
+
+```bash
+curl -X POST "http://localhost:17170/api/ApiCode" \
+  -H "Content-Type: application/json" \
+  -H "Token: 用户Token值" \
+  -d "{\"id\":201,\"code_type\":\"curl bash(chrome)\"}"
+```
+
+### 10. 提取 JSON 响应路径
+
+```bash
+curl -X POST "http://localhost:17170/api/ApiTakeJsonResult" \
+  -H "Content-Type: application/json" \
+  -H "Token: 用户Token值" \
+  -d "{\"id\":201,\"json\":\"{\\\"code\\\":0,\\\"data\\\":{\\\"token\\\":\\\"abc\\\"}}\"}"
+```
+
+### 11. 查询集合环境
+
+```bash
+curl -X POST "http://localhost:17170/api/CollectionEnvs" \
+  -H "Content-Type: application/json" \
+  -H "Token: 用户Token值" \
+  -d "{\"collection_id\":1}"
+```
+
+### 12. 查询环境变量
+
+```bash
+curl -X POST "http://localhost:17170/api/CollectionEnvItems" \
+  -H "Content-Type: application/json" \
+  -H "Token: 用户Token值" \
+  -d "{\"collection_id\":1,\"env_id\":5}"
 ```

@@ -8,6 +8,10 @@ type HomeTaskSaveRequest struct {
 	StartTime        int64  `json:"start_time"`
 	MemoryFragmentID any    `json:"memory_fragment_id"`
 	TapdUrl          string `json:"tapd_url"`
+	GitID            int    `json:"git_id"`
+	ApiDevEnabled    int    `json:"api_dev_enabled"`
+	ApiCollectionID  int    `json:"api_collection_id"`
+	ApiDirID         int    `json:"api_dir_id"`
 	ApiHost          string `json:"api_host"`
 	ApiToken         string `json:"api_token"`
 }

@@ -38,6 +38,61 @@
     </div>
 
     <div class="set-config-header" style="margin-top: 24px;">
+      <h3 class="set-config-title">工作流提示词模板</h3>
+      <p class="set-config-desc">
+        编辑工作流中使用的提示词模板，可点击下方占位符复制后粘贴到模板中。
+      </p>
+    </div>
+
+    <div class="prompt-placeholder-bar">
+      <span class="prompt-placeholder-bar__label">内置占位符：</span>
+      <span
+        v-for="ph in promptPlaceholders"
+        :key="ph.value"
+        class="prompt-placeholder-tag"
+        @click="copyPlaceholder(ph)"
+      >
+        {{ ph.label }}
+        <el-icon class="prompt-placeholder-tag__icon"><CopyDocument /></el-icon>
+      </span>
+    </div>
+
+    <div class="set-config-table-card">
+      <el-form label-width="120px" class="memory-config-form">
+        <el-form-item label="需求开发提示词">
+          <MdEditor
+            v-model="form.home_task_prompt_dev"
+            preview-theme="github"
+            :preview="false"
+            :toolbars="promptEditorToolbars"
+            style="height: 280px;"
+          />
+        </el-form-item>
+        <el-form-item label="接口生成提示词">
+          <MdEditor
+            v-model="form.home_task_prompt_api_gen"
+            preview-theme="github"
+            :preview="false"
+            :toolbars="promptEditorToolbars"
+            style="height: 280px;"
+          />
+        </el-form-item>
+        <el-form-item label="接口自动化测试提示词">
+          <MdEditor
+            v-model="form.home_task_prompt_api_test"
+            preview-theme="github"
+            :preview="false"
+            :toolbars="promptEditorToolbars"
+            style="height: 280px;"
+          />
+        </el-form-item>
+        <el-form-item>
+          <pl-button type="primary" @click="savePromptConfig">保存提示词模板配置</pl-button>
+        </el-form-item>
+      </el-form>
+    </div>
+
+    <div class="set-config-header" style="margin-top: 24px;">
       <h3 class="set-config-title">TAPD 登录页配置</h3>
       <p class="set-config-desc">
         从自定义网页中选择一个链接，用于在任务中快速跳转到 TAPD 登录页。
@@ -104,9 +159,28 @@
 import set from '@/utils/base/git_set'
 import AiSetApi from '@/utils/base/ai_set'
 import SmartLinkSet from '@/utils/base/smart_link_set'
+import { MdEditor } from 'md-editor-v3'
+import 'md-editor-v3/lib/style.css'
+import { CopyDocument } from '@element-plus/icons-vue'
 
 const DEFAULT_MEMORY_ARRANGE_PROMPT = '帮我把当前 markdown 进行整理格式，让它看起来更顺畅清晰，注意禁止修改内容'
 const DEFAULT_HOME_TASK_DAILY_REPORT_PROMPT = '请基于当前活跃任务生成中文工作日报，按已完成、进行中、风险与阻塞三个部分总结，输出 Markdown，禁止编造未提供的信息。'
+
+const PROMPT_PLACEHOLDERS = [
+  { label: '需求文档地址', value: '{需求文档地址}' },
+  { label: '接口开发API地址', value: '{接口开发API地址}' },
+  { label: '接口开发API的token', value: '{接口开发API的token}' },
+  { label: '上传文件接口python', value: '{上传文件接口python}' },
+  { label: '查询数据库接口python', value: '{查询数据库接口python}' },
+  { label: '接口开发文件夹', value: '{接口开发文件夹}' },
+  { label: '接口开发集合', value: '{接口开发集合}' },
+]
+
+const PROMPT_EDITOR_TOOLBARS = [
+  'bold', 'italic', 'strikeThrough', 'title', 'quote',
+  'unorderedList', 'orderedList', 'task', 'link', 'code',
+  'codeRow', 'table', 'preview', 'fullscreen',
+]
 
 export default {
   name: 'HomeTaskReportSetting',
@@ -121,11 +195,16 @@ export default {
         home_task_daily_report_model_id: null,
         home_task_daily_report_prompt: DEFAULT_HOME_TASK_DAILY_REPORT_PROMPT,
         home_task_fragment_prompt: '',
+        home_task_prompt_dev: '',
+        home_task_prompt_api_gen: '',
+        home_task_prompt_api_test: '',
         home_task_tapd_smart_link_id: null,
         home_task_tapd_link_label: '',
         home_task_tapd_css_selector: '',
         home_task_tapd_wait_seconds: 3,
       },
+      promptPlaceholders: PROMPT_PLACEHOLDERS,
+      promptEditorToolbars: PROMPT_EDITOR_TOOLBARS,
     }
   },
   computed: {
@@ -180,6 +259,9 @@ export default {
         this.form.home_task_daily_report_model_id = response.Data.home_task_daily_report_model_id || null
         this.form.home_task_daily_report_prompt = response.Data.home_task_daily_report_prompt || DEFAULT_HOME_TASK_DAILY_REPORT_PROMPT
         this.form.home_task_fragment_prompt = response.Data.home_task_fragment_prompt || ''
+        this.form.home_task_prompt_dev = response.Data.home_task_prompt_dev || ''
+        this.form.home_task_prompt_api_gen = response.Data.home_task_prompt_api_gen || ''
+        this.form.home_task_prompt_api_test = response.Data.home_task_prompt_api_test || ''
         this.form.home_task_tapd_smart_link_id = response.Data.home_task_tapd_smart_link_id || null
         this.form.home_task_tapd_link_label = response.Data.home_task_tapd_link_label || ''
         this.form.home_task_tapd_css_selector = response.Data.home_task_tapd_css_selector || ''
@@ -187,17 +269,7 @@ export default {
       })
     },
     saveConfig() {
-      const payload = {
-        memory_arrange_model_id: this.form.memory_arrange_model_id,
-        memory_arrange_prompt: this.form.memory_arrange_prompt,
-        home_task_daily_report_model_id: this.form.home_task_daily_report_model_id,
-        home_task_daily_report_prompt: this.form.home_task_daily_report_prompt,
-        home_task_fragment_prompt: this.form.home_task_fragment_prompt,
-        home_task_tapd_smart_link_id: this.form.home_task_tapd_smart_link_id,
-        home_task_tapd_link_label: this.form.home_task_tapd_link_label,
-        home_task_tapd_css_selector: this.form.home_task_tapd_css_selector,
-        home_task_tapd_wait_seconds: this.form.home_task_tapd_wait_seconds,
-      }
+      const payload = this.buildFullPayload()
       set.MemoryConfigSave(payload, (response) => {
         if (response.ErrCode === 0) {
           this.$helperNotify.success('配置已保存')
@@ -206,17 +278,7 @@ export default {
       })
     },
     saveTapdConfig() {
-      const payload = {
-        memory_arrange_model_id: this.form.memory_arrange_model_id,
-        memory_arrange_prompt: this.form.memory_arrange_prompt,
-        home_task_daily_report_model_id: this.form.home_task_daily_report_model_id,
-        home_task_daily_report_prompt: this.form.home_task_daily_report_prompt,
-        home_task_fragment_prompt: this.form.home_task_fragment_prompt,
-        home_task_tapd_smart_link_id: this.form.home_task_tapd_smart_link_id,
-        home_task_tapd_link_label: this.form.home_task_tapd_link_label,
-        home_task_tapd_css_selector: this.form.home_task_tapd_css_selector,
-        home_task_tapd_wait_seconds: this.form.home_task_tapd_wait_seconds,
-      }
+      const payload = this.buildFullPayload()
       set.MemoryConfigSave(payload, (response) => {
         if (response.ErrCode === 0) {
           this.$helperNotify.success('TAPD 登录页配置已保存')
@@ -224,6 +286,58 @@ export default {
         }
       })
     },
+    savePromptConfig() {
+      const payload = this.buildFullPayload()
+      set.MemoryConfigSave(payload, (response) => {
+        if (response.ErrCode === 0) {
+          this.$helperNotify.success('提示词模板配置已保存')
+          this.$emit('changed')
+        }
+      })
+    },
+    buildFullPayload() {
+      return {
+        memory_arrange_model_id: this.form.memory_arrange_model_id,
+        memory_arrange_prompt: this.form.memory_arrange_prompt,
+        home_task_daily_report_model_id: this.form.home_task_daily_report_model_id,
+        home_task_daily_report_prompt: this.form.home_task_daily_report_prompt,
+        home_task_fragment_prompt: this.form.home_task_fragment_prompt,
+        home_task_prompt_dev: this.form.home_task_prompt_dev,
+        home_task_prompt_api_gen: this.form.home_task_prompt_api_gen,
+        home_task_prompt_api_test: this.form.home_task_prompt_api_test,
+        home_task_tapd_smart_link_id: this.form.home_task_tapd_smart_link_id,
+        home_task_tapd_link_label: this.form.home_task_tapd_link_label,
+        home_task_tapd_css_selector: this.form.home_task_tapd_css_selector,
+        home_task_tapd_wait_seconds: this.form.home_task_tapd_wait_seconds,
+      }
+    },
+    copyPlaceholder(placeholder) {
+      const text = placeholder.value
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+          this.$helperNotify.success(`已复制：${text}`)
+        }).catch(() => {
+          this.fallbackCopy(text)
+        })
+      } else {
+        this.fallbackCopy(text)
+      }
+    },
+    fallbackCopy(text) {
+      const textarea = document.createElement('textarea')
+      textarea.value = text
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+      this.$helperNotify.success(`已复制：${text}`)
+    },
+  },
+  components: {
+    MdEditor,
+    CopyDocument,
   },
 }
 </script>

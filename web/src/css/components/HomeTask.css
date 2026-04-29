@@ -211,6 +211,22 @@
   text-decoration: underline;
 }
 
+.home-task-card__git-repo {
+  color: #5a8a5a;
+  background: #eef4ec;
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.home-task-card__api-dev {
+  color: #6b5a8a;
+  background: #eeeef4;
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
 .home-task-card__memory {
   margin-top: 14px;
   padding: 12px 14px;

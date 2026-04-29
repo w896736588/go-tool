@@ -37,6 +37,8 @@
                     <span>开始时间：{{ task.start_time_desc || '-' }}</span>
                     <span>最后操作：{{ task.last_operated_at_desc || '-' }}</span>
                     <a v-if="task.tapd_url" :href="task.tapd_url" target="_blank" class="home-task-card__tapd-link">TAPD需求</a>
+                    <span v-if="getHomeTaskGitRepoName(task)" class="home-task-card__git-repo">{{ getHomeTaskGitRepoName(task) }}</span>
+                    <span v-if="task.api_dev_enabled === 1" class="home-task-card__api-dev">接口: {{ getHomeTaskApiDevLabel(task) }}</span>
                     <span class="home-task-card__status-group">
                       <el-tag size="small" effect="light" :type="getHomeTaskStatusTagType(task.task_status)">
                         {{ task.task_status }}
@@ -130,6 +132,8 @@
                     <span>开始时间：{{ task.start_time_desc || '-' }}</span>
                     <span>最后操作：{{ task.last_operated_at_desc || '-' }}</span>
                     <a v-if="task.tapd_url" :href="task.tapd_url" target="_blank" class="home-task-card__tapd-link">TAPD需求</a>
+                    <span v-if="getHomeTaskGitRepoName(task)" class="home-task-card__git-repo">{{ getHomeTaskGitRepoName(task) }}</span>
+                    <span v-if="task.api_dev_enabled === 1" class="home-task-card__api-dev">接口: {{ getHomeTaskApiDevLabel(task) }}</span>
                   </div>
                 </div>
                 <div class="home-task-card__status-group">
@@ -264,6 +268,31 @@
               />
             </el-form-item>
           </el-col>
+          <el-col :span="24">
+            <el-form-item label="Git仓库">
+              <el-select
+                v-model="homeTaskForm.git_id"
+                clearable
+                filterable
+                style="width: 100%"
+                placeholder="选择关联的Git仓库（可选）"
+                :loading="homeTaskGitRepoLoading"
+              >
+                <el-option-group
+                  v-for="group in homeTaskGitRepoGroupedOptions"
+                  :key="group.label"
+                  :label="group.label"
+                >
+                  <el-option
+                    v-for="repo in group.options"
+                    :key="repo.value"
+                    :label="repo.label"
+                    :value="repo.value"
+                  />
+                </el-option-group>
+              </el-select>
+            </el-form-item>
+          </el-col>
           <el-col :xs="24" :sm="12" :md="12">
             <el-form-item label="任务状态">
               <el-select v-model="homeTaskForm.task_status" style="width: 100%">
@@ -287,6 +316,60 @@
               />
             </el-form-item>
           </el-col>
+        </el-row>
+        <el-row :gutter="12">
+          <el-col :span="24">
+            <el-form-item label="接口开发">
+              <el-switch
+                v-model="homeTaskForm.api_dev_enabled"
+                :active-value="1"
+                :inactive-value="0"
+                active-text="启用"
+                inactive-text="关闭"
+              />
+            </el-form-item>
+          </el-col>
+          <template v-if="homeTaskForm.api_dev_enabled === 1">
+            <el-col :xs="24" :sm="12" :md="12">
+              <el-form-item label="选择集合">
+                <el-select
+                  v-model="homeTaskForm.api_collection_id"
+                  filterable
+                  style="width: 100%"
+                  placeholder="请选择接口集合（必选）"
+                  :loading="homeTaskApiCollectionLoading"
+                  @change="handleHomeTaskApiCollectionChange"
+                >
+                  <el-option
+                    v-for="col in homeTaskApiCollectionList"
+                    :key="col.id"
+                    :label="col.name"
+                    :value="col.id"
+                  />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :xs="24" :sm="12" :md="12">
+              <el-form-item label="选择文件夹">
+                <el-select
+                  v-model="homeTaskForm.api_dir_id"
+                  filterable
+                  clearable
+                  style="width: 100%"
+                  placeholder="留空则自动创建（可选）"
+                  :loading="homeTaskApiFolderLoading"
+                  :disabled="!homeTaskForm.api_collection_id"
+                >
+                  <el-option
+                    v-for="dir in homeTaskApiFolderList"
+                    :key="dir.id"
+                    :label="dir.name"
+                    :value="dir.id"
+                  />
+                </el-select>
+              </el-form-item>
+            </el-col>
+          </template>
         </el-row>
         <el-row :gutter="12">
           <el-col :span="24">
@@ -337,6 +420,8 @@
 import base from '../utils/base'
 import homeTaskApi from '@/utils/base/home_task'
 import memoryFragmentApi from '@/utils/base/memory_fragment'
+import gitApi from '@/utils/base/git'
+import apiManagement from '@/utils/base/api'
 const { mergeHomeTaskFragmentOptions } = require('@/utils/home_task_fragment_options.cjs')
 import GitActionButton from "@/components/base/GitActionButton.vue";
 import SettingsDialog from '@/components/base/SettingsDialog.vue'
@@ -400,6 +485,10 @@ function createHomeTaskDefaultForm() {
     start_date: getTodayDateText(),
     memory_fragment_id: '',
     tapd_url: '',
+    git_id: 0,
+    api_dev_enabled: 0,
+    api_collection_id: 0,
+    api_dir_id: 0,
   }
 }
 
@@ -437,15 +526,35 @@ export default {
       homeTaskEditFeedbackMap: {},
       homeTaskEditFeedbackTimers: {},
       homeTaskEditFeedbackDurationMs: 1000,
+      homeTaskGitRepoList: [],
+      homeTaskGitRepoLoading: false,
+      homeTaskApiCollectionList: [],
+      homeTaskApiFolderList: [],
+      homeTaskApiCollectionLoading: false,
+      homeTaskApiFolderLoading: false,
     }
   },
   computed: {
     homeTaskDialogTitle() {
       return this.homeTaskForm.id > 0 ? '编辑任务' : '新增任务'
     },
+    homeTaskGitRepoGroupedOptions() {
+      const groupMap = {}
+      const groupOrder = []
+      for (const repo of this.homeTaskGitRepoList) {
+        const groupName = repo.git_group_name || '未分组'
+        if (!groupMap[groupName]) {
+          groupMap[groupName] = []
+          groupOrder.push(groupName)
+        }
+        groupMap[groupName].push({ label: repo.name, value: repo.id })
+      }
+      return groupOrder.map(name => ({ label: name, options: groupMap[name] }))
+    },
   },
   mounted() {
     this.loadHomeTaskFragmentOptions()
+    this.loadHomeTaskGitRepoList()
     this.loadHomeTaskList(HOME_TASK_ARCHIVED_NO)
     this.loadHomeTaskList(HOME_TASK_ARCHIVED_YES)
   },
@@ -453,6 +562,7 @@ export default {
     this.loadHomeTaskList(HOME_TASK_ARCHIVED_NO)
     this.loadHomeTaskList(HOME_TASK_ARCHIVED_YES)
     this.loadHomeTaskFragmentOptions()
+    this.loadHomeTaskGitRepoList()
   },
   methods: {
     handleHomeTaskTabChange(tabName) {
@@ -507,6 +617,53 @@ export default {
     ensureHomeTaskFragmentOption(fragment) {
       this.homeTaskFragmentOptions = mergeHomeTaskFragmentOptions(this.homeTaskFragmentOptions, fragment)
     },
+    loadHomeTaskGitRepoList() {
+      this.homeTaskGitRepoLoading = true
+      gitApi.GitConfigList({}, (response) => {
+        this.homeTaskGitRepoLoading = false
+        if (!(response && response.ErrCode === 0)) {
+          return
+        }
+        const gitList = Array.isArray(response.Data?.git_list) ? response.Data.git_list : []
+        const groupList = Array.isArray(response.Data?.git_group_list) ? response.Data.git_group_list : []
+        const groupMap = {}
+        for (const g of groupList) {
+          groupMap[g.id] = g.name
+        }
+        this.homeTaskGitRepoList = gitList.map(repo => ({
+          ...repo,
+          git_group_name: groupMap[repo.git_group_id] || '未分组',
+        }))
+      })
+    },
+    loadHomeTaskApiCollections() {
+      this.homeTaskApiCollectionLoading = true
+      apiManagement.CollectionListBasic({}, (response) => {
+        this.homeTaskApiCollectionLoading = false
+        if (!(response && response.ErrCode === 0)) {
+          return
+        }
+        this.homeTaskApiCollectionList = Array.isArray(response.Data?.list) ? response.Data.list : []
+      })
+    },
+    loadHomeTaskApiFolders(collectionId) {
+      if (!collectionId) {
+        this.homeTaskApiFolderList = []
+        return
+      }
+      this.homeTaskApiFolderLoading = true
+      apiManagement.CollectionFoldersBasic({ collection_id: collectionId }, (response) => {
+        this.homeTaskApiFolderLoading = false
+        if (!(response && response.ErrCode === 0)) {
+          return
+        }
+        this.homeTaskApiFolderList = Array.isArray(response.Data?.list) ? response.Data.list : []
+      })
+    },
+    handleHomeTaskApiCollectionChange(collectionId) {
+      this.homeTaskForm.api_dir_id = 0
+      this.loadHomeTaskApiFolders(collectionId)
+    },
     buildHomeTaskFragmentOptionLabel(fragment) {
       const tagText = Array.isArray(fragment?.tags) && fragment.tags.length > 0 ? ` [${fragment.tags.join('、')}]` : ''
       return `${fragment.title || `#${fragment.id}`}${tagText}`
@@ -514,6 +671,8 @@ export default {
     openCreateHomeTaskDialog() {
       this.resetHomeTaskForm()
       this.loadHomeTaskFragmentOptions()
+      this.loadHomeTaskGitRepoList()
+      this.loadHomeTaskApiCollections()
       this.homeTaskDialogVisible = true
     },
     openHomeTaskReportSettingsDialog() {
@@ -560,8 +719,17 @@ export default {
         start_date: task.start_time_desc || getTodayDateText(),
         memory_fragment_id: fragmentID,
         tapd_url: task.tapd_url || '',
+        git_id: Number(task.git_id || 0),
+        api_dev_enabled: Number(task.api_dev_enabled || 0),
+        api_collection_id: Number(task.api_collection_id || 0),
+        api_dir_id: Number(task.api_dir_id || 0),
       }
       this.loadHomeTaskFragmentOptions(task.memory_fragment)
+      this.loadHomeTaskGitRepoList()
+      this.loadHomeTaskApiCollections()
+      if (Number(task.api_collection_id || 0) > 0) {
+        this.loadHomeTaskApiFolders(Number(task.api_collection_id))
+      }
       this.homeTaskDialogVisible = true
     },
     openHomeTaskMemoryFragment(task) {
@@ -609,6 +777,23 @@ export default {
     hasHomeTaskMemoryFragment(task) {
       return this.normalizeHomeTaskMemoryFragmentId(task?.memory_fragment?.file_id || task?.memory_fragment_id) !== ''
     },
+    getHomeTaskGitRepoName(task) {
+      const gitId = Number(task?.git_id || 0)
+      if (gitId <= 0) return ''
+      const repo = this.homeTaskGitRepoList.find(r => Number(r.id) === gitId)
+      return repo ? repo.name : ''
+    },
+    getHomeTaskApiDevLabel(task) {
+      const collectionId = Number(task?.api_collection_id || 0)
+      if (collectionId <= 0) return ''
+      const col = this.homeTaskApiCollectionList.find(c => Number(c.id) === collectionId)
+      const colName = col ? col.name : `#${collectionId}`
+      const dirId = Number(task?.api_dir_id || 0)
+      if (dirId <= 0) return colName
+      const dir = this.homeTaskApiFolderList.find(d => Number(d.id) === dirId)
+      const dirName = dir ? dir.name : `#${dirId}`
+      return `${colName} / ${dirName}`
+    },
     saveHomeTask() {
       if (this.homeTaskSaving) {
         return
@@ -616,6 +801,10 @@ export default {
       const taskName = String(this.homeTaskForm.name || '').trim()
       if (!taskName) {
         this.$helperNotify.error('任务名称不能为空')
+        return
+      }
+      if (this.homeTaskForm.api_dev_enabled === 1 && !this.homeTaskForm.api_collection_id) {
+        this.$helperNotify.error('启用接口开发时必须选择集合')
         return
       }
       this.homeTaskSaving = true
@@ -627,6 +816,10 @@ export default {
         start_time: this.convertHomeTaskDateToUnix(this.homeTaskForm.start_date),
         memory_fragment_id: String(this.homeTaskForm.memory_fragment_id || '').trim(),
         tapd_url: String(this.homeTaskForm.tapd_url || '').trim(),
+        git_id: Number(this.homeTaskForm.git_id || 0),
+        api_dev_enabled: Number(this.homeTaskForm.api_dev_enabled || 0),
+        api_collection_id: Number(this.homeTaskForm.api_collection_id || 0),
+        api_dir_id: Number(this.homeTaskForm.api_dir_id || 0),
         api_host: base.GetApiHost() || window.location.origin,
         api_token: base.GetSafeToken(),
       }, (response) => {

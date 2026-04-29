@@ -13,13 +13,13 @@ import (
 const (
 	// homeTaskListQuerySQL 用于查询首页任务列表。
 	homeTaskListQuerySQL = `
-select id,name,task_status,memory_fragment_id,is_archived,start_time,last_operated_at,create_time,update_time,tapd_url
+select id,name,task_status,memory_fragment_id,is_archived,start_time,last_operated_at,create_time,update_time,tapd_url,git_id,api_dev_enabled,api_collection_id,api_dir_id
 from tbl_home_task
 where is_archived = ?
 order by id desc`
 	// homeTaskListTodayUpdatedQuerySQL 用于查询今天变更过的任务，供工作日报使用。
 	homeTaskListTodayUpdatedQuerySQL = `
-select id,name,task_status,memory_fragment_id,is_archived,start_time,last_operated_at,create_time,update_time,tapd_url
+select id,name,task_status,memory_fragment_id,is_archived,start_time,last_operated_at,create_time,update_time,tapd_url,git_id,api_dev_enabled,api_collection_id,api_dir_id
 from tbl_home_task
 where update_time >= ? or create_time >= ?
 order by id desc`
@@ -73,7 +73,7 @@ func (h *CSqlite) HomeTaskRow(id int) (map[string]any, error) {
 }
 
 // HomeTaskSave 保存首页任务。
-func (h *CSqlite) HomeTaskSave(id int, name, taskStatus string, startTime int64, memoryFragmentID string, tapdUrl string) (map[string]any, error) {
+func (h *CSqlite) HomeTaskSave(id int, name, taskStatus string, startTime int64, memoryFragmentID string, tapdUrl string, gitID int, apiDevEnabled int, apiCollectionID int, apiDirID int) (map[string]any, error) {
 	now := time.Now().Unix()
 	name = strings.TrimSpace(name)
 	taskStatus = strings.TrimSpace(taskStatus)
@@ -96,6 +96,10 @@ func (h *CSqlite) HomeTaskSave(id int, name, taskStatus string, startTime int64,
 		`last_operated_at`:   now,
 		`update_time`:        now,
 		`tapd_url`:           tapdUrl,
+		`git_id`:             gitID,
+		`api_dev_enabled`:    apiDevEnabled,
+		`api_collection_id`:  apiCollectionID,
+		`api_dir_id`:         apiDirID,
 	}
 	if id <= 0 {
 		updateData[`is_archived`] = define.HomeTaskArchivedNo

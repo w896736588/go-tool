@@ -14,6 +14,11 @@ import (
 	"github.com/spf13/cast"
 )
 
+const (
+	homeTaskApiDevDisabled = 0
+	homeTaskApiDevEnabled  = 1
+)
+
 // HomeTaskList 查询首页任务列表。
 func HomeTaskList(c *gin.Context) {
 	request := _struct.HomeTaskListRequest{}
@@ -41,7 +46,18 @@ func HomeTaskSave(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	info, err := common.DbMain.HomeTaskSave(request.ID, request.Name, request.TaskStatus, request.StartTime, memoryFragmentID, request.TapdUrl)
+	apiDevEnabled := request.ApiDevEnabled
+	apiCollectionID := request.ApiCollectionID
+	apiDirID := request.ApiDirID
+	if apiDevEnabled == homeTaskApiDevEnabled && apiCollectionID > 0 && apiDirID <= 0 {
+		autoDirID, autoDirErr := autoCreateHomeTaskApiDir(request.Name, apiCollectionID)
+		if autoDirErr != nil {
+			gsgin.GinResponseError(c, `自动创建接口文件夹失败: `+autoDirErr.Error(), nil)
+			return
+		}
+		apiDirID = autoDirID
+	}
+	info, err := common.DbMain.HomeTaskSave(request.ID, request.Name, request.TaskStatus, request.StartTime, memoryFragmentID, request.TapdUrl, request.GitID, apiDevEnabled, apiCollectionID, apiDirID)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
@@ -249,4 +265,25 @@ func enrichHomeTaskListWithMemoryFragment(list []map[string]any) {
 			`missing`: false,
 		}
 	}
+}
+
+// autoCreateHomeTaskApiDir 自动在指定集合下创建接口文件夹，返回文件夹 ID。
+func autoCreateHomeTaskApiDir(taskName string, collectionID int) (int, error) {
+	taskName = strings.TrimSpace(taskName)
+	if taskName == `` {
+		taskName = `默认文件夹`
+	}
+	now := time.Now().Unix()
+	dirData := map[string]any{
+		`name`:          taskName,
+		`collection_id`: collectionID,
+		`headers`:       `{}`,
+		`create_time`:   now,
+		`update_time`:   now,
+	}
+	newID, err := common.DbMain.Client.QuickCreate(`tbl_api_dir`, dirData).Exec()
+	if err != nil {
+		return 0, err
+	}
+	return cast.ToInt(newID), nil
 }

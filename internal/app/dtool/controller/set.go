@@ -866,6 +866,21 @@ func SetMemoryConfigGet(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
+	promptDev, err := homeTaskConfigValue(define.HomeTaskConfigPromptDev)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	promptApiGen, err := homeTaskConfigValue(define.HomeTaskConfigPromptApiGen)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	promptApiTest, err := homeTaskConfigValue(define.HomeTaskConfigPromptApiTest)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`db_dir`:                            mainDBConfig.Dir,
 		`db_name`:                           mainDBConfig.DBName,
@@ -887,6 +902,9 @@ func SetMemoryConfigGet(c *gin.Context) {
 		`home_task_tapd_link_label`:         tapdLinkLabel,
 		`home_task_tapd_css_selector`:       tapdCssSelector,
 		`home_task_tapd_wait_seconds`:       cast.ToInt(tapdWaitSeconds),
+		`home_task_prompt_dev`:              promptDev,
+		`home_task_prompt_api_gen`:          promptApiGen,
+		`home_task_prompt_api_test`:         promptApiTest,
 		`safe_password`:                     component.ConfigViper.GetString(`safe.password`),
 		`run_mode`:                          component.EnvClient.SmartLinkConfig.RunMode,
 		`client_version`:                    component.EnvClient.SmartLinkConfig.ClientVersion,
@@ -969,6 +987,21 @@ func SetMemoryConfigSave(c *gin.Context) {
 	}
 	homeTaskTapdWaitSeconds := cast.ToString(cast.ToInt(dataMap[`home_task_tapd_wait_seconds`]))
 	if err := common.DbMain.HomeTaskConfigSave(`TAPD抓取等待秒数`, define.HomeTaskConfigTapdWaitSeconds, homeTaskTapdWaitSeconds, `TAPD网页抓取前等待秒数`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskPromptDev := strings.TrimSpace(cast.ToString(dataMap[`home_task_prompt_dev`]))
+	if err := common.DbMain.HomeTaskConfigSave(`需求开发提示词`, define.HomeTaskConfigPromptDev, homeTaskPromptDev, `工作流-需求开发提示词模板`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskPromptApiGen := strings.TrimSpace(cast.ToString(dataMap[`home_task_prompt_api_gen`]))
+	if err := common.DbMain.HomeTaskConfigSave(`接口生成提示词`, define.HomeTaskConfigPromptApiGen, homeTaskPromptApiGen, `工作流-接口生成提示词模板`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskPromptApiTest := strings.TrimSpace(cast.ToString(dataMap[`home_task_prompt_api_test`]))
+	if err := common.DbMain.HomeTaskConfigSave(`接口自动化测试提示词`, define.HomeTaskConfigPromptApiTest, homeTaskPromptApiTest, `工作流-接口自动化测试提示词模板`); err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
