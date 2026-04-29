@@ -61,6 +61,10 @@
             </template>
           </el-input>
         </div>
+        <div v-if="sidebarFilterLoading" class="sidebar-filter-loading">
+          <el-icon class="is-loading"><Loading /></el-icon>
+          <span>搜索中...</span>
+        </div>
         <button
           v-for="item in filteredFragmentList"
           :key="sidebarItemKey(item)"
@@ -285,7 +289,7 @@
 </template>
 
 <script>
-import { Check, DArrowLeft, DArrowRight, Delete, Plus, Search } from '@element-plus/icons-vue'
+import { Check, DArrowLeft, DArrowRight, Delete, Loading, Plus, Search } from '@element-plus/icons-vue'
 import MemoryFragmentApi from '@/utils/base/memory_fragment'
 import MemoryEditor from '@/components/memory/MemoryEditor.vue'
 import MemoryHistoryDialog from '@/components/memory/MemoryHistoryDialog.vue'
@@ -371,6 +375,9 @@ export default {
       routeFragmentHandledPath: '',
       sidebarCollapsed: localStorage.getItem('memorySidebarCollapsed') === 'true',
       sidebarFilterQuery: '',
+      sidebarFilterTimer: null,
+      sidebarFilterLoading: false,
+      sidebarFilterResults: [],
     }
   },
   computed: {
@@ -415,16 +422,10 @@ export default {
       }
       return '输入关键词，多个关键词使用空格分隔，回车打开结果页'
     },
-    // filteredFragmentList 根据侧边栏搜索框过滤片段列表，多关键词空格分隔且全部匹配。
+    // filteredFragmentList 侧边栏过滤结果，由 watch sidebarFilterQuery 驱动。
     filteredFragmentList() {
-      const raw = this.sidebarFilterQuery.trim().toLowerCase()
-      if (!raw) return this.fragmentList
-      const keywords = raw.split(/\s+/)
-      return this.fragmentList.filter(item => {
-        const title = (item.title || '').toLowerCase()
-        const filePath = (item.file_path || '').toLowerCase()
-        return keywords.every(kw => title.includes(kw) || filePath.includes(kw))
-      })
+      if (!this.sidebarFilterQuery.trim()) return this.fragmentList
+      return this.sidebarFilterResults
     }
   },
   mounted() {
@@ -456,6 +457,28 @@ export default {
     '$route.fullPath'() {
       this.routeFragmentHandled = false
       this.tryOpenRouteFragmentOnEntry()
+    },
+    sidebarFilterQuery() {
+      clearTimeout(this.sidebarFilterTimer)
+      const query = this.sidebarFilterQuery.trim()
+      if (!query) {
+        this.sidebarFilterResults = []
+        this.sidebarFilterLoading = false
+        return
+      }
+      this.sidebarFilterLoading = true
+      this.sidebarFilterTimer = setTimeout(() => {
+        MemoryFragmentApi.MemoryFragmentSearch(
+          this.sidebarFilterQuery.trim(),
+          KEYWORD_SEARCH_MODE,
+          [],
+          0,
+          (response) => {
+            this.sidebarFilterLoading = false
+            this.sidebarFilterResults = Array.isArray(response.Data) ? response.Data : []
+          }
+        )
+      }, 300)
     },
   },
   methods: {
@@ -530,6 +553,7 @@ export default {
       this.loadFragmentList()
       this.loadTrashList()
       this.rerunSubmittedSearch()
+      this.rerunSidebarFilter()
       if (!fragmentId) {
         return
       }
@@ -848,6 +872,22 @@ export default {
         return
       }
       this.runSearch(this.submittedSearchQuery, this.submittedSearchMode)
+    },
+    // rerunSidebarFilter 重新执行侧边栏过滤搜索。
+    rerunSidebarFilter() {
+      const query = this.sidebarFilterQuery.trim()
+      if (!query) return
+      this.sidebarFilterLoading = true
+      MemoryFragmentApi.MemoryFragmentSearch(
+        query,
+        KEYWORD_SEARCH_MODE,
+        [],
+        0,
+        (response) => {
+          this.sidebarFilterLoading = false
+          this.sidebarFilterResults = Array.isArray(response.Data) ? response.Data : []
+        }
+      )
     },
     // handleSearchClear 处理搜索输入框清空。
     handleSearchClear() {
@@ -1171,6 +1211,7 @@ export default {
       this.triggerFragmentSaveFeedback(target.fragment.id)
       if (this.sidebarFilterQuery.trim()) {
         this.loadFragmentListPreservingOrder()
+        this.rerunSidebarFilter()
       } else {
         this.loadFragmentList()
       }
@@ -1184,6 +1225,7 @@ export default {
       this.loadFragmentList()
       this.loadTrashList()
       this.rerunSubmittedSearch()
+      this.rerunSidebarFilter()
       if (this.activeTab === `fragment-${fragmentId}`) {
         this.activeTab = ''
         this.ensureDefaultFragmentTab()
@@ -1198,6 +1240,7 @@ export default {
         this.loadFragmentList()
         this.loadTrashList()
         this.rerunSubmittedSearch()
+        this.rerunSidebarFilter()
       })
     },
     // handleFragmentHardDelete 彻底删除回收站中的片段。
@@ -1210,6 +1253,7 @@ export default {
         this.loadFragmentList()
         this.loadTrashList()
         this.rerunSubmittedSearch()
+        this.rerunSidebarFilter()
         if (this.activeTab === `fragment-${fragmentId}`) {
           this.activeTab = this.trashTabVisible ? TRASH_TAB_NAME : ''
           this.ensureDefaultFragmentTab()

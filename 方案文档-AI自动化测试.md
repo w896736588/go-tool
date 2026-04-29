@@ -126,6 +126,18 @@ tapd_url
 - 支持 `预览 / 源码` 切换
 - 支持查看最近抓取时间
 
+给 AI 的提示词：
+
+```text
+读取 xxxxx（TAPD 抓取后生成的知识片段分享地址），分析并设计方案
+```
+
+补充说明：
+
+- `xxxxx` 由当前任务关联的需求知识片段分享地址动态填入
+- AI 输出建议为结构化 Markdown，至少包含：需求摘要、功能点拆分、涉及接口、风险点、待确认问题
+- 该输出默认写入 Tab 2 作为开发执行 MD 的初稿来源
+
 #### Tab 2：开发执行 MD
 
 用途：
@@ -133,6 +145,18 @@ tapd_url
 - 任务创建时自动生成一个新的知识片段
 - 供 AI 或人工写入开发方案、接口补充说明、实施记录
 - 作为后续生成覆盖分析与测试计划的重要输入
+
+给 AI 的提示词：
+
+```text
+将开发方案通过 /api/task/workflow/dev-plan/save 接口更新进去。请求方式：POST。入参示例：{"workflow_id":10,"content":"# 开发执行说明\n..."}。其中 workflow_id 为当前工作流 id，content 为 AI 生成或补充后的完整 Markdown 内容。
+```
+
+补充说明：
+
+- `workflow_id` 来自 `/api/task/workflow/create_or_get` 或 `/api/task/workflow/info`
+- `content` 建议传完整文档内容，而不是仅传增量 patch，避免版本合并复杂化
+- 后端保存后应返回最新更新时间、版本号或摘要信息，供页面刷新展示
 
 建议默认模板：
 
@@ -238,12 +262,153 @@ tapd_url
 - 辅助识别页面功能对应的接口
 - 抓取页面触发的接口请求样例
 - 帮助 AI 理解某些功能入口
+- 当需求主要以页面操作描述、接口映射不清时，补充真实请求证据
 
 不建议第一期承担：
 
 - 主接口测试执行
 - 主覆盖判断
 - 主测试结果判定
+
+### 4.4 Playwright 与现有能力的结合方式
+
+核心原则：
+
+- `Playwright` 负责“页面辅助识别”
+- `/api/ApiRun` 负责“正式接口测试执行”
+- 数据库工具负责“只读校验”
+
+推荐链路：
+
+```text
+需求 MD / 开发执行 MD
+-> AI 初步识别需求点
+-> 如接口不明确，则触发 Playwright 页面辅助识别
+-> 采集页面真实请求样例 ui_api_trace.json
+-> AI 结合代码、接口定义、数据库 schema 生成 test_plan.json
+-> 执行器逐条调用 /api/ApiRun
+-> 数据库只读校验
+-> 输出测试报告
+```
+
+Playwright 产物建议单独沉淀为：
+
+- `ui_api_trace.json`
+- 页面动作日志
+- 关键请求响应样例
+
+`ui_api_trace.json` 建议结构：
+
+```json
+{
+  "workflow_id": 10,
+  "env_id": 3,
+  "entry_url": "/order/list",
+  "action_template": "create_order",
+  "trace_summary": {
+    "action_count": 3,
+    "request_count": 6,
+    "matched_api_count": 2
+  },
+  "actions": [
+    {
+      "step": 1,
+      "action": "click",
+      "target": "[data-testid='create-btn']",
+      "label": "点击创建按钮"
+    }
+  ],
+  "requests": [
+    {
+      "request_id": "req-1",
+      "step": 3,
+      "type": "xhr",
+      "method": "POST",
+      "url": "/api/order/create",
+      "query": {},
+      "request_headers": {
+        "content-type": "application/json"
+      },
+      "request_body": {
+        "product_id": 101,
+        "count": 2
+      },
+      "response_status": 200,
+      "response_body_sample": {
+        "code": 0,
+        "data": {
+          "id": 123
+        }
+      },
+      "matched_api_id": 1001,
+      "role": "target_api"
+    }
+  ],
+  "open_questions": [],
+  "blocked_items": []
+}
+```
+
+字段设计重点：
+
+- `actions` 用于回看页面操作路径
+- `requests` 用于沉淀真实请求证据
+- `matched_api_id` 用于与接口定义关联
+- `role` 用于标记该请求是 `prepare_api`、`target_api` 还是 `noise`
+
+这样可以保证：
+
+- 浏览器采集与接口执行解耦
+- 测试计划生成有真实页面证据，而不只依赖代码猜测
+- 后续即使不再重复跑页面采集，也可复用已有 trace 生成或修正测试计划
+
+### 4.5 页面动作模板建议
+
+第一期建议仅支持“预设动作模板”，不做开放式浏览器录制。
+
+推荐模板字段：
+
+```json
+{
+  "template_code": "create_order",
+  "name": "创建订单",
+  "entry_url": "/order/list",
+  "steps": [
+    {
+      "type": "click",
+      "selector": "[data-testid='create-btn']",
+      "label": "打开创建弹窗"
+    },
+    {
+      "type": "fill",
+      "selector": "[name='productName']",
+      "value_from": "context.product_name",
+      "label": "填写商品名"
+    },
+    {
+      "type": "click",
+      "selector": "[data-testid='submit-btn']",
+      "label": "提交表单"
+    }
+  ]
+}
+```
+
+建议支持的步骤类型：
+
+- `goto`
+- `click`
+- `fill`
+- `select`
+- `check`
+- `wait_response`
+- `wait_visible`
+
+模板的主要价值：
+
+- 降低第一期的交互复杂度
+- 避免自由录制导致脚本不稳定
+- 便于沉淀业务功能与接口映射关系
 
 ---
 
@@ -321,7 +486,33 @@ tapd_url
 - `failure_reason`
 - `create_time`
 
-### 5.4 为什么必须保留 Snapshot
+### 5.4 页面动作模板表 `tbl_task_ui_action_template`
+
+如果第一期要稳定落地 `Playwright` 辅助识别，建议增加页面动作模板表，避免把模板硬编码在程序里。
+
+建议字段：
+
+- `id`
+- `template_code`
+- `template_name`
+- `biz_key`
+- `entry_url`
+- `env_scope`
+- `steps_json`
+- `status`
+- `remark`
+- `create_time`
+- `update_time`
+
+字段说明：
+
+- `template_code`：如 `create_order`
+- `biz_key`：用于按业务域区分，如 `order`、`product`
+- `env_scope`：标记模板适用环境，避免测试环境与预发环境页面结构不一致
+- `steps_json`：保存预设步骤定义
+- `status`：建议取值 `enabled`、`disabled`
+
+### 5.5 为什么必须保留 Snapshot
 
 需求文档、开发执行文档和代码分支后续都可能变化，因此每次执行必须保留当时的上下文快照。
 
@@ -447,6 +638,23 @@ tapd_url
 
 第三个 Tab 的主产物是机器可执行的 `test_plan.json`，而不是纯 Markdown。
 
+推荐生成输入来源：
+
+1. 需求文档 MD
+2. 开发执行 MD
+3. 覆盖分析结果 `coverage_report.json`
+4. 当前分支相对基线分支的 diff
+5. 接口定义详情
+6. 路由 / 控制器代码摘要
+7. 数据库 schema 摘要与少量样本数据
+8. 可选的 `ui_api_trace.json`
+
+生成原则：
+
+- 默认优先依据代码、接口定义和数据库结构直接生成接口测试方案
+- 当需求描述偏页面行为、接口不明确时，再引入 `Playwright` 采集结果辅助识别
+- `Playwright` 只提供真实请求样例和页面触发顺序，不直接承担最终测试执行
+
 ### 8.2 结构示例
 
 ```json
@@ -518,6 +726,141 @@ tapd_url
 - 阻塞项必须显式输出
 - 疑问项必须显式输出
 
+### 8.3.1 `test_plan.json` Schema 建议
+
+建议对 `test_plan.json` 做固定 Schema 校验，至少约束以下字段：
+
+```json
+{
+  "type": "object",
+  "required": [
+    "plan_name",
+    "workflow_id",
+    "source",
+    "coverage_links",
+    "preconditions",
+    "api_cases",
+    "open_questions",
+    "blocked_items"
+  ],
+  "properties": {
+    "plan_name": {"type": "string", "minLength": 1},
+    "workflow_id": {"type": "integer"},
+    "source": {
+      "type": "object",
+      "required": ["task_id", "base_branch", "feature_branch"],
+      "properties": {
+        "task_id": {"type": "integer"},
+        "requirement_fragment_id": {"type": "string"},
+        "dev_plan_fragment_id": {"type": "string"},
+        "base_branch": {"type": "string"},
+        "feature_branch": {"type": "string"},
+        "ui_trace_id": {"type": "integer"}
+      }
+    },
+    "coverage_links": {
+      "type": "array"
+    },
+    "preconditions": {
+      "type": "array"
+    },
+    "api_cases": {
+      "type": "array",
+      "minItems": 1
+    },
+    "open_questions": {
+      "type": "array"
+    },
+    "blocked_items": {
+      "type": "array"
+    }
+  }
+}
+```
+
+建议额外增加业务校验：
+
+- `api_cases[*].case_id` 不能重复
+- `api_cases[*].requirement_id` 必须在 `coverage_links` 中可找到
+- `preconditions[*].id` 不能重复
+- `request_data` 中引用的变量必须能在前置步骤或环境变量中解析
+- `blocked_items` 非空时，不应把对应阻塞用例标记为可直接执行
+
+### 8.3.2 `api_cases` 字段约束建议
+
+每条 `api_case` 建议至少包含：
+
+- `case_id`
+- `name`
+- `requirement_id`
+- `api_id` 或 `api_uri`
+- `method`
+- `request_data`
+- `assertions`
+
+建议可选字段：
+
+- `tags`
+- `priority`
+- `timeout_ms`
+- `depends_on`
+- `skip_reason`
+
+优先级建议：
+
+- `P0`：主链路必过
+- `P1`：重要分支
+- `P2`：边界或增强验证
+
+### 8.4 页面辅助识别产物如何转成测试计划
+
+当存在 `ui_api_trace.json` 时，AI 生成测试计划需要额外完成以下映射：
+
+1. 将页面动作映射为需求点
+2. 将真实请求 URL 映射为接口定义中的 `api_id`
+3. 从请求体中抽取参数样例，整理为 `request_data`
+4. 从响应体中抽取稳定断言字段
+5. 识别哪些请求属于前置造数，哪些请求属于主验证接口
+
+例如：
+
+- 页面点击“创建订单”抓到 `/api/order/create`
+- 请求体包含 `product_id`、`count`
+- 响应体包含 `code` 和 `data.id`
+
+则 AI 应把它转成：
+
+- 一个 `api_prepare` 类型前置条件，或
+- 一个正式 `api_case`
+
+而不是直接保存为浏览器脚本步骤
+
+转换规则建议：
+
+1. 命中 `/api/` 且在接口定义中可识别的请求，优先作为候选业务接口
+2. 列表查询、字典查询、埋点、心跳类请求标记为 `noise`
+3. 页面打开即自动触发、但与当前需求无强关联的请求不进入正式用例
+4. 提交动作后触发且返回关键业务 id 的请求，优先识别为 `target_api`
+5. 在主请求前用于创建前置资源的请求，识别为 `prepare_api`
+
+这样生成的 `test_plan.json` 更接近“标准接口测试计划”，而不是“页面录制回放结果”
+
+### 8.5 何时需要 Playwright
+
+建议仅在以下场景触发：
+
+- 需求主要描述页面行为，未明确后端接口
+- 接口定义缺失或字段说明不足
+- 需要从页面真实操作中抓取请求参数样例
+- 需要辅助识别同一功能涉及的多个串联接口
+
+以下场景不建议触发：
+
+- 接口定义已经完整
+- 开发执行 MD 已明确写出涉及接口
+- 只做常规接口回归
+- 仅需基于已有用例重跑
+
 ---
 
 ## 九、测试报告设计
@@ -574,6 +917,23 @@ tapd_url
 }
 ```
 
+### 9.3 报告与计划的关联要求
+
+建议 `test_report.json` 中每条结果都保留以下关联字段：
+
+- `case_id`
+- `requirement_id`
+- `api_id`
+- `api_uri`
+- `source_plan_version`
+
+这样前端可以从测试报告直接回跳：
+
+- 对应需求点
+- 对应接口
+- 对应计划版本
+- 对应历史执行记录
+
 ---
 
 ## 十、核心接口设计
@@ -611,6 +971,143 @@ tapd_url
 - `/api/task/workflow/db/schema`
 - `/api/task/workflow/db/sample`
 - `/api/task/workflow/db/check`
+
+### 10.6 页面辅助识别相关接口补充约定
+
+建议新增：
+
+- `/api/task/workflow/ui-template/list`
+- `/api/task/workflow/ui-template/detail`
+
+用途：
+
+- 给前端提供可选动作模板列表
+- 允许页面按业务域筛选模板
+
+推荐返回字段：
+
+- `template_code`
+- `template_name`
+- `biz_key`
+- `entry_url`
+- `status`
+
+### 10.7 统一错误码建议
+
+建议工作流相关接口统一返回业务错误码，便于前端做精细提示。
+
+可先约定以下错误：
+
+- `TASK_WORKFLOW_NOT_FOUND`
+- `TASK_WORKFLOW_DEV_PLAN_EMPTY`
+- `TASK_WORKFLOW_REQUIREMENT_EMPTY`
+- `TASK_WORKFLOW_UI_TEMPLATE_NOT_FOUND`
+- `TASK_WORKFLOW_UI_TRACE_FAILED`
+- `TASK_WORKFLOW_TEST_PLAN_INVALID`
+- `TASK_WORKFLOW_API_MAPPING_FAILED`
+- `TASK_WORKFLOW_DB_CHECK_FAILED`
+
+错误返回建议结构：
+
+```json
+{
+  "code": "TASK_WORKFLOW_UI_TEMPLATE_NOT_FOUND",
+  "message": "未找到可用的页面动作模板",
+  "detail": {
+    "template_code": "create_order"
+  }
+}
+```
+
+---
+
+## 十一、前端交互补充建议
+
+### 11.1 Tab 按钮可用条件
+
+建议按状态控制按钮可用性：
+
+- `Tab 1`
+  - `复制 AI 提示词`：有需求知识片段分享地址即可用
+- `Tab 2`
+  - `保存`：文档有改动即可用
+  - `复制 AI 提示词`：有 `workflow_id` 即可用
+- `Tab 3`
+  - `页面辅助识别`：已选择环境且存在可用动作模板时可用
+  - `生成覆盖分析`：需求 MD 存在时可用
+  - `生成测试计划`：开发执行 MD 不为空时可用
+  - `基于页面痕迹生成测试计划`：存在成功的 `ui_trace` 时可用
+- `Tab 4`
+  - `执行接口测试`：存在成功的 `test_plan` 时可用
+  - `执行覆盖检查+接口测试`：需求 MD 与开发执行 MD 都存在时可用
+  - `按历史记录重跑`：存在历史成功或失败记录时可用
+
+### 11.2 页面辅助识别交互流程
+
+建议流程：
+
+1. 用户点击 `页面辅助识别`
+2. 弹出侧边栏或弹窗
+3. 选择环境
+4. 选择动作模板
+5. 填写模板上下文参数
+6. 提交后创建异步任务
+7. 在页面展示实时日志与结果摘要
+8. 成功后允许一键生成测试计划
+
+弹窗建议字段：
+
+- `env_id`
+- `template_code`
+- `entry_url`
+- `template_context`
+
+### 11.3 测试计划区展示建议
+
+建议默认展示“摘要视图”，按需展开 JSON：
+
+- 需求点数
+- 接口数
+- 前置条件数
+- 用例数
+- 阻塞项数
+- 疑问项数
+
+每条用例建议支持展开查看：
+
+- 请求参数
+- 断言
+- 数据库校验
+- 来源依据
+
+### 11.4 测试执行区展示建议
+
+当前执行区建议固定展示：
+
+- 执行编号
+- 执行类型
+- 当前阶段
+- 进度百分比
+- 当前用例名
+- 成功 / 失败 / 跳过计数
+
+日志区建议支持：
+
+- 按阶段筛选
+- 仅看失败
+- 复制日志
+- 自动滚动开关
+
+### 11.5 历史记录区交互建议
+
+每条历史记录建议支持：
+
+- 查看执行摘要
+- 查看覆盖分析
+- 查看测试计划快照
+- 查看失败用例详情
+- 重跑本次计划
+- 基于本次上下文重新生成计划
 
 ### 10.6 推荐实现方式
 
@@ -669,6 +1166,17 @@ tapd_url
 输出：
 
 - `test_plan.json`
+- 测试计划摘要 Markdown
+- 疑问项和阻塞项清单
+
+建议生成步骤：
+
+1. 解析覆盖分析结果，抽取已覆盖与部分覆盖的需求点
+2. 匹配每个需求点对应的接口定义
+3. 判断是否需要前置造数接口
+4. 若存在 `ui_api_trace.json`，则用其补充真实请求参数样例
+5. 为每个接口生成断言与数据库只读校验项
+6. 生成 `open_questions` 与 `blocked_items`
 
 #### 准备前置数据
 
@@ -681,6 +1189,28 @@ tapd_url
 #### 执行接口测试
 
 逐条调用 `/api/ApiRun`
+
+执行细则建议：
+
+- 每条 `api_case` 先解析变量占位符，例如 `{{pre-1.data.id}}`
+- 组装环境、请求方法、路径、请求体后调用 `/api/ApiRun`
+- 保存请求快照与响应快照
+- 单条失败继续后续用例，不中断整个批次
+
+`/api/ApiRun` 建议透传的关键上下文：
+
+- `env_id`
+- `api_id` 或 `api_uri`
+- `method`
+- `request_data`
+- 变量解析结果
+- 调用来源 `task_workflow_test_execute`
+
+这样便于后续：
+
+- 统一审计调用来源
+- 与既有接口执行模块复用日志与回放能力
+- 在失败时快速回查原始请求参数
 
 #### 执行数据库校验
 
@@ -711,6 +1241,7 @@ tapd_url
 - 解析开发执行 MD
 - 结合 diff 判断实现范围
 - 从接口定义中寻找候选接口
+- 必要时结合 `Playwright` 页面采集结果识别真实请求链路
 - 必要时调用只读数据库工具辅助理解数据结构
 - 生成覆盖分析
 - 生成测试计划
@@ -800,6 +1331,8 @@ tapd_url
 在第一期稳定后，可继续扩展：
 
 - Playwright 辅助页面功能识别
+- 页面操作模板沉淀与复用
+- `ui_api_trace.json` 与测试计划的自动映射优化
 - 登录态复用
 - 仅失败用例重跑
 - 历史记录对比
@@ -808,7 +1341,164 @@ tapd_url
 
 ---
 
-## 十七、结论
+## 十七、实施里程碑建议
+
+### 17.1 里程碑 M1：基础工作流闭环
+
+目标：
+
+- 页面能进入工作流程页
+- 自动初始化开发执行 MD
+- 可生成覆盖分析
+- 可生成测试计划
+
+建议范围：
+
+- `tbl_task_workflow`
+- `tbl_task_test_run`
+- `/api/task/workflow/create_or_get`
+- `/api/task/workflow/info`
+- `/api/task/workflow/dev-plan/*`
+- `/api/task/workflow/coverage/*`
+- `/api/task/workflow/test-plan/*`
+
+完成标志：
+
+- 用户可以从任务清单进入工作流程页
+- Tab 1 和 Tab 2 可完整查看与保存
+- Tab 3 可看到覆盖分析和测试计划结果
+
+### 17.2 里程碑 M2：接口测试执行闭环
+
+目标：
+
+- 测试计划可正式执行
+- 执行结果可落历史
+- 失败详情可回看
+
+建议范围：
+
+- `/api/task/workflow/test-run/*`
+- `/api/task/workflow/db/*`
+- `/api/ApiRun` 对接
+- `tbl_task_test_case_result`
+
+完成标志：
+
+- 可执行 `plan_and_test`
+- 可查看单次执行详情
+- 可查看每条用例请求、响应、断言、数据库校验结果
+
+### 17.3 里程碑 M3：Playwright 辅助识别闭环
+
+目标：
+
+- 页面动作模板可管理
+- 可采集页面真实请求样例
+- 可基于页面痕迹生成测试计划
+
+建议范围：
+
+- `tbl_task_ui_action_template`
+- `/api/task/workflow/ui-template/*`
+- `/api/task/workflow/ui-trace/*`
+- `task_workflow_ui_trace_generate`
+
+完成标志：
+
+- 用户可选择模板触发页面辅助识别
+- 成功生成 `ui_api_trace.json`
+- 可基于 `ui_trace` 辅助生成测试计划
+
+### 17.4 推荐排期策略
+
+建议按 `M1 -> M2 -> M3` 顺序推进。
+
+原因：
+
+- 先做 `API-only` 主链路最稳
+- 没有 `M1` 和 `M2`，`Playwright` 采集结果没有稳定落点
+- `M3` 是增强项，应建立在已有测试执行闭环之上
+
+---
+
+## 十八、角色分工建议
+
+### 18.1 前端
+
+负责：
+
+- 工作流程页路由与四个 Tab
+- 文档展示、提示词复制、计划摘要展示
+- 当前执行区、日志区、历史记录区
+- 页面辅助识别弹窗与模板选择
+- SSE 或轮询刷新
+
+交付物：
+
+- `/task-workflow/:taskId` 页面
+- 覆盖分析、测试计划、测试报告的可视化展示
+- 历史记录与重跑交互
+
+### 18.2 后端
+
+负责：
+
+- 工作流主表与运行表
+- 文档初始化和保存接口
+- 覆盖分析、测试计划、测试执行异步任务
+- `/api/ApiRun` 与数据库只读校验对接
+- 历史快照、日志、详情查询
+
+交付物：
+
+- 任务工作流接口
+- 异步执行器
+- 测试结果落库与查询接口
+
+### 18.3 AI 编排
+
+负责：
+
+- 覆盖分析 Prompt
+- 测试计划 Prompt
+- 页面辅助识别 Prompt
+- 失败总结 Prompt
+- JSON Schema 校验与失败兜底
+
+交付物：
+
+- 结构稳定的 `coverage_report.json`
+- 结构稳定的 `test_plan.json`
+- 结构稳定的失败摘要
+
+### 18.4 Playwright 能力
+
+负责：
+
+- 登录和页面访问
+- 执行动作模板
+- 抓取真实请求样例
+- 输出 `ui_api_trace.json`
+
+交付物：
+
+- 模板执行器
+- 请求过滤器
+- trace 结果结构化产物
+
+### 18.5 联调与验收
+
+负责：
+
+- 验证接口入参与页面展示一致
+- 验证异步任务状态、日志、进度推送
+- 验证 `test_plan.json` 和 `test_report.json` 可正确渲染
+- 验证历史重跑和失败回放链路
+
+---
+
+## 十九、结论
 
 该方案第一期完全可行，且与当前项目基础能力高度匹配。
 
