@@ -32,6 +32,7 @@ func InitRouter(tGin *p_gin.Gin) {
 	phpRouter(tGin)
 	supervisorRouter(tGin)
 	gitRouter(tGin)
+	mysqlRouter(tGin)
 	gitLabTokenRouter(tGin)
 	globalSetRouter(tGin)
 	codeRouter(tGin)
@@ -174,6 +175,14 @@ func gitRouter(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/CreateMerge`, controller.CreateMerge)                     //创建合并请求
 	tGin.GinPost(`/api/GitSetSafeLog`, controller.GitSetSafeLog)                 //设置项目安全
 	tGin.GinPost(`/api/GitSaveCredentials`, controller.GitSaveCredentials)       //保存git记住密码账号
+	tGin.GinPost(`/api/GitUploadFile`, controller.GitUploadFile)                 //上传文件到Git项目
+}
+
+// MySQL查询相关
+func mysqlRouter(tGin *p_gin.Gin) {
+	tGin.GinPost(`/api/MysqlTables`, controller.MysqlTables)                 //查询MySQL所有表
+	tGin.GinPost(`/api/MysqlTableStructure`, controller.MysqlTableStructure) //查询MySQL表结构
+	tGin.GinPost(`/api/MysqlQuery`, controller.MysqlQuery)                   //执行MySQL查询
 }
 
 // gitlab token相关

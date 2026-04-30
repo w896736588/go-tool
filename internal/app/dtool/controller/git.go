@@ -7,9 +7,12 @@ import (
 	"dev_tool/internal/pkg/p_common"
 	"dev_tool/internal/pkg/p_shell"
 	"dev_tool/internal/pkg/p_sse"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -1038,4 +1041,148 @@ func prepareGitOperationEnv(sshClient *gsssh.SshTerminal, codePath string) error
 	cmd.SetCommand(`grep -qi '\[credential\]' .git/config 2>/dev/null && grep -qi 'helper.*=.*store' .git/config 2>/dev/null || printf '[credential]\nhelper = store\n' >> .git/config`)
 	_, err := sshClient.RunCommandWait(cmd.GetCommand().ToStr(), 6*time.Second)
 	return err
+}
+
+const (
+	gitUploadFileMaxSize     = 10 * 1024 * 1024 // 文件上传最大10MB
+	gitUploadBase64ChunkSize = 512 * 1024       // base64分块大小512KB
+)
+
+// GitUploadFile 上传本地文件到远程Git项目目录
+// 参数：git_id(Git配置ID), local_file_path(本地文件绝对路径), upload_dir(相对于项目根目录的上传目录)
+func GitUploadFile(c *gin.Context) {
+	reqMap := make(map[string]interface{})
+	if err := gsgin.GinPostBody(c, &reqMap); err != nil {
+		gsgin.GinResponseError(c, `请求参数错误`, nil)
+		return
+	}
+
+	gitId := cast.ToString(reqMap[`git_id`])
+	localFilePath := strings.TrimSpace(cast.ToString(reqMap[`local_file_path`]))
+	uploadDir := strings.TrimSpace(cast.ToString(reqMap[`upload_dir`]))
+
+	// 参数校验
+	if gitId == `` {
+		gsgin.GinResponseError(c, `git_id不能为空`, nil)
+		return
+	}
+	if localFilePath == `` {
+		gsgin.GinResponseError(c, `local_file_path不能为空`, nil)
+		return
+	}
+	if uploadDir == `` {
+		gsgin.GinResponseError(c, `upload_dir不能为空`, nil)
+		return
+	}
+
+	// 标准化upload_dir：统一正斜杠，去除尾部斜杠
+	uploadDir = strings.ReplaceAll(uploadDir, `\`, `/`)
+	uploadDir = strings.TrimRight(uploadDir, `/`)
+
+	// 安全检查：upload_dir不允许路径穿越或以/开头
+	if strings.Contains(uploadDir, `..`) || strings.HasPrefix(uploadDir, `/`) {
+		gsgin.GinResponseError(c, `upload_dir不合法`, nil)
+		return
+	}
+
+	// 检查本地文件
+	fileInfo, statErr := os.Stat(localFilePath)
+	if statErr != nil {
+		gsgin.GinResponseError(c, `本地文件不存在或无法访问: `+statErr.Error(), nil)
+		return
+	}
+	if fileInfo.IsDir() {
+		gsgin.GinResponseError(c, `local_file_path不能是目录`, nil)
+		return
+	}
+	if fileInfo.Size() > gitUploadFileMaxSize {
+		gsgin.GinResponseError(c, fmt.Sprintf(`文件大小超过限制(最大%dMB)`, gitUploadFileMaxSize/(1024*1024)), nil)
+		return
+	}
+
+	// 根据git配置id查询
+	gitInfo, queryErr := common.DbMain.Client.QuickQuery(`tbl_git`, `*`, map[string]any{
+		`id`: gitId,
+	}).One()
+	if queryErr != nil || len(gitInfo) == 0 {
+		gsgin.GinResponseError(c, `未找到id为 "`+gitId+`" 的Git配置`, nil)
+		return
+	}
+
+	codePath := cast.ToString(gitInfo[`code_path`])
+	if codePath == `` {
+		gsgin.GinResponseError(c, `Git项目未配置code_path`, nil)
+		return
+	}
+
+	sshId := gitInfo[`ssh_id`]
+	sshConfig, sshConfigErr := common.DbMain.GetSshConfig(sshId)
+	if sshConfigErr != nil {
+		gsgin.GinResponseError(c, `获取SSH配置失败: `+sshConfigErr.Error(), nil)
+		return
+	}
+	if len(sshConfig) == 0 {
+		gsgin.GinResponseError(c, `SSH配置为空`, nil)
+		return
+	}
+
+	// 读取本地文件内容
+	fileContent, readErr := os.ReadFile(localFilePath)
+	if readErr != nil {
+		gsgin.GinResponseError(c, `读取本地文件失败: `+readErr.Error(), nil)
+		return
+	}
+
+	// 创建一次性SSH连接
+	sshOnce, sshErr := component.ShellClient.GetSshOnce(sshConfig)
+	if sshErr != nil {
+		gsgin.GinResponseError(c, `创建SSH连接失败: `+sshErr.Error(), nil)
+		return
+	}
+
+	// 构建远程目标路径
+	fileName := filepath.Base(localFilePath)
+	targetDir := codePath + `/` + uploadDir
+	targetPath := targetDir + `/` + fileName
+
+	// 创建远程目录
+	if _, mkdirErr := sshOnce.RunCommandOnce(fmt.Sprintf(`mkdir -p %s`, targetDir)); mkdirErr != nil {
+		gsgin.GinResponseError(c, `创建远程目录失败: `+mkdirErr.Error(), nil)
+		return
+	}
+
+	// base64编码后分块传输到远程服务器
+	encoded := base64.StdEncoding.EncodeToString(fileContent)
+	encodedLen := len(encoded)
+	totalChunks := (encodedLen + gitUploadBase64ChunkSize - 1) / gitUploadBase64ChunkSize
+
+	for i := 0; i < totalChunks; i++ {
+		start := i * gitUploadBase64ChunkSize
+		end := start + gitUploadBase64ChunkSize
+		if end > encodedLen {
+			end = encodedLen
+		}
+		chunk := encoded[start:end]
+
+		var cmd string
+		if i == 0 {
+			cmd = fmt.Sprintf(`echo '%s' | base64 -d > %s`, chunk, targetPath)
+		} else {
+			cmd = fmt.Sprintf(`echo '%s' | base64 -d >> %s`, chunk, targetPath)
+		}
+
+		if _, cmdErr := sshOnce.RunCommandOnce(cmd); cmdErr != nil {
+			// 传输失败时清理不完整文件
+			_, _ = sshOnce.RunCommandOnce(fmt.Sprintf(`rm -f %s`, targetPath))
+			gsgin.GinResponseError(c, fmt.Sprintf(`文件传输失败(块%d/%d): %s`, i+1, totalChunks, cmdErr.Error()), nil)
+			return
+		}
+	}
+
+	gsgin.GinResponseSuccess(c, `文件上传成功`, map[string]any{
+		`remote_path`: targetPath,
+		`file_name`:   fileName,
+		`file_size`:   fileInfo.Size(),
+		`git_id`:      gitId,
+	})
 }
