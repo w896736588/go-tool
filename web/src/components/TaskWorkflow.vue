@@ -19,6 +19,11 @@
           </div>
         </div>
         <div class="task-workflow-header__actions">
+          <el-tooltip content="返回首页" placement="bottom">
+            <el-button class="task-workflow-home-btn" @click="goHome">
+              <el-icon :size="18"><HomeFilled /></el-icon>
+            </el-button>
+          </el-tooltip>
           <GitActionButton compact variant="info" @click="goBackToTaskList">
             返回任务清单
           </GitActionButton>
@@ -63,38 +68,32 @@
               />
             </div>
 
+          </div>
+        </el-tab-pane>
+
+        <el-tab-pane label="开发设计" name="design">
+          <div class="task-workflow-tab">
             <div class="task-workflow-card">
               <div class="task-workflow-card__header">
-                <div class="task-workflow-card__title">需求文档内容</div>
+                <div class="task-workflow-card__title">AI 提示词</div>
                 <div class="task-workflow-card__switch">
-                  <GitActionButton
-                    compact
-                    :class="{ 'task-workflow-mode-button--active': requirementViewMode === 'preview' }"
-                    @click="requirementViewMode = 'preview'"
-                  >
-                    预览
+                  <GitActionButton compact :loading="promptSaving === 'design'" @click="savePrompts('design')">
+                    保存提示词
                   </GitActionButton>
-                  <GitActionButton
-                    compact
-                    variant="info"
-                    :class="{ 'task-workflow-mode-button--active': requirementViewMode === 'source' }"
-                    @click="requirementViewMode = 'source'"
-                  >
-                    源码
+                  <GitActionButton compact @click="copyText(workflow.prompt_design || '', '提示词已复制')">
+                    复制提示词
+                  </GitActionButton>
+                  <GitActionButton compact variant="warning" :loading="promptRestoring === 'design'" @click="restorePrompts('design')">
+                    还原为默认提示词
                   </GitActionButton>
                 </div>
               </div>
-              <MarkdownRenderer
-                v-if="requirementViewMode === 'preview'"
-                :source="requirementFragment.content || ''"
-                class="task-workflow-markdown"
-              />
-              <el-input
-                v-else
-                :model-value="requirementFragment.content || ''"
-                type="textarea"
-                :rows="20"
-                readonly
+              <MdEditor
+                v-model="workflow.prompt_design"
+                preview-theme="github"
+                :preview="true"
+                :toolbars="promptEditorToolbars"
+                style="height: 560px;"
               />
             </div>
           </div>
@@ -161,6 +160,7 @@
 </template>
 
 <script>
+import { HomeFilled } from '@element-plus/icons-vue'
 import GitActionButton from '@/components/base/GitActionButton.vue'
 import MarkdownRenderer from '@/components/base/markdown.vue'
 import MemoryFragmentApi from '@/utils/base/memory_fragment'
@@ -178,6 +178,7 @@ const PROMPT_EDITOR_TOOLBARS = [
 export default {
   name: 'TaskWorkflow',
   components: {
+    HomeFilled,
     GitActionButton,
     MarkdownRenderer,
     MdEditor,
@@ -206,6 +207,10 @@ export default {
   },
   mounted() {
     this.loadWorkflowPage()
+    window.addEventListener('keydown', this.handleCtrlS)
+  },
+  beforeUnmount() {
+    window.removeEventListener('keydown', this.handleCtrlS)
   },
   watch: {
     '$route.params.taskId'() {
@@ -213,8 +218,18 @@ export default {
     },
   },
   methods: {
+    handleCtrlS(e) {
+      if (!(e.ctrlKey && e.key === 's')) return
+      e.preventDefault()
+      const TAB_TO_PROMPT = { requirement: 'requirement', design: 'design', 'api-dev': 'api_dev', 'api-test-fix': 'api_test' }
+      const promptType = TAB_TO_PROMPT[this.activeTab]
+      if (promptType) this.savePrompts(promptType)
+    },
     goBackToTaskList() {
       this.$router.push('/HomeTask')
+    },
+    goHome() {
+      this.$router.push('/Dashboard')
     },
     loadWorkflowPage() {
       if (this.taskId <= 0) {
@@ -299,6 +314,7 @@ export default {
         prompt_requirement: this.workflow.prompt_requirement || '',
         prompt_api_dev: this.workflow.prompt_api_dev || '',
         prompt_api_test: this.workflow.prompt_api_test || '',
+        prompt_design: this.workflow.prompt_design || '',
       }, (response) => {
         this.promptSaving = ''
         if (!(response && response.ErrCode === 0)) {
@@ -315,6 +331,15 @@ export default {
       if (this.promptRestoring || this.workflowId <= 0) {
         return
       }
+      this.$confirm('确定要还原为默认提示词吗？当前内容将被覆盖。', '提示', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }).then(() => {
+        this.doRestorePrompts(promptType)
+      }).catch(() => {})
+    },
+    doRestorePrompts(promptType) {
       this.promptRestoring = promptType
       taskWorkflowApi.TaskWorkflowPromptsRestore(this.workflowId, (response) => {
         this.promptRestoring = ''
@@ -434,6 +459,26 @@ export default {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.task-workflow-home-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(122, 136, 114, 0.18);
+  background: rgba(255, 255, 255, 0.6);
+  color: #5e6553;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.task-workflow-home-btn:hover {
+  background: #eef3e7;
+  color: #3a7a3a;
 }
 
 .task-workflow-alert {

@@ -21,6 +21,15 @@ export default {
       linkify: true,
       typographer: true,
     });
+    // 所有链接在新标签页打开
+    const defaultRender = md.renderer.rules.link_open || function (tokens, idx, options, _env, self) {
+      return self.renderToken(tokens, idx, options);
+    };
+    md.renderer.rules.link_open = function (tokens, idx, options, env, self) {
+      tokens[idx].attrSet('target', '_blank');
+      tokens[idx].attrSet('rel', 'noopener noreferrer');
+      return defaultRender(tokens, idx, options, env, self);
+    };
 
     const compiledMarkdown = computed(() => md.render(props.source));
     const markdownContainer = ref(null);

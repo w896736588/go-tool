@@ -44,6 +44,7 @@ type TaskWorkflowPromptsSaveRequest struct {
 	PromptRequirement string `json:"prompt_requirement"`
 	PromptApiDev      string `json:"prompt_api_dev"`
 	PromptApiTest     string `json:"prompt_api_test"`
+	PromptDesign      string `json:"prompt_design"`
 }
 
 // TaskWorkflowPromptsRestoreRequest 还原工作流提示词请求。

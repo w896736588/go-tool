@@ -87,6 +87,33 @@
 }
 
 .sidebar-footer {
+  padding: 10px 14px 8px;
+  border-top: 1px solid #ecece4;
+  background: #f9faf6;
+}
+
+.memory-home-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid #ddd;
+  background: #fff;
+  color: #777;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.memory-home-btn:hover {
+  background: #eef3e7;
+  color: #3a7a3a;
+  border-color: #c5d4b8;
+}
+
+.sidebar-git-footer {
   display: flex;
   flex-direction: column;
   gap: 6px;

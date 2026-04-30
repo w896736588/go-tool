@@ -105,7 +105,15 @@
         </button>
       </el-scrollbar>
 
-      <div v-if="memoryGitRepoEnabled && !sidebarCollapsed" class="sidebar-footer">
+      <div v-if="!sidebarCollapsed" class="sidebar-footer">
+        <el-tooltip content="返回首页" placement="right">
+          <button class="memory-home-btn" @click="goHome">
+            <el-icon :size="13"><HomeFilled /></el-icon>
+          </button>
+        </el-tooltip>
+      </div>
+
+      <div v-if="memoryGitRepoEnabled && !sidebarCollapsed" class="sidebar-git-footer">
         <div class="sidebar-footer-row">
           <span class="sidebar-footer-label">{{ pushStatusLabel }}</span>
           <span class="sidebar-footer-value">{{ pushStatusDesc }}</span>
@@ -289,7 +297,7 @@
 </template>
 
 <script>
-import { Check, DArrowLeft, DArrowRight, Delete, Loading, Plus, Search } from '@element-plus/icons-vue'
+import { Check, DArrowLeft, DArrowRight, Delete, HomeFilled, Loading, Plus, Search } from '@element-plus/icons-vue'
 import MemoryFragmentApi from '@/utils/base/memory_fragment'
 import MemoryEditor from '@/components/memory/MemoryEditor.vue'
 import MemoryHistoryDialog from '@/components/memory/MemoryHistoryDialog.vue'
@@ -331,6 +339,7 @@ export default {
     DArrowLeft,
     DArrowRight,
     Delete,
+    HomeFilled,
     Plus,
     Search,
     GitActionButton,
@@ -1297,6 +1306,9 @@ export default {
     // handleTabChange 切换 tab 时保持页面状态一致。
     handleTabChange(tabPane) {
       this.activeTab = tabPane.paneName
+    },
+    goHome() {
+      this.$router.push('/Dashboard')
     },
   }
 }

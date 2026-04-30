@@ -19,6 +19,16 @@ configureMdEditor({
   codeMirrorExtensions(extensions) {
     return buildMdEditorCodeMirrorExtensions(extensions)
   },
+  markdownItConfig(mdit) {
+    const defaultRender = mdit.renderer.rules.link_open || function (tokens, idx, options, _env, self) {
+      return self.renderToken(tokens, idx, options)
+    }
+    mdit.renderer.rules.link_open = function (tokens, idx, options, env, self) {
+      tokens[idx].attrSet('target', '_blank')
+      tokens[idx].attrSet('rel', 'noopener noreferrer')
+      return defaultRender(tokens, idx, options, env, self)
+    }
+  },
 })
 
 

@@ -1376,6 +1376,11 @@ func SetHomeTaskConfigGet(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
+	promptDesign, err := homeTaskConfigValue(define.HomeTaskConfigPromptDesign)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`home_task_daily_report_prompt`:   dailyReportPrompt,
 		`home_task_daily_report_model_id`: cast.ToInt(dailyReportModelID),
@@ -1387,6 +1392,7 @@ func SetHomeTaskConfigGet(c *gin.Context) {
 		`home_task_prompt_dev`:            promptDev,
 		`home_task_prompt_api_gen`:        promptApiGen,
 		`home_task_prompt_api_test`:       promptApiTest,
+		`home_task_prompt_design`:         promptDesign,
 	})
 }
 
@@ -1456,6 +1462,11 @@ func SetHomeTaskConfigSave(c *gin.Context) {
 	}
 	homeTaskPromptApiTest := strings.TrimSpace(cast.ToString(dataMap[`home_task_prompt_api_test`]))
 	if err := common.DbMain.HomeTaskConfigSave(`接口自动化测试提示词`, define.HomeTaskConfigPromptApiTest, homeTaskPromptApiTest, `工作流-接口自动化测试提示词模板`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskPromptDesign := strings.TrimSpace(cast.ToString(dataMap[`home_task_prompt_design`]))
+	if err := common.DbMain.HomeTaskConfigSave(`开发设计提示词`, define.HomeTaskConfigPromptDesign, homeTaskPromptDesign, `工作流-开发设计提示词模板`); err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}

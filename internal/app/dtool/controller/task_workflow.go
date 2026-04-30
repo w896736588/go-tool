@@ -8,6 +8,7 @@ import (
 	_struct "dev_tool/internal/app/dtool/struct"
 	"encoding/json"
 	"net/url"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -587,9 +588,9 @@ func buildTaskWorkflowResponse(c *gin.Context, workflowInfo map[string]any) (map
 	}
 	// 新创建的工作流提示词为空时，从配置模板初始化。
 	workflowID := cast.ToInt(workflowInfo[`id`])
-	if workflowID > 0 && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_requirement`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_api_dev`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_api_test`])) == `` {
+	if workflowID > 0 && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_requirement`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_api_dev`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_api_test`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_design`])) == `` {
 		prompts := resolveTaskWorkflowPrompts(c, homeTaskInfo, workflowInfo)
-		_ = common.DbMain.TaskWorkflowUpdatePrompts(workflowID, prompts[`requirement`], prompts[`api_dev`], prompts[`api_test`])
+		_ = common.DbMain.TaskWorkflowUpdatePrompts(workflowID, prompts[`requirement`], prompts[`api_dev`], prompts[`api_test`], prompts[`design`])
 		updatedInfo, updateErr := common.DbMain.TaskWorkflowInfo(workflowID)
 		if updateErr == nil {
 			workflowInfo = updatedInfo
@@ -1246,6 +1247,7 @@ func TaskWorkflowPromptsSave(c *gin.Context) {
 		request.PromptRequirement,
 		request.PromptApiDev,
 		request.PromptApiTest,
+		request.PromptDesign,
 	)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
@@ -1289,6 +1291,7 @@ func TaskWorkflowPromptsRestore(c *gin.Context) {
 		prompts[`requirement`],
 		prompts[`api_dev`],
 		prompts[`api_test`],
+		prompts[`design`],
 	); updateErr != nil {
 		gsgin.GinResponseError(c, updateErr.Error(), nil)
 		return
@@ -1309,10 +1312,12 @@ func resolveTaskWorkflowPrompts(c *gin.Context, homeTaskInfo map[string]any, wor
 	promptDev, _ := common.DbMain.HomeTaskConfigValue(define.HomeTaskConfigPromptDev)
 	promptApiGen, _ := common.DbMain.HomeTaskConfigValue(define.HomeTaskConfigPromptApiGen)
 	promptApiTest, _ := common.DbMain.HomeTaskConfigValue(define.HomeTaskConfigPromptApiTest)
+	promptDesign, _ := common.DbMain.HomeTaskConfigValue(define.HomeTaskConfigPromptDesign)
 	return map[string]string{
 		`requirement`: taskWorkflowResolvePlaceholders(promptDev, placeholders),
 		`api_dev`:     taskWorkflowResolvePlaceholders(promptApiGen, placeholders),
 		`api_test`:    taskWorkflowResolvePlaceholders(promptApiTest, placeholders),
+		`design`:      taskWorkflowResolvePlaceholders(promptDesign, placeholders),
 	}
 }
 
@@ -1320,13 +1325,15 @@ func resolveTaskWorkflowPrompts(c *gin.Context, homeTaskInfo map[string]any, wor
 func buildTaskWorkflowPlaceholderMap(c *gin.Context, homeTaskInfo map[string]any, workflowInfo map[string]any) map[string]string {
 	apiHost := taskWorkflowBuildAPIHost(c)
 	result := map[string]string{
-		`{需求文档地址}`:        taskWorkflowBuildShareURL(c, workflowInfo, apiHost),
-		`{接口开发API地址}`:     apiHost,
-		`{接口开发API的token}`: taskWorkflowBuildAPIToken(c),
-		`{Git配置的id}`:      cast.ToString(homeTaskInfo[`git_id`]),
-		`{MySQL配置的id}`:    cast.ToString(homeTaskInfo[`mysql_id`]),
-		`{接口开发文件夹}`:       taskWorkflowQueryApiDirName(homeTaskInfo),
-		`{接口开发集合}`:        taskWorkflowQueryApiCollectionName(homeTaskInfo),
+		`{需求文档地址}`:         taskWorkflowBuildShareURL(c, workflowInfo, apiHost),
+		`{接口开发API地址}`:      apiHost,
+		`{接口开发API的token}`:  taskWorkflowBuildAPIToken(c),
+		`{Git配置的id}`:       cast.ToString(homeTaskInfo[`git_id`]),
+		`{MySQL配置的id}`:     cast.ToString(homeTaskInfo[`mysql_id`]),
+		`{接口开发文件夹}`:        taskWorkflowQueryApiDirName(homeTaskInfo),
+		`{接口开发集合}`:         taskWorkflowQueryApiCollectionName(homeTaskInfo),
+		`{dtool-api地址}`:    taskWorkflowQuerySkillPath(homeTaskInfo, `skills/dtool-api`),
+		`{dtool-common地址}`: taskWorkflowQuerySkillPath(homeTaskInfo, `skills/dtool-common`),
 	}
 	return result
 }
@@ -1426,4 +1433,23 @@ func taskWorkflowQueryApiCollectionName(homeTaskInfo map[string]any) string {
 		return ``
 	}
 	return cast.ToString(info[`name`])
+}
+
+// taskWorkflowQuerySkillPath 根据 git_id 查询项目根目录，拼接 skill 子目录的绝对路径。
+func taskWorkflowQuerySkillPath(homeTaskInfo map[string]any, subDir string) string {
+	gitID := cast.ToInt(homeTaskInfo[`git_id`])
+	if gitID <= 0 {
+		return ``
+	}
+	info, err := common.DbMain.Client.QuickQuery(`tbl_git`, `code_path`, map[string]any{
+		`id`: gitID,
+	}).One()
+	if err != nil || len(info) == 0 {
+		return ``
+	}
+	codePath := strings.TrimSpace(cast.ToString(info[`code_path`]))
+	if codePath == `` {
+		return ``
+	}
+	return filepath.Join(codePath, subDir)
 }

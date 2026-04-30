@@ -87,6 +87,15 @@
             style="height: 280px;"
           />
         </el-form-item>
+        <el-form-item label="开发设计提示词">
+          <MdEditor
+            v-model="form.home_task_prompt_design"
+            preview-theme="github"
+            :preview="true"
+            :toolbars="promptEditorToolbars"
+            style="height: 280px;"
+          />
+        </el-form-item>
         <el-form-item>
           <pl-button type="primary" @click="savePromptConfig">保存提示词模板配置</pl-button>
         </el-form-item>
@@ -174,6 +183,8 @@ const PROMPT_PLACEHOLDERS = [
   { label: '接口开发集合', value: '{接口开发集合}' },
   { label: 'Git配置的id', value: '{Git配置的id}' },
   { label: 'MySQL配置的id', value: '{MySQL配置的id}' },
+  { label: 'dtool-api地址', value: '{dtool-api地址}' },
+  { label: 'dtool-common地址', value: '{dtool-common地址}' },
 ]
 
 const PROMPT_EDITOR_TOOLBARS = [
@@ -196,6 +207,7 @@ export default {
         home_task_prompt_dev: '',
         home_task_prompt_api_gen: '',
         home_task_prompt_api_test: '',
+        home_task_prompt_design: '',
         home_task_tapd_smart_link_id: null,
         home_task_tapd_link_label: '',
         home_task_tapd_css_selector: '',
@@ -258,6 +270,7 @@ export default {
         this.form.home_task_prompt_dev = response.Data.home_task_prompt_dev || ''
         this.form.home_task_prompt_api_gen = response.Data.home_task_prompt_api_gen || ''
         this.form.home_task_prompt_api_test = response.Data.home_task_prompt_api_test || ''
+        this.form.home_task_prompt_design = response.Data.home_task_prompt_design || ''
         this.form.home_task_tapd_smart_link_id = response.Data.home_task_tapd_smart_link_id || null
         this.form.home_task_tapd_link_label = response.Data.home_task_tapd_link_label || ''
         this.form.home_task_tapd_css_selector = response.Data.home_task_tapd_css_selector || ''
@@ -299,6 +312,7 @@ export default {
         home_task_prompt_dev: this.form.home_task_prompt_dev,
         home_task_prompt_api_gen: this.form.home_task_prompt_api_gen,
         home_task_prompt_api_test: this.form.home_task_prompt_api_test,
+        home_task_prompt_design: this.form.home_task_prompt_design,
         home_task_tapd_smart_link_id: this.form.home_task_tapd_smart_link_id,
         home_task_tapd_link_label: this.form.home_task_tapd_link_label,
         home_task_tapd_css_selector: this.form.home_task_tapd_css_selector,
