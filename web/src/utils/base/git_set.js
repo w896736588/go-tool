@@ -73,6 +73,14 @@ function CronConfigSave(data , callBack){
     base.BasePost('/api/Set/CronConfigSave', data, callBack)
 }
 
+function HomeTaskConfigGet(callBack){
+    base.BasePost('/api/Set/HomeTaskConfigGet', {}, callBack)
+}
+
+function HomeTaskConfigSave(data , callBack){
+    base.BasePost('/api/Set/HomeTaskConfigSave', data, callBack)
+}
+
 export default {
     GitList,
     GitAdd,
@@ -94,4 +102,6 @@ export default {
     RuntimeConfigItemSave,
     CronConfigGet,
     CronConfigSave,
+    HomeTaskConfigGet,
+    HomeTaskConfigSave,
 }

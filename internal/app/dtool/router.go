@@ -254,6 +254,8 @@ func setRouter(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/Set/RuntimeConfigItemSave`, controller.SetRuntimeConfigItemSave)
 	tGin.GinPost(`/api/Set/CronConfigGet`, controller.SetCronConfigGet)
 	tGin.GinPost(`/api/Set/CronConfigSave`, controller.SetCronConfigSave)
+	tGin.GinPost(`/api/Set/HomeTaskConfigGet`, controller.SetHomeTaskConfigGet)
+	tGin.GinPost(`/api/Set/HomeTaskConfigSave`, controller.SetHomeTaskConfigSave)
 }
 
 func setStar(tGin *p_gin.Gin) {

@@ -831,56 +831,6 @@ func SetMemoryConfigGet(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	dailyReportPrompt, err := homeTaskConfigValue(define.HomeTaskConfigDailyReportPrompt)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	dailyReportModelID, err := homeTaskConfigValue(define.HomeTaskConfigDailyReportModelID)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	fragmentPrompt, err := homeTaskConfigValue(define.HomeTaskConfigFragmentPrompt)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	tapdSmartLinkID, err := homeTaskConfigValue(define.HomeTaskConfigTapdSmartLinkID)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	tapdLinkLabel, err := homeTaskConfigValue(define.HomeTaskConfigTapdLinkLabel)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	tapdCssSelector, err := homeTaskConfigValue(define.HomeTaskConfigTapdCssSelector)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	tapdWaitSeconds, err := homeTaskConfigValue(define.HomeTaskConfigTapdWaitSeconds)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	promptDev, err := homeTaskConfigValue(define.HomeTaskConfigPromptDev)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	promptApiGen, err := homeTaskConfigValue(define.HomeTaskConfigPromptApiGen)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	promptApiTest, err := homeTaskConfigValue(define.HomeTaskConfigPromptApiTest)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`db_dir`:                            mainDBConfig.Dir,
 		`db_name`:                           mainDBConfig.DBName,
@@ -895,16 +845,6 @@ func SetMemoryConfigGet(c *gin.Context) {
 		`memory_config_file`:                memoryConfigFilePath(),
 		`memory_arrange_prompt`:             arrangePrompt,
 		`memory_arrange_model_id`:           cast.ToInt(arrangeModelID),
-		`home_task_daily_report_prompt`:     dailyReportPrompt,
-		`home_task_daily_report_model_id`:   cast.ToInt(dailyReportModelID),
-		`home_task_fragment_prompt`:         fragmentPrompt,
-		`home_task_tapd_smart_link_id`:      cast.ToInt(tapdSmartLinkID),
-		`home_task_tapd_link_label`:         tapdLinkLabel,
-		`home_task_tapd_css_selector`:       tapdCssSelector,
-		`home_task_tapd_wait_seconds`:       cast.ToInt(tapdWaitSeconds),
-		`home_task_prompt_dev`:              promptDev,
-		`home_task_prompt_api_gen`:          promptApiGen,
-		`home_task_prompt_api_test`:         promptApiTest,
 		`safe_password`:                     component.ConfigViper.GetString(`safe.password`),
 		`run_mode`:                          component.EnvClient.SmartLinkConfig.RunMode,
 		`client_version`:                    component.EnvClient.SmartLinkConfig.ClientVersion,
@@ -937,71 +877,6 @@ func SetMemoryConfigSave(c *gin.Context) {
 		return
 	}
 	if err := common.DbMain.MemoryConfigSave(`记忆整理模型`, define.MemoryConfigArrangeModelID, cast.ToString(memoryArrangeModelID), `知识片段 AI 整理所用模型 id`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	homeTaskDailyReportPrompt := strings.TrimSpace(cast.ToString(dataMap[`home_task_daily_report_prompt`]))
-	if homeTaskDailyReportPrompt == `` {
-		homeTaskDailyReportPrompt = defaultHomeTaskDailyReportPrompt()
-	}
-	homeTaskDailyReportModelID := cast.ToInt(dataMap[`home_task_daily_report_model_id`])
-	if homeTaskDailyReportModelID > 0 {
-		modelInfo, err := common.DbMain.AiModelInfo(homeTaskDailyReportModelID)
-		if err != nil {
-			gsgin.GinResponseError(c, `AI 模型不存在`, nil)
-			return
-		}
-		// 工作日报仅允许使用 LLM 模型 / only LLM models are allowed for daily report.
-		if strings.ToLower(cast.ToString(modelInfo[`model_type`])) != `llm` {
-			gsgin.GinResponseError(c, `工作日报仅支持选择 LLM 模型`, nil)
-			return
-		}
-	}
-	if err := common.DbMain.HomeTaskConfigSave(`工作日报提示词`, define.HomeTaskConfigDailyReportPrompt, homeTaskDailyReportPrompt, `首页任务工作日报 AI 提示词`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	if err := common.DbMain.HomeTaskConfigSave(`工作日报模型`, define.HomeTaskConfigDailyReportModelID, cast.ToString(homeTaskDailyReportModelID), `首页任务工作日报所用模型 id`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	homeTaskFragmentPrompt := strings.TrimSpace(cast.ToString(dataMap[`home_task_fragment_prompt`]))
-	if err := common.DbMain.HomeTaskConfigSave(`任务知识片段提示词`, define.HomeTaskConfigFragmentPrompt, homeTaskFragmentPrompt, `新建任务时自动创建知识片段的提示词模板`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	homeTaskTapdSmartLinkID := cast.ToString(cast.ToInt(dataMap[`home_task_tapd_smart_link_id`]))
-	if err := common.DbMain.HomeTaskConfigSave(`TAPD自定义网页ID`, define.HomeTaskConfigTapdSmartLinkID, homeTaskTapdSmartLinkID, `TAPD登录页所选自定义网页ID`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	homeTaskTapdLinkLabel := strings.TrimSpace(cast.ToString(dataMap[`home_task_tapd_link_label`]))
-	if err := common.DbMain.HomeTaskConfigSave(`TAPD链接标签`, define.HomeTaskConfigTapdLinkLabel, homeTaskTapdLinkLabel, `TAPD登录页所选链接的label`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	homeTaskTapdCssSelector := strings.TrimSpace(cast.ToString(dataMap[`home_task_tapd_css_selector`]))
-	if err := common.DbMain.HomeTaskConfigSave(`TAPD抓取CSS选择器`, define.HomeTaskConfigTapdCssSelector, homeTaskTapdCssSelector, `TAPD网页抓取区域CSS选择器`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	homeTaskTapdWaitSeconds := cast.ToString(cast.ToInt(dataMap[`home_task_tapd_wait_seconds`]))
-	if err := common.DbMain.HomeTaskConfigSave(`TAPD抓取等待秒数`, define.HomeTaskConfigTapdWaitSeconds, homeTaskTapdWaitSeconds, `TAPD网页抓取前等待秒数`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	homeTaskPromptDev := strings.TrimSpace(cast.ToString(dataMap[`home_task_prompt_dev`]))
-	if err := common.DbMain.HomeTaskConfigSave(`需求开发提示词`, define.HomeTaskConfigPromptDev, homeTaskPromptDev, `工作流-需求开发提示词模板`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	homeTaskPromptApiGen := strings.TrimSpace(cast.ToString(dataMap[`home_task_prompt_api_gen`]))
-	if err := common.DbMain.HomeTaskConfigSave(`接口生成提示词`, define.HomeTaskConfigPromptApiGen, homeTaskPromptApiGen, `工作流-接口生成提示词模板`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	homeTaskPromptApiTest := strings.TrimSpace(cast.ToString(dataMap[`home_task_prompt_api_test`]))
-	if err := common.DbMain.HomeTaskConfigSave(`接口自动化测试提示词`, define.HomeTaskConfigPromptApiTest, homeTaskPromptApiTest, `工作流-接口自动化测试提示词模板`); err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
@@ -1445,6 +1320,144 @@ func SetAccountGroupDelete(c *gin.Context) {
 		_, _ = common.DbMain.Client.QuickDelete(`tbl_group`, map[string]any{
 			`id`: dataMap[`id`],
 		}).Exec()
+	}
+	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
+// SetHomeTaskConfigGet 返回任务清单配置页面数据。
+func SetHomeTaskConfigGet(c *gin.Context) {
+	dailyReportPrompt, err := homeTaskConfigValue(define.HomeTaskConfigDailyReportPrompt)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	dailyReportModelID, err := homeTaskConfigValue(define.HomeTaskConfigDailyReportModelID)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	fragmentPrompt, err := homeTaskConfigValue(define.HomeTaskConfigFragmentPrompt)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	tapdSmartLinkID, err := homeTaskConfigValue(define.HomeTaskConfigTapdSmartLinkID)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	tapdLinkLabel, err := homeTaskConfigValue(define.HomeTaskConfigTapdLinkLabel)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	tapdCssSelector, err := homeTaskConfigValue(define.HomeTaskConfigTapdCssSelector)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	tapdWaitSeconds, err := homeTaskConfigValue(define.HomeTaskConfigTapdWaitSeconds)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	promptDev, err := homeTaskConfigValue(define.HomeTaskConfigPromptDev)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	promptApiGen, err := homeTaskConfigValue(define.HomeTaskConfigPromptApiGen)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	promptApiTest, err := homeTaskConfigValue(define.HomeTaskConfigPromptApiTest)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`home_task_daily_report_prompt`:   dailyReportPrompt,
+		`home_task_daily_report_model_id`: cast.ToInt(dailyReportModelID),
+		`home_task_fragment_prompt`:       fragmentPrompt,
+		`home_task_tapd_smart_link_id`:    cast.ToInt(tapdSmartLinkID),
+		`home_task_tapd_link_label`:       tapdLinkLabel,
+		`home_task_tapd_css_selector`:     tapdCssSelector,
+		`home_task_tapd_wait_seconds`:     cast.ToInt(tapdWaitSeconds),
+		`home_task_prompt_dev`:            promptDev,
+		`home_task_prompt_api_gen`:        promptApiGen,
+		`home_task_prompt_api_test`:       promptApiTest,
+	})
+}
+
+// SetHomeTaskConfigSave 保存任务清单配置。
+func SetHomeTaskConfigSave(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+
+	homeTaskDailyReportPrompt := strings.TrimSpace(cast.ToString(dataMap[`home_task_daily_report_prompt`]))
+	if homeTaskDailyReportPrompt == `` {
+		homeTaskDailyReportPrompt = defaultHomeTaskDailyReportPrompt()
+	}
+	homeTaskDailyReportModelID := cast.ToInt(dataMap[`home_task_daily_report_model_id`])
+	if homeTaskDailyReportModelID > 0 {
+		modelInfo, err := common.DbMain.AiModelInfo(homeTaskDailyReportModelID)
+		if err != nil {
+			gsgin.GinResponseError(c, `AI 模型不存在`, nil)
+			return
+		}
+		if strings.ToLower(cast.ToString(modelInfo[`model_type`])) != `llm` {
+			gsgin.GinResponseError(c, `工作日报仅支持选择 LLM 模型`, nil)
+			return
+		}
+	}
+	if err := common.DbMain.HomeTaskConfigSave(`工作日报提示词`, define.HomeTaskConfigDailyReportPrompt, homeTaskDailyReportPrompt, `首页任务工作日报 AI 提示词`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	if err := common.DbMain.HomeTaskConfigSave(`工作日报模型`, define.HomeTaskConfigDailyReportModelID, cast.ToString(homeTaskDailyReportModelID), `首页任务工作日报所用模型 id`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskFragmentPrompt := strings.TrimSpace(cast.ToString(dataMap[`home_task_fragment_prompt`]))
+	if err := common.DbMain.HomeTaskConfigSave(`任务知识片段提示词`, define.HomeTaskConfigFragmentPrompt, homeTaskFragmentPrompt, `新建任务时自动创建知识片段的提示词模板`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskTapdSmartLinkID := cast.ToString(cast.ToInt(dataMap[`home_task_tapd_smart_link_id`]))
+	if err := common.DbMain.HomeTaskConfigSave(`TAPD自定义网页ID`, define.HomeTaskConfigTapdSmartLinkID, homeTaskTapdSmartLinkID, `TAPD登录页所选自定义网页ID`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskTapdLinkLabel := strings.TrimSpace(cast.ToString(dataMap[`home_task_tapd_link_label`]))
+	if err := common.DbMain.HomeTaskConfigSave(`TAPD链接标签`, define.HomeTaskConfigTapdLinkLabel, homeTaskTapdLinkLabel, `TAPD登录页所选链接的label`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskTapdCssSelector := strings.TrimSpace(cast.ToString(dataMap[`home_task_tapd_css_selector`]))
+	if err := common.DbMain.HomeTaskConfigSave(`TAPD抓取CSS选择器`, define.HomeTaskConfigTapdCssSelector, homeTaskTapdCssSelector, `TAPD网页抓取区域CSS选择器`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskTapdWaitSeconds := cast.ToString(cast.ToInt(dataMap[`home_task_tapd_wait_seconds`]))
+	if err := common.DbMain.HomeTaskConfigSave(`TAPD抓取等待秒数`, define.HomeTaskConfigTapdWaitSeconds, homeTaskTapdWaitSeconds, `TAPD网页抓取前等待秒数`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskPromptDev := strings.TrimSpace(cast.ToString(dataMap[`home_task_prompt_dev`]))
+	if err := common.DbMain.HomeTaskConfigSave(`需求开发提示词`, define.HomeTaskConfigPromptDev, homeTaskPromptDev, `工作流-需求开发提示词模板`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskPromptApiGen := strings.TrimSpace(cast.ToString(dataMap[`home_task_prompt_api_gen`]))
+	if err := common.DbMain.HomeTaskConfigSave(`接口生成提示词`, define.HomeTaskConfigPromptApiGen, homeTaskPromptApiGen, `工作流-接口生成提示词模板`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskPromptApiTest := strings.TrimSpace(cast.ToString(dataMap[`home_task_prompt_api_test`]))
+	if err := common.DbMain.HomeTaskConfigSave(`接口自动化测试提示词`, define.HomeTaskConfigPromptApiTest, homeTaskPromptApiTest, `工作流-接口自动化测试提示词模板`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
 	}
 	gsgin.GinResponseSuccess(c, ``, nil)
 }

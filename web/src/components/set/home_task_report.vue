@@ -164,7 +164,6 @@ import { MdEditor } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 import { CopyDocument } from '@element-plus/icons-vue'
 
-const DEFAULT_MEMORY_ARRANGE_PROMPT = '帮我把当前 markdown 进行整理格式，让它看起来更顺畅清晰，注意禁止修改内容'
 const DEFAULT_HOME_TASK_DAILY_REPORT_PROMPT = '请基于当前活跃任务生成中文工作日报，按已完成、进行中、风险与阻塞三个部分总结，输出 Markdown，禁止编造未提供的信息。'
 
 const PROMPT_PLACEHOLDERS = [
@@ -191,8 +190,6 @@ export default {
       aiModelList: [],
       smartLinkList: [],
       form: {
-        memory_arrange_model_id: null,
-        memory_arrange_prompt: DEFAULT_MEMORY_ARRANGE_PROMPT,
         home_task_daily_report_model_id: null,
         home_task_daily_report_prompt: DEFAULT_HOME_TASK_DAILY_REPORT_PROMPT,
         home_task_fragment_prompt: '',
@@ -251,12 +248,10 @@ export default {
       })
     },
     loadConfig() {
-      set.MemoryConfigGet((response) => {
+      set.HomeTaskConfigGet((response) => {
         if (response.ErrCode !== 0 || !response.Data) {
           return
         }
-        this.form.memory_arrange_model_id = response.Data.memory_arrange_model_id || null
-        this.form.memory_arrange_prompt = response.Data.memory_arrange_prompt || DEFAULT_MEMORY_ARRANGE_PROMPT
         this.form.home_task_daily_report_model_id = response.Data.home_task_daily_report_model_id || null
         this.form.home_task_daily_report_prompt = response.Data.home_task_daily_report_prompt || DEFAULT_HOME_TASK_DAILY_REPORT_PROMPT
         this.form.home_task_fragment_prompt = response.Data.home_task_fragment_prompt || ''
@@ -271,7 +266,7 @@ export default {
     },
     saveConfig() {
       const payload = this.buildFullPayload()
-      set.MemoryConfigSave(payload, (response) => {
+      set.HomeTaskConfigSave(payload, (response) => {
         if (response.ErrCode === 0) {
           this.$helperNotify.success('配置已保存')
           this.$emit('changed')
@@ -280,7 +275,7 @@ export default {
     },
     saveTapdConfig() {
       const payload = this.buildFullPayload()
-      set.MemoryConfigSave(payload, (response) => {
+      set.HomeTaskConfigSave(payload, (response) => {
         if (response.ErrCode === 0) {
           this.$helperNotify.success('TAPD 登录页配置已保存')
           this.$emit('changed')
@@ -289,7 +284,7 @@ export default {
     },
     savePromptConfig() {
       const payload = this.buildFullPayload()
-      set.MemoryConfigSave(payload, (response) => {
+      set.HomeTaskConfigSave(payload, (response) => {
         if (response.ErrCode === 0) {
           this.$helperNotify.success('提示词模板配置已保存')
           this.$emit('changed')
@@ -298,8 +293,6 @@ export default {
     },
     buildFullPayload() {
       return {
-        memory_arrange_model_id: this.form.memory_arrange_model_id,
-        memory_arrange_prompt: this.form.memory_arrange_prompt,
         home_task_daily_report_model_id: this.form.home_task_daily_report_model_id,
         home_task_daily_report_prompt: this.form.home_task_daily_report_prompt,
         home_task_fragment_prompt: this.form.home_task_fragment_prompt,
