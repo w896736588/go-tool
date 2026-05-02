@@ -176,6 +176,8 @@ func gitRouter(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/GitSetSafeLog`, controller.GitSetSafeLog)                 //设置项目安全
 	tGin.GinPost(`/api/GitSaveCredentials`, controller.GitSaveCredentials)       //保存git记住密码账号
 	tGin.GinPost(`/api/GitUploadFile`, controller.GitUploadFile)                 //上传文件到Git项目
+	tGin.GinPost(`/api/GitCurrentBranch`, controller.GitCurrentBranchById)       //通过git_id查询当前分支
+	tGin.GinPost(`/api/GitPull`, controller.GitPull)                             //通过git_id拉取当前分支最新代码
 }
 
 // MySQL查询相关

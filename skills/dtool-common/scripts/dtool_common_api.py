@@ -242,6 +242,50 @@ def docker_service_logs(docker_id, command):
 
 
 # ============================================================
+# 7. 通过 git_id 查询当前分支
+# ============================================================
+def git_current_branch_by_id(git_id):
+    """
+    通过 git_id 查询当前分支和远程跟踪分支
+
+    参数:
+        git_id: Git 配置 ID（关联 tbl_git 表）
+    """
+    result = call_api("/api/GitCurrentBranch", {
+        "git_id": git_id,
+    })
+    if result.get("code") == 0:
+        print(result.get("data", ""))
+    else:
+        print(f"查询失败: {result.get('msg')}")
+    return result
+
+
+# ============================================================
+# 8. 拉取当前分支最新代码
+# ============================================================
+def git_pull(git_id):
+    """
+    通过 git_id 拉取当前分支最新代码
+
+    参数:
+        git_id: Git 配置 ID（关联 tbl_git 表）
+    """
+    result = call_api("/api/GitPull", {
+        "git_id": git_id,
+    })
+    if result.get("code") == 0:
+        output = result.get("data", "")
+        if output:
+            print(output)
+        else:
+            print("拉取完成")
+    else:
+        print(f"拉取失败: {result.get('msg')}")
+    return result
+
+
+# ============================================================
 # 使用示例
 # ============================================================
 if __name__ == "__main__":
@@ -272,3 +316,9 @@ if __name__ == "__main__":
     # 示例6: 查询 Docker Compose 服务日志（需提供 docker_id 和 command）
     # docker_service_logs(1, "docker compose logs nginx")
     # docker_service_logs(1, "docker compose logs --tail 100 nginx")
+
+    # 示例7: 查询当前分支（需提供 git_id）
+    # git_current_branch_by_id("1")
+
+    # 示例8: 拉取当前分支最新代码（需提供 git_id）
+    # git_pull("1")

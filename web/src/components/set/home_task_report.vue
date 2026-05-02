@@ -29,7 +29,7 @@
             preview-theme="github"
             :preview="true"
             :toolbars="promptEditorToolbars"
-            style="height: 280px;"
+            style="height: 480px;"
           />
         </el-form-item>
         <el-form-item>
@@ -67,7 +67,7 @@
             preview-theme="github"
             :preview="true"
             :toolbars="promptEditorToolbars"
-            style="height: 280px;"
+            style="height: 480px;"
           />
         </el-tab-pane>
         <el-tab-pane label="开发设计提示词" name="design">
@@ -76,7 +76,7 @@
             preview-theme="github"
             :preview="true"
             :toolbars="promptEditorToolbars"
-            style="height: 280px;"
+            style="height: 480px;"
           />
         </el-tab-pane>
         <el-tab-pane label="接口生成提示词" name="api_gen">
@@ -85,7 +85,7 @@
             preview-theme="github"
             :preview="true"
             :toolbars="promptEditorToolbars"
-            style="height: 280px;"
+            style="height: 480px;"
           />
         </el-tab-pane>
         <el-tab-pane label="接口自动化测试提示词" name="api_test">
@@ -94,7 +94,7 @@
             preview-theme="github"
             :preview="true"
             :toolbars="promptEditorToolbars"
-            style="height: 280px;"
+            style="height: 480px;"
           />
         </el-tab-pane>
       </el-tabs>
