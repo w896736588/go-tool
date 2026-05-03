@@ -74,13 +74,14 @@
                     <el-icon v-else-if="data.type === 'folder'"><Folder/></el-icon>
                     <!--                    <el-icon v-else><Document /></el-icon>-->
                   </span>
-                  <span v-if="data.type === 'folder'" :title="node.label + '(' + getNodeChildCount(data) + ')'" class="node-label" style="font-weight: 500;">{{
+                  <span v-if="data.type === 'folder'" :title="node.label + '(' + getNodeChildCount(data) + ')'" class="node-label" style="font-weight: 500;"><el-tag size="small" type="info" class="node-id-tag">{{ data.id }}</el-tag>{{
                       node.label + '(' + getNodeChildCount(data) + ')'
                     }}</span>
-                  <span v-if="data.type === 'collection'" :title="node.label + '(' + getNodeChildCount(data) + ')'" class="node-label" style="font-weight: 800;">{{
+                  <span v-if="data.type === 'collection'" :title="node.label + '(' + getNodeChildCount(data) + ')'" class="node-label" style="font-weight: 800;"><el-tag size="small" type="info" class="node-id-tag">{{ data.id }}</el-tag>{{
                       node.label + '(' + getNodeChildCount(data) + ')'
                     }}</span>
                   <span v-if="data.type === 'api'" :title="node.label" class="node-label">
+                    <el-tag size="small" type="info" class="node-id-tag">{{ data.id }}</el-tag>
                     <el-tag v-if="data.method === 'GET'" size="small" type="success">G</el-tag>
                     <el-tag v-if="data.method === 'POST'" size="small" type="primary">P</el-tag>
                     {{ node.label }}
