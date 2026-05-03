@@ -31,7 +31,7 @@
               preview-theme="github"
               :preview="true"
               :toolbars="promptEditorToolbars"
-              style="height: 480px;"
+              class="daily-report-editor"
             />
           </el-form-item>
           <el-form-item>
