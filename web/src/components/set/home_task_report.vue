@@ -502,7 +502,9 @@ export default {
 }
 
 .prompt-template-editor {
-  min-height: 480px;
+  height: calc(100vh - 460px);
+  min-height: 200px;
+  max-height: 800px;
 }
 
 .prompt-template-footer {

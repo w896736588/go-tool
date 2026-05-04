@@ -64,7 +64,7 @@
                 preview-theme="github"
                 :preview="true"
                 :toolbars="promptEditorToolbars"
-                height="840px"
+                height="100%"
               />
             </div>
 
@@ -93,7 +93,7 @@
                 preview-theme="github"
                 :preview="true"
                 :toolbars="promptEditorToolbars"
-                height="840px"
+                height="100%"
               />
             </div>
           </div>
@@ -121,7 +121,7 @@
                 preview-theme="github"
                 :preview="true"
                 :toolbars="promptEditorToolbars"
-                height="840px"
+                height="100%"
               />
             </div>
           </div>
@@ -149,7 +149,7 @@
                 preview-theme="github"
                 :preview="true"
                 :toolbars="promptEditorToolbars"
-                height="840px"
+                height="100%"
               />
             </div>
           </div>
@@ -396,17 +396,25 @@ export default {
 
 <style scoped>
 .task-workflow-page {
-  min-height: 100vh;
+  height: 100vh;
   background:
     radial-gradient(circle at top left, rgba(150, 190, 160, 0.18), transparent 32%),
     linear-gradient(180deg, #f4f0e8 0%, #f7f5ef 48%, #eef4ec 100%);
   padding: 28px;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .task-workflow-shell {
   max-width: 1240px;
   margin: 0 auto;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .task-workflow-header {
@@ -490,12 +498,32 @@ export default {
   border-radius: 24px;
   padding: 18px 20px 24px;
   box-shadow: 0 16px 42px rgba(68, 86, 63, 0.08);
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.task-workflow-tabs :deep(.el-tabs__header) {
+  order: -1;
+  flex-shrink: 0;
+}
+
+.task-workflow-tabs :deep(.el-tabs__content) {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.task-workflow-tabs :deep(.el-tab-pane) {
+  height: 100%;
 }
 
 .task-workflow-tab {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  height: 100%;
 }
 
 .task-workflow-toolbar {
@@ -534,6 +562,15 @@ export default {
   padding: 18px;
   background: rgba(255, 255, 255, 0.86);
   border: 1px solid rgba(122, 136, 114, 0.12);
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.task-workflow-card :deep(.md-editor) {
+  flex: 1;
+  min-height: 0;
 }
 
 .task-workflow-card__label {
