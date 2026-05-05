@@ -3,6 +3,10 @@
     <aside v-if="memoryConfigured && !sidebarCollapsed" class="memory-sidebar">
       <div class="sidebar-header">
         <div class="sidebar-header-actions">
+          <pl-button plain size="small" @click="searchDialogVisible = true">
+            <el-icon><Search /></el-icon>
+            搜索
+          </pl-button>
           <pl-button type="primary" plain size="small" @click="createFragment">
             <el-icon><Plus /></el-icon>
             新建
@@ -14,37 +18,6 @@
           <pl-button plain size="small" @click="openSettingsDialog">
             设置
           </pl-button>
-        </div>
-      </div>
-
-      <div v-show="!sidebarCollapsed" class="search-card sidebar-search-card">
-        <div class="search-row">
-          <el-input
-            v-model="searchQuery"
-            clearable
-            :placeholder="searchPlaceholder"
-            @keydown.enter.prevent="submitSearch"
-            @clear="handleSearchClear"
-          >
-            <template #prefix>
-              <el-icon><Search /></el-icon>
-            </template>
-          </el-input>
-          <el-switch
-            v-model="searchModeSemantic"
-            inline-prompt
-            active-text="智能"
-            inactive-text="全文"
-            class="search-mode-switch"
-            @change="handleSearchModeSwitch"
-          />
-        </div>
-        <div class="search-actions">
-          <pl-button type="primary" size="small" @click="submitSearch">
-            <el-icon><Search /></el-icon>
-            搜索
-          </pl-button>
-          <pl-button plain size="small" @click="clearFilter">清空条件</pl-button>
         </div>
       </div>
 
@@ -405,6 +378,42 @@
     >
       <MemorySettingPage ref="memorySettingPage" @changed="handleMemorySettingsChanged" />
     </SettingsDialog>
+
+    <el-dialog
+      v-model="searchDialogVisible"
+      title="搜索知识片段"
+      width="580px"
+      :close-on-click-modal="true"
+      destroy-on-close
+      class="search-dialog"
+    >
+      <div class="search-dialog-body">
+        <el-input
+          v-model="searchQuery"
+          type="textarea"
+          :autosize="{ minRows: 4, maxRows: 10 }"
+          :placeholder="searchPlaceholder"
+          @keydown.enter.prevent="submitSearchFromDialog"
+        />
+        <div class="search-dialog-mode-row">
+          <span class="search-dialog-mode-label">搜索模式</span>
+          <el-switch
+            v-model="searchModeSemantic"
+            active-text="智能搜索"
+            inactive-text="全文搜索"
+            class="search-mode-switch"
+            @change="handleSearchModeSwitch"
+          />
+        </div>
+        <div class="search-dialog-actions">
+          <pl-button type="primary" @click="submitSearchFromDialog">
+            <el-icon><Search /></el-icon>
+            搜索
+          </pl-button>
+          <pl-button plain @click="clearFilterAndCloseDialog">清空条件</pl-button>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -475,6 +484,7 @@ export default {
       searchQuery: '',
       searchMode: KEYWORD_SEARCH_MODE,
       searchModeSemantic: false,
+      searchDialogVisible: false,
       searchTabVisible: false,
       trashTabVisible: false,
       submittedSearchQuery: '',
@@ -1001,6 +1011,16 @@ export default {
       this.searchTabVisible = true
       this.activeTab = SEARCH_TAB_NAME
       this.runSearch(this.submittedSearchQuery, this.submittedSearchMode)
+    },
+    // submitSearchFromDialog 从弹窗提交搜索，搜索后关闭弹窗。
+    submitSearchFromDialog() {
+      this.searchDialogVisible = false
+      this.submitSearch()
+    },
+    // clearFilterAndCloseDialog 清空搜索条件并关闭弹窗。
+    clearFilterAndCloseDialog() {
+      this.clearFilter()
+      this.searchDialogVisible = false
     },
     // escapeHtml 对文本做 HTML 转义，避免高亮时插入原始标签。
     escapeHtml(text) {

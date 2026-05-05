@@ -628,6 +628,35 @@
   margin-top: 12px;
 }
 
+.search-dialog .el-dialog__header {
+  padding-bottom: 10px;
+  border-bottom: 1px solid #ecece4;
+}
+
+.search-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.search-dialog-mode-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.search-dialog-mode-label {
+  font-size: 14px;
+  color: #666;
+  white-space: nowrap;
+}
+
+.search-dialog-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
+
 .workspace-card {
   flex: 1;
   min-height: 0;
