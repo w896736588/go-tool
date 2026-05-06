@@ -171,6 +171,7 @@ func SmartLinkAdd(c *gin.Context) {
 	_ = gsgin.GinPostBody(c, &dataMap)
 	var id any
 	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `filter_uris`, `smart_link_group_id`, `links`, `is_error_continue`, `open_num`, `open_type`, `weight`, `combine_type`, `download_finds`, `auto_close_second`, `channel`, `show_cookies`, `process_id`})
+	updateData[`combine_type`] = define.CombineTypeFix
 	if cast.ToInt(dataMap[`id`]) == 0 {
 		updateData[`create_time`] = time.Now().Unix()
 		updateData[`update_time`] = time.Now().Unix()

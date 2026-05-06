@@ -16,6 +16,25 @@ import (
 	"github.com/spf13/cast"
 )
 
+func buildAccountKey(userName string) string {
+	userName = strings.TrimSpace(userName)
+	if userName == `` {
+		return ``
+	}
+	return `account_user_` + userName
+}
+
+func buildDirectoryMappingKey(smartLinkID int, label, accountKey string) string {
+	keyParts := []string{
+		fmt.Sprintf(`smart_link_%d`, smartLinkID),
+		`label_` + strings.TrimSpace(label),
+	}
+	if accountKey != `` {
+		keyParts = append(keyParts, accountKey)
+	}
+	return strings.Join(keyParts, `_`)
+}
+
 func GetRunParams(id int, label, userName, password string, openType int, openNum int, replaceList map[string]string) (*PlaywrightRunParams, error) {
 	runParams := &PlaywrightRunParams{}
 	if id == 0 {
@@ -25,6 +44,7 @@ func GetRunParams(id int, label, userName, password string, openType int, openNu
 		return runParams, errors.New(`链接label不能为空`)
 	}
 	runParams.Id = id
+	runParams.Label = label
 	smartLink, smartLinkErr := common.DbMain.Client.QueryBySql(`select * from tbl_smart_link where id = ? `, id).One()
 	if smartLinkErr != nil {
 		return runParams, errors.New(smartLinkErr.Error())
@@ -69,8 +89,10 @@ func GetRunParams(id int, label, userName, password string, openType int, openNu
 		`{rand}`: p_common.TBaseClient.GetUnique(`link_rand_`),
 	})
 	runParams.Link = gstool.SReplaces(runParams.Link, replaceList)
-	runParams.CombineType = cast.ToInt(smartLink[`combine_type`])
+	runParams.CombineType = define.CombineTypeFix
 	runParams.OpenNum = cast.ToInt(math.Max(1, cast.ToFloat64(openNum)))
+	runParams.AccountKey = buildAccountKey(userName)
+	runParams.DirectoryMappingKey = buildDirectoryMappingKey(runParams.Id, label, runParams.AccountKey)
 	if openType != 0 {
 		runParams.OpenType = define.OpenType(openType)
 	} else {

@@ -169,15 +169,7 @@
           </template>
         </el-select>
       </el-form-item>
-      <el-form-item v-if="parseInt(smartLinkConfig.open_type) !== 1" label="Session类型">
-        <el-alert :closable="false" show-icon title="如果选择自动合并，将会自动挑选已打开的浏览器运行，没有可用的浏览器时会重新开启新浏览器;如果选择优先上次，那么优先使用上次的数据目录" type="info"/>
-        <el-select v-model="smartLinkConfig.combine_type" placeholder="选择类型">
-          <template v-for="(value,key) in CombineList" :key="key">
-            <el-option :label="value.label" :value="value.value"/>
-          </template>
-        </el-select>
-      </el-form-item>
-      <el-form-item v-if="parseInt(smartLinkConfig.combine_type) !== 3" label="浏览器">
+      <el-form-item v-if="parseInt(smartLinkConfig.open_type) !== 1" label="浏览器">
         <el-alert :closable="false" show-icon title="如果选择chrome，那么支持播放视频（其他区别还没发现）但是耗费更多内存，会卡一些" type="info"/>
         <el-select v-model="smartLinkConfig.channel" placeholder="选择类型">
           <template v-for="(value,key) in channelList" :key="key">
@@ -328,12 +320,6 @@ export default {
         {label: '静默打开(内置核心打开)', value: 2},
         {label: '浏览器打开(内置核心打开)', value: 3}
       ],
-      CombineList: [
-        {label: '固定目录', value: '4'},
-        {label: '优先上次', value: '2'},
-        {label: '自动合并', value: '1'},
-        {label: '每次重新打开', value: '3'},
-      ],
       channelList: [
         {label: '请选择', value: ''},
         {label: 'chrome(完整浏览器功能)', value: 'chrome'},
@@ -348,7 +334,7 @@ export default {
         open_num: 0,
         open_type: '',
         status: '',
-        combine_type: 0,
+        combine_type: 4,
         weight: 0,
         download_finds: '',
         channel: '',
@@ -362,7 +348,7 @@ export default {
         open_num: 0,
         open_type: '',
         status: '',
-        combine_type: 0,
+        combine_type: 4,
         weight: 0,
         download_finds: '',
         channel: '',
@@ -983,6 +969,7 @@ export default {
     saveSmartLink: function () {
       let _that = this
       _that.smartLinkConfig.linkList = JSON.parse(_that.smartLinkConfig.links || '[]')
+      _that.smartLinkConfig.combine_type = 4
       smart_link_set.SmartLinkAdd(_that.smartLinkConfig, function (response) {
         if (response.ErrCode === 0) {
           _that.smartList = mergeSavedSmartLinkIntoList(_that.smartList, response.Data)

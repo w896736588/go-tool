@@ -297,6 +297,10 @@ func convertHTMLToMarkdown(htmlText string) (string, error) {
 	return converter.ConvertString(normalizedHTML)
 }
 
+func HTMLToMarkdown(htmlText string) (string, error) {
+	return convertHTMLToMarkdown(htmlText)
+}
+
 // buildImageFileName 按下载顺序和响应类型生成稳定文件名。
 func buildImageFileName(index int, contentType, rawURL string) string {
 	ext := ".bin"
@@ -407,10 +411,7 @@ func RunScrapeToMarkdown(runParams *PlaywrightRunParams, scrapeConfig define.Age
 	if scrapeConfig.CssSelector == "" {
 		return nil, fmt.Errorf("css_selector不能为空")
 	}
-	if runParams.CombineType != define.CombineTypeNo && runParams.CombineType != define.CombineTypeFix {
-		return nil, fmt.Errorf("抓取任务暂不支持当前数据目录复用类型=%d，请改为固定目录或每次打开新的", runParams.CombineType)
-	}
-	logScrapeMarkdownStep(log, runParams, "抓取任务", "开始 jump_url=%s css_selector=%s combine_type=%d process_count=%d", scrapeConfig.JumpURL, scrapeConfig.CssSelector, runParams.CombineType, len(runParams.ProcessList))
+	logScrapeMarkdownStep(log, runParams, "抓取任务", "开始 jump_url=%s css_selector=%s process_count=%d", scrapeConfig.JumpURL, scrapeConfig.CssSelector, len(runParams.ProcessList))
 
 	runParams.ProcessList = buildScrapeProcessList(runParams.ProcessList, scrapeConfig.JumpURL)
 	logScrapeMarkdownStep(log, runParams, "抓取任务", "已追加跳转节点 process_count=%d", len(runParams.ProcessList))
