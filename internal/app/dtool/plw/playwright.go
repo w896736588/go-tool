@@ -176,6 +176,27 @@ func (h *Playwright) LastUserDataIndex(runParams *PlaywrightRunParams, userDataI
 	}
 }
 
+// RunProcessesSync 同步执行所有流程步骤，不启动异步协程。
+// AI 浏览器会话接口要求登录流程完整执行完毕后再关闭浏览器，因此必须同步等待。
+func (h *Playwright) RunProcessesSync(page *playwright.Page) error {
+	for _, processVal := range h.RunParams.ProcessList {
+		h.RunParams.StreamFunc(cast.ToString(processVal[`name`]), `同步执行`)
+		boolContinue, runErr := h.ProcessRun(processVal, page)
+		if runErr != nil {
+			if cast.ToInt(processVal[`is_error_continue`]) == 1 {
+				h.RunParams.StreamFunc(cast.ToString(processVal[`name`]), fmt.Sprintf(`本节点执行失败 %s，继续执行下一个`, runErr.Error()))
+			} else {
+				h.RunParams.StreamFunc(cast.ToString(processVal[`name`]), fmt.Sprintf(`执行失败 %s`, runErr.Error()))
+				return runErr
+			}
+		}
+		if !boolContinue {
+			return nil
+		}
+	}
+	return nil
+}
+
 func (h *Playwright) Recycle() error {
 	h.log.Debugf(`开始回收..`)
 	_ = component.PlaywrightClient.Pw.Stop()

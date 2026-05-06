@@ -16,7 +16,7 @@ description: Use when operating the dtool 自定义网页 / Playwright 模块 an
    - **Token**：认证令牌，放在请求头 `Token` 中
    - **smart_link_id**：自定义网页配置 ID
    - **label**：自定义网页里目标链接的 label
-   - **账号信息**：如果该链接依赖账号，确认使用哪个账号，传 `id` 或 `user_name`
+   - **账号信息**：如果该链接依赖账号，确认使用哪个账号名
 2. 所有请求统一使用 `POST`，`Content-Type: application/json; charset=utf-8`。
 3. 统一使用 Python 脚本发送请求，避免 bash/PowerShell 编码问题。
 4. 接口执行完成后，服务端会关闭准备阶段浏览器，再返回 `userDataDir`，AI 后续必须自己用原生 Playwright 重新接管。
@@ -39,7 +39,7 @@ description: Use when operating the dtool 自定义网页 / Playwright 模块 an
 |---|---|---|---|
 | `smart_link_id` | int | 是 | 自定义网页配置 ID |
 | `label` | string | 是 | 自定义网页中的链接 label |
-| `account` | object | 否 | 账号对象，可传 `{"id": 1}` 或 `{"user_name": "tester"}` |
+| `account` | string | 否 | 账号名，如 `"tester"` |
 | `open_type` | int | 否 | 打开方式，`0` 表示沿用配置值 |
 | `reuse_if_open` | bool | 否 | 兼容保留字段，默认 `true` |
 
@@ -49,9 +49,7 @@ description: Use when operating the dtool 自定义网页 / Playwright 模块 an
 {
   "smart_link_id": 12,
   "label": "登录后首页",
-  "account": {
-    "user_name": "tester"
-  },
+  "account": "tester",
   "open_type": 0,
   "reuse_if_open": true
 }
@@ -119,7 +117,7 @@ description: Use when operating the dtool 自定义网页 / Playwright 模块 an
 ### 场景 1：让自定义网页负责登录，AI 原生接管
 
 1. 确认 `base_url`、`Token`、`smart_link_id`、`label`
-2. 如果链接依赖账号，确认账号 `id` 或 `user_name`
+2. 如果链接依赖账号，确认账号名
 3. 调用 `/api/ai/browser/session/open`
 4. 从返回里读取 `user_data_dir`
 5. AI 在本地直接用 Playwright Chromium `launchPersistentContext(userDataDir)` 接管

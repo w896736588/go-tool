@@ -75,6 +75,13 @@ func AIBrowserSessionOpen(c *gin.Context) {
 		}
 	}
 
+	// 同步执行自定义网页流程（登录等），确保流程完整执行后才关闭浏览器
+	playwrightRunner := plw.NewPlaywright(runParams, component.PlaywrightClient.Log)
+	if err := playwrightRunner.RunProcessesSync(page); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+
 	response := buildAIBrowserProfileResponse(req, runParams, contextPage, page, accountInfo, reused)
 	if closeErr := closeAIBrowserPreparedContext(contextList, contextPage); closeErr != nil {
 		gsgin.GinResponseError(c, closeErr.Error(), response)
@@ -130,33 +137,13 @@ func closeAIBrowserPreparedContext(contextList *plw.ContextPageList, contextPage
 	return nil
 }
 
-func resolveAIBrowserAccount(account map[string]any) (aiBrowserResolvedAccount, error) {
-	if len(account) == 0 {
+func resolveAIBrowserAccount(account string) (aiBrowserResolvedAccount, error) {
+	account = strings.TrimSpace(account)
+	if account == "" {
 		return aiBrowserResolvedAccount{}, nil
 	}
-	if id := cast.ToInt(account["id"]); id > 0 {
-		info, err := common.DbMain.Client.QuickQuery("tbl_account", "*", map[string]any{
-			"id": id,
-		}).One()
-		if err != nil {
-			return aiBrowserResolvedAccount{}, err
-		}
-		if len(info) == 0 {
-			return aiBrowserResolvedAccount{}, fmt.Errorf("账号不存在")
-		}
-		return aiBrowserResolvedAccount{
-			ID:         cast.ToInt(info["id"]),
-			UserName:   cast.ToString(info["username"]),
-			Password:   cast.ToString(info["password"]),
-			AccountKey: fmt.Sprintf("account_id_%d", id),
-		}, nil
-	}
-	userName := strings.TrimSpace(cast.ToString(account["user_name"]))
-	if userName == "" {
-		return aiBrowserResolvedAccount{}, fmt.Errorf("账号不能为空")
-	}
 	info, err := common.DbMain.Client.QuickQuery("tbl_account", "*", map[string]any{
-		"username": userName,
+		"username": account,
 	}).One()
 	if err != nil {
 		return aiBrowserResolvedAccount{}, err
@@ -168,7 +155,7 @@ func resolveAIBrowserAccount(account map[string]any) (aiBrowserResolvedAccount, 
 		ID:         cast.ToInt(info["id"]),
 		UserName:   cast.ToString(info["username"]),
 		Password:   cast.ToString(info["password"]),
-		AccountKey: "account_user_" + userName,
+		AccountKey: "account_user_" + account,
 	}, nil
 }
 

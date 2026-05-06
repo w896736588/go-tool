@@ -18,12 +18,12 @@ def _post_json(base_url: str, token: str, path: str, payload: dict):
 
 
 def browser_profile_open(base_url: str, token: str, smart_link_id: int, label: str,
-                         account: dict | None = None, open_type: int = 0,
+                         account: str = "", open_type: int = 0,
                          reuse_if_open: bool = True):
     payload = {
         "smart_link_id": smart_link_id,
         "label": label,
-        "account": account or {},
+        "account": account,
         "open_type": open_type,
         "reuse_if_open": reuse_if_open,
     }
@@ -63,7 +63,7 @@ if __name__ == "__main__":
             token=token,
             smart_link_id=12,
             label="登录后首页",
-            account={"user_name": "tester"},
+            account="tester",
         )
         print("open_result:")
         print(json.dumps(open_result, ensure_ascii=False, indent=2))
