@@ -5,8 +5,8 @@ description: Use when operating the dtool 通用工具模块 and the task involv
 
 # dtool 通用工具技能
 
-提供远程文件上传、Git 分支查询与代码拉取、数据库表查询（MySQL/Pgsql）、表结构查询、SQL 查询、知识片段管理、分支变更文件查看等通用接口。
-
+- 提供远程文件上传、Git 分支查询与代码拉取、数据库表查询（MySQL/Pgsql）、表结构查询、SQL 查询、知识片段管理、分支变更文件查看等通用接口。
+- dtool-common 不在 Skill 列表中，使用时直接内联 Python 调用其 API，Windows 路径用 r'...' 原始字符串。
 ## 强制约束
 
 1. 调用接口前，必须向用户确认以下信息：
