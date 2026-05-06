@@ -533,7 +533,7 @@ func SmartProcessItemAdd(c *gin.Context) {
 		return
 	}
 	var id any
-	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `wait_mills`, `is_async`, `append_to_replace`, `smart_link_process_id`, `type`, `locator`, `tip`, `value`, `out_key`, `check_key`, `weight`, `domain_limit`, `x`, `y`, `next_ids`})
+	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `wait_mills`, `is_async`, `is_error_continue`, `append_to_replace`, `smart_link_process_id`, `type`, `locator`, `tip`, `value`, `out_key`, `check_key`, `weight`, `domain_limit`, `x`, `y`, `next_ids`})
 	if cast.ToInt(dataMap[`id`]) == 0 {
 		updateData[`create_time`] = time.Now().Unix()
 		updateData[`update_time`] = time.Now().Unix()

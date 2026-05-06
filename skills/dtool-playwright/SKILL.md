@@ -116,12 +116,12 @@ description: Use when operating the dtool 自定义网页 / Playwright 模块 an
 
 ### 场景 1：让自定义网页负责登录，AI 原生接管
 
-1. 确认 `base_url`、`Token`、`smart_link_id`、`label`
+1. 确认 `base_url`、`Token`、`smart_link_id`、`label`、`account`
 2. 如果链接依赖账号，确认账号名
 3. 调用 `/api/ai/browser/session/open`
 4. 从返回里读取 `user_data_dir`
 5. AI 在本地直接用 Playwright Chromium `launchPersistentContext(userDataDir)` 接管
-6. 后续所有点击、输入、截图、断言都走原生 Playwright，不再调用 dtool 的 action 接口
+6. 后续所有点击、输入、截图、断言都走原生 Playwright
 
 ### 场景 2：自动化测试
 

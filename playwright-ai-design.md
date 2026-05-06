@@ -131,7 +131,7 @@
 
 ## 7. AI 使用方式
 
-AI 侧不再调用 dtool 的浏览器动作接口，而是直接使用原生 Playwright。
+AI 侧直接使用原生 Playwright。
 
 Python 示例：
 

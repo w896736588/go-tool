@@ -122,7 +122,7 @@ func buildAIBrowserProfileResponse(req aiBrowserOpenRequest, runParams *plw.Play
 			"url":   (*page).URL(),
 			"title": safePageTitle(page),
 		},
-		"usage_hint": "AI应使用Playwright Chromium的launchPersistentContext(userDataDir)重新接管该目录，不再调用session/action接口。",
+		"usage_hint": "AI应使用Playwright Chromium的launchPersistentContext(userDataDir)重新接管该目录",
 	}
 }
 
