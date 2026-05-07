@@ -374,6 +374,7 @@ func variableRouter(tGin *p_gin.Gin) {
 
 func smartLink(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/ai/browser/session/open`, controller.AIBrowserSessionOpen)
+	tGin.GinPost(`/api/ai/browser/session/capture-headers`, controller.AIBrowserSessionCaptureHeaders)
 	tGin.GinPost(`/api/SmartLinkList`, controller.SmartLinkList)
 	tGin.GinPost(`/api/SmartLinkAdd`, controller.SmartLinkAdd)
 	tGin.GinPost(`/api/SmartLinkDel`, controller.SmartLinkDelete)
@@ -385,6 +386,7 @@ func smartLink(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/SmartLinkChromeDownload`, controller.SmartLinkUpWebkit)
 	tGin.GinPost(`/api/SmartLinkRecycle`, controller.SmartLinkRecycle)
 	tGin.GinPost(`/api/SmartLinkDownloadPath`, controller.SmartLinkDownloadPath)
+	tGin.GinPost(`/api/SmartLinkOpenDataDir`, controller.SmartLinkOpenDataDir)
 	tGin.GinPost(`/api/SmartLinkLocatorAutoExtract`, controller.SmartLinkLocatorAutoExtract)
 	// 本地客户端相关接口
 	tGin.GinGet(`/api/smart-link/runtime-config`, controller.SmartLinkRuntimeConfig)

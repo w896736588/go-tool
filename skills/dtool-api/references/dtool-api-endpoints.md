@@ -235,9 +235,68 @@
 | `body_form` | array | 表单参数数组（用于 form-urlencoded / multipart），见下方字段格式 |
 | `body_json` | string | JSON 请求体字符串（用于 application/json）               |
 | `body_raw` | string | 原始请求体（用于 text/plain / raw）                     |
-| `env_id` | int | 环境变量 ID                                        |
+| `env_id` | int | 接口绑定的环境 ID。绑定后，接口中的 `$变量Key$` 会从该环境下的变量项取值 |
 | `take_result` | array | 结果字段备注，**必须填写**，用于写入返回字段描述、字段含义、示例等备注结构，见下方格式  |
 | `take_result_desc` | string | 不需要处理                                          |
+
+#### 环境变量在接口中的使用方式
+
+接口可以在以下位置引用环境变量：
+
+- `url`，例如：`$Url$/v1/login`
+- `headers`，例如：`{"Cookie":"$Cookie$","Token":"$Token$"}`
+- `query_params[].value`
+- `body_form[].value`
+- `body_json`
+- `body_raw`
+
+引用格式统一为：
+
+```text
+$变量Key$
+```
+
+例如环境变量项的 `key` 为 `Cookie`、`Token`、`Url`，则接口里应写成：
+
+```json
+{
+  "url": "$Url$/api/user/info",
+  "headers": {
+    "Cookie": "$Cookie$",
+    "Token": "$Token$"
+  }
+}
+```
+
+#### env_id 与变量引用的关系
+
+1. 先在集合下创建环境，例如“测试环境”“预发环境”
+2. 再在该环境下创建若干环境变量项，例如 `Url`、`Cookie`、`Token`
+3. 创建或更新接口时，把接口的 `env_id` 指向目标环境
+4. 接口中的 `url`、`headers`、请求参数里再使用 `$变量Key$` 引用实际值
+
+如果接口里写了 `$Cookie$`、`$Token$`，但没有绑定正确的 `env_id`，或目标环境下不存在对应 `key`，运行接口时就无法得到正确的请求值。
+
+#### 登录态相关请求头的推荐写法
+
+对于登录后抓取得到的请求头，尤其是 `Cookie`、`Token`、`Authorization`、`X-Token` 等认证字段，不要把真实值直接固化在接口定义里，而应优先：
+
+1. 在集合环境下创建同名或语义清晰的变量项
+2. 将真实值写入变量项的 `value`
+3. 在接口 `headers` 中改为 `$变量Key$` 引用
+
+示例：
+
+```json
+{
+  "env_id": 5,
+  "headers": {
+    "Cookie": "$Cookie$",
+    "Token": "$Token$",
+    "Authorization": "$Authorization$"
+  }
+}
+```
 
 #### 返回结果字段写入规则
 
@@ -511,6 +570,67 @@
   "value": "https://example.com"
 }
 ```
+
+### 5. 环境变量如何应用到接口中
+
+典型步骤：
+
+1. 先调用 `/api/CollectionEnvs` 确认集合下要使用的环境，拿到 `env_id`
+2. 再调用 `/api/CollectionEnvItems` 查看该环境已有变量项
+3. 如果缺少所需变量，调用 `/api/CreateCollectionEnvItem` 创建，例如 `Url`、`Cookie`、`Token`
+4. 创建或更新接口时，调用 `/api/CreateApi`，把接口的 `env_id` 设为该环境 ID
+5. 将接口中的真实值改成 `$变量Key$` 形式，例如：
+   - `url`: `$Url$/api/order/list`
+   - `headers.Cookie`: `$Cookie$`
+   - `headers.Token`: `$Token$`
+
+接口示例：
+
+```json
+{
+  "folder_id": 12,
+  "collection_id": 1,
+  "name": "订单列表",
+  "method": "GET",
+  "url": "$Url$/api/order/list",
+  "protocol": "https",
+  "desc": "查询订单列表",
+  "headers": {
+    "Cookie": "$Cookie$",
+    "Token": "$Token$"
+  },
+  "query_params": [],
+  "content_type": "",
+  "body_form": [],
+  "body_json": "",
+  "body_raw": "",
+  "env_id": 5,
+  "take_result": [
+    {"key": "code", "type": "number", "desc": "状态码"},
+    {"key": "data.list", "type": "array", "desc": "订单列表"}
+  ]
+}
+```
+
+### 6. 使用登录态请求头更新环境变量的推荐流程
+
+当 AI 通过浏览器或其他方式拿到登录后的请求头时，推荐按以下顺序处理：
+
+1. 确认目标接口所属集合和目标环境
+2. 对每个需要复用的请求头，优先查找是否已有对应环境变量项
+3. 已存在则调用 `/api/CreateCollectionEnvItem` 并带 `id` 更新 `value`
+4. 不存在则新建环境变量项，`key` 建议与请求头名称一致或保持稳定命名
+5. 将所有相关接口的 `headers` 改成 `$变量Key$`
+6. 确保这些接口都绑定了正确的 `env_id`
+
+常见登录态请求头示例：
+
+- `Cookie` -> `$Cookie$`
+- `Token` -> `$Token$`
+- `Authorization` -> `$Authorization$`
+- `X-Token` -> `$X-Token$`
+
+**重要**：登录态值应写入集合环境变量，不要直接把真实 Cookie 或 Token 固化在接口 `headers` 中。
 
 ## 五、运行、调试与辅助能力
 
