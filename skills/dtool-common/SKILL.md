@@ -6,6 +6,7 @@ description: Use when operating the dtool 通用工具模块 and the task involv
 # dtool 通用工具技能
 
 - 提供远程文件上传、Git 分支查询与代码拉取、数据库表查询（MySQL/Pgsql）、表结构查询、SQL 查询、知识片段管理、分支变更文件查看等通用接口。
+- 新增浏览器登录后抓取接口请求头能力，可在登录完成后刷新页面并返回首个接口请求的 headers。
 - dtool-common 不在 Skill 列表中，使用时直接内联 Python 调用其 API，Windows 路径用 r'...' 原始字符串。
 ## 强制约束
 
@@ -215,7 +216,25 @@ description: Use when operating the dtool 通用工具模块 and the task involv
 - **示例**:
   - 单关键词: `{"query": "迁移"}` — 搜索包含"迁移"的片段
   - 多关键词 AND: `{"query": "数据库 迁移"}` — 搜索同时包含"数据库"和"迁移"的片段
-  - 三关键词 AND: `{"query": "API 规范 前端"}` — 搜索同时包含这三个词的片段
+- 三关键词 AND: `{"query": "API 规范 前端"}` — 搜索同时包含这三个词的片段
+
+### 13. 登录后抓取首个接口请求头
+
+使用与 `browser_profile_open` 一致的参数，服务端完成网页登录后会自动刷新当前页，抓取首个 `xhr/fetch` 接口请求的 request headers，返回后自动关闭浏览器。
+
+- **路径**: `/api/ai/browser/session/capture-headers`
+- **参数**:
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `smart_link_id` | int | 是 | 自定义网页配置 ID |
+| `label` | string | 是 | 要打开的链接标签名 |
+| `account` | string | 否 | 账号用户名，留空表示不代入账号 |
+| `open_type` | int | 否 | 打开类型，默认 `0` |
+| `reuse_if_open` | bool | 否 | 已打开时是否复用已有浏览器 |
+| `enable_mcp` | bool | 否 | 兼容保留参数，此接口会在抓取后关闭浏览器 |
+
+- **返回**: `headers` 对象，直接为实际请求头键值对。
 
 ## 推荐工作流
 

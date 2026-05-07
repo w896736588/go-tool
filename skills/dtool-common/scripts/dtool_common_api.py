@@ -301,7 +301,7 @@ def git_pull(git_id):
 # ============================================================
 def git_change_branch_by_id(git_id, branch_name):
     """
-    通过 git_id 切换到指定分支
+    通过 git_id 切换到指定分支(切换可能持续时间比较长，请等待返回，最长等待30分钟)
 
     参数:
         git_id: Git 配置 ID（关联 tbl_git 表）
@@ -366,7 +366,44 @@ def screenshot(url, full_page=False, width=1920, height=1080, timeout=30, select
 
 
 # ============================================================
-# 11. 创建知识片段
+# 11. 打开浏览器配置并在登录后抓取首个接口请求头
+# ============================================================
+def browser_profile_capture_headers(smart_link_id, label, account="", open_type=0,
+                                    reuse_if_open=True, enable_mcp=False):
+    """
+    使用与 browser_profile_open 一致的参数，在登录完成后刷新页面，
+    抓取首个 xhr/fetch 接口请求的 headers，然后自动关闭浏览器。
+
+    参数:
+        smart_link_id: 自定义网页配置 ID
+        label: 要打开的链接标签名
+        account: 账号名（可选）
+        open_type: 打开类型（可选）
+        reuse_if_open: 如果已打开是否复用（可选）
+    """
+    result = call_api("/api/ai/browser/session/capture-headers", {
+        "smart_link_id": smart_link_id,
+        "label": label,
+        "account": account,
+        "open_type": open_type,
+        "reuse_if_open": reuse_if_open,
+        "enable_mcp": enable_mcp,
+    })
+    if result.get("code") == 0:
+        headers = result.get("data", {}).get("headers", {})
+        if headers:
+            print("headers:")
+            for key in sorted(headers.keys()):
+                print(f"  {key}: {headers[key]}")
+        else:
+            print("headers 为空")
+    else:
+        print(f"抓取失败: {result.get('msg')}")
+    return result
+
+
+# ============================================================
+# 12. 创建知识片段
 # 知识片段是 dtool 中用于持久化存储项目经验、开发规则、会议纪要等
 # 结构化知识的载体。每个片段包含标题、Markdown 内容和标签，
 # 以文件形式存储在 memory 目录中，支持 Git 版本管理。
@@ -403,7 +440,7 @@ def memory_fragment_create(title, content, tags=None):
 
 
 # ============================================================
-# 12. 编辑知识片段
+# 13. 编辑知识片段
 # ============================================================
 def memory_fragment_edit(fragment_id, title=None, content=None, tags=None):
     """
@@ -447,7 +484,7 @@ def memory_fragment_edit(fragment_id, title=None, content=None, tags=None):
 
 
 # ============================================================
-# 13. 查询知识片段明细
+# 14. 查询知识片段明细
 # ============================================================
 def memory_fragment_info(fragment_id):
     """
@@ -476,7 +513,7 @@ def memory_fragment_info(fragment_id):
 
 
 # ============================================================
-# 14. 搜索知识片段（多关键词 AND 搜索）
+# 15. 搜索知识片段（多关键词 AND 搜索）
 # ============================================================
 def memory_fragment_search(query, limit=20):
     """
@@ -566,3 +603,6 @@ if __name__ == "__main__":
     # screenshot("https://www.baidu.com")
     # screenshot("https://www.baidu.com", full_page=True, save_path="page.png")
     # screenshot("https://www.baidu.com", selector="#main-content", save_path="element.png")
+
+    # 示例11: 登录后刷新页面，抓取首个接口请求头
+    # browser_profile_capture_headers(12, "登录后首页", account="tester")

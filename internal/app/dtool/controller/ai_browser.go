@@ -6,6 +6,8 @@ import (
 	"dev_tool/internal/app/dtool/mcp"
 	"dev_tool/internal/app/dtool/plw"
 	"fmt"
+	"net/url"
+	"path"
 	"strings"
 	"time"
 
@@ -33,6 +35,15 @@ type aiBrowserResolvedAccount struct {
 	Password   string
 	AccountKey string
 }
+
+type aiBrowserCapturedRequest struct {
+	URL          string            `json:"url"`
+	Method       string            `json:"method"`
+	ResourceType string            `json:"resource_type"`
+	Headers      map[string]string `json:"headers"`
+}
+
+const aiBrowserCaptureHeadersMinTimeoutMs = 10000
 
 // AIBrowserSessionOpen 打开自定义网页并准备可复用的 Chromium 用户数据目录。
 // 该接口完成网页登录后会关闭当前浏览器，再把 userDataDir 返回给 AI 侧原生 Playwright 使用。
@@ -120,6 +131,73 @@ func AIBrowserSessionOpen(c *gin.Context) {
 	}
 
 	gsgin.GinResponseSuccess(c, "", response)
+}
+
+// AIBrowserSessionCaptureHeaders 登录完成后刷新页面，抓取首个非资源接口请求的 headers 并关闭浏览器。
+func AIBrowserSessionCaptureHeaders(c *gin.Context) {
+	var req aiBrowserOpenRequest
+	if err := gsgin.GinPostBody(c, &req); err != nil {
+		gsgin.GinResponseError(c, "请求参数错误", nil)
+		return
+	}
+	req.Label = strings.TrimSpace(req.Label)
+	if req.SmartLinkID == 0 || req.Label == "" {
+		gsgin.GinResponseError(c, "smart_link_id和label不能为空", nil)
+		return
+	}
+	if !ensureSmartLinkNodeInstalled(c, nil) {
+		return
+	}
+
+	accountInfo, err := resolveAIBrowserAccount(req.Account)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	runParams, err := plw.GetRunParams(req.SmartLinkID, req.Label, accountInfo.UserName, accountInfo.Password, req.OpenType, 1, map[string]string{})
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	runParams.StreamFunc = func(string, string) {}
+
+	contextList := plw.NewContextList(component.PlaywrightClient.Log)
+	contextPage, boolCleanFirstBlank, err := contextList.GetContextSaveUserData(runParams)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	defer func() {
+		if closeErr := closeAIBrowserPreparedContext(contextList, contextPage); closeErr != nil {
+			component.PlaywrightClient.Log.Errof("关闭AI浏览器headers抓取session失败: %v", closeErr)
+		}
+	}()
+
+	page := findContextPageForDomain(contextPage, runParams.Domain)
+	if page == nil {
+		page, err = openAIBrowserPage(contextPage, runParams, boolCleanFirstBlank)
+		if err != nil {
+			gsgin.GinResponseError(c, err.Error(), nil)
+			return
+		}
+	}
+
+	playwrightRunner := plw.NewPlaywright(runParams, component.PlaywrightClient.Log)
+	if err := playwrightRunner.RunProcessesSync(page); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	time.Sleep(3 * time.Second)
+	component.PlaywrightClient.WaitForLoadState(page, runParams.LocatorTimeout)
+
+	capturedRequest, err := captureFirstNonResourceRequest(page, runParams.LocatorTimeout)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	gsgin.GinResponseSuccess(c, "", map[string]any{
+		"headers": capturedRequest.Headers,
+	})
 }
 
 func buildAIBrowserProfileResponse(req aiBrowserOpenRequest, runParams *plw.PlaywrightRunParams, contextPage *plw.ContextPage, page *playwright.Page, accountInfo aiBrowserResolvedAccount, reused bool) map[string]any {
@@ -238,4 +316,70 @@ func safePageTitle(page *playwright.Page) string {
 		return ""
 	}
 	return title
+}
+
+func captureFirstNonResourceRequest(page *playwright.Page, locatorTimeout float64) (aiBrowserCapturedRequest, error) {
+	timeout := locatorTimeout
+	if timeout < aiBrowserCaptureHeadersMinTimeoutMs {
+		timeout = aiBrowserCaptureHeadersMinTimeoutMs
+	}
+	event, err := (*page).ExpectEvent("request", func() error {
+		_, reloadErr := (*page).Reload()
+		if reloadErr != nil {
+			return reloadErr
+		}
+		component.PlaywrightClient.WaitForLoadState(page, timeout)
+		return nil
+	}, playwright.PageExpectEventOptions{
+		Timeout: playwright.Float(timeout),
+		Predicate: func(payload interface{}) bool {
+			req, ok := payload.(playwright.Request)
+			if !ok || req == nil {
+				return false
+			}
+			return shouldCaptureAIBrowserRequest(req.ResourceType(), req.URL())
+		},
+	})
+	if err != nil {
+		return aiBrowserCapturedRequest{}, fmt.Errorf("刷新后未捕获到接口请求: %w", err)
+	}
+	requestObj, ok := event.(playwright.Request)
+	if !ok || requestObj == nil {
+		return aiBrowserCapturedRequest{}, fmt.Errorf("捕获请求失败: 事件类型错误")
+	}
+	headers, headersErr := requestObj.AllHeaders()
+	if headersErr != nil || len(headers) == 0 {
+		headers = requestObj.Headers()
+	}
+	return aiBrowserCapturedRequest{
+		URL:          requestObj.URL(),
+		Method:       requestObj.Method(),
+		ResourceType: requestObj.ResourceType(),
+		Headers:      headers,
+	}, nil
+}
+
+func shouldCaptureAIBrowserRequest(resourceType, rawURL string) bool {
+	resourceType = strings.TrimSpace(strings.ToLower(resourceType))
+	if resourceType != "xhr" && resourceType != "fetch" {
+		return false
+	}
+	if hasStaticResourceExtension(rawURL) {
+		return false
+	}
+	return true
+}
+
+func hasStaticResourceExtension(rawURL string) bool {
+	parsedURL, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return false
+	}
+	ext := strings.ToLower(path.Ext(parsedURL.Path))
+	switch ext {
+	case ".js", ".mjs", ".css", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico", ".bmp", ".woff", ".woff2", ".ttf", ".otf", ".eot", ".map", ".mp4", ".mp3", ".wav", ".webm", ".pdf", ".zip":
+		return true
+	default:
+		return false
+	}
 }
