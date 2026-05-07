@@ -646,9 +646,8 @@
 }
 
 .pending-command-panel {
-  flex: 0 0 clamp(240px, 32vw, 360px);
-  max-width: clamp(240px, 32vw, 360px);
-  min-width: 240px;
+  width: 100%;
+  margin-bottom: 10px;
   border: 1px solid #dfe8dc;
   border-radius: 10px;
   background: linear-gradient(180deg, #fbfdf8 0%, #f4f9f1 100%);
@@ -690,7 +689,7 @@
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
-  overflow: hidden;
+  overflow-x: auto;
   min-width: 0;
 }
 
@@ -857,17 +856,6 @@
 }
 
 /* 滚动条样式 */
-@media (max-width: 900px) {
-  .input-main-row {
-    flex-direction: column;
-  }
-
-  .pending-command-panel {
-    width: 100%;
-    max-width: none;
-    min-width: 0;
-  }
-}
 
 .message-list::-webkit-scrollbar,
 .command-dropdown::-webkit-scrollbar {

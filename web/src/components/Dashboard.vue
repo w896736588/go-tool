@@ -133,6 +133,26 @@
       <!-- 输入区域 -->
       <div class="input-container">
         <div class="input-center-box" :style="{ width: inputWrapperWidth }">
+          <div v-if="hasPendingCommandQueue" class="pending-command-panel">
+            <div class="pending-command-header">
+              <span class="pending-command-title">{{ pendingCommandTitle }}</span>
+              <span class="pending-command-count">{{ pendingCommandQueue.length }}</span>
+            </div>
+            <div class="pending-command-list pending-command-list--horizontal">
+              <div
+                v-for="item in pendingCommandQueue"
+                :key="item.id"
+                class="pending-command-item"
+              >
+                <span class="pending-command-text" :title="item.rawCommand">{{ item.rawCommand }}</span>
+                <pl-button
+                  class="pending-command-delete"
+                  link
+                  @click="removePendingCommand(item.id)"
+                >移除</pl-button>
+              </div>
+            </div>
+          </div>
           <div class="input-main-row">
             <div class="input-main-panel">
               <div class="input-wrapper">
@@ -160,26 +180,6 @@
             </pl-button>
               </div>
               <div class="next-step-tip">{{ nextStepHint }}</div>
-            </div>
-              <div v-if="hasPendingCommandQueue" class="pending-command-panel">
-                <div class="pending-command-header">
-                  <span class="pending-command-title">{{ pendingCommandTitle }}</span>
-                  <span class="pending-command-count">{{ pendingCommandQueue.length }}</span>
-                </div>
-              <div class="pending-command-list pending-command-list--horizontal">
-                  <div
-                    v-for="item in pendingCommandQueue"
-                    :key="item.id"
-                    class="pending-command-item"
-                >
-                  <span class="pending-command-text" :title="item.rawCommand">{{ item.rawCommand }}</span>
-                  <pl-button
-                    class="pending-command-delete"
-                    link
-                    @click="removePendingCommand(item.id)"
-                  >移除</pl-button>
-                </div>
-              </div>
             </div>
           </div>
         </div>
