@@ -103,18 +103,18 @@ description: Use when operating the dtool 通用工具模块 and the task involv
 - `docker compose logs --tail 100 nginx` — 查看 nginx 最近 100 行日志
 - `docker compose logs --since 30m nginx php-fpm` — 查看 nginx 和 php-fpm 最近 30 分钟日志
 
-### 6. 查询远程分支列表
+### 6. 查询当前分支
 
-通过 git_id 自动解析 SSH 连接和项目路径，查询指定 Git 仓库的所有远程分支。
+通过 git_id 自动解析 SSH 连接和项目路径，查询指定 Git 仓库的当前分支和远程跟踪分支。
 
-- **路径**: `/api/GitBranchList`
+- **路径**: `/api/GitCurrentBranch`
 - **参数**:
 
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
 | `git_id` | string | 是 | Git 配置 ID（关联 tbl_git 表，自动获取 SSH 连接和 code_path） |
 
-- **返回**: `list` 数组，每项为分支名字符串（如 `master`、`dev`、`feature_xxx`）
+- **返回**: 文本内容，包含当前分支和远程分支信息
 
 ### 7. 拉取当前分支最新代码
 
@@ -267,11 +267,11 @@ description: Use when operating the dtool 通用工具模块 and the task involv
 4. 调用 `/api/DockerServiceLogs`
 5. 返回 `logs` 字段中的日志内容
 
-### 场景 5：查看 Git 远程分支
+### 场景 5：查询 Git 当前分支
 
 1. 向用户确认 `base_url`、`Token`、`git_id`
-2. 调用 `/api/GitBranchList`
-3. 返回远程分支列表
+2. 调用 `/api/GitCurrentBranch`
+3. 返回当前分支和远程分支信息
 
 ### 场景 6：拉取 Git 最新代码
 
