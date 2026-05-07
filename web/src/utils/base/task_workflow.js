@@ -26,9 +26,17 @@ function TaskWorkflowPromptsRestore(workflowId, callBack) {
   }, callBack)
 }
 
+// TaskWorkflowRequirementFetch 执行工作流首节点 TAPD 抓取。
+function TaskWorkflowRequirementFetch(workflowId, callBack) {
+  base.BasePost('/api/task/workflow/requirement/fetch', {
+    workflow_id: workflowId,
+  }, callBack)
+}
+
 export default {
   TaskWorkflowCreateOrGet,
   TaskWorkflowInfo,
   TaskWorkflowPromptsSave,
   TaskWorkflowPromptsRestore,
+  TaskWorkflowRequirementFetch,
 }

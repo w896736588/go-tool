@@ -10,8 +10,13 @@ import (
 )
 
 const (
-	taskWorkflowStatusInit = `init`
-	taskWorkflowStageIdle  = `idle`
+	taskWorkflowStatusInit              = `init`
+	taskWorkflowStageIdle               = `idle`
+	taskWorkflowStageRequirementFetch   = `requirement_fetch`
+	taskWorkflowRequirementFetchIdle    = `idle`
+	taskWorkflowRequirementFetchRunning = `running`
+	taskWorkflowRequirementFetchSuccess = `success`
+	taskWorkflowRequirementFetchFailed  = `failed`
 )
 
 // TaskWorkflowCreateOrGetByHomeTaskID 查询或创建任务工作流主记录。
@@ -34,18 +39,23 @@ func (h *CSqlite) TaskWorkflowCreateOrGetByHomeTaskID(homeTaskID int) (map[strin
 	}
 	now := time.Now().Unix()
 	newID, err := h.Client.QuickCreate(`tbl_task_workflow`, map[string]any{
-		`home_task_id`:            homeTaskID,
-		`status`:                  taskWorkflowStatusInit,
-		`current_stage`:           taskWorkflowStageIdle,
-		`requirement_fragment_id`: strings.TrimSpace(cast.ToString(homeTaskInfo[`memory_fragment_id`])),
-		`dev_plan_fragment_id`:    ``,
-		`latest_plan_run_id`:      0,
-		`latest_test_run_id`:      0,
-		`base_branch`:             ``,
-		`feature_branch`:          ``,
-		`last_error`:              ``,
-		`create_time`:             now,
-		`update_time`:             now,
+		`home_task_id`:                  homeTaskID,
+		`status`:                        taskWorkflowStatusInit,
+		`current_stage`:                 taskWorkflowStageIdle,
+		`requirement_fragment_id`:       strings.TrimSpace(cast.ToString(homeTaskInfo[`memory_fragment_id`])),
+		`requirement_fetch_status`:      taskWorkflowRequirementFetchIdle,
+		`requirement_fetch_started_at`:  0,
+		`requirement_fetch_finished_at`: 0,
+		`requirement_fetch_error`:       ``,
+		`requirement_source_url`:        strings.TrimSpace(cast.ToString(homeTaskInfo[`tapd_url`])),
+		`dev_plan_fragment_id`:          ``,
+		`latest_plan_run_id`:            0,
+		`latest_test_run_id`:            0,
+		`base_branch`:                   ``,
+		`feature_branch`:                ``,
+		`last_error`:                    ``,
+		`create_time`:                   now,
+		`update_time`:                   now,
 	}).Exec()
 	if err != nil {
 		return nil, err
@@ -207,6 +217,80 @@ func (h *CSqlite) TaskWorkflowUpdatePrompts(workflowID int, promptRequirement, p
 		`prompt_api_test`:    promptApiTest,
 		`prompt_design`:      promptDesign,
 		`update_time`:        time.Now().Unix(),
+	}).Exec()
+	return err
+}
+
+// TaskWorkflowMarkRequirementFetchRunning 标记需求抓取节点开始执行。
+func (h *CSqlite) TaskWorkflowMarkRequirementFetchRunning(workflowID int, sourceURL string) error {
+	if workflowID <= 0 {
+		return errors.New(`工作流id不能为空`)
+	}
+	if _, err := h.TaskWorkflowInfo(workflowID); err != nil {
+		return err
+	}
+	now := time.Now().Unix()
+	_, err := h.Client.QuickUpdate(`tbl_task_workflow`, map[string]any{
+		`id`: workflowID,
+	}, map[string]any{
+		`status`:                        taskWorkflowStageRequirementFetch,
+		`current_stage`:                 taskWorkflowStageRequirementFetch,
+		`requirement_fetch_status`:      taskWorkflowRequirementFetchRunning,
+		`requirement_fetch_started_at`:  now,
+		`requirement_fetch_finished_at`: 0,
+		`requirement_fetch_error`:       ``,
+		`requirement_source_url`:        strings.TrimSpace(sourceURL),
+		`last_error`:                    ``,
+		`update_time`:                   now,
+	}).Exec()
+	return err
+}
+
+// TaskWorkflowMarkRequirementFetchSuccess 标记需求抓取节点成功完成。
+func (h *CSqlite) TaskWorkflowMarkRequirementFetchSuccess(workflowID int, sourceURL string) error {
+	if workflowID <= 0 {
+		return errors.New(`工作流id不能为空`)
+	}
+	if _, err := h.TaskWorkflowInfo(workflowID); err != nil {
+		return err
+	}
+	now := time.Now().Unix()
+	_, err := h.Client.QuickUpdate(`tbl_task_workflow`, map[string]any{
+		`id`: workflowID,
+	}, map[string]any{
+		`status`:                        taskWorkflowStatusInit,
+		`current_stage`:                 taskWorkflowStageRequirementFetch,
+		`requirement_fetch_status`:      taskWorkflowRequirementFetchSuccess,
+		`requirement_fetch_finished_at`: now,
+		`requirement_fetch_error`:       ``,
+		`requirement_source_url`:        strings.TrimSpace(sourceURL),
+		`last_error`:                    ``,
+		`update_time`:                   now,
+	}).Exec()
+	return err
+}
+
+// TaskWorkflowMarkRequirementFetchFailed 标记需求抓取节点执行失败。
+func (h *CSqlite) TaskWorkflowMarkRequirementFetchFailed(workflowID int, sourceURL, errMsg string) error {
+	if workflowID <= 0 {
+		return errors.New(`工作流id不能为空`)
+	}
+	if _, err := h.TaskWorkflowInfo(workflowID); err != nil {
+		return err
+	}
+	now := time.Now().Unix()
+	errMsg = strings.TrimSpace(errMsg)
+	_, err := h.Client.QuickUpdate(`tbl_task_workflow`, map[string]any{
+		`id`: workflowID,
+	}, map[string]any{
+		`status`:                        taskWorkflowStatusInit,
+		`current_stage`:                 taskWorkflowStageRequirementFetch,
+		`requirement_fetch_status`:      taskWorkflowRequirementFetchFailed,
+		`requirement_fetch_finished_at`: now,
+		`requirement_fetch_error`:       errMsg,
+		`requirement_source_url`:        strings.TrimSpace(sourceURL),
+		`last_error`:                    errMsg,
+		`update_time`:                   now,
 	}).Exec()
 	return err
 }

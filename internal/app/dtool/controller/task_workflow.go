@@ -6,6 +6,7 @@ import (
 	"dev_tool/internal/app/dtool/component"
 	"dev_tool/internal/app/dtool/define"
 	_struct "dev_tool/internal/app/dtool/struct"
+	"dev_tool/internal/pkg/p_define"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -598,8 +599,9 @@ func buildTaskWorkflowResponse(c *gin.Context, workflowInfo map[string]any) (map
 		}
 	}
 	return map[string]any{
-		`workflow`:  workflowInfo,
-		`home_task`: homeTaskInfo,
+		`workflow`:                 workflowInfo,
+		`home_task`:                homeTaskInfo,
+		`requirement_fetch_config`: taskWorkflowRequirementFetchConfig(),
 	}, nil
 }
 
@@ -1616,4 +1618,164 @@ func taskWorkflowQueryNameByID(tableName string, id int) string {
 		return ""
 	}
 	return cast.ToString(info["name"])
+}
+
+// TaskWorkflowRequirementFetch 执行工作流首节点：抓取 TAPD 需求并直接写入知识片段。
+func TaskWorkflowRequirementFetch(c *gin.Context) {
+	if common.DbMain == nil || common.DbMain.Client == nil {
+		gsgin.GinResponseError(c, `主库未初始化`, nil)
+		return
+	}
+	request := _struct.TaskWorkflowRequirementFetchRequest{}
+	_ = gsgin.GinPostBody(c, &request)
+	if request.WorkflowID <= 0 {
+		gsgin.GinResponseError(c, `workflow_id不能为空`, nil)
+		return
+	}
+	workflowInfo, memoryDB, homeTaskInfo, ok := taskWorkflowLoadContextForDevPlanByID(c, request.WorkflowID)
+	if !ok {
+		return
+	}
+	tapdURL := strings.TrimSpace(cast.ToString(homeTaskInfo[`tapd_url`]))
+	if tapdURL == `` {
+		gsgin.GinResponseError(c, `当前任务未配置TAPD地址`, nil)
+		return
+	}
+	fragmentID := strings.TrimSpace(cast.ToString(workflowInfo[`requirement_fragment_id`]))
+	if fragmentID == `` {
+		gsgin.GinResponseError(c, `需求知识片段未绑定`, nil)
+		return
+	}
+	existingFragment, err := memoryDB.MemoryFragmentInfo(fragmentID)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	taskWorkflowBroadcastStep(cast.ToInt(workflowInfo[`id`]), `load_config`, `running`, `开始读取 TAPD 抓取配置`)
+	if err = common.DbMain.TaskWorkflowMarkRequirementFetchRunning(request.WorkflowID, tapdURL); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	resultMap, err := buildAsyncHomeTaskTapdScrapeResultWithLog(tapdURL, fragmentID, func(step, message string) {
+		taskWorkflowBroadcastStep(cast.ToInt(workflowInfo[`id`]), taskWorkflowNormalizeFetchStep(step), `running`, message)
+	})
+	if err != nil {
+		_ = common.DbMain.TaskWorkflowMarkRequirementFetchFailed(request.WorkflowID, tapdURL, err.Error())
+		taskWorkflowBroadcastStep(cast.ToInt(workflowInfo[`id`]), `error`, `failed`, err.Error())
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	markdown := cast.ToString(resultMap[`markdown`])
+	if strings.TrimSpace(markdown) == `` {
+		err = fmt.Errorf(`抓取结果为空`)
+		_ = common.DbMain.TaskWorkflowMarkRequirementFetchFailed(request.WorkflowID, tapdURL, err.Error())
+		taskWorkflowBroadcastStep(cast.ToInt(workflowInfo[`id`]), `error`, `failed`, err.Error())
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	taskWorkflowBroadcastStep(cast.ToInt(workflowInfo[`id`]), `save_fragment`, `running`, `开始写入需求知识片段`)
+	savedFragment, err := memoryDB.MemoryFragmentSave(
+		fragmentID,
+		cast.ToString(existingFragment[`title`]),
+		markdown,
+		cast.ToStringSlice(existingFragment[`tags`]),
+	)
+	if err != nil {
+		_ = common.DbMain.TaskWorkflowMarkRequirementFetchFailed(request.WorkflowID, tapdURL, err.Error())
+		taskWorkflowBroadcastStep(cast.ToInt(workflowInfo[`id`]), `error`, `failed`, err.Error())
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	component.MemoryRuntime.ScheduleSync()
+	broadcastMemoryFragmentUpsert(savedFragment)
+	if err = common.DbMain.TaskWorkflowMarkRequirementFetchSuccess(request.WorkflowID, tapdURL); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	updatedWorkflowInfo, err := common.DbMain.TaskWorkflowInfo(request.WorkflowID)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	taskWorkflowBroadcastStep(cast.ToInt(workflowInfo[`id`]), `done`, `success`, `TAPD 需求抓取完成并已写入知识片段`)
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`workflow`: updatedWorkflowInfo,
+		`fragment`: map[string]any{
+			`id`:      savedFragment[`id`],
+			`file_id`: savedFragment[`file_id`],
+			`title`:   savedFragment[`title`],
+			`content`: savedFragment[`content`],
+			`tags`:    savedFragment[`tags`],
+		},
+		`requirement_fetch_config`: taskWorkflowRequirementFetchConfig(),
+	})
+}
+
+// taskWorkflowRequirementFetchConfig 返回当前工作流首节点抓取配置快照。
+func taskWorkflowRequirementFetchConfig() map[string]any {
+	smartLinkIDStr, smartLinkErr := homeTaskConfigValue(define.HomeTaskConfigTapdSmartLinkID)
+	label, labelErr := homeTaskConfigValue(define.HomeTaskConfigTapdLinkLabel)
+	cssSelector, selectorErr := homeTaskConfigValue(define.HomeTaskConfigTapdCssSelector)
+	waitSecondsStr, waitErr := homeTaskConfigValue(define.HomeTaskConfigTapdWaitSeconds)
+	config := map[string]any{
+		`smart_link_id`: cast.ToInt(smartLinkIDStr),
+		`label`:         strings.TrimSpace(label),
+		`css_selector`:  strings.TrimSpace(cssSelector),
+		`wait_seconds`:  cast.ToInt(waitSecondsStr),
+		`configured`:    true,
+	}
+	if config[`wait_seconds`].(int) <= 0 {
+		config[`wait_seconds`] = defaultSmartLinkScrapeWaitSeconds
+	}
+	if smartLinkErr != nil || labelErr != nil || selectorErr != nil || waitErr != nil {
+		config[`configured`] = false
+	}
+	return config
+}
+
+// taskWorkflowBroadcastStep 向所有在线 SSE 客户端广播当前工作流步骤日志。
+func taskWorkflowBroadcastStep(workflowID int, step, status, message string) {
+	if workflowID <= 0 {
+		return
+	}
+	distributeID := define.SseTaskWorkflowPrefix + cast.ToString(workflowID)
+	msg := gstool.JsonEncode(p_define.SseData{
+		SseDistributeId: distributeID,
+		Data: map[string]any{
+			`workflow_id`: workflowID,
+			`step`:        strings.TrimSpace(step),
+			`status`:      strings.TrimSpace(status),
+			`message`:     strings.TrimSpace(message),
+			`time`:        time.Now().Unix(),
+		},
+		Type: p_define.SseContentTypeMsg,
+	})
+	for _, item := range gsgin.SseStatus() {
+		clientID := strings.TrimSpace(strings.TrimPrefix(item, apiDataChangeSseStatusPrefix))
+		if clientID == `` || clientID == item {
+			continue
+		}
+		sse := gsgin.SseGetByClientId(clientID)
+		if sse == nil {
+			continue
+		}
+		_ = sse.SendToChan(msg)
+	}
+}
+
+// taskWorkflowNormalizeFetchStep 将旧日志步骤映射为前端统一步骤名。
+func taskWorkflowNormalizeFetchStep(step string) string {
+	step = strings.TrimSpace(step)
+	switch step {
+	case `读取配置`:
+		return `load_config`
+	case `下发任务`:
+		return `dispatch_scrape`
+	case `处理结果`:
+		return `process_zip`
+	case `保存片段`:
+		return `save_fragment`
+	default:
+		return `progress`
+	}
 }

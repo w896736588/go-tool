@@ -51,3 +51,8 @@ type TaskWorkflowPromptsSaveRequest struct {
 type TaskWorkflowPromptsRestoreRequest struct {
 	WorkflowID int `json:"workflow_id"`
 }
+
+// TaskWorkflowRequirementFetchRequest 抓取 TAPD 需求文档请求。
+type TaskWorkflowRequirementFetchRequest struct {
+	WorkflowID int `json:"workflow_id"`
+}

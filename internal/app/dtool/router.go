@@ -326,6 +326,7 @@ func homeTask(tGin *p_gin.Gin) {
 func taskWorkflow(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/task/workflow/create_or_get`, controller.TaskWorkflowCreateOrGet)
 	tGin.GinPost(`/api/task/workflow/info`, controller.TaskWorkflowInfo)
+	tGin.GinPost(`/api/task/workflow/requirement/fetch`, controller.TaskWorkflowRequirementFetch)
 	tGin.GinPost(`/api/task/workflow/dev-plan/init`, controller.TaskWorkflowDevPlanInit)
 	tGin.GinPost(`/api/task/workflow/dev-plan/info`, controller.TaskWorkflowDevPlanInfo)
 	tGin.GinPost(`/api/task/workflow/dev-plan/save`, controller.TaskWorkflowDevPlanSave)

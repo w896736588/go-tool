@@ -27,7 +27,7 @@
           <GitActionButton compact variant="info" @click="goBackToTaskList">
             返回任务清单
           </GitActionButton>
-          <GitActionButton compact :loading="loading" @click="loadWorkflowPage">
+          <GitActionButton compact :loading="loading" @click="reloadWorkflowPage">
             刷新
           </GitActionButton>
         </div>
@@ -41,120 +41,195 @@
         class="task-workflow-alert"
       />
 
-      <el-tabs v-model="activeTab" class="task-workflow-tabs">
-        <el-tab-pane label="需求文档 MD" name="requirement">
-          <div class="task-workflow-tab">
-            <div class="task-workflow-card">
-              <div class="task-workflow-card__header">
-                <div class="task-workflow-card__title">AI 提示词</div>
-                <div class="task-workflow-card__switch">
-                  <GitActionButton compact :loading="promptSaving === 'requirement'" @click="savePrompts('requirement')">
-                    保存提示词
-                  </GitActionButton>
-                  <GitActionButton compact @click="copyText(workflow.prompt_requirement || '', '提示词已复制')">
-                    复制提示词
-                  </GitActionButton>
-                  <GitActionButton compact variant="warning" :loading="promptRestoring === 'requirement'" @click="restorePrompts('requirement')">
-                    还原为默认提示词
-                  </GitActionButton>
-                </div>
+      <section class="task-workflow-nodes">
+        <button
+          v-for="node in workflowNodes"
+          :key="node.key"
+          type="button"
+          class="task-workflow-node"
+          :class="{
+            'task-workflow-node--active': activeNode === node.key,
+            'task-workflow-node--success': node.key === 'requirement-fetch' && activeNode === node.key && requirementFetchStatus === 'success',
+            'task-workflow-node--failed': node.key === 'requirement-fetch' && activeNode === node.key && requirementFetchStatus === 'failed',
+            'task-workflow-node--running': node.key === 'requirement-fetch' && activeNode === node.key && requirementFetchStatus === 'running',
+          }"
+          @click="activeNode = node.key"
+        >
+          <span class="task-workflow-node__index">{{ node.index }}</span>
+          <span class="task-workflow-node__label">{{ node.label }}</span>
+        </button>
+      </section>
+
+      <section class="task-workflow-content">
+        <div v-if="activeNode === 'requirement-fetch'" class="task-workflow-tab">
+          <div class="task-workflow-card">
+            <div class="task-workflow-card__header">
+              <div class="task-workflow-card__title">抓取 TAPD 需求内容</div>
+              <div class="task-workflow-card__switch">
+                <GitActionButton compact :loading="requirementFetchRunning" @click="triggerRequirementFetch(false)">
+                  重新抓取
+                </GitActionButton>
+                <GitActionButton compact variant="info" @click="openRequirementFragment" :disabled="!requirementFragmentId">
+                  打开知识片段
+                </GitActionButton>
               </div>
-              <MdEditor
-                v-model="workflow.prompt_requirement"
-                preview-theme="github"
-                :preview="true"
-                :toolbars="promptEditorToolbars"
-                height="100%"
-              />
             </div>
-
-          </div>
-        </el-tab-pane>
-
-        <el-tab-pane label="开发设计" name="design">
-          <div class="task-workflow-tab">
-            <div class="task-workflow-card">
-              <div class="task-workflow-card__header">
-                <div class="task-workflow-card__title">AI 提示词</div>
-                <div class="task-workflow-card__switch">
-                  <GitActionButton compact :loading="promptSaving === 'design'" @click="savePrompts('design')">
-                    保存提示词
-                  </GitActionButton>
-                  <GitActionButton compact @click="copyText(workflow.prompt_design || '', '提示词已复制')">
-                    复制提示词
-                  </GitActionButton>
-                  <GitActionButton compact variant="warning" :loading="promptRestoring === 'design'" @click="restorePrompts('design')">
-                    还原为默认提示词
-                  </GitActionButton>
-                </div>
+            <div class="task-workflow-summary-list task-workflow-summary-list--compact">
+              <div class="task-workflow-summary-item">
+                <span>知识片段</span>
+                <strong>{{ requirementFragmentTitle }}</strong>
               </div>
-              <MdEditor
-                v-model="workflow.prompt_design"
-                preview-theme="github"
-                :preview="true"
-                :toolbars="promptEditorToolbars"
-                height="100%"
-              />
+              <div class="task-workflow-summary-item">
+                <span>TAPD 地址</span>
+                <strong>{{ homeTask.tapd_url || '-' }}</strong>
+              </div>
+              <div class="task-workflow-summary-item">
+                <span>SmartLink</span>
+                <strong>{{ requirementFetchConfig.smart_link_id || '-' }}</strong>
+              </div>
+              <div class="task-workflow-summary-item">
+                <span>网页标签</span>
+                <strong>{{ requirementFetchConfig.label || '-' }}</strong>
+              </div>
+              <div class="task-workflow-summary-item">
+                <span>等待秒数</span>
+                <strong>{{ requirementFetchConfig.wait_seconds || '-' }}</strong>
+              </div>
             </div>
-          </div>
-        </el-tab-pane>
-
-        <el-tab-pane label="接口开发生成" name="api-dev">
-          <div class="task-workflow-tab">
-            <div class="task-workflow-card">
-              <div class="task-workflow-card__header">
-                <div class="task-workflow-card__title">AI 提示词</div>
-                <div class="task-workflow-card__switch">
-                  <GitActionButton compact :loading="promptSaving === 'api_dev'" @click="savePrompts('api_dev')">
-                    保存提示词
-                  </GitActionButton>
-                  <GitActionButton compact @click="copyText(workflow.prompt_api_dev || '', '提示词已复制')">
-                    复制提示词
-                  </GitActionButton>
-                  <GitActionButton compact variant="warning" :loading="promptRestoring === 'api_dev'" @click="restorePrompts('api_dev')">
-                    还原为默认提示词
-                  </GitActionButton>
-                </div>
-              </div>
-              <MdEditor
-                v-model="workflow.prompt_api_dev"
-                preview-theme="github"
-                :preview="true"
-                :toolbars="promptEditorToolbars"
-                height="100%"
+            <div v-if="workflow.requirement_fetch_error" class="task-workflow-card__hint task-workflow-card__hint--error">
+              最近错误：{{ workflow.requirement_fetch_error }}
+            </div>
+            <div v-if="!homeTask.tapd_url" class="task-workflow-card__hint">
+              当前任务未配置 TAPD 地址，无法自动抓取。
+            </div>
+            <div class="task-workflow-fragment-view">
+              <iframe
+                v-if="requirementShareUrl"
+                :src="requirementShareUrl"
+                class="task-workflow-fragment-view__iframe"
+                title="需求知识片段预览"
               />
+              <div v-else class="task-workflow-fragment-view__empty">
+                知识片段分享链接生成中...
+              </div>
             </div>
           </div>
-        </el-tab-pane>
+        </div>
 
-        <el-tab-pane label="接口自动化测试修复" name="api-test-fix">
-          <div class="task-workflow-tab">
-            <div class="task-workflow-card">
-              <div class="task-workflow-card__header">
-                <div class="task-workflow-card__title">AI 提示词</div>
-                <div class="task-workflow-card__switch">
-                  <GitActionButton compact :loading="promptSaving === 'api_test'" @click="savePrompts('api_test')">
-                    保存提示词
-                  </GitActionButton>
-                  <GitActionButton compact @click="copyText(workflow.prompt_api_test || '', '提示词已复制')">
-                    复制提示词
-                  </GitActionButton>
-                  <GitActionButton compact variant="warning" :loading="promptRestoring === 'api_test'" @click="restorePrompts('api_test')">
-                    还原为默认提示词
-                  </GitActionButton>
-                </div>
+        <div v-else-if="activeNode === 'requirement'" class="task-workflow-tab">
+          <div class="task-workflow-card">
+            <div class="task-workflow-card__header">
+              <div class="task-workflow-card__title">需求文档提示词</div>
+              <div class="task-workflow-card__switch">
+                <GitActionButton compact variant="info" @click="openRequirementFragment" :disabled="!requirementFragmentId">
+                  打开知识片段
+                </GitActionButton>
+                <GitActionButton compact :loading="promptSaving === 'requirement'" @click="savePrompts('requirement')">
+                  保存提示词
+                </GitActionButton>
+                <GitActionButton compact @click="copyText(workflow.prompt_requirement || '', '提示词已复制')">
+                  复制提示词
+                </GitActionButton>
+                <GitActionButton compact variant="warning" :loading="promptRestoring === 'requirement'" @click="restorePrompts('requirement')">
+                  还原为默认提示词
+                </GitActionButton>
               </div>
-              <MdEditor
-                v-model="workflow.prompt_api_test"
-                preview-theme="github"
-                :preview="true"
-                :toolbars="promptEditorToolbars"
-                height="100%"
-              />
             </div>
+            <div class="task-workflow-card__hint">
+              当前片段：{{ requirementFragmentTitle }}
+            </div>
+            <MdEditor
+              v-model="workflow.prompt_requirement"
+              class="task-workflow-prompt-editor"
+              preview-theme="github"
+              :preview="true"
+              :toolbars="promptEditorToolbars"
+              height="100%"
+            />
           </div>
-        </el-tab-pane>
-      </el-tabs>
+        </div>
+
+        <div v-else-if="activeNode === 'design'" class="task-workflow-tab">
+          <div class="task-workflow-card">
+            <div class="task-workflow-card__header">
+              <div class="task-workflow-card__title">开发设计提示词</div>
+              <div class="task-workflow-card__switch">
+                <GitActionButton compact :loading="promptSaving === 'design'" @click="savePrompts('design')">
+                  保存提示词
+                </GitActionButton>
+                <GitActionButton compact @click="copyText(workflow.prompt_design || '', '提示词已复制')">
+                  复制提示词
+                </GitActionButton>
+                <GitActionButton compact variant="warning" :loading="promptRestoring === 'design'" @click="restorePrompts('design')">
+                  还原为默认提示词
+                </GitActionButton>
+              </div>
+            </div>
+            <MdEditor
+              v-model="workflow.prompt_design"
+              class="task-workflow-prompt-editor"
+              preview-theme="github"
+              :preview="true"
+              :toolbars="promptEditorToolbars"
+              height="100%"
+            />
+          </div>
+        </div>
+
+        <div v-else-if="activeNode === 'api-dev'" class="task-workflow-tab">
+          <div class="task-workflow-card">
+            <div class="task-workflow-card__header">
+              <div class="task-workflow-card__title">接口开发生成提示词</div>
+              <div class="task-workflow-card__switch">
+                <GitActionButton compact :loading="promptSaving === 'api_dev'" @click="savePrompts('api_dev')">
+                  保存提示词
+                </GitActionButton>
+                <GitActionButton compact @click="copyText(workflow.prompt_api_dev || '', '提示词已复制')">
+                  复制提示词
+                </GitActionButton>
+                <GitActionButton compact variant="warning" :loading="promptRestoring === 'api_dev'" @click="restorePrompts('api_dev')">
+                  还原为默认提示词
+                </GitActionButton>
+              </div>
+            </div>
+            <MdEditor
+              v-model="workflow.prompt_api_dev"
+              class="task-workflow-prompt-editor"
+              preview-theme="github"
+              :preview="true"
+              :toolbars="promptEditorToolbars"
+              height="100%"
+            />
+          </div>
+        </div>
+
+        <div v-else class="task-workflow-tab">
+          <div class="task-workflow-card">
+            <div class="task-workflow-card__header">
+              <div class="task-workflow-card__title">接口自动化测试修复提示词</div>
+              <div class="task-workflow-card__switch">
+                <GitActionButton compact :loading="promptSaving === 'api_test'" @click="savePrompts('api_test')">
+                  保存提示词
+                </GitActionButton>
+                <GitActionButton compact @click="copyText(workflow.prompt_api_test || '', '提示词已复制')">
+                  复制提示词
+                </GitActionButton>
+                <GitActionButton compact variant="warning" :loading="promptRestoring === 'api_test'" @click="restorePrompts('api_test')">
+                  还原为默认提示词
+                </GitActionButton>
+              </div>
+            </div>
+            <MdEditor
+              v-model="workflow.prompt_api_test"
+              class="task-workflow-prompt-editor"
+              preview-theme="github"
+              :preview="true"
+              :toolbars="promptEditorToolbars"
+              height="100%"
+            />
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 </template>
@@ -162,10 +237,10 @@
 <script>
 import { HomeFilled } from '@element-plus/icons-vue'
 import GitActionButton from '@/components/base/GitActionButton.vue'
-import MarkdownRenderer from '@/components/base/markdown.vue'
 import MemoryFragmentApi from '@/utils/base/memory_fragment'
 import taskWorkflowApi from '@/utils/base/task_workflow'
 import baseUtils from '@/utils/base'
+import sseDistribute from '@/utils/base/sse_distribute'
 import { MdEditor } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 
@@ -175,26 +250,37 @@ const PROMPT_EDITOR_TOOLBARS = [
   'codeRow', 'table', 'preview', 'fullscreen',
 ]
 
+const WORKFLOW_NODES = [
+  { key: 'requirement-fetch', label: '抓取TAPD需求', index: '01' },
+  { key: 'requirement', label: '需求文档MD', index: '02' },
+  { key: 'design', label: '开发设计', index: '03' },
+  { key: 'api-dev', label: '接口开发生成', index: '04' },
+  { key: 'api-test-fix', label: '接口自动化测试修复', index: '05' },
+]
+
 export default {
   name: 'TaskWorkflow',
   components: {
     HomeFilled,
     GitActionButton,
-    MarkdownRenderer,
     MdEditor,
   },
   data() {
     return {
-      activeTab: 'requirement',
+      workflowNodes: WORKFLOW_NODES,
+      activeNode: 'requirement-fetch',
       loading: false,
-      requirementShareLoading: false,
       errorMessage: '',
       workflowId: 0,
       workflow: {},
       homeTask: {},
       requirementFragment: {},
       requirementShareUrl: '',
-      requirementViewMode: 'preview',
+      requirementFetchConfig: {},
+      requirementFetchLogs: [],
+      requirementFetchRunning: false,
+      requirementFetchAutoTriggered: false,
+      workflowSseDistributeId: '',
       promptSaving: '',
       promptRestoring: '',
       promptEditorToolbars: PROMPT_EDITOR_TOOLBARS,
@@ -204,6 +290,24 @@ export default {
     taskId() {
       return Number(this.$route.params.taskId || 0)
     },
+    requirementFetchStatus() {
+      return String(this.workflow.requirement_fetch_status || 'idle').trim() || 'idle'
+    },
+    requirementFetchStatusText() {
+      const map = {
+        idle: '待执行',
+        running: '执行中',
+        success: '已完成',
+        failed: '执行失败',
+      }
+      return map[this.requirementFetchStatus] || this.requirementFetchStatus
+    },
+    requirementFragmentId() {
+      return String(this.workflow.requirement_fragment_id || '').trim()
+    },
+    requirementFragmentTitle() {
+      return String(this.requirementFragment.title || '').trim() || (this.requirementFragmentId ? `#${this.requirementFragmentId}` : '-')
+    },
   },
   mounted() {
     this.loadWorkflowPage()
@@ -211,9 +315,14 @@ export default {
   },
   beforeUnmount() {
     window.removeEventListener('keydown', this.handleCtrlS)
+    this.unregisterWorkflowSse()
   },
   watch: {
     '$route.params.taskId'() {
+      this.requirementFetchAutoTriggered = false
+      this.requirementFetchLogs = []
+      this.activeNode = 'requirement-fetch'
+      this.unregisterWorkflowSse()
       this.loadWorkflowPage()
     },
   },
@@ -221,15 +330,22 @@ export default {
     handleCtrlS(e) {
       if (!(e.ctrlKey && e.key === 's')) return
       e.preventDefault()
-      const TAB_TO_PROMPT = { requirement: 'requirement', design: 'design', 'api-dev': 'api_dev', 'api-test-fix': 'api_test' }
-      const promptType = TAB_TO_PROMPT[this.activeTab]
-      if (promptType) this.savePrompts(promptType)
+      const nodeToPrompt = { requirement: 'requirement', design: 'design', 'api-dev': 'api_dev', 'api-test-fix': 'api_test' }
+      const promptType = nodeToPrompt[this.activeNode]
+      if (promptType) {
+        this.savePrompts(promptType)
+      }
     },
     goBackToTaskList() {
       this.$router.push('/HomeTask')
     },
     goHome() {
       this.$router.push('/Dashboard')
+    },
+    reloadWorkflowPage() {
+      this.requirementFetchAutoTriggered = false
+      this.requirementFetchLogs = []
+      this.loadWorkflowPage()
     },
     loadWorkflowPage() {
       if (this.taskId <= 0) {
@@ -245,43 +361,45 @@ export default {
           return
         }
         this.applyWorkflowPayload(response.Data)
-        this.loadRequirementFragment()
+        this.loadRequirementFragment(() => {
+          this.loading = false
+          this.ensureWorkflowSse()
+          this.maybeAutoFetchRequirement()
+        })
       })
     },
     applyWorkflowPayload(data) {
       this.workflow = data.workflow || {}
-      this.homeTask = data.home_task || {}
+      this.homeTask = data.home_task || this.homeTask || {}
       this.workflowId = Number(this.workflow.id || 0)
+      this.requirementFetchConfig = data.requirement_fetch_config || this.requirementFetchConfig || {}
     },
-    loadRequirementFragment() {
-      const fragmentId = String(this.workflow.requirement_fragment_id || '').trim()
+    loadRequirementFragment(done) {
+      const fragmentId = this.requirementFragmentId
       if (!fragmentId) {
         this.requirementFragment = {}
         this.requirementShareUrl = ''
-        this.loading = false
+        if (typeof done === 'function') done()
         return
       }
       MemoryFragmentApi.MemoryFragmentInfo(fragmentId, (response) => {
-        this.loading = false
-        if (!(response && response.ErrCode === 0 && response.Data)) {
+        if (response && response.ErrCode === 0 && response.Data) {
+          this.requirementFragment = response.Data || {}
+          this.refreshRequirementShareUrl()
+        } else {
           this.errorMessage = response?.ErrMsg || '需求文档加载失败'
-          return
         }
-        this.requirementFragment = response.Data || {}
-        this.refreshRequirementShareUrl()
+        if (typeof done === 'function') done()
       })
     },
     refreshRequirementShareUrl() {
-      const fragmentId = String(this.workflow.requirement_fragment_id || '').trim()
+      const fragmentId = this.requirementFragmentId
       if (!fragmentId) {
         this.requirementShareUrl = ''
         return
       }
-      this.requirementShareLoading = true
       MemoryFragmentApi.MemoryFragmentShareCreate(fragmentId, (response) => {
-        this.requirementShareLoading = false
         if (!(response && response.ErrCode === 0 && response.Data)) {
-          this.$helperNotify.error(response?.ErrMsg || '分享链接生成失败')
           return
         }
         const token = String(response.Data.token || '').trim()
@@ -291,7 +409,6 @@ export default {
         }
         const apiHost = String(baseUtils.GetApiHost() || window.location.origin).trim()
         this.requirementShareUrl = new URL(`/share/${encodeURIComponent(token)}`, apiHost).toString()
-        // 获取到分享链接后自动替换需求提示词中的占位符。
         this.replaceRequirementShareUrlPlaceholder()
       })
     },
@@ -303,6 +420,111 @@ export default {
       if (this.workflow.prompt_requirement.includes(placeholder)) {
         this.workflow.prompt_requirement = this.workflow.prompt_requirement.replaceAll(placeholder, this.requirementShareUrl)
       }
+    },
+    ensureWorkflowSse() {
+      if (this.workflowId <= 0) {
+        return
+      }
+      const nextDistributeId = `task_workflow_${this.workflowId}`
+      if (this.workflowSseDistributeId === nextDistributeId) {
+        return
+      }
+      this.unregisterWorkflowSse()
+      sseDistribute.InitFromLoginStatus().then((created) => {
+        if (!created && !sseDistribute.GetSseClientId()) {
+          return
+        }
+        this.workflowSseDistributeId = nextDistributeId
+        sseDistribute.RegisterReceive(nextDistributeId, this.handleWorkflowSseMessage)
+      })
+    },
+    unregisterWorkflowSse() {
+      if (!this.workflowSseDistributeId) {
+        return
+      }
+      sseDistribute.UnRegisterReceive(this.workflowSseDistributeId)
+      this.workflowSseDistributeId = ''
+    },
+    handleWorkflowSseMessage(data) {
+      if (!data || Number(data.workflow_id || 0) !== this.workflowId) {
+        return
+      }
+      this.requirementFetchLogs.push({
+        workflow_id: Number(data.workflow_id || 0),
+        step: String(data.step || '').trim(),
+        status: String(data.status || '').trim(),
+        message: String(data.message || '').trim(),
+        time: Number(data.time || 0),
+      })
+    },
+    maybeAutoFetchRequirement() {
+      if (this.requirementFetchAutoTriggered) {
+        return
+      }
+      if (!String(this.homeTask.tapd_url || '').trim()) {
+        return
+      }
+      if (this.requirementFetchStatus === 'success') {
+        return
+      }
+      if (this.requirementFetchStatus === 'running') {
+        this.requirementFetchRunning = true
+        return
+      }
+      this.requirementFetchAutoTriggered = true
+      this.triggerRequirementFetch(true)
+    },
+    triggerRequirementFetch(isAuto) {
+      if (this.workflowId <= 0 || this.requirementFetchRunning) {
+        return
+      }
+      if (!String(this.homeTask.tapd_url || '').trim()) {
+        this.$helperNotify.error('当前任务未配置 TAPD 地址')
+        return
+      }
+      if (!isAuto) {
+        this.requirementFetchAutoTriggered = true
+      }
+      this.requirementFetchRunning = true
+      this.errorMessage = ''
+      if (!isAuto) {
+        this.requirementFetchLogs.push({
+          step: 'manual',
+          status: 'running',
+          message: '手动触发重新抓取',
+          time: Math.floor(Date.now() / 1000),
+        })
+      }
+      taskWorkflowApi.TaskWorkflowRequirementFetch(this.workflowId, (response) => {
+        this.requirementFetchRunning = false
+        if (!(response && response.ErrCode === 0 && response.Data)) {
+          this.errorMessage = response?.ErrMsg || '抓取 TAPD 需求失败'
+          this.$helperNotify.error(this.errorMessage)
+          this.loadWorkflowPage()
+          return
+        }
+        this.$helperNotify.success('TAPD 需求已抓取并写入知识片段')
+        this.applyWorkflowPayload({
+          workflow: response.Data.workflow || {},
+          home_task: this.homeTask,
+          requirement_fetch_config: response.Data.requirement_fetch_config || {},
+        })
+        this.loadRequirementFragment(() => {})
+      })
+    },
+    openRequirementFragment() {
+      if (!this.requirementFragmentId) {
+        this.$helperNotify.error('当前工作流未绑定需求知识片段')
+        return
+      }
+      const routeInfo = this.$router.resolve({
+        path: '/MemoryFragment',
+        query: {
+          fragment_id: this.requirementFragmentId,
+          hide_menu: '1',
+        },
+      })
+      window.open(routeInfo.href, '_blank')
     },
     savePrompts(promptType) {
       if (this.promptSaving || this.workflowId <= 0) {
@@ -350,7 +572,6 @@ export default {
         this.$helperNotify.success('提示词已还原为默认值')
         if (response.Data?.workflow) {
           this.workflow = response.Data.workflow
-          // 还原后如果有分享链接，自动替换需求文档地址占位符。
           this.$nextTick(() => {
             this.replaceRequirementShareUrlPlaceholder()
           })
@@ -389,6 +610,13 @@ export default {
         this.$helperNotify.error('复制失败')
       }
       document.body.removeChild(textArea)
+    },
+    formatUnixTime(unixTime) {
+      const value = Number(unixTime || 0)
+      if (value <= 0) {
+        return '-'
+      }
+      return new Date(value * 1000).toLocaleString()
     },
   },
 }
@@ -489,44 +717,82 @@ export default {
   margin-bottom: 0;
 }
 
-.task-workflow-tabs {
+.task-workflow-nodes {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.task-workflow-node {
+  border: 1px solid #e8e8e0;
+  border-radius: 14px;
+  background: #fff;
+  min-height: 78px;
+  padding: 14px 16px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.task-workflow-node:hover {
+  border-color: #b7c9a8;
+  transform: translateY(-1px);
+}
+
+.task-workflow-node--active {
+  border-color: #3a7a3a;
+  background: #f3f8ef;
+  box-shadow: 0 6px 18px rgba(58, 122, 58, 0.14);
+}
+
+.task-workflow-node--success {
+  background: #f3f8ef;
+}
+
+.task-workflow-node--failed {
+  background: #fff5f4;
+}
+
+.task-workflow-node--running {
+  background: #fff9ec;
+}
+
+.task-workflow-node__index {
+  font-size: 12px;
+  color: #909399;
+}
+
+.task-workflow-node__label {
+  font-size: 15px;
+  line-height: 1.4;
+  color: #303133;
+  font-weight: 600;
+}
+
+.task-workflow-content {
   background: #fff;
   border-radius: 12px;
   padding: 16px 20px 20px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
   border: 1px solid #e8e8e0;
   flex: 1;
-  min-height: 0;
   display: flex;
   flex-direction: column;
-}
-
-.task-workflow-tabs :deep(.el-tabs__header) {
-  order: -1;
-  flex-shrink: 0;
-}
-
-.task-workflow-tabs :deep(.el-tabs__content) {
-  flex: 1;
   min-height: 0;
-  overflow: auto;
-}
-
-.task-workflow-tabs :deep(.el-tab-pane) {
-  height: 100%;
+  overflow: hidden;
 }
 
 .task-workflow-tab {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  flex: 1;
   height: 100%;
-}
-
-.task-workflow-toolbar {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+  min-height: 0;
 }
 
 .task-workflow-grid {
@@ -535,45 +801,38 @@ export default {
   gap: 12px;
 }
 
-.task-workflow-stat-card {
-  border-radius: 12px;
-  padding: 16px;
-  background: #fafaf7;
-  border: 1px solid #e8e8e0;
-}
-
-.task-workflow-stat-card__label {
-  font-size: 13px;
-  color: #909399;
-  margin-bottom: 6px;
-}
-
-.task-workflow-stat-card__value {
-  font-size: 28px;
-  font-weight: 700;
-  color: #303133;
-}
-
 .task-workflow-card {
   border-radius: 12px;
   padding: 16px;
   background: #fafaf7;
   border: 1px solid #e8e8e0;
   flex: 1;
+  height: 100%;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+}
+
+.task-workflow-prompt-editor {
+  flex: 1;
+  height: 100%;
+  min-height: 0;
 }
 
 .task-workflow-card :deep(.md-editor) {
   flex: 1;
+  height: 100%;
   min-height: 0;
 }
 
-.task-workflow-card__label {
-  font-size: 13px;
-  color: #909399;
-  margin-bottom: 8px;
+.task-workflow-card :deep(.md-editor-content) {
+  min-height: 0;
+}
+
+.task-workflow-card :deep(.md-editor-input-wrapper),
+.task-workflow-card :deep(.md-editor-preview-wrapper) {
+  overflow: auto;
 }
 
 .task-workflow-card__header {
@@ -594,33 +853,17 @@ export default {
   margin-bottom: 10px;
   font-size: 13px;
   color: #909399;
+  word-break: break-all;
+}
+
+.task-workflow-card__hint--error {
+  color: #c45656;
 }
 
 .task-workflow-card__switch {
   display: flex;
   gap: 8px;
-}
-
-.task-workflow-mode-button--active {
-  box-shadow: inset 0 0 0 1px rgba(58, 122, 58, 0.24);
-}
-
-.task-workflow-inline {
-  display: flex;
-  gap: 8px;
-}
-
-.task-workflow-markdown {
-  max-height: 720px;
-  overflow: auto;
-  background: #fff;
-  border-radius: 8px;
-  padding: 12px;
-  border: 1px solid #e8e8e0;
-}
-
-.task-workflow-markdown--compact {
-  max-height: 200px;
+  flex-wrap: wrap;
 }
 
 .task-workflow-summary-list {
@@ -637,7 +880,7 @@ export default {
   min-width: 140px;
   padding: 12px 14px;
   border-radius: 8px;
-  background: #fafaf7;
+  background: #fff;
   border: 1px solid #e8e8e0;
   color: #909399;
   display: flex;
@@ -647,148 +890,46 @@ export default {
 
 .task-workflow-summary-item strong {
   color: #303133;
-}
-
-.task-workflow-history-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.task-workflow-history-item {
-  display: grid;
-  grid-template-columns: 1.2fr 1fr 1fr;
-  gap: 12px;
-  padding: 12px 14px;
-  border-radius: 8px;
-  background: #fafaf7;
-  border: 1px solid #e8e8e0;
-  color: #606266;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-}
-
-.task-workflow-history-item:hover {
-  background: #f0f0e8;
-}
-
-.task-workflow-history-item--active {
-  background: #e8f0e3;
-  border-color: #3a7a3a;
-}
-
-.task-workflow-detail-tabs {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 12px;
-}
-
-.task-workflow-history-report {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.task-workflow-ui-assist {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.task-workflow-ui-assist__item {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  color: #606266;
-  font-size: 13px;
-}
-
-.task-workflow-ui-assist__tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.task-workflow-ui-assist__list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.task-workflow-ui-assist__list-item {
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: #fafaf7;
-  border: 1px solid #e8e8e0;
-  color: #606266;
-  font-size: 12px;
-}
-
-.task-workflow-ui-assist__tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: #eef3e7;
-  color: #3a7a3a;
-  font-size: 12px;
-}
-
-.task-workflow-dialog-form :deep(.el-form-item) {
-  margin-bottom: 16px;
-}
-
-.task-workflow-report-table {
-  border: 1px solid #e8e8e0;
-  border-radius: 8px;
-  overflow: hidden;
-  background: #fff;
-}
-
-.task-workflow-report-table__head,
-.task-workflow-report-table__row {
-  display: grid;
-  grid-template-columns: 1.6fr 1.4fr 0.8fr 0.8fr 0.8fr;
-  gap: 12px;
-  padding: 10px 14px;
-  align-items: center;
-}
-
-.task-workflow-report-table__head {
-  background: #fafaf7;
-  color: #909399;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.task-workflow-report-table__row {
-  border-top: 1px solid #e8e8e0;
-  color: #606266;
-  font-size: 13px;
-}
-
-.task-workflow-report-table__cell-main {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-.task-workflow-report-table__sub {
-  color: #909399;
-  font-size: 12px;
+  max-width: 360px;
+  text-align: right;
   word-break: break-all;
 }
 
-.task-workflow-result--pass {
-  color: #2d7a48;
-  font-weight: 600;
+.task-workflow-fragment-view {
+  border-radius: 10px;
+  border: 1px solid #e8e8e0;
+  background: #fff;
+  overflow: auto;
+  min-height: 0;
+  flex: 1;
 }
 
-.task-workflow-result--fail {
-  color: #b14f46;
-  font-weight: 600;
+.task-workflow-fragment-view__iframe {
+  width: 100%;
+  height: 100%;
+  min-height: 520px;
+  border: 0;
+  display: block;
+}
+
+.task-workflow-fragment-view__empty {
+  min-height: 520px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #909399;
+  font-size: 13px;
+}
+
+@media (max-width: 1100px) {
+  .task-workflow-nodes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .task-workflow-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
 }
 
 @media (max-width: 900px) {
@@ -804,16 +945,6 @@ export default {
   .task-workflow-card__header {
     flex-direction: column;
     align-items: flex-start;
-  }
-
-  .task-workflow-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .task-workflow-report-table__head,
-  .task-workflow-report-table__row {
-    grid-template-columns: 1.2fr 1fr 0.8fr 0.8fr 0.8fr;
-    font-size: 12px;
   }
 }
 </style>

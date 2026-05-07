@@ -1207,6 +1207,7 @@ export default {
           return
         }
         const isEdit = this.homeTaskForm.id > 0
+        const createdTaskId = Number(response?.Data?.id || 0)
         this.$helperNotify.success(isEdit ? '任务已更新' : '任务已创建')
         this.closeHomeTaskDialog()
         if (isEdit) {
@@ -1214,6 +1215,9 @@ export default {
           this.triggerHomeTaskEditFeedback(taskId)
         }
         this.refreshAllHomeTaskList()
+        if (!isEdit && createdTaskId > 0) {
+          this.openTaskWorkflow({ id: createdTaskId })
+        }
       })
     },
     isHomeTaskBusy(taskId, operateType = '') {
