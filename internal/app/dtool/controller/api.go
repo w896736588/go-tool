@@ -284,15 +284,22 @@ select c.id,
        c.update_time,
        count(d.id) as child_count
 from tbl_api_collection c
-left join tbl_api_dir d on d.collection_id = c.id
+left join tbl_api_dir d on d.collection_id = c.id and d.archived = 0
 group by c.id, c.name, c.create_time, c.update_time
 order by c.id asc`).All()
 	result := make([]map[string]any, 0, len(list))
 	for _, item := range list {
 		result = append(result, buildCollectionBasicInfo(item))
 	}
+	// query archive folder count
+	archiveRows, _ := common.DbMain.Client.QueryBySql(`select count(*) as cnt from tbl_api_dir where archived = 1`).All()
+	archiveCount := 0
+	if len(archiveRows) > 0 {
+		archiveCount = cast.ToInt(archiveRows[0][`cnt`])
+	}
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
-		`list`: result,
+		`list`:          result,
+		`archive_count`: archiveCount,
 	})
 }
 

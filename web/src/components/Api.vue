@@ -1392,7 +1392,7 @@ export default {
           // 加载集合树后按本地缓存恢复排序
           _that.applyTreeSortCache()
           // 末尾追加虚拟归档集合节点
-          _that.pushArchiveNode()
+          _that.pushArchiveNode(res.Data.archive_count || 0)
           _that.initTreeExpansion()
           // 处理从任务清单跳转过来的初始导航
           _that.handleInitialNavigation()
@@ -2460,7 +2460,7 @@ export default {
       })
     },
     // 追加虚拟归档集合节点到树末尾
-    pushArchiveNode() {
+    pushArchiveNode(archiveCount) {
       let _that = this
       const archiveNode = {
         id: -1,
@@ -2471,7 +2471,7 @@ export default {
         isLeaf: false,
         loaded: false,
         loading: false,
-        child_count: 0,
+        child_count: archiveCount || 0,
       }
       _that.pushUniqueByKey(_that.treeData, archiveNode, 'uniqueid')
     },
