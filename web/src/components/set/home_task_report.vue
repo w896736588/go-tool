@@ -322,6 +322,7 @@ const DEFAULT_HOME_TASK_DAILY_REPORT_PROMPT = '请基于当前活跃任务生成
 const PROMPT_PLACEHOLDERS = [
   { label: '需求文档地址', value: '{需求文档地址}' },
   { label: '需求文档纯文本地址', value: '{需求文档纯文本地址}' },
+  { label: '需求文档纯文本文件相对地址', value: '{需求文档纯文本文件相对地址}' },
   { label: '接口开发API地址', value: '{接口开发API地址}' },
   { label: '接口开发API的token', value: '{接口开发API的token}' },
   { label: '开发项目配置', value: '{开发项目配置}' },

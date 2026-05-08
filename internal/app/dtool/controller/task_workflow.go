@@ -1342,6 +1342,8 @@ func buildTaskWorkflowPlaceholderMap(c *gin.Context, homeTaskInfo map[string]any
 	devEnvironment, _ := common.DbMain.HomeTaskConfigValue(define.HomeTaskConfigDevEnvironment)
 	result := map[string]string{
 		`{需求文档地址}`:            taskWorkflowBuildShareURL(c, workflowInfo, apiHost),
+		`{需求文档纯文本地址}`:         taskWorkflowBuildPlainTextShareURL(c, workflowInfo, apiHost),
+		`{需求文档纯文本文件相对地址}`:     taskWorkflowBuildPlainTextFragmentRelativePath(workflowInfo),
 		`{接口开发API地址}`:         apiHost,
 		`{接口开发API的token}`:     taskWorkflowBuildAPIToken(c),
 		`{开发项目配置}`:            taskWorkflowBuildDevConfigsMarkdown(homeTaskInfo),
@@ -1403,6 +1405,31 @@ func taskWorkflowBuildShareURL(c *gin.Context, workflowInfo map[string]any, apiH
 		return ``
 	}
 	// 确认片段存在。
+	if _, err := component.MemoryRuntime.DB().MemoryFragmentInfo(fragmentID); err != nil {
+		return ``
+	}
+	shareStore := memoryFragmentShareStoreForRoot(component.MemoryRuntime.Config().Dir)
+	share, err := shareStore.Create(fragmentID, time.Now())
+	if err != nil {
+		return ``
+	}
+	if apiHost == `` {
+		return ``
+	}
+	shareURL, _ := url.Parse(apiHost)
+	shareURL.Path = `/share/` + url.PathEscape(share.Token)
+	return shareURL.String()
+}
+
+// taskWorkflowBuildPlainTextShareURL 为纯文本需求知识片段生成分享链接。
+func taskWorkflowBuildPlainTextShareURL(c *gin.Context, workflowInfo map[string]any, apiHost string) string {
+	fragmentID := strings.TrimSpace(cast.ToString(workflowInfo[`plain_text_requirement_fragment_id`]))
+	if fragmentID == `` || component.MemoryRuntime == nil {
+		return ``
+	}
+	if err := component.MemoryRuntime.EnsureConfigured(); err != nil {
+		return ``
+	}
 	if _, err := component.MemoryRuntime.DB().MemoryFragmentInfo(fragmentID); err != nil {
 		return ``
 	}
@@ -1825,4 +1852,33 @@ func ensureTaskWorkflowPlainTextReqFragment(workflowInfo map[string]any, homeTas
 		return
 	}
 	workflowInfo[`plain_text_requirement_fragment_id`] = fragmentFileID
+}
+
+// taskWorkflowBuildPlainTextFragmentRelativePath 为纯文本需求知识片段构建相对于 fragments/ 目录的相对路径。
+func taskWorkflowBuildPlainTextFragmentRelativePath(workflowInfo map[string]any) string {
+	fragmentID := strings.TrimSpace(cast.ToString(workflowInfo[`plain_text_requirement_fragment_id`]))
+	if fragmentID == `` || component.MemoryRuntime == nil {
+		return ``
+	}
+	if err := component.MemoryRuntime.EnsureConfigured(); err != nil {
+		return ``
+	}
+	info, err := component.MemoryRuntime.DB().MemoryFragmentInfo(fragmentID)
+	if err != nil {
+		return ``
+	}
+	filePath := strings.TrimSpace(cast.ToString(info[`file_path`]))
+	if filePath == `` {
+		return ``
+	}
+	fragmentsDir := filepath.Join(component.MemoryRuntime.Config().Dir, `fragments`)
+	relPath, err := filepath.Rel(fragmentsDir, filePath)
+	if err != nil {
+		return ``
+	}
+	relPath = filepath.ToSlash(relPath)
+	if relPath == `.` || strings.HasPrefix(relPath, `../`) {
+		return ``
+	}
+	return relPath
 }

@@ -171,7 +171,7 @@ description: Use when operating the dtool 通用工具模块 and the task involv
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
 | `relative_path` | string | 是 | 相对于知识片段文件夹（`fragments/`）的路径，如 `"2026/05/a59db79a-3e4d-4f37-a02d-1bf87cc0c590.md"` |
-| `content` | string | 是 | 新的 Markdown 正文内容 |
+| `content` | string | 是 | 新的 Markdown 正文内容，支持占位符 `{需求文档纯文本文件相对地址}`（后端自动替换为实际路径） |
 | `title` | string | 否 | 新标题（不传则不修改） |
 
 - **返回**: 更新后的片段对象，包含 `id`、`title`、`content`、`update_time_desc` 等字段
@@ -258,35 +258,13 @@ description: Use when operating the dtool 通用工具模块 and the task involv
 3. 调用 `/api/GitChangeBranchById`
 4. 返回切换后的当前分支和远程分支信息
 
-### 场景 8：创建知识片段
+### 场景 8：更新知识片段（按文件路径）
 
 1. 向用户确认 `base_url`、`Token`
-2. 确认片段标题 `title` 和内容 `content`（支持 Markdown）
-3. 确认是否需要标签 `tags`（可选，用于分类）
-4. 调用 `/api/MemoryFragmentSave`（不传 `id`）
-5. 返回新创建的片段信息（含自动生成的 `id`）
-
-### 场景 9：编辑知识片段
-
-1. 向用户确认 `base_url`、`Token`
-2. 确认要编辑的片段 ID（可通过搜索接口获取）
-3. 确认需要修改的字段（`title`、`content`、`tags`，未传的字段保持不变）
-4. 调用 `/api/MemoryFragmentSave`（传入 `id` + 要修改的字段）
+2. 确认要更新的知识片段相对路径（如 `2026/05/uuid.md`）
+3. 确认新的正文内容 `content` 和可选的新标题 `title`
+4. 调用 `memory_fragment_update_by_path(relative_path, content, title)`
 5. 返回更新后的片段信息
-
-### 场景 10：查询知识片段明细
-
-1. 向用户确认 `base_url`、`Token`
-2. 确认要查询的片段 ID
-3. 调用 `/api/MemoryFragmentInfo`
-4. 返回片段完整内容（标题、正文、标签、时间等）
-
-### 场景 11：搜索知识片段
-
-1. 向用户确认 `base_url`、`Token`
-2. 确认搜索关键词（多个关键词用空格分隔，AND 逻辑）
-3. 调用 `/api/MemoryFragmentSearch`
-4. 返回匹配的知识片段列表（按相关度排序）
 ## Git 分支变更查看脚本
 
 用于查看当前分支相对基分支的改动文件列表和单文件 diff（类似 GitLab MR 文件列表），跨平台通用。
