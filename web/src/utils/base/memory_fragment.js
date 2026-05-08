@@ -114,9 +114,10 @@ function MemoryFragmentImageUpload(file, callBack) {
 }
 
 // MemoryFragmentUploadZip 上传 ZIP 文件，解析 content.md + images/ 创建知识片段。
-function MemoryFragmentUploadZip(file, callBack) {
+function MemoryFragmentUploadZip(file, apiBaseURL, callBack) {
   const form = new FormData()
   form.append('file', file)
+  form.append('api_base_url', apiBaseURL)
   base.BasePostForm('/api/MemoryFragmentUploadZip', form, callBack)
 }
 

@@ -627,6 +627,8 @@ func MemoryFragmentUploadZip(c *gin.Context) {
 		gsgin.GinResponseError(c, `仅支持 .zip 文件`, nil)
 		return
 	}
+	// 前端传入的 API 基地址，用于拼接图片绝对路径
+	apiBaseURL := strings.TrimRight(c.PostForm(`api_base_url`), `/`)
 
 	// 保存到临时文件
 	tmpDir := os.TempDir()
@@ -688,7 +690,12 @@ func MemoryFragmentUploadZip(c *gin.Context) {
 		return
 	}
 	markdownContent = rewriteScrapeImagePaths(markdownContent, pathMapping)
-	markdownContent = prefixMemoryImagePaths(markdownContent)
+	// 用前端传入的 apiBaseURL 替换图片路径为绝对地址
+	if apiBaseURL != `` {
+		markdownContent = strings.ReplaceAll(markdownContent, "(/memory/images/", "("+apiBaseURL+"/memory/images/")
+	} else {
+		markdownContent = prefixMemoryImagePaths(markdownContent)
+	}
 
 	// 创建知识片段
 	info, saveErr := memoryDB.MemoryFragmentSave(``, title, markdownContent, nil)
