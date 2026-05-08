@@ -155,6 +155,20 @@ function GetApiHost() {
     return ''  // 生产环境返回空字符串，使用相对路径
 }
 
+// 获取完整的 API 基地址（包含协议、主机和端口），用于需要拼接绝对路径的场景。
+// 生产环境使用地址栏 host + 注入端口，开发环境与 GetApiHost 一致。
+function GetAbsoluteApiHost() {
+    if (isDev()) {
+        return GetApiHost()
+    }
+    const config = GetServerConfig()
+    const port = (config && config.port) ? config.port : window.location.port
+    if (!port) {
+        return window.location.origin
+    }
+    return window.location.protocol + '//' + window.location.hostname + ':' + port
+}
+
 // 获取 SSE API 地址
 function GetSseApiHost() {
     if (isDev()) {
@@ -268,6 +282,7 @@ export default {
     BasePost,
     BasePostForm,
     GetApiHost,
+    GetAbsoluteApiHost,
     GetSseApiHost,
     GetServerConfig,
     GetSafeToken,

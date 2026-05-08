@@ -1265,7 +1265,7 @@ export default {
         return
       }
       this.zipUploading = true
-      const apiBaseURL = base.GetApiHost()
+      const apiBaseURL = base.GetAbsoluteApiHost()
       MemoryFragmentApi.MemoryFragmentUploadZip(file, apiBaseURL, (response) => {
         this.zipUploading = false
         // 重置 input，允许重复选择同一文件
