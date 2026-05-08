@@ -69,6 +69,10 @@ function CronConfigGet(callBack){
     base.BasePost('/api/Set/CronConfigGet', {}, callBack)
 }
 
+function CronConfigTypes(callBack){
+    base.BasePost('/api/Set/CronConfigTypes', {}, callBack)
+}
+
 function CronConfigSave(data , callBack){
     base.BasePost('/api/Set/CronConfigSave', data, callBack)
 }
@@ -105,6 +109,7 @@ export default {
     RuntimeDatabaseGitSync,
     RuntimeConfigItemSave,
     CronConfigGet,
+    CronConfigTypes,
     CronConfigSave,
     HomeTaskConfigGet,
     HomeTaskConfigSave,

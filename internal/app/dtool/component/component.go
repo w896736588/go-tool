@@ -56,7 +56,10 @@ var VariableClient VariableRuntime
 var ShellOutClient *common.TShellOut
 var MemoryRuntime *common.MemoryStore
 var MainDBAutoSyncRuntime *common.MainDBAutoSync
-var CronScheduler *common.CronScheduler
+var CronSchedulers map[string]*common.CronScheduler
+
+// CronTaskFuncRegistry 存储定时任务类型到执行函数的映射，由 controller 在初始化时注册。
+var CronTaskFuncRegistry = make(map[string]func())
 var EnvClient *define.Env
 var ConfigViper *viper.Viper
 var GsLog *gstool.GsSlog

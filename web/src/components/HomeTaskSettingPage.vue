@@ -41,10 +41,11 @@ import GitActionButton from '@/components/base/GitActionButton.vue'
 import HomeTaskReportSetting from '@/components/set/home_task_report.vue'
 
 const TABS = [
-  { name: 'daily-report', label: '工作日报 AI' },
-  { name: 'prompt-template', label: '工作流提示词' },
-  { name: 'dev-environment', label: '开发环境提示词' },
-  { name: 'tapd', label: 'TAPD 抓取' },
+  { name: 'daily-report', label: '工作日报提示词' },
+  { name: 'prompt-template', label: '工作流程提示词模板' },
+  { name: 'dev-environment', label: '开发环境提示词模板' },
+  { name: 'tapd', label: 'TAPD 抓取配置' },
+  { name: 'branch-name', label: '分支名生成提示词' },
 ]
 
 export default {

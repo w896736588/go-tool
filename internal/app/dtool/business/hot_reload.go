@@ -12,6 +12,7 @@ import (
 
 	"gitee.com/Sxiaobai/gs/v2/gsdb"
 	"gitee.com/Sxiaobai/gs/v2/gstool"
+	"github.com/spf13/cast"
 )
 
 // hotReloadMu 保护所有热重载入口，同一时刻只允许一个配置项执行热重载。
@@ -243,18 +244,20 @@ func HotReloadMemoryAutoSyncDelay() error {
 	return nil
 }
 
-// HotReloadCronScheduler 热重载定时任务调度器（定时任务配置变更时使用）。
-func HotReloadCronScheduler() error {
+// HotReloadCronScheduler 热重载指定类型的定时任务调度器。
+func HotReloadCronScheduler(taskType string) error {
 	hotReloadMu.Lock()
 	defer hotReloadMu.Unlock()
 
-	enabled, triggerTime, err := readCronConfig()
-	if err != nil {
+	one, err := common.DbMain.CronTaskByType(taskType)
+	if err != nil && !common.DbRowMissing(err) {
 		return fmt.Errorf(`读取定时任务配置失败 %w`, err)
 	}
-	component.CronScheduler.Configure(enabled, triggerTime)
+	enabled := cast.ToInt(one[`enabled`]) == 1
+	triggerTime := strings.TrimSpace(cast.ToString(one[`trigger_time`]))
 
-	gstool.FmtPrintlnLogTime(`定时任务热重载成功 enabled=%v time=%s`, enabled, triggerTime)
+	startCronSchedulerByType(taskType, enabled, triggerTime)
+	gstool.FmtPrintlnLogTime(`定时任务热重载成功 type=%s enabled=%v time=%s`, taskType, enabled, triggerTime)
 	return nil
 }
 

@@ -3,8 +3,10 @@ package controller
 import (
 	"dev_tool/internal/app/dtool/common"
 	"dev_tool/internal/app/dtool/component"
+	"dev_tool/internal/app/dtool/define"
 	_struct "dev_tool/internal/app/dtool/struct"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -442,4 +444,64 @@ func autoCreateHomeTaskDevConfigDirs(taskName string, configsJSON string) string
 	}
 	bytes, _ := json.Marshal(configs)
 	return string(bytes)
+}
+
+// HomeTaskBranchNameGenerate 使用 AI 生成分支名。
+func HomeTaskBranchNameGenerate(c *gin.Context) {
+	if _, ok := memoryDBOrResponse(c); !ok {
+		return
+	}
+	request := _struct.HomeTaskBranchNameGenerateRequest{}
+	_ = gsgin.GinPostBody(c, &request)
+	taskName := strings.TrimSpace(request.TaskName)
+	parentBranch := strings.TrimSpace(request.ParentBranch)
+	if taskName == "" {
+		gsgin.GinResponseError(c, "任务名称不能为空", nil)
+		return
+	}
+
+	modelIDText, err := common.DbMain.HomeTaskConfigValue(define.HomeTaskConfigBranchNameModelID)
+	if err != nil && !common.DbRowMissing(err) {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	modelID := cast.ToInt(modelIDText)
+	if modelID <= 0 {
+		gsgin.GinResponseError(c, "请先在设置中配置分支名生成模型", nil)
+		return
+	}
+	modelInfo, err := common.DbMain.AiModelInfo(modelID)
+	if err != nil {
+		gsgin.GinResponseError(c, "当前分支名生成模型不可用", nil)
+		return
+	}
+	if strings.ToLower(cast.ToString(modelInfo["model_type"])) != "llm" {
+		gsgin.GinResponseError(c, "分支名生成仅支持 LLM 模型", nil)
+		return
+	}
+
+	prompt, err := common.DbMain.HomeTaskConfigValue(define.HomeTaskConfigBranchNamePrompt)
+	if err != nil && !common.DbRowMissing(err) {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	prompt = strings.TrimSpace(prompt)
+	if prompt == "" {
+		prompt = "请根据以下信息生成分支名：\n需求名：{需求名}\n基于分支：{父分支}\n\n要求：只输出分支名，不要附加解释。分支名使用英文小写，单词间用下划线连接，格式如 feature_xxx 或 fix_xxx。"
+	}
+	prompt = strings.ReplaceAll(prompt, "{需求名}", taskName)
+	prompt = strings.ReplaceAll(prompt, "{父分支}", parentBranch)
+
+	systemPrompt := "你是一个分支名生成助手。根据用户提供的任务信息生成合适的 Git 分支名。只输出分支名本身，不要附加任何解释或说明。"
+	result, _, err := common.DbMain.AIChatByModel(modelID, systemPrompt, prompt)
+	if err != nil {
+		gsgin.GinResponseError(c, fmt.Sprintf("生成分支名失败：%s", err.Error()), nil)
+		return
+	}
+	result = strings.TrimSpace(result)
+	result = strings.Trim(result, "`")
+	result = strings.TrimSpace(result)
+	gsgin.GinResponseSuccess(c, "", map[string]any{
+		"branch_name": result,
+	})
 }

@@ -266,6 +266,7 @@ func setRouter(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/Set/RuntimeConfigSave`, controller.SetRuntimeConfigSave)
 	tGin.GinPost(`/api/Set/RuntimeDatabaseGitSync`, controller.SetRuntimeDatabaseGitSync)
 	tGin.GinPost(`/api/Set/RuntimeConfigItemSave`, controller.SetRuntimeConfigItemSave)
+	tGin.GinPost(`/api/Set/CronConfigTypes`, controller.SetCronConfigTypes)
 	tGin.GinPost(`/api/Set/CronConfigGet`, controller.SetCronConfigGet)
 	tGin.GinPost(`/api/Set/CronConfigSave`, controller.SetCronConfigSave)
 	tGin.GinPost(`/api/Set/HomeTaskConfigGet`, controller.SetHomeTaskConfigGet)
@@ -323,6 +324,7 @@ func homeTask(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/HomeTaskDelete`, controller.HomeTaskDelete)
 	tGin.GinPost(`/api/HomeTaskDailyReportGenerate`, controller.HomeTaskDailyReportGenerate)
 	tGin.GinPost(`/api/HomeTaskLastDevConfigByGitId`, controller.HomeTaskLastDevConfigByGitId)
+	tGin.GinPost(`/api/HomeTaskBranchNameGenerate`, controller.HomeTaskBranchNameGenerate)
 }
 
 func taskWorkflow(tGin *p_gin.Gin) {

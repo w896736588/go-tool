@@ -1532,6 +1532,9 @@ func taskWorkflowBuildDevConfigsMarkdown(homeTaskInfo map[string]any) string {
 		if cfg.ParentBranch != "" {
 			sb.WriteString(fmt.Sprintf("- **父分支**: %s（用于提取当前分支改动文件）\n", cfg.ParentBranch))
 		}
+		if cfg.BranchName != "" {
+			sb.WriteString(fmt.Sprintf("- **分支名**: %s", cfg.BranchName))
+		}
 		collectionName := taskWorkflowQueryNameByID("tbl_api_collection", cfg.CollectionID)
 		if cfg.CollectionID > 0 {
 			dirName := taskWorkflowQueryNameByID("tbl_api_dir", cfg.DirID)

@@ -213,6 +213,63 @@
       </div>
     </div>
 
+    <!-- 分支名生成提示词 -->
+    <div v-show="activeTab === 'branch-name'">
+      <div class="set-config-header">
+        <h3 class="set-config-title">分支名生成提示词</h3>
+        <p class="set-config-desc">
+          用于生成分支名称的提示词模板，支持 Markdown 语法。
+        </p>
+      </div>
+
+      <div class="prompt-placeholder-bar">
+        <span class="prompt-placeholder-bar__label">内置占位符：</span>
+        <span
+          v-for="ph in branchNamePlaceholders"
+          :key="ph.value"
+          class="prompt-placeholder-tag"
+          @click="copyPlaceholder(ph)"
+        >
+          {{ ph.label }}
+          <el-icon class="prompt-placeholder-tag__icon"><CopyDocument /></el-icon>
+        </span>
+      </div>
+
+      <div class="set-config-table-card">
+        <el-form label-width="120px" class="memory-config-form">
+          <el-form-item label="生成模型">
+            <el-select
+              v-model="form.home_task_branch_name_model_id"
+              clearable
+              filterable
+              style="width: 100%;"
+              placeholder="请选择用于生成分支名的 LLM 模型"
+            >
+              <el-option
+                v-for="item in aiModelList"
+                :key="item.id"
+                :label="buildModelLabel(item)"
+                :value="item.id"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="提示词">
+            <MdEditor
+              v-model="form.home_task_branch_name_prompt"
+              preview-theme="github"
+              :preview="true"
+              :toolbars="promptEditorToolbars"
+              style="height: 360px;"
+            />
+          </el-form-item>
+          <el-form-item>
+            <pl-button type="primary" @click="saveBranchNameConfig">保存分支名生成提示词</pl-button>
+            <pl-button @click="showChangeLog">改动记录</pl-button>
+          </el-form-item>
+        </el-form>
+      </div>
+    </div>
+
     <!-- 提示词改动记录弹窗 -->
     <el-dialog v-model="changeLogVisible" title="提示词改动记录" width="720px" >
       <el-table :data="changeLogList" stripe max-height="480">
@@ -300,6 +357,8 @@ export default {
         home_task_tapd_css_selector: '',
         home_task_tapd_wait_seconds: 3,
         home_task_dev_environment: '',
+        home_task_branch_name_prompt: '',
+        home_task_branch_name_model_id: null,
       },
       promptPlaceholders: PROMPT_PLACEHOLDERS,
       promptEditorToolbars: PROMPT_EDITOR_TOOLBARS,
@@ -312,6 +371,12 @@ export default {
     }
   },
   computed: {
+    branchNamePlaceholders() {
+      return [
+        { label: '需求名', value: '{需求名}' },
+        { label: '父分支', value: '{父分支}' },
+      ]
+    },
     devEnvironmentPlaceholders() {
       return PROMPT_PLACEHOLDERS.filter(ph => ph.value !== '{开发环境}')
     },
@@ -373,6 +438,8 @@ export default {
         this.form.home_task_tapd_css_selector = response.Data.home_task_tapd_css_selector || ''
         this.form.home_task_tapd_wait_seconds = response.Data.home_task_tapd_wait_seconds || 3
         this.form.home_task_dev_environment = response.Data.home_task_dev_environment || ''
+        this.form.home_task_branch_name_prompt = response.Data.home_task_branch_name_prompt || ''
+        this.form.home_task_branch_name_model_id = response.Data.home_task_branch_name_model_id || null
       })
     },
     saveConfig() {
@@ -411,6 +478,15 @@ export default {
         }
       })
     },
+    saveBranchNameConfig() {
+      const payload = this.buildFullPayload()
+      set.HomeTaskConfigSave(payload, (response) => {
+        if (response.ErrCode === 0) {
+          this.$helperNotify.success('分支名生成提示词已保存')
+          this.$emit('changed')
+        }
+      })
+    },
     buildFullPayload() {
       return {
         home_task_daily_report_model_id: this.form.home_task_daily_report_model_id,
@@ -425,6 +501,8 @@ export default {
         home_task_tapd_css_selector: this.form.home_task_tapd_css_selector,
         home_task_tapd_wait_seconds: this.form.home_task_tapd_wait_seconds,
         home_task_dev_environment: this.form.home_task_dev_environment,
+        home_task_branch_name_prompt: this.form.home_task_branch_name_prompt,
+        home_task_branch_name_model_id: this.form.home_task_branch_name_model_id,
       }
     },
     copyPlaceholder(placeholder) {

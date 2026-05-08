@@ -476,6 +476,24 @@
                 </el-row>
                 <el-row :gutter="12">
                   <el-col :xs="24" :sm="12" :md="12">
+                    <el-form-item label="分支名" label-width="72px">
+                      <div style="display: flex; gap: 8px; width: 100%;">
+                        <el-input
+                          v-model="cfg.branch_name"
+                          clearable
+                          placeholder="输入或AI生成分支名"
+                        />
+                        <el-button
+                          type="success"
+                          :loading="cfg._branchGenerating"
+                          @click="generateBranchName(cfgIdx)"
+                        >
+                          AI生成
+                        </el-button>
+                      </div>
+                    </el-form-item>
+                  </el-col>
+                  <el-col :xs="24" :sm="12" :md="12">
                     <el-form-item label="自定义网页" label-width="72px">
                       <el-select
                         v-model="cfg.smart_link_id"
@@ -635,7 +653,7 @@ function createHomeTaskDefaultForm() {
     task_status: HOME_TASK_STATUS_TODO,
     start_date: getTodayDateText(),
     tapd_url: '',
-    dev_configs: [{ git_id: '', collection_id: '', dir_id: '', docker_id: '', mysql_id: '', local_dir: '', parent_branch: '', smart_link_id: '', smart_link_label: '', smart_link_account: '' }],
+    dev_configs: [{ git_id: '', collection_id: '', dir_id: '', docker_id: '', mysql_id: '', local_dir: '', parent_branch: '', branch_name: '', _branchGenerating: false, smart_link_id: '', smart_link_label: '', smart_link_account: '' }],
   }
 }
 
@@ -689,6 +707,7 @@ export default {
         { key: 'mysql', label: 'Db' },
         { key: 'local_dir', label: '本地目录' },
         { key: 'parent_branch', label: '父分支' },
+        { key: 'branch_name', label: '分支名' },
         { key: 'smart_link', label: '自定义网页' },
         { key: 'smart_link_label', label: '网页标签' },
         { key: 'smart_link_account', label: '账号' },
@@ -926,8 +945,27 @@ export default {
         }
       })
     },
+    generateBranchName(cfgIdx) {
+      const cfg = this.homeTaskForm.dev_configs[cfgIdx]
+      const taskName = String(this.homeTaskForm.name || '').trim()
+      if (!taskName) {
+        this.$helperNotify.error('请先填写任务名称')
+        return
+      }
+      cfg._branchGenerating = true
+      homeTaskApi.HomeTaskBranchNameGenerate(taskName, String(cfg.parent_branch || '').trim(), (response) => {
+        cfg._branchGenerating = false
+        if (response && response.ErrCode === 0 && response.Data) {
+          cfg.branch_name = response.Data.branch_name || ''
+          this.$helperNotify.success('分支名已生成')
+        } else {
+          this.$helperNotify.error((response && response.ErrMsg) || '生成分支名失败')
+        }
+      })
+    },
+
     addDevConfig() {
-      this.homeTaskForm.dev_configs.push({ git_id: '', collection_id: '', dir_id: '', docker_id: '', local_dir: '', parent_branch: '', smart_link_id: '', smart_link_label: '', smart_link_account: '' })
+      this.homeTaskForm.dev_configs.push({ git_id: '', collection_id: '', dir_id: '', docker_id: '', local_dir: '', parent_branch: '', branch_name: '', _branchGenerating: false, smart_link_id: '', smart_link_label: '', smart_link_account: '' })
     },
     removeDevConfig(idx) {
       this.homeTaskForm.dev_configs.splice(idx, 1)
@@ -990,6 +1028,7 @@ export default {
           mysql_id: Number(cfg.mysql_id || 0) || '',
           local_dir: String(cfg.local_dir || ''),
           parent_branch: String(cfg.parent_branch || ''),
+          branch_name: String(cfg.branch_name || ''),
           smart_link_id: Number(cfg.smart_link_id || 0) || '',
           smart_link_label: String(cfg.smart_link_label || ''),
           smart_link_account: String(cfg.smart_link_account || ''),
@@ -1013,6 +1052,7 @@ export default {
             mysql_id: Number(task.mysql_id || 0) || '',
             local_dir: '',
             parent_branch: '',
+            branch_name: '',
             smart_link_id: '',
             smart_link_label: '',
             smart_link_account: '',
@@ -1020,7 +1060,7 @@ export default {
         }
       }
       if (devConfigs.length === 0) {
-        devConfigs = [{ git_id: '', collection_id: '', dir_id: '', docker_id: '', local_dir: '', parent_branch: '', smart_link_id: '', smart_link_label: '', smart_link_account: '' }]
+        devConfigs = [{ git_id: '', collection_id: '', dir_id: '', docker_id: '', local_dir: '', parent_branch: '', branch_name: '', _branchGenerating: false, smart_link_id: '', smart_link_label: '', smart_link_account: '' }]
       }
       this.homeTaskForm = {
         id: Number(task.id || 0),
@@ -1149,6 +1189,9 @@ export default {
         if (String(cfg.parent_branch || '').trim() !== '') {
           group.push({ type: 'parent_branch', label: '分支: ' + String(cfg.parent_branch).trim(), tagType: '' })
         }
+        if (String(cfg.branch_name || '').trim() !== '') {
+          group.push({ type: 'branch_name', label: String(cfg.branch_name).trim(), tagType: 'success' })
+        }
         if (Number(cfg.smart_link_id || 0) > 0) {
           const sl = this.homeTaskSmartLinkList.find(s => Number(s.id) === Number(cfg.smart_link_id))
           if (sl) {
@@ -1206,7 +1249,7 @@ export default {
         return
       }
       const validConfigs = this.homeTaskForm.dev_configs
-        .filter(cfg => Number(cfg.git_id || 0) > 0 || Number(cfg.collection_id || 0) > 0 || Number(cfg.docker_id || 0) > 0 || Number(cfg.mysql_id || 0) > 0 || String(cfg.local_dir || '').trim() !== '' || String(cfg.parent_branch || '').trim() !== '' || Number(cfg.smart_link_id || 0) > 0)
+        .filter(cfg => Number(cfg.git_id || 0) > 0 || Number(cfg.collection_id || 0) > 0 || Number(cfg.docker_id || 0) > 0 || Number(cfg.mysql_id || 0) > 0 || String(cfg.local_dir || '').trim() !== '' || String(cfg.parent_branch || '').trim() !== '' || String(cfg.branch_name || '').trim() !== '' || Number(cfg.smart_link_id || 0) > 0)
         .map(cfg => ({
           git_id: Number(cfg.git_id || 0),
           collection_id: Number(cfg.collection_id || 0),
@@ -1215,6 +1258,7 @@ export default {
           mysql_id: Number(cfg.mysql_id || 0),
           local_dir: String(cfg.local_dir || '').trim(),
           parent_branch: String(cfg.parent_branch || '').trim(),
+          branch_name: String(cfg.branch_name || '').trim(),
           smart_link_id: Number(cfg.smart_link_id || 0),
           smart_link_label: String(cfg.smart_link_label || '').trim(),
           smart_link_account: String(cfg.smart_link_account || '').trim(),

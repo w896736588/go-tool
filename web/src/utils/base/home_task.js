@@ -50,6 +50,11 @@ function HomeTaskLastDevConfigByGitId(gitId, callBack) {
   base.BasePost('/api/HomeTaskLastDevConfigByGitId', { git_id: gitId }, callBack)
 }
 
+// HomeTaskBranchNameGenerate 使用 AI 生成分支名。
+function HomeTaskBranchNameGenerate(taskName, parentBranch, callBack) {
+  base.BasePost('/api/HomeTaskBranchNameGenerate', { task_name: taskName, parent_branch: parentBranch }, callBack)
+}
+
 export default {
   HomeTaskList,
   HomeTaskSave,
@@ -61,4 +66,5 @@ export default {
   LocalDirList,
   OpenLocalDir,
   HomeTaskLastDevConfigByGitId,
+  HomeTaskBranchNameGenerate,
 }

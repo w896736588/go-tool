@@ -1400,25 +1400,54 @@ func SetAccountGroupAdd(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, ``, nil)
 }
 
-// SetCronConfigGet 返回定时任务配置。 // Return scheduled task settings.
+// SetCronConfigTypes 返回所有已注册但未入库的定时任务类型。
+func SetCronConfigTypes(c *gin.Context) {
+	result := make([]map[string]any, 0)
+	for taskType, def := range define.CronTaskRegistry {
+		result = append(result, map[string]any{
+			`type`: taskType,
+			`name`: def.Name,
+		})
+	}
+	gsgin.GinResponseSuccess(c, ``, result)
+}
+
+// SetCronConfigGet 返回所有定时任务配置列表。
 func SetCronConfigGet(c *gin.Context) {
-	one, err := common.DbMain.CronTaskByType(define.CronTaskTypeDailyReport)
-	if err != nil && !common.DbRowMissing(err) {
+	list, err := common.DbMain.CronTaskList()
+	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	gsgin.GinResponseSuccess(c, ``, map[string]any{
-		`cron_daily_report_enabled`: cast.ToInt(one[`enabled`]),
-		`cron_daily_report_time`:    strings.TrimSpace(cast.ToString(one[`trigger_time`])),
-	})
+	result := make([]map[string]any, 0, len(list))
+	for _, row := range list {
+		result = append(result, map[string]any{
+			`type`:              cast.ToString(row[`type`]),
+			`name`:              cast.ToString(row[`name`]),
+			`enabled`:           cast.ToInt(row[`enabled`]),
+			`trigger_time`:      strings.TrimSpace(cast.ToString(row[`trigger_time`])),
+			`last_trigger_time`: cast.ToInt64(row[`last_trigger_time`]),
+		})
+	}
+	gsgin.GinResponseSuccess(c, ``, result)
 }
 
-// SetCronConfigSave 保存定时任务配置并热重载调度器。 // Save scheduled task settings and hot-reload the scheduler.
+// SetCronConfigSave 保存单条定时任务配置并热重载对应调度器。
 func SetCronConfigSave(c *gin.Context) {
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
-	enabled := cast.ToInt(dataMap[`cron_daily_report_enabled`])
-	triggerTime := strings.TrimSpace(cast.ToString(dataMap[`cron_daily_report_time`]))
+	taskType := strings.TrimSpace(cast.ToString(dataMap[`type`]))
+	if taskType == `` {
+		gsgin.GinResponseError(c, `type 不能为空`, nil)
+		return
+	}
+	taskDef, ok := define.CronTaskRegistry[taskType]
+	if !ok {
+		gsgin.GinResponseError(c, `未知的定时任务类型`, nil)
+		return
+	}
+	enabled := cast.ToInt(dataMap[`enabled`])
+	triggerTime := strings.TrimSpace(cast.ToString(dataMap[`trigger_time`]))
 	if enabled == 1 {
 		if triggerTime == `` {
 			gsgin.GinResponseError(c, `启用定时任务时触发时间不能为空`, nil)
@@ -1429,11 +1458,11 @@ func SetCronConfigSave(c *gin.Context) {
 			return
 		}
 	}
-	if err := common.DbMain.CronTaskSave(define.CronTaskTypeDailyReport, `AI 生成工作日报`, enabled, triggerTime); err != nil {
+	if err := common.DbMain.CronTaskSave(taskType, taskDef.Name, enabled, triggerTime); err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	if err := business.HotReloadCronScheduler(); err != nil {
+	if err := business.HotReloadCronScheduler(taskType); err != nil {
 		gsgin.GinResponseError(c, fmt.Sprintf(`配置已保存但热重载失败: %s`, err.Error()), nil)
 		return
 	}
@@ -1516,6 +1545,16 @@ func SetHomeTaskConfigGet(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
+	branchNamePrompt, err := homeTaskConfigValue(define.HomeTaskConfigBranchNamePrompt)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	branchNameModelID, err := homeTaskConfigValue(define.HomeTaskConfigBranchNameModelID)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`home_task_daily_report_prompt`:   dailyReportPrompt,
 		`home_task_daily_report_model_id`: cast.ToInt(dailyReportModelID),
@@ -1529,6 +1568,8 @@ func SetHomeTaskConfigGet(c *gin.Context) {
 		`home_task_prompt_api_test`:       promptApiTest,
 		`home_task_prompt_design`:         promptDesign,
 		`home_task_dev_environment`:       devEnvironment,
+		`home_task_branch_name_prompt`:    branchNamePrompt,
+		`home_task_branch_name_model_id`:  cast.ToInt(branchNameModelID),
 	})
 }
 
@@ -1541,6 +1582,7 @@ var promptConfigKeys = map[string]string{
 	define.HomeTaskConfigPromptApiTest:     `接口自动化测试提示词`,
 	define.HomeTaskConfigPromptDesign:      `开发设计提示词`,
 	define.HomeTaskConfigDevEnvironment:    `开发环境`,
+	define.HomeTaskConfigBranchNamePrompt:  `分支名生成提示词`,
 }
 
 // saveHomeTaskPromptWithLog 保存提示词配置并记录变更日志（仅当值真正变化时才写日志）。
@@ -1635,6 +1677,17 @@ func SetHomeTaskConfigSave(c *gin.Context) {
 	homeTaskDevEnvironment := strings.TrimSpace(cast.ToString(dataMap[`home_task_dev_environment`]))
 	saveHomeTaskPromptWithLog(define.HomeTaskConfigDevEnvironment, `开发环境`, homeTaskDevEnvironment, `工作流-开发环境描述`)
 	if err := common.DbMain.HomeTaskConfigSave(`开发环境`, define.HomeTaskConfigDevEnvironment, homeTaskDevEnvironment, `工作流-开发环境描述`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskBranchNamePrompt := strings.TrimSpace(cast.ToString(dataMap[`home_task_branch_name_prompt`]))
+	saveHomeTaskPromptWithLog(define.HomeTaskConfigBranchNamePrompt, `分支名生成提示词`, homeTaskBranchNamePrompt, `工作流-分支名生成提示词模板`)
+	if err := common.DbMain.HomeTaskConfigSave(`分支名生成提示词`, define.HomeTaskConfigBranchNamePrompt, homeTaskBranchNamePrompt, `工作流-分支名生成提示词模板`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskBranchNameModelID := cast.ToString(cast.ToInt(dataMap[`home_task_branch_name_model_id`]))
+	if err := common.DbMain.HomeTaskConfigSave(`分支名生成模型`, define.HomeTaskConfigBranchNameModelID, homeTaskBranchNameModelID, `分支名生成所用模型 id`); err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}

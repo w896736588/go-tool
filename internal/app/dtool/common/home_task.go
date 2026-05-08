@@ -18,6 +18,11 @@ select id,name,task_status,memory_fragment_id,is_archived,start_time,last_operat
 from tbl_home_task
 where is_archived = ?
 order by id desc`
+	// homeTaskListAllQuerySQL 用于查询所有任务（包含已归档和未归档）。
+	homeTaskListAllQuerySQL = `
+select id,name,task_status,memory_fragment_id,is_archived,start_time,last_operated_at,create_time,update_time,tapd_url,git_id,api_dev_enabled,api_collection_id,api_dir_id,git_ids,api_dev_entries,mysql_id,dev_configs
+from tbl_home_task
+order by id desc`
 	// homeTaskListTodayUpdatedQuerySQL 用于查询今天变更过的任务，供工作日报使用。
 	homeTaskListTodayUpdatedQuerySQL = `
 select id,name,task_status,memory_fragment_id,is_archived,start_time,last_operated_at,create_time,update_time,tapd_url,git_id,api_dev_enabled,api_collection_id,api_dir_id,git_ids,api_dev_entries,mysql_id,dev_configs
@@ -269,8 +274,8 @@ func (h *CSqlite) HomeTaskLastDevConfigByGitId(gitID int) (map[string]any, error
 	if gitID <= 0 {
 		return nil, errors.New(`git_id不合法`)
 	}
-	// 查询所有未归档任务，按 id 倒序，取最近匹配的一条。
-	list, err := h.Client.QueryBySql(homeTaskListQuerySQL, define.HomeTaskArchivedNo).All()
+	// 查询所有任务（包含已归档），按 id 倒序，取最近匹配的一条。
+	list, err := h.Client.QueryBySql(homeTaskListAllQuerySQL).All()
 	if err != nil {
 		return nil, err
 	}

@@ -13,4 +13,6 @@ const (
 	HomeTaskConfigPromptApiTest      = `home_task_prompt_api_test`
 	HomeTaskConfigPromptDesign       = `home_task_prompt_design`
 	HomeTaskConfigDevEnvironment     = `home_task_dev_environment`
+	HomeTaskConfigBranchNamePrompt   = `home_task_branch_name_prompt`
+	HomeTaskConfigBranchNameModelID  = `home_task_branch_name_model_id`
 )

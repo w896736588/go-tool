@@ -29,6 +29,7 @@ type DevConfig struct {
 	MysqlID          int    `json:"mysql_id"`
 	LocalDir         string `json:"local_dir"`
 	ParentBranch     string `json:"parent_branch"`
+	BranchName       string `json:"branch_name"`
 	SmartLinkID      int    `json:"smart_link_id"`
 	SmartLinkLabel   string `json:"smart_link_label"`
 	SmartLinkAccount string `json:"smart_link_account"`
@@ -65,4 +66,10 @@ type HomeTaskDeleteRequest struct {
 // HomeTaskLastDevConfigByGitIdRequest 根据 Git 仓库 ID 查找最近匹配的 dev_config 请求。
 type HomeTaskLastDevConfigByGitIdRequest struct {
 	GitID int `json:"git_id"`
+}
+
+// HomeTaskBranchNameGenerateRequest 分支名生成请求。
+type HomeTaskBranchNameGenerateRequest struct {
+	TaskName     string `json:"task_name"`
+	ParentBranch string `json:"parent_branch"`
 }
