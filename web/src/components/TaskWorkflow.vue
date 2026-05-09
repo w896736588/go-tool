@@ -108,6 +108,25 @@
                 </div>
               </div>
             </div>
+            <div class="task-workflow-config-section">
+              <div class="task-workflow-config-section__title">关联知识片段</div>
+              <el-table :data="workflowFragments" border size="small" empty-text="暂无关联知识片段">
+                <el-table-column label="片段类型" prop="label" width="180" />
+                <el-table-column label="片段ID" prop="id" width="120">
+                  <template #default="{ row }">
+                    <span v-if="row.id">{{ row.id }}</span>
+                    <span v-else class="task-workflow-config-hint">未绑定</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="操作" width="100">
+                  <template #default="{ row }">
+                    <el-button v-if="row.id" size="small" text type="primary" @click="openFragmentById(row.id)">
+                      打开
+                    </el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
           </div>
         </div>
 
@@ -187,8 +206,23 @@
         <div v-else-if="activeNode === 'requirement'" class="task-workflow-tab">
           <div class="task-workflow-card">
             <div class="task-workflow-card__header">
-              <div class="task-workflow-card__title">需求文档提示词</div>
+              <div class="task-workflow-card__title">需求分析</div>
               <div class="task-workflow-card__switch">
+                <div class="task-workflow-inner-tabs">
+                  <button
+                    :class="['task-workflow-inner-tab', { 'task-workflow-inner-tab--active': requirementActiveTab === 'requirement-prompt' }]"
+                    @click="requirementActiveTab = 'requirement-prompt'"
+                  >需求文档提示词</button>
+                  <button
+                    :class="['task-workflow-inner-tab', { 'task-workflow-inner-tab--active': requirementActiveTab === 'design-plan-prompt' }]"
+                    @click="requirementActiveTab = 'design-plan-prompt'"
+                  >需求设计方案</button>
+                </div>
+              </div>
+            </div>
+
+            <div v-show="requirementActiveTab === 'requirement-prompt'" class="task-workflow-prompt-section">
+              <div class="task-workflow-card__switch" style="margin-bottom: 12px;">
                 <GitActionButton compact variant="info" @click="openRequirementFragment" :disabled="!requirementFragmentId">
                   打开知识片段
                 </GitActionButton>
@@ -202,18 +236,43 @@
                   还原为默认提示词
                 </GitActionButton>
               </div>
+              <div class="task-workflow-card__hint">
+                当前片段：{{ requirementFragmentTitle }}
+              </div>
+              <MdEditor
+                v-model="workflow.prompt_requirement"
+                class="task-workflow-prompt-editor"
+                preview-theme="github"
+                :preview="true"
+                :toolbars="promptEditorToolbars"
+                height="100%"
+              />
             </div>
-            <div class="task-workflow-card__hint">
-              当前片段：{{ requirementFragmentTitle }}
+
+            <div v-show="requirementActiveTab === 'design-plan-prompt'" class="task-workflow-prompt-section">
+              <div class="task-workflow-card__switch" style="margin-bottom: 12px;">
+                <GitActionButton compact :loading="promptSaving === 'design_plan_requirement'" @click="savePrompts('design_plan_requirement')">
+                  保存提示词
+                </GitActionButton>
+                <GitActionButton compact @click="copyText(workflow.prompt_design_plan_requirement || '', '提示词已复制')">
+                  复制提示词
+                </GitActionButton>
+                <GitActionButton compact variant="warning" :loading="promptRestoring === 'design_plan_requirement'" @click="restorePrompts('design_plan_requirement')">
+                  还原为默认提示词
+                </GitActionButton>
+                <GitActionButton compact variant="info" @click="openDesignPlanReqFragment" :disabled="!designPlanReqFragmentId">
+                  打开知识片段
+                </GitActionButton>
+              </div>
+              <MdEditor
+                v-model="workflow.prompt_design_plan_requirement"
+                class="task-workflow-prompt-editor"
+                preview-theme="github"
+                :preview="true"
+                :toolbars="promptEditorToolbars"
+                height="100%"
+              />
             </div>
-            <MdEditor
-              v-model="workflow.prompt_requirement"
-              class="task-workflow-prompt-editor"
-              preview-theme="github"
-              :preview="true"
-              :toolbars="promptEditorToolbars"
-              height="100%"
-            />
           </div>
         </div>
 
@@ -380,6 +439,7 @@ export default {
       promptSaving: '',
       promptRestoring: '',
       requirementFetchActiveTab: 'tapd-fetch',
+      requirementActiveTab: 'requirement-prompt',
       promptEditorToolbars: PROMPT_EDITOR_TOOLBARS,
       taskStatusOptions: TASK_STATUS_OPTIONS,
       statusUpdating: false,
@@ -413,8 +473,22 @@ export default {
     plainTextReqFragmentId() {
       return String(this.workflow.plain_text_requirement_fragment_id || '').trim()
     },
+    designPlanReqFragmentId() {
+      return String(this.workflow.design_plan_requirement_fragment_id || '').trim()
+    },
     requirementFragmentTitle() {
       return String(this.requirementFragment.title || '').trim() || (this.requirementFragmentId ? `#${this.requirementFragmentId}` : '-')
+    },
+    devPlanFragmentId() {
+      return String(this.workflow.dev_plan_fragment_id || '').trim()
+    },
+    workflowFragments() {
+      return [
+        { label: 'TAPD需求文档', id: this.requirementFragmentId },
+        { label: '纯文本需求文档', id: this.plainTextReqFragmentId },
+        { label: '需求设计方案文档', id: this.designPlanReqFragmentId },
+        { label: '开发执行文档', id: this.devPlanFragmentId },
+      ]
     },
     parsedTaskDevConfigs() {
       const raw = this.homeTask.dev_configs
@@ -453,6 +527,7 @@ export default {
       this.requirementFetchLogs = []
       this.activeNode = 'requirement-fetch'
       this.requirementFetchActiveTab = 'tapd-fetch'
+      this.requirementActiveTab = 'requirement-prompt'
       this.unregisterWorkflowSse()
       this.loadWorkflowPage()
     },
@@ -465,6 +540,9 @@ export default {
       let promptType = nodeToPrompt[this.activeNode]
       if (this.activeNode === 'requirement-fetch' && this.requirementFetchActiveTab === 'plain-text-prompt') {
         promptType = 'plain_text_requirement'
+      }
+      if (this.activeNode === 'requirement' && this.requirementActiveTab === 'design-plan-prompt') {
+        promptType = 'design_plan_requirement'
       }
       if (promptType) {
         this.savePrompts(promptType)
@@ -557,6 +635,9 @@ export default {
       }
       if (this.workflow.prompt_plain_text_requirement && this.workflow.prompt_plain_text_requirement.includes(placeholder)) {
         this.workflow.prompt_plain_text_requirement = this.workflow.prompt_plain_text_requirement.replaceAll(placeholder, this.requirementShareUrl)
+      }
+      if (this.workflow.prompt_design_plan_requirement && this.workflow.prompt_design_plan_requirement.includes(placeholder)) {
+        this.workflow.prompt_design_plan_requirement = this.workflow.prompt_design_plan_requirement.replaceAll(placeholder, this.requirementShareUrl)
       }
     },
     ensureWorkflowSse() {
@@ -678,6 +759,31 @@ export default {
       })
       window.open(routeInfo.href, '_blank')
     },
+    openDesignPlanReqFragment() {
+      if (!this.designPlanReqFragmentId) {
+        this.$helperNotify.error('当前工作流未绑定需求设计方案知识片段')
+        return
+      }
+      const routeInfo = this.$router.resolve({
+        path: '/MemoryFragment',
+        query: {
+          fragment_id: this.designPlanReqFragmentId,
+          hide_menu: '1',
+        },
+      })
+      window.open(routeInfo.href, '_blank')
+    },
+    openFragmentById(fragmentId) {
+      if (!fragmentId) return
+      const routeInfo = this.$router.resolve({
+        path: '/MemoryFragment',
+        query: {
+          fragment_id: fragmentId,
+          hide_menu: '1',
+        },
+      })
+      window.open(routeInfo.href, '_blank')
+    },
     savePrompts(promptType) {
       if (this.promptSaving || this.workflowId <= 0) {
         return
@@ -690,6 +796,7 @@ export default {
         prompt_api_test: this.workflow.prompt_api_test || '',
         prompt_design: this.workflow.prompt_design || '',
         prompt_plain_text_requirement: this.workflow.prompt_plain_text_requirement || '',
+        prompt_design_plan_requirement: this.workflow.prompt_design_plan_requirement || '',
       }, (response) => {
         this.promptSaving = ''
         if (!(response && response.ErrCode === 0)) {

@@ -590,9 +590,9 @@ func buildTaskWorkflowResponse(c *gin.Context, workflowInfo map[string]any) (map
 	}
 	// 新创建的工作流提示词为空时，从配置模板初始化。
 	workflowID := cast.ToInt(workflowInfo[`id`])
-	if workflowID > 0 && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_requirement`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_api_dev`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_api_test`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_design`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_plain_text_requirement`])) == `` {
+	if workflowID > 0 && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_requirement`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_api_dev`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_api_test`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_design`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_plain_text_requirement`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_design_plan_requirement`])) == `` {
 		prompts := resolveTaskWorkflowPrompts(c, homeTaskInfo, workflowInfo)
-		_ = common.DbMain.TaskWorkflowUpdatePrompts(workflowID, prompts[`requirement`], prompts[`api_dev`], prompts[`api_test`], prompts[`design`], prompts[`plain_text_requirement`])
+		_ = common.DbMain.TaskWorkflowUpdatePrompts(workflowID, prompts[`requirement`], prompts[`api_dev`], prompts[`api_test`], prompts[`design`], prompts[`plain_text_requirement`], prompts[`design_plan_requirement`])
 		updatedInfo, updateErr := common.DbMain.TaskWorkflowInfo(workflowID)
 		if updateErr == nil {
 			workflowInfo = updatedInfo
@@ -601,6 +601,14 @@ func buildTaskWorkflowResponse(c *gin.Context, workflowInfo map[string]any) (map
 	// 纯文本需求知识片段不存在时自动创建。
 	if workflowID > 0 && strings.TrimSpace(cast.ToString(workflowInfo[`plain_text_requirement_fragment_id`])) == `` {
 		ensureTaskWorkflowPlainTextReqFragment(workflowInfo, homeTaskInfo)
+		updatedInfo, updateErr := common.DbMain.TaskWorkflowInfo(workflowID)
+		if updateErr == nil {
+			workflowInfo = updatedInfo
+		}
+	}
+	// 需求设计方案知识片段不存在时自动创建。
+	if workflowID > 0 && strings.TrimSpace(cast.ToString(workflowInfo[`design_plan_requirement_fragment_id`])) == `` {
+		ensureTaskWorkflowDesignPlanReqFragment(workflowInfo, homeTaskInfo)
 		updatedInfo, updateErr := common.DbMain.TaskWorkflowInfo(workflowID)
 		if updateErr == nil {
 			workflowInfo = updatedInfo
@@ -1260,6 +1268,7 @@ func TaskWorkflowPromptsSave(c *gin.Context) {
 		request.PromptApiTest,
 		request.PromptDesign,
 		request.PromptPlainTextRequirement,
+		request.PromptDesignPlanRequirement,
 	)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
@@ -1305,6 +1314,7 @@ func TaskWorkflowPromptsRestore(c *gin.Context) {
 		prompts[`api_test`],
 		prompts[`design`],
 		prompts[`plain_text_requirement`],
+		prompts[`design_plan_requirement`],
 	); updateErr != nil {
 		gsgin.GinResponseError(c, updateErr.Error(), nil)
 		return
@@ -1327,12 +1337,14 @@ func resolveTaskWorkflowPrompts(c *gin.Context, homeTaskInfo map[string]any, wor
 	promptApiTest, _ := common.DbMain.HomeTaskConfigValue(define.HomeTaskConfigPromptApiTest)
 	promptDesign, _ := common.DbMain.HomeTaskConfigValue(define.HomeTaskConfigPromptDesign)
 	promptPlainTextRequirement, _ := common.DbMain.HomeTaskConfigValue(define.HomeTaskConfigPromptPlainTextReq)
+	promptDesignPlanRequirement, _ := common.DbMain.HomeTaskConfigValue(define.HomeTaskConfigPromptDesignPlanReq)
 	return map[string]string{
-		`requirement`:            taskWorkflowResolvePlaceholders(promptDev, placeholders),
-		`api_dev`:                taskWorkflowResolvePlaceholders(promptApiGen, placeholders),
-		`api_test`:               taskWorkflowResolvePlaceholders(promptApiTest, placeholders),
-		`design`:                 taskWorkflowResolvePlaceholders(promptDesign, placeholders),
-		`plain_text_requirement`: taskWorkflowResolvePlaceholders(promptPlainTextRequirement, placeholders),
+		`requirement`:             taskWorkflowResolvePlaceholders(promptDev, placeholders),
+		`api_dev`:                 taskWorkflowResolvePlaceholders(promptApiGen, placeholders),
+		`api_test`:                taskWorkflowResolvePlaceholders(promptApiTest, placeholders),
+		`design`:                  taskWorkflowResolvePlaceholders(promptDesign, placeholders),
+		`plain_text_requirement`:  taskWorkflowResolvePlaceholders(promptPlainTextRequirement, placeholders),
+		`design_plan_requirement`: taskWorkflowResolvePlaceholders(promptDesignPlanRequirement, placeholders),
 	}
 }
 
@@ -1344,6 +1356,7 @@ func buildTaskWorkflowPlaceholderMap(c *gin.Context, homeTaskInfo map[string]any
 		`{需求文档地址}`:            taskWorkflowBuildShareURL(c, workflowInfo, apiHost),
 		`{需求文档纯文本地址}`:         taskWorkflowBuildPlainTextShareURL(c, workflowInfo, apiHost),
 		`{需求文档纯文本文件相对地址}`:     taskWorkflowBuildPlainTextFragmentRelativePath(workflowInfo),
+		`{需求设计方案文件相对地址}`:      taskWorkflowBuildDesignPlanFragmentRelativePath(workflowInfo),
 		`{接口开发API地址}`:         apiHost,
 		`{接口开发API的token}`:     taskWorkflowBuildAPIToken(c),
 		`{开发项目配置}`:            taskWorkflowBuildDevConfigsMarkdown(homeTaskInfo),
@@ -1860,6 +1873,67 @@ func ensureTaskWorkflowPlainTextReqFragment(workflowInfo map[string]any, homeTas
 // taskWorkflowBuildPlainTextFragmentRelativePath 为纯文本需求知识片段构建相对于 fragments/ 目录的相对路径。
 func taskWorkflowBuildPlainTextFragmentRelativePath(workflowInfo map[string]any) string {
 	fragmentID := strings.TrimSpace(cast.ToString(workflowInfo[`plain_text_requirement_fragment_id`]))
+	if fragmentID == `` || component.MemoryRuntime == nil {
+		return ``
+	}
+	if err := component.MemoryRuntime.EnsureConfigured(); err != nil {
+		return ``
+	}
+	info, err := component.MemoryRuntime.DB().MemoryFragmentInfo(fragmentID)
+	if err != nil {
+		return ``
+	}
+	filePath := strings.TrimSpace(cast.ToString(info[`file_path`]))
+	if filePath == `` {
+		return ``
+	}
+	fragmentsDir := filepath.Join(component.MemoryRuntime.Config().Dir, `fragments`)
+	relPath, err := filepath.Rel(fragmentsDir, filePath)
+	if err != nil {
+		return ``
+	}
+	relPath = filepath.ToSlash(relPath)
+	if relPath == `.` || strings.HasPrefix(relPath, `../`) {
+		return ``
+	}
+	return relPath
+}
+
+// ensureTaskWorkflowDesignPlanReqFragment 确保需求设计方案知识片段存在，不存在则自动创建。
+func ensureTaskWorkflowDesignPlanReqFragment(workflowInfo map[string]any, homeTaskInfo map[string]any) {
+	if component.MemoryRuntime == nil {
+		return
+	}
+	if err := component.MemoryRuntime.EnsureConfigured(); err != nil {
+		return
+	}
+	memoryDB := component.MemoryRuntime.DB()
+	if memoryDB == nil {
+		return
+	}
+	fragmentTitle := strings.TrimSpace(cast.ToString(homeTaskInfo[`name`])) + `-需求设计方案`
+	if strings.TrimSpace(fragmentTitle) == `-需求设计方案` {
+		fragmentTitle = `需求设计方案文档`
+	}
+	fragmentInfo, err := memoryDB.MemoryFragmentSave(0, fragmentTitle, ``, []string{`需求设计方案`})
+	if err != nil {
+		return
+	}
+	component.MemoryRuntime.ScheduleSync()
+	workflowID := cast.ToInt(workflowInfo[`id`])
+	fragmentFileID := strings.TrimSpace(cast.ToString(fragmentInfo[`file_id`]))
+	if fragmentFileID == `` {
+		return
+	}
+	if err = common.DbMain.TaskWorkflowBindDesignPlanReqFragment(workflowID, fragmentFileID); err != nil {
+		return
+	}
+	workflowInfo[`design_plan_requirement_fragment_id`] = fragmentFileID
+}
+
+// taskWorkflowBuildDesignPlanFragmentRelativePath 为需求设计方案知识片段构建相对于 fragments/ 目录的相对路径。
+func taskWorkflowBuildDesignPlanFragmentRelativePath(workflowInfo map[string]any) string {
+	fragmentID := strings.TrimSpace(cast.ToString(workflowInfo[`design_plan_requirement_fragment_id`]))
 	if fragmentID == `` || component.MemoryRuntime == nil {
 		return ``
 	}
