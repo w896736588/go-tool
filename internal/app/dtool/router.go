@@ -532,6 +532,9 @@ func apiUse(tGin *p_gin.Gin) {
 		// 中文注释：Git 待提交状态及倒计时复用普通 SSE 通道推送，替代前端 10s 轮询。
 		// English comment: Git pending status and countdown now ride on the normal SSE channel for this client.
 		controller.BindGitPendingStatusSSE(sse, stopC, 5*time.Second)
+		// 中文注释：SSE 连接数定时推送，前端右下角展示连接数指示器。
+		// English comment: Periodically push SSE connection count so the frontend can display the indicator.
+		controller.BindConnectionCountSSE(sse, stopC, 5*time.Second)
 		return sse, nil
 	}
 	closeFunc := func(sse *gsgin.Sse) {

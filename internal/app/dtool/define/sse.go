@@ -12,6 +12,7 @@ const (
 	SseApiDataChange         = `api_data_change`          //API数据变更推送
 	SseGitPendingStatus      = `git_pending_status`       //Git待提交状态及倒计时推送
 	SseTaskWorkflowPrefix    = `task_workflow_`           //任务工作流步骤推送前缀
+	SseConnectionCount       = `sse_connection_count`     //SSE连接数推送
 )
 
 const (
