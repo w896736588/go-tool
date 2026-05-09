@@ -40,13 +40,23 @@ func HomeTaskList(c *gin.Context) {
 func HomeTaskSave(c *gin.Context) {
 	request := _struct.HomeTaskSaveRequest{}
 	_ = gsgin.GinPostBody(c, &request)
-	memoryFragmentID, err := ensureHomeTaskMemoryFragment(
-		request.ID, request.Name, normalizeHomeTaskMemoryFragmentID(request.MemoryFragmentID),
-		request.TapdUrl, request.ApiHost, request.ApiToken,
-	)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
+
+	useWorkflow := request.UseWorkflow
+	if useWorkflow != 0 {
+		useWorkflow = 1
+	}
+
+	var memoryFragmentID string
+	if useWorkflow == 1 {
+		var err error
+		memoryFragmentID, err = ensureHomeTaskMemoryFragment(
+			request.ID, request.Name, normalizeHomeTaskMemoryFragmentID(request.MemoryFragmentID),
+			request.TapdUrl, request.ApiHost, request.ApiToken,
+		)
+		if err != nil {
+			gsgin.GinResponseError(c, err.Error(), nil)
+			return
+		}
 	}
 
 	// 解析 dev_configs JSON，从中派生旧字段实现向后兼容。
@@ -121,12 +131,12 @@ func HomeTaskSave(c *gin.Context) {
 		request.MysqlID = devConfigs[0].MysqlID
 	}
 
-	info, err := common.DbMain.HomeTaskSave(request.ID, request.Name, request.TaskStatus, request.StartTime, memoryFragmentID, request.TapdUrl, request.GitID, apiDevEnabled, apiCollectionID, apiDirID, request.MysqlID, gitIDsJSON, apiDevEntriesJSON, devConfigsJSON)
+	info, err := common.DbMain.HomeTaskSave(request.ID, request.Name, request.TaskStatus, request.StartTime, memoryFragmentID, request.TapdUrl, request.GitID, apiDevEnabled, apiCollectionID, apiDirID, request.MysqlID, gitIDsJSON, apiDevEntriesJSON, devConfigsJSON, useWorkflow)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	if request.ID <= 0 {
+	if request.ID <= 0 && useWorkflow == 1 {
 		_, _ = common.DbMain.TaskWorkflowCreateOrGetByHomeTaskID(cast.ToInt(info[`id`]))
 	}
 	enrichHomeTaskListWithMemoryFragment([]map[string]any{info})

@@ -1,0 +1,1 @@
+ALTER TABLE tbl_home_task ADD COLUMN use_workflow INTEGER NOT NULL DEFAULT 1;

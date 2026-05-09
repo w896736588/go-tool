@@ -44,7 +44,7 @@
 
                     </span>
                   </div>
-                  <table v-if="getHomeTaskDevConfigTags(task).length > 0" class="home-task-config-table">
+                  <table v-if="Number(task.use_workflow) !== HOME_TASK_USE_WORKFLOW_NO && getHomeTaskDevConfigTags(task).length > 0" class="home-task-config-table">
                     <thead>
                       <tr>
                         <th v-for="col in homeTaskConfigTableColumns" :key="col.key" class="home-task-config-table__header">{{ col.label }}</th>
@@ -79,6 +79,7 @@
                     compact
                     variant="primary"
                     :disabled="isHomeTaskBusy(task.id)"
+                    v-if="Number(task.use_workflow) !== HOME_TASK_USE_WORKFLOW_NO"
                     @click="openTaskWorkflow(task)"
                   >
                     工作流程
@@ -166,7 +167,7 @@
                       </el-tag>
                     </span>
                   </div>
-                  <table v-if="getHomeTaskDevConfigTags(task).length > 0" class="home-task-config-table">
+                  <table v-if="Number(task.use_workflow) !== HOME_TASK_USE_WORKFLOW_NO && getHomeTaskDevConfigTags(task).length > 0" class="home-task-config-table">
                     <thead>
                       <tr>
                         <th v-for="col in homeTaskConfigTableColumns" :key="col.key" class="home-task-config-table__header">{{ col.label }}</th>
@@ -201,6 +202,7 @@
                     compact
                     variant="primary"
                     :disabled="isHomeTaskBusy(task.id)"
+                    v-if="Number(task.use_workflow) !== HOME_TASK_USE_WORKFLOW_NO"
                     @click="openTaskWorkflow(task)"
                   >
                     工作流程
@@ -310,8 +312,19 @@
               />
             </el-form-item>
           </el-col>
+          <el-col :xs="24" :sm="12" :md="12">
+            <el-form-item label="使用工作流程">
+              <el-switch
+                v-model="homeTaskForm.use_workflow"
+                :active-value="HOME_TASK_USE_WORKFLOW_YES"
+                :inactive-value="HOME_TASK_USE_WORKFLOW_NO"
+                active-text="是"
+                inactive-text="否"
+              />
+            </el-form-item>
+          </el-col>
         </el-row>
-        <el-row :gutter="12">
+        <el-row :gutter="12" v-if="homeTaskForm.use_workflow === HOME_TASK_USE_WORKFLOW_YES">
           <el-col :span="24">
             <el-form-item label="开发项目配置">
               <div v-for="(cfg, cfgIdx) in homeTaskForm.dev_configs" :key="cfgIdx" style="border: 1px solid #e4e7ed; border-radius: 4px; padding: 12px 12px 4px; margin-bottom: 10px; position: relative;">
@@ -594,6 +607,8 @@ const HOME_TASK_DAILY_REPORT_SUCCESS_MESSAGE = '工作日报任务已加入异�
 const HOME_TASK_DAILY_REPORT_FAILED_MESSAGE = '工作日报生成失败'
 const HOME_TASK_ACTION_COMMAND_STATUS_PREFIX = 'status:'
 const HOME_TASK_CONFIG_TAG_MAX_LENGTH = 15
+const HOME_TASK_USE_WORKFLOW_YES = 1
+const HOME_TASK_USE_WORKFLOW_NO = 0
 const HOME_TASK_STATUS_OPTIONS = [
   HOME_TASK_STATUS_TODO,
   HOME_TASK_STATUS_DEVELOPING,
@@ -630,6 +645,7 @@ function createHomeTaskDefaultForm() {
     task_status: HOME_TASK_STATUS_TODO,
     start_date: getTodayDateText(),
     tapd_url: '',
+    use_workflow: HOME_TASK_USE_WORKFLOW_YES,
     dev_configs: [{ git_id: '', collection_id: '', dir_id: '', docker_id: '', mysql_id: '', local_dir: '', parent_branch: '', branch_name: '', rule_entry_file: '', _branchGenerating: false, smart_link_id: '', smart_link_label: '', smart_link_account: '' }],
   }
 }
@@ -650,6 +666,8 @@ export default {
       HOME_TASK_EDIT_BUTTON_TEXT,
       HOME_TASK_DAILY_REPORT_BUTTON_TEXT,
       HOME_TASK_CONFIG_TAG_MAX_LENGTH,
+      HOME_TASK_USE_WORKFLOW_YES,
+      HOME_TASK_USE_WORKFLOW_NO,
       homeTaskActiveTab: HOME_TASK_TAB_ACTIVE,
       homeTaskDialogVisible: false,
       homeTaskLoadingActive: false,
@@ -1065,6 +1083,7 @@ export default {
         task_status: task.task_status || HOME_TASK_STATUS_TODO,
         start_date: task.start_time_desc || getTodayDateText(),
         tapd_url: task.tapd_url || '',
+        use_workflow: Number(task.use_workflow || HOME_TASK_USE_WORKFLOW_YES) === HOME_TASK_USE_WORKFLOW_YES ? HOME_TASK_USE_WORKFLOW_YES : HOME_TASK_USE_WORKFLOW_NO,
         dev_configs: devConfigs,
       }
       this.loadHomeTaskGitRepoList()
@@ -1280,6 +1299,7 @@ export default {
         start_time: this.convertHomeTaskDateToUnix(this.homeTaskForm.start_date),
         tapd_url: String(this.homeTaskForm.tapd_url || '').trim(),
         dev_configs: JSON.stringify(validConfigs),
+        use_workflow: this.homeTaskForm.use_workflow,
         api_host: base.GetApiHost() || window.location.origin,
         api_token: base.GetSafeToken(),
       }, (response) => {
@@ -1298,7 +1318,7 @@ export default {
           this.triggerHomeTaskEditFeedback(taskId)
         }
         this.refreshAllHomeTaskList()
-        if (!isEdit && createdTaskId > 0) {
+        if (!isEdit && createdTaskId > 0 && this.homeTaskForm.use_workflow === HOME_TASK_USE_WORKFLOW_YES) {
           this.openTaskWorkflow({ id: createdTaskId })
         }
       })

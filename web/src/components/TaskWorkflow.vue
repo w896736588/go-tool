@@ -257,11 +257,11 @@ const PROMPT_EDITOR_TOOLBARS = [
 ]
 
 const WORKFLOW_NODES = [
-  { key: 'requirement-fetch', label: '抓取TAPD需求', desc: '自动登录和解析tapd需求到知识片段，转为markdown格式供AI解析' },
-  { key: 'requirement', label: '需求分析', desc: '编写提示词，AI自动结合数据库和代码分析需求，形成开发文档' },
-  { key: 'design', label: '开发执行', desc: '编写提示词，AI自动结合数据库，代码和开发文档进行开发' },
-  { key: 'api-dev', label: '接口生成', desc: '编写提示词，AI自动获取登录态，将所有改动接口写入接口开发中' },
-  { key: 'api-test-fix', label: '自动化测试+修复', desc: '编写提示词，AI自动根据接口开发中的接口设计测试流程，自动上传代码+自动重启服务+自动修复BUG，支持多项目联调' },
+  { key: 'requirement-fetch', label: '1.抓取TAPD需求', desc: '自动登录和解析tapd需求到知识片段，转为markdown格式供AI解析' },
+  { key: 'requirement', label: '2.需求分析', desc: '编写提示词，AI自动结合数据库和代码分析需求，形成开发文档' },
+  { key: 'design', label: '3.开发执行', desc: '编写提示词，AI自动结合数据库，代码和开发文档进行开发' },
+  { key: 'api-dev', label: '4.接口生成', desc: '编写提示词，AI自动获取登录态，将所有改动接口写入接口开发中' },
+  { key: 'api-test-fix', label: '5.自动化测试+修复', desc: '编写提示词，AI自动根据接口开发中的接口设计测试流程，自动上传代码+自动重启服务+自动修复BUG，支持多项目联调' },
 ]
 
 export default {
