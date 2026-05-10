@@ -3,26 +3,32 @@
     <aside v-if="memoryConfigured && !sidebarCollapsed" class="memory-sidebar">
       <div class="sidebar-header">
         <div class="sidebar-header-actions">
-          <pl-button plain size="small" @click="triggerUploadZip" :loading="zipUploading">
-            <el-icon><Upload /></el-icon>
-            上传ZIP
-          </pl-button>
+          <el-tooltip content="上传ZIP" placement="bottom">
+            <pl-button plain size="small" class="icon-only-btn" @click="triggerUploadZip" :loading="zipUploading">
+              <el-icon><Upload /></el-icon>
+            </pl-button>
+          </el-tooltip>
           <input ref="zipFileInput" type="file" accept=".zip" style="display:none" @change="handleZipUpload" />
-          <pl-button plain size="small" @click="searchDialogVisible = true">
-            <el-icon><Search /></el-icon>
-            搜索
-          </pl-button>
-          <pl-button type="primary" plain size="small" @click="createFragment">
-            <el-icon><Plus /></el-icon>
-            新建
-          </pl-button>
-          <pl-button plain size="small" @click="openTrashTab">
-            <el-icon><Delete /></el-icon>
-            回收站
-          </pl-button>
-          <pl-button plain size="small" @click="openSettingsDialog">
-            设置
-          </pl-button>
+          <el-tooltip content="搜索" placement="bottom">
+            <pl-button plain size="small" class="icon-only-btn" @click="searchDialogVisible = true">
+              <el-icon><Search /></el-icon>
+            </pl-button>
+          </el-tooltip>
+          <el-tooltip content="新建" placement="bottom">
+            <pl-button type="primary" plain size="small" class="icon-only-btn" @click="createFragment">
+              <el-icon><Plus /></el-icon>
+            </pl-button>
+          </el-tooltip>
+          <el-tooltip content="回收站" placement="bottom">
+            <pl-button plain size="small" class="icon-only-btn" @click="openTrashTab">
+              <el-icon><Delete /></el-icon>
+            </pl-button>
+          </el-tooltip>
+          <el-tooltip content="设置" placement="bottom">
+            <pl-button plain size="small" class="icon-only-btn" @click="openSettingsDialog">
+              <el-icon><Setting /></el-icon>
+            </pl-button>
+          </el-tooltip>
         </div>
       </div>
 
@@ -420,7 +426,7 @@
 </template>
 
 <script>
-import { ArrowDown, ArrowRight, Check, Close, DArrowLeft, DArrowRight, Delete, HomeFilled, Loading, Plus, Search, Upload } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowRight, Check, Close, DArrowLeft, DArrowRight, Delete, HomeFilled, Loading, Plus, Search, Setting, Upload } from '@element-plus/icons-vue'
 import MemoryFragmentApi from '@/utils/base/memory_fragment'
 import MemoryEditor from '@/components/memory/MemoryEditor.vue'
 import MemoryHistoryDialog from '@/components/memory/MemoryHistoryDialog.vue'
@@ -472,6 +478,7 @@ export default {
     HomeFilled,
     Plus,
     Search,
+    Setting,
     GitActionButton,
     MemoryEditor,
     MemoryHistoryDialog,

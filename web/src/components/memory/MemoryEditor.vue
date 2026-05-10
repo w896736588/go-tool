@@ -895,6 +895,9 @@ export default {
         return
       }
       this.scrollToActiveSearchMark(shouldScroll)
+      if (shouldScroll && this.contentEditMode) {
+        this.scrollEditorToSearchMatch()
+      }
     },
     // clearPreviewSearchMarks 移除预览区内已有的搜索高亮。
     clearPreviewSearchMarks() {
@@ -1011,6 +1014,26 @@ export default {
         top: Math.max(activeMark.offsetTop - 40, 0),
         behavior: 'smooth',
       })
+    },
+    // scrollEditorToSearchMatch 把左侧编辑器滚动到当前搜索命中的字符位置。
+    scrollEditorToSearchMatch() {
+      const editorView = this.getEditorView()
+      if (!editorView || !this.activeSearchMatch || this.activeSearchMatch.field !== 'content') {
+        return
+      }
+      const pos = Math.min(Math.max(this.activeSearchMatch.index, 0), editorView.state.doc.length)
+      const targetLine = editorView.state.doc.lineAt(pos)
+      const targetTop = editorView.lineBlockAt(targetLine.from).top
+      editorView.dispatch({
+        selection: { anchor: pos },
+        scrollIntoView: true,
+      })
+      if (editorView.scrollDOM && typeof editorView.scrollDOM.scrollTo === 'function') {
+        editorView.scrollDOM.scrollTo({
+          top: Math.max(targetTop - 40, 0),
+          behavior: 'smooth',
+        })
+      }
     },
     // focusTitleSearchMatch 在当前命中位于标题时聚焦并选中标题输入框对应范围。
     focusTitleSearchMatch() {

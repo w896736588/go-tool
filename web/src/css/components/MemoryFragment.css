@@ -58,8 +58,14 @@
 .sidebar-header-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 4px;
+  flex-wrap: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar-header-actions .icon-only-btn {
+  padding: 5px 8px;
 }
 
 .sidebar-title {
