@@ -1376,29 +1376,21 @@ func replaceApiEnvVars(url string, envItems []map[string]any) string {
 	return url
 }
 
-// ApiFolderApisMarkdown 通过文件夹 ID 获取接口文档（Markdown 格式），格式与前端"复制所有接口(Markdown)"按钮一致。
-func ApiFolderApisMarkdown(c *gin.Context) {
-	dataMap := make(map[string]any)
-	_ = gsgin.GinPostBody(c, &dataMap)
-	folderId := cast.ToInt(dataMap[`folder_id`])
+// buildFolderApisMarkdown 根据文件夹 ID 生成该文件夹下所有接口的 Markdown 文档。
+func buildFolderApisMarkdown(folderId int) string {
 	if folderId <= 0 {
-		gsgin.GinResponseError(c, `请选择文件夹`, nil)
-		return
+		return ``
 	}
-	// 查询文件夹信息
 	dir, _ := common.DbMain.Client.QuickQuery(`tbl_api_dir`, `*`, map[string]any{
 		`id`: folderId,
 	}).One()
 	if len(dir) == 0 {
-		gsgin.GinResponseError(c, `文件夹不存在`, nil)
-		return
+		return ``
 	}
 	folderName := cast.ToString(dir[`name`])
-	// 查询文件夹下所有接口（按权重和ID排序，与前端一致）
 	apis, _ := common.DbMain.Client.QuickQuery(`tbl_api`, `*`, map[string]any{
 		`folder_id`: folderId,
 	}).Order(`weight,id asc`).All()
-	// 预加载文件夹环境变量，用于 URL 占位符替换
 	dirEnvId := cast.ToInt(dir[`env_id`])
 	dirEnvItems := make([]map[string]any, 0)
 	if dirEnvId > 0 {
@@ -1406,22 +1398,17 @@ func ApiFolderApisMarkdown(c *gin.Context) {
 			`env_id`: dirEnvId,
 		}).All()
 	}
-
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf(`## %s 接口文档`, folderName))
 	sb.WriteString("\n\n")
-
 	for i, apiItem := range apis {
-		// API 标题
 		sb.WriteString(fmt.Sprintf(`### %d. %s`, i+1, cast.ToString(apiItem[`name`])))
 		sb.WriteString("\n\n")
-		// 基本信息表格
 		sb.WriteString("| 项目 | 详情 |\n")
 		sb.WriteString("| --- | --- |\n")
 		apiMethod := cast.ToString(apiItem[`method`])
 		apiUrl := cast.ToString(apiItem[`url`])
 		contentType := cast.ToString(apiItem[`content_type`])
-		// 替换环境变量：接口自身有环境时用自身的，否则继承文件夹环境
 		apiEnvId := cast.ToInt(apiItem[`env_id`])
 		if apiEnvId > 0 && apiEnvId != dirEnvId {
 			apiEnvItems, _ := common.DbMain.Client.QuickQuery(`tbl_api_env_item`, `*`, map[string]any{
@@ -1438,14 +1425,12 @@ func ApiFolderApisMarkdown(c *gin.Context) {
 		}
 		sb.WriteString(fmt.Sprintf("| 创建时间 | %s |\n", formatMarkdownTimestamp(cast.ToInt64(apiItem[`create_time`]))))
 		sb.WriteString("\n")
-		// 备注（描述）
 		desc := cast.ToString(apiItem[`desc`])
 		if desc != `` {
 			sb.WriteString("备注\n\n")
 			sb.WriteString(formatMarkdownBlockquote(desc))
 			sb.WriteString("\n\n")
 		}
-		// 请求参数
 		queryParams := parseJsonArrayMap(cast.ToString(apiItem[`query_params`]))
 		if len(queryParams) > 0 {
 			sb.WriteString("请求参数\n\n")
@@ -1460,7 +1445,6 @@ func ApiFolderApisMarkdown(c *gin.Context) {
 			}
 			sb.WriteString("\n")
 		}
-		// 请求体
 		if hasBody {
 			sb.WriteString("请求体\n\n")
 			if contentType == `application/json` {
@@ -1489,7 +1473,6 @@ func ApiFolderApisMarkdown(c *gin.Context) {
 				sb.WriteString("\n" + bodyRaw + "\n```\n\n")
 			}
 		}
-		// 返回结果说明
 		takeResultData := parseJsonArrayMap(cast.ToString(apiItem[`take_result`]))
 		if len(takeResultData) > 0 {
 			sb.WriteString("返回结果说明\n\n")
@@ -1503,7 +1486,6 @@ func ApiFolderApisMarkdown(c *gin.Context) {
 			}
 			sb.WriteString("\n")
 		}
-		// 返回结果示例
 		lastResult := cast.ToString(apiItem[`last_result`])
 		if lastResult != `` && lastResult != `{}` && lastResult != `null` {
 			sb.WriteString("返回结果示例\n\n")
@@ -1519,13 +1501,28 @@ func ApiFolderApisMarkdown(c *gin.Context) {
 			}
 			sb.WriteString("\n\n")
 		}
-		// 分隔线（除最后一个接口外）
 		if i < len(apis)-1 {
 			sb.WriteString("---\n\n")
 		}
 	}
+	return sb.String()
+}
 
+// ApiFolderApisMarkdown 通过文件夹 ID 获取接口文档（Markdown 格式），格式与前端"复制所有接口(Markdown)"按钮一致。
+func ApiFolderApisMarkdown(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	folderId := cast.ToInt(dataMap[`folder_id`])
+	if folderId <= 0 {
+		gsgin.GinResponseError(c, `请选择文件夹`, nil)
+		return
+	}
+	markdown := buildFolderApisMarkdown(folderId)
+	if markdown == `` {
+		gsgin.GinResponseError(c, `文件夹不存在或无接口`, nil)
+		return
+	}
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
-		`markdown`: sb.String(),
+		`markdown`: markdown,
 	})
 }

@@ -614,6 +614,14 @@ func buildTaskWorkflowResponse(c *gin.Context, workflowInfo map[string]any) (map
 			workflowInfo = updatedInfo
 		}
 	}
+	// 接口文档知识片段不存在时自动创建。
+	if workflowID > 0 && strings.TrimSpace(cast.ToString(workflowInfo[`api_doc_fragment_id`])) == `` {
+		ensureTaskWorkflowApiDocFragment(workflowInfo, homeTaskInfo)
+		updatedInfo, updateErr := common.DbMain.TaskWorkflowInfo(workflowID)
+		if updateErr == nil {
+			workflowInfo = updatedInfo
+		}
+	}
 	return map[string]any{
 		`workflow`:                 workflowInfo,
 		`home_task`:                homeTaskInfo,
@@ -1988,4 +1996,136 @@ func taskWorkflowBuildDesignPlanFragmentRelativePath(workflowInfo map[string]any
 		return ``
 	}
 	return relPath
+}
+
+// ensureTaskWorkflowApiDocFragment 确保接口文档知识片段存在，不存在则自动创建。
+func ensureTaskWorkflowApiDocFragment(workflowInfo map[string]any, homeTaskInfo map[string]any) {
+	if component.MemoryRuntime == nil {
+		return
+	}
+	if err := component.MemoryRuntime.EnsureConfigured(); err != nil {
+		return
+	}
+	memoryDB := component.MemoryRuntime.DB()
+	if memoryDB == nil {
+		return
+	}
+	fragmentTitle := strings.TrimSpace(cast.ToString(homeTaskInfo[`name`])) + `-接口文档`
+	if strings.TrimSpace(fragmentTitle) == `-接口文档` {
+		fragmentTitle = `接口文档`
+	}
+	fragmentInfo, err := memoryDB.MemoryFragmentSave(0, fragmentTitle, ``, []string{`接口文档`})
+	if err != nil {
+		return
+	}
+	component.MemoryRuntime.ScheduleSync()
+	workflowID := cast.ToInt(workflowInfo[`id`])
+	fragmentFileID := strings.TrimSpace(cast.ToString(fragmentInfo[`file_id`]))
+	if fragmentFileID == `` {
+		return
+	}
+	if err = common.DbMain.TaskWorkflowBindApiDocFragment(workflowID, fragmentFileID); err != nil {
+		return
+	}
+	workflowInfo[`api_doc_fragment_id`] = fragmentFileID
+}
+
+// TaskWorkflowApiDocReset 重置接口文档，将所有关联文件夹下的接口 Markdown 合并覆盖到知识片段中。
+func TaskWorkflowApiDocReset(c *gin.Context) {
+	if common.DbMain == nil || common.DbMain.Client == nil {
+		gsgin.GinResponseError(c, `主库未初始化`, nil)
+		return
+	}
+	request := _struct.TaskWorkflowInfoRequest{}
+	_ = gsgin.GinPostBody(c, &request)
+	workflowInfo, err := common.DbMain.TaskWorkflowInfo(request.WorkflowID)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	fragmentID := strings.TrimSpace(cast.ToString(workflowInfo[`api_doc_fragment_id`]))
+	if fragmentID == `` {
+		gsgin.GinResponseError(c, `接口文档片段未创建`, nil)
+		return
+	}
+	memoryDB, ok := taskWorkflowMemoryDBOrResponse(c)
+	if !ok {
+		return
+	}
+	homeTaskInfo, err := common.DbMain.HomeTaskRow(cast.ToInt(workflowInfo[`home_task_id`]))
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	// 解析 dev_configs 获取所有关联文件夹
+	devConfigsStr := strings.TrimSpace(cast.ToString(homeTaskInfo[`dev_configs`]))
+	if devConfigsStr == `` || devConfigsStr == `[]` {
+		gsgin.GinResponseError(c, `未配置开发环境`, nil)
+		return
+	}
+	var devConfigs []_struct.DevConfig
+	if err := json.Unmarshal([]byte(devConfigsStr), &devConfigs); err != nil {
+		gsgin.GinResponseError(c, `开发配置解析失败`, nil)
+		return
+	}
+	// 收集所有有 dir_id 的配置，生成 Markdown
+	var sb strings.Builder
+	sb.WriteString(`# 接口文档`)
+	sb.WriteString(`
+
+`)
+	for _, cfg := range devConfigs {
+		if cfg.DirID <= 0 {
+			continue
+		}
+		folderMD := buildFolderApisMarkdown(cfg.DirID)
+		if folderMD == `` {
+			continue
+		}
+		// 用一级大标题分隔不同项目
+		dir, _ := common.DbMain.Client.QuickQuery(`tbl_api_dir`, `*`, map[string]any{`id`: cfg.DirID}).One()
+		folderName := `未命名项目`
+		if len(dir) > 0 {
+			folderName = cast.ToString(dir[`name`])
+		}
+		sb.WriteString(fmt.Sprintf(`# %s`, folderName))
+		sb.WriteString(`
+
+`)
+		sb.WriteString(folderMD)
+		sb.WriteString(`
+
+`)
+	}
+	combinedMD := sb.String()
+	if strings.TrimSpace(combinedMD) == `# 接口文档` || strings.TrimSpace(combinedMD) == `` {
+		gsgin.GinResponseError(c, `未找到关联的接口文件夹`, nil)
+		return
+	}
+	// 获取现有片段信息以保留标题和标签
+	fragmentInfo, err := memoryDB.MemoryFragmentInfo(fragmentID)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	fragmentTitle := cast.ToString(fragmentInfo[`title`])
+	tags := []string{`接口文档`}
+	if rawTags, ok := fragmentInfo[`tags`]; ok {
+		if tagStr := cast.ToString(rawTags); tagStr != `` {
+			var parsedTags []string
+			if json.Unmarshal([]byte(tagStr), &parsedTags) == nil {
+				tags = parsedTags
+			}
+		}
+	}
+	// 覆盖写入知识片段
+	_, err = memoryDB.MemoryFragmentSave(fragmentID, fragmentTitle, combinedMD, tags)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	component.MemoryRuntime.ScheduleSync()
+	gsgin.GinResponseSuccess(c, `接口文档已重置`, map[string]any{
+		`fragment_id`: fragmentID,
+	})
 }

@@ -302,6 +302,12 @@
             <div class="task-workflow-card__header">
               <div class="task-workflow-card__title">接口开发生成提示词</div>
               <div class="task-workflow-card__switch">
+                <GitActionButton compact @click="openApiDocFragment">
+                  接口文档
+                </GitActionButton>
+                <GitActionButton compact variant="warning" :loading="apiDocResetting" @click="resetApiDoc">
+                  重置接口文档
+                </GitActionButton>
                 <GitActionButton compact :loading="promptSaving === 'api_dev'" @click="savePrompts('api_dev')">
                   保存提示词
                 </GitActionButton>
@@ -460,6 +466,7 @@ export default {
       workflowSseDistributeId: '',
       promptSaving: '',
       promptRestoring: '',
+      apiDocResetting: false,
       requirementFetchActiveTab: 'tapd-fetch',
       requirementActiveTab: 'requirement-prompt',
       promptEditorToolbars: PROMPT_EDITOR_TOOLBARS,
@@ -804,6 +811,27 @@ export default {
         },
       })
       window.open(routeInfo.href, '_blank')
+    },
+    openApiDocFragment() {
+      const fragmentId = this.workflow.api_doc_fragment_id
+      if (!fragmentId) {
+        this.$message.warning('接口文档片段未初始化')
+        return
+      }
+      this.openFragmentById(fragmentId)
+    },
+    resetApiDoc() {
+      if (this.apiDocResetting || this.workflowId <= 0) return
+      this.apiDocResetting = true
+      const _this = this
+      taskWorkflowApi.TaskWorkflowApiDocReset(this.workflowId, function (res) {
+        _this.apiDocResetting = false
+        if (res.ErrCode !== 0) {
+          _this.$message.error(res.ErrMsg || '重置接口文档失败')
+          return
+        }
+        _this.$message.success('接口文档已重置')
+      })
     },
     savePrompts(promptType) {
       if (this.promptSaving || this.workflowId <= 0) {

@@ -346,6 +346,7 @@ func taskWorkflow(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/task/workflow/test-run/list`, controller.TaskWorkflowTestRunList)
 	tGin.GinPost(`/api/task/workflow/prompts/save`, controller.TaskWorkflowPromptsSave)
 	tGin.GinPost(`/api/task/workflow/prompts/restore`, controller.TaskWorkflowPromptsRestore)
+	tGin.GinPost(`/api/task/workflow/api-doc/reset`, controller.TaskWorkflowApiDocReset)
 }
 
 func shellOut(tGin *p_gin.Gin) {
