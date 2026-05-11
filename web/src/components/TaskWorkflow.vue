@@ -223,8 +223,8 @@
 
             <div v-show="requirementActiveTab === 'requirement-prompt'" class="task-workflow-prompt-section">
               <div class="task-workflow-card__switch" style="margin-bottom: 12px;">
-                <GitActionButton compact variant="info" @click="openRequirementFragment" :disabled="!requirementFragmentId">
-                  打开知识片段
+                <GitActionButton compact variant="info" @click="openDesignPlanReqFragment" :disabled="!designPlanReqFragmentId">
+                  需求设计方案文档
                 </GitActionButton>
                 <GitActionButton compact :loading="promptSaving === 'requirement'" @click="savePrompts('requirement')">
                   保存提示词
