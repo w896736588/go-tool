@@ -209,14 +209,8 @@
               <div class="task-workflow-card__title">需求分析</div>
               <div class="task-workflow-card__switch">
                 <div class="task-workflow-inner-tabs">
-                  <button
-                    :class="['task-workflow-inner-tab', { 'task-workflow-inner-tab--active': requirementActiveTab === 'requirement-prompt' }]"
-                    @click="requirementActiveTab = 'requirement-prompt'"
-                  >需求文档提示词</button>
-                  <button
-                    :class="['task-workflow-inner-tab', { 'task-workflow-inner-tab--active': requirementActiveTab === 'design-plan-prompt' }]"
-                    @click="requirementActiveTab = 'design-plan-prompt'"
-                  >需求设计方案</button>
+
+
                 </div>
               </div>
             </div>
@@ -515,7 +509,6 @@ export default {
         { label: 'TAPD需求文档', id: this.requirementFragmentId },
         { label: '纯文本需求文档', id: this.plainTextReqFragmentId },
         { label: '需求设计方案文档', id: this.designPlanReqFragmentId },
-        { label: '开发执行文档', id: this.devPlanFragmentId },
       ]
     },
     parsedTaskDevConfigs() {
