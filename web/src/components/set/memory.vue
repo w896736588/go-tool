@@ -308,6 +308,23 @@
             placeholder="请输入 AI 整理提示词"
           />
         </el-form-item>
+        <el-divider content-position="left">AI 智能搜索</el-divider>
+        <el-form-item label="搜索模型">
+          <el-select
+            v-model="form.memory_ai_search_model_id"
+            clearable
+            filterable
+            style="width: 100%;"
+            placeholder="请选择用于知识片段 AI 智能搜索的 LLM 模型"
+          >
+            <el-option
+              v-for="item in aiModelList"
+              :key="item.id"
+              :label="buildModelLabel(item)"
+              :value="item.id"
+            />
+          </el-select>
+        </el-form-item>
         <el-form-item>
           <GitActionButton type="primary" @click="saveAiConfig">保存 AI 配置</GitActionButton>
         </el-form-item>
@@ -323,8 +340,6 @@ import GitActionButton from '@/components/base/GitActionButton.vue'
 
 // DEFAULT_MEMORY_ARRANGE_PROMPT 定义记忆整理默认提示词。 // Default prompt used when arranging memory fragments with AI.
 const DEFAULT_MEMORY_ARRANGE_PROMPT = '帮我把当前 markdown 进行整理格式，让它看起来更顺畅清晰，注意禁止修改内容'
-// DEFAULT_HOME_TASK_DAILY_REPORT_PROMPT 作为透传字段保留工作日报配置。 // Keep daily report fields in state so saving memory settings does not overwrite them.
-const DEFAULT_HOME_TASK_DAILY_REPORT_PROMPT = '请基于当前活跃任务生成中文工作日报，按已完成、进行中、风险与阻塞三个部分总结，输出 Markdown，禁止编造未提供的信息。'
 // RUNTIME_DATABASE_SYNC_TARGET_* 约束手动同步接口的库类型。 // Enumerates the supported manual database sync targets.
 const RUNTIME_DATABASE_SYNC_TARGET_MAIN = 'main'
 const RUNTIME_DATABASE_SYNC_TARGET_MEMORY = 'memory'
@@ -377,8 +392,7 @@ export default {
         memory_config_file: '',
         memory_arrange_model_id: null,
         memory_arrange_prompt: DEFAULT_MEMORY_ARRANGE_PROMPT,
-        home_task_daily_report_model_id: null,
-        home_task_daily_report_prompt: DEFAULT_HOME_TASK_DAILY_REPORT_PROMPT,
+        memory_ai_search_model_id: null,
         safe_password: '',
         run_mode: 'server',
       },
@@ -471,8 +485,7 @@ export default {
         this.form.memory_config_file = response.Data.memory_config_file || ''
         this.form.memory_arrange_model_id = response.Data.memory_arrange_model_id || null
         this.form.memory_arrange_prompt = response.Data.memory_arrange_prompt || DEFAULT_MEMORY_ARRANGE_PROMPT
-        this.form.home_task_daily_report_model_id = response.Data.home_task_daily_report_model_id || null
-        this.form.home_task_daily_report_prompt = response.Data.home_task_daily_report_prompt || DEFAULT_HOME_TASK_DAILY_REPORT_PROMPT
+        this.form.memory_ai_search_model_id = response.Data.memory_ai_search_model_id || null
         this.form.safe_password = response.Data.safe_password || ''
         this.form.run_mode = response.Data.run_mode || 'server'
       })
@@ -546,13 +559,12 @@ export default {
         this.$helperNotify.info(idleText)
       })
     },
-    // saveAiConfig 保存知识片段 AI 配置，并透传日报配置防止被覆盖。 // Save memory AI config and pass through daily-report config to avoid overwriting it.
+    // saveAiConfig 保存知识片段 AI 配置。 // Save memory AI config.
     saveAiConfig() {
       const payload = {
         memory_arrange_model_id: this.form.memory_arrange_model_id,
         memory_arrange_prompt: this.form.memory_arrange_prompt,
-        home_task_daily_report_model_id: this.form.home_task_daily_report_model_id,
-        home_task_daily_report_prompt: this.form.home_task_daily_report_prompt,
+        memory_ai_search_model_id: this.form.memory_ai_search_model_id,
       }
       set.MemoryConfigSave(payload, (response) => {
         if (response.__loginRequired) {

@@ -27,6 +27,7 @@ func NewPlaywright(runParams *PlaywrightRunParams, log *gstool.GsSlog) *Playwrig
 	contextPageList := NewContextList(log)
 	if runParams != nil {
 		contextPageList.SetSmartLinkLastStore(runParams.SmartLinkLastStore)
+		contextPageList.SetSmartLinkDirectoryStore(runParams.SmartLinkDirectoryStore)
 	}
 	return &Playwright{
 		RunParams:       runParams,
@@ -115,17 +116,7 @@ func (h *Playwright) ProcessRun(processVal map[string]any, page *playwright.Page
 
 // GetContext 获取浏览器实例
 func (h *Playwright) GetContext() (*ContextPage, bool, error) {
-	if h.RunParams.CombineType == define.CombineTypeNo { //不保存用户数据
-		browser, browserErr := h.GetBrowser()
-		if browserErr != nil {
-			h.RunParams.StreamFunc(`启动playwright`, fmt.Sprintf(`获取browser失败 %s`, browserErr.Error()))
-			return nil, false, browserErr
-		}
-		contextPage, contextErr := h.ContextPageList.GetContextNotSaveUserData(browser, h.RunParams)
-		return contextPage, false, contextErr
-	} else { //保留用户数据
-		return h.ContextPageList.GetContextSaveUserData(h.RunParams)
-	}
+	return h.ContextPageList.GetContextSaveUserData(h.RunParams)
 }
 
 // GetPage 获取page
@@ -185,33 +176,25 @@ func (h *Playwright) LastUserDataIndex(runParams *PlaywrightRunParams, userDataI
 	}
 }
 
-func (h *Playwright) GetBrowser() (playwright.Browser, error) {
-	if h.RunParams.OpenType == define.OpenTypeWebkitSilence && component.PlaywrightClient.BrowserWebkitSilence != nil {
-		return component.PlaywrightClient.BrowserWebkitSilence, nil
-	} else if h.RunParams.OpenType == define.OpenTypeWebkitChrome && component.PlaywrightClient.BrowserWebkitChrome != nil {
-		return component.PlaywrightClient.BrowserWebkitChrome, nil
-	}
-	var browserErr error
-	if h.RunParams.OpenType == define.OpenTypeWebkitSilence {
-		component.PlaywrightClient.BrowserWebkitSilence, browserErr = component.PlaywrightClient.Pw.Chromium.Launch()
-		if browserErr != nil {
-			component.PlaywrightClient.BrowserWebkitSilence = nil
-			return nil, browserErr
-		} else {
-			return component.PlaywrightClient.BrowserWebkitSilence, nil
+// RunProcessesSync 同步执行所有流程步骤，不启动异步协程。
+// AI 浏览器会话接口要求登录流程完整执行完毕后再关闭浏览器，因此必须同步等待。
+func (h *Playwright) RunProcessesSync(page *playwright.Page) error {
+	for _, processVal := range h.RunParams.ProcessList {
+		h.RunParams.StreamFunc(cast.ToString(processVal[`name`]), `同步执行`)
+		boolContinue, runErr := h.ProcessRun(processVal, page)
+		if runErr != nil {
+			if cast.ToInt(processVal[`is_error_continue`]) == 1 {
+				h.RunParams.StreamFunc(cast.ToString(processVal[`name`]), fmt.Sprintf(`本节点执行失败 %s，继续执行下一个`, runErr.Error()))
+			} else {
+				h.RunParams.StreamFunc(cast.ToString(processVal[`name`]), fmt.Sprintf(`执行失败 %s`, runErr.Error()))
+				return runErr
+			}
 		}
-	} else {
-		component.PlaywrightClient.BrowserWebkitChrome, browserErr = component.PlaywrightClient.Pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-			//DownloadsPath: &h.downloadPath,
-			Headless: playwright.Bool(false), //有界面模式
-		})
-		if browserErr != nil {
-			component.PlaywrightClient.BrowserWebkitChrome = nil
-			return nil, browserErr
-		} else {
-			return component.PlaywrightClient.BrowserWebkitChrome, nil
+		if !boolContinue {
+			return nil
 		}
 	}
+	return nil
 }
 
 func (h *Playwright) Recycle() error {

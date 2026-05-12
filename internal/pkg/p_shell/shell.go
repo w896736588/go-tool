@@ -26,7 +26,7 @@ type Shell struct {
 	log                 *gstool.GsSlog
 }
 
-const shellIdleTimeout = 3 * time.Minute
+const shellIdleTimeout = 30 * time.Minute
 const shellIdleCleanTicker = 30 * time.Second
 
 // shellConnectTimeout 控制单次 SSH 建连探活的最长等待时间。

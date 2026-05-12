@@ -155,17 +155,29 @@ function GetApiHost() {
     return ''  // 生产环境返回空字符串，使用相对路径
 }
 
-// 获取 SSE API 地址
-function GetSseApiHost() {
+// 获取完整的 API 基地址（包含协议、主机和端口），用于需要拼接绝对路径的场景。
+// 生产环境直接取地址栏的 origin，开发环境与 GetApiHost 一致。
+function GetAbsoluteApiHost() {
     if (isDev()) {
-        const config = GetServerConfig()
-        const port = runtimeSsePort || (config && config.sse_port)
-        if (!port) {
+        return GetApiHost()
+    }
+    return window.location.origin
+}
+
+// 获取 SSE API 地址
+function GetSseApiHost(port) {
+    if (isDev()) {
+        const ssePort = port || runtimeSsePort
+        if (!ssePort) {
             return ''
         }
-        return 'http://localhost:' + port
+        return 'http://localhost:' + ssePort
     }
-    return ''  // 生产环境返回空字符串，使用相对路径
+    // 生产环境：指定端口时用 location.hostname 拼接，否则用相对路径
+    if (port) {
+        return window.location.protocol + '//' + window.location.hostname + ':' + port
+    }
+    return ''
 }
 
 //上面是mainCard 这个返回mainCard距离底部还剩余的高度px
@@ -268,6 +280,7 @@ export default {
     BasePost,
     BasePostForm,
     GetApiHost,
+    GetAbsoluteApiHost,
     GetSseApiHost,
     GetServerConfig,
     GetSafeToken,

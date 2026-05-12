@@ -133,6 +133,26 @@
       <!-- 输入区域 -->
       <div class="input-container">
         <div class="input-center-box" :style="{ width: inputWrapperWidth }">
+          <div v-if="hasPendingCommandQueue" class="pending-command-panel">
+            <div class="pending-command-header">
+              <span class="pending-command-title">{{ pendingCommandTitle }}</span>
+              <span class="pending-command-count">{{ pendingCommandQueue.length }}</span>
+            </div>
+            <div class="pending-command-list pending-command-list--horizontal">
+              <div
+                v-for="item in pendingCommandQueue"
+                :key="item.id"
+                class="pending-command-item"
+              >
+                <span class="pending-command-text" :title="item.rawCommand">{{ item.rawCommand }}</span>
+                <pl-button
+                  class="pending-command-delete"
+                  link
+                  @click="removePendingCommand(item.id)"
+                >移除</pl-button>
+              </div>
+            </div>
+          </div>
           <div class="input-main-row">
             <div class="input-main-panel">
               <div class="input-wrapper">
@@ -160,26 +180,6 @@
             </pl-button>
               </div>
               <div class="next-step-tip">{{ nextStepHint }}</div>
-            </div>
-              <div v-if="hasPendingCommandQueue" class="pending-command-panel">
-                <div class="pending-command-header">
-                  <span class="pending-command-title">{{ pendingCommandTitle }}</span>
-                  <span class="pending-command-count">{{ pendingCommandQueue.length }}</span>
-                </div>
-              <div class="pending-command-list pending-command-list--horizontal">
-                  <div
-                    v-for="item in pendingCommandQueue"
-                    :key="item.id"
-                    class="pending-command-item"
-                >
-                  <span class="pending-command-text" :title="item.rawCommand">{{ item.rawCommand }}</span>
-                  <pl-button
-                    class="pending-command-delete"
-                    link
-                    @click="removePendingCommand(item.id)"
-                  >移除</pl-button>
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -3995,6 +3995,13 @@ export default {
       scrollToBottom()
     }
 
+    // handleVisibilityChange 浏览器 tab 切换回来时自动聚焦输入框
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        focusInputOnHome()
+      }
+    }
+
     watch(filteredCommands, (commandList) => {
       if (!showCommands.value) {
         return
@@ -4013,6 +4020,7 @@ export default {
       loadCommandHistoryCache()
       handleHomeAppear()
       initSseConnection()
+      document.addEventListener('visibilitychange', handleVisibilityChange)
     })
 
     // keep-alive 组件重新激活时，自动让首页输入框获得焦点
@@ -4023,6 +4031,7 @@ export default {
     onUnmounted(() => {
       // 只取消注册回调，不关闭 SSE 连接（其他页面可能还在使用）
       sseDistribute.UnRegisterReceive(sseDistributeId.value)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     })
 
     return {

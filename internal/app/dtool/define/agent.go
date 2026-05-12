@@ -56,7 +56,9 @@ type AgentRunParams struct {
 	AutoCloseSecond     int               `json:"auto_close_second"`
 	Channel             string            `json:"channel"`
 	FilterUris          []string          `json:"filter_uris"`
-	ShowCookies         any               `json:"show_cookies"` // 原样传递，agent 侧反序列化
+	ShowCookies         any               `json:"show_cookies"`          // 原样传递，agent 侧反序列化
+	DirectoryMappingKey string            `json:"directory_mapping_key"` // 固定目录映射键，按 smart_link + label (+ account) 组合
+	AccountKey          string            `json:"account_key"`           // 稳定账号键，例如 account_user_xxx
 }
 
 type AgentTaskScrapeConfig struct {
@@ -124,6 +126,34 @@ type AgentSmartLinkLastRequest struct {
 
 // AgentSmartLinkLastResponse 是历史目录代理接口的响应数据。
 type AgentSmartLinkLastResponse struct {
+	UserDataIndex int  `json:"user_data_index,omitempty"`
+	Exists        bool `json:"exists,omitempty"`
+}
+
+// AgentSmartLinkDirectoryAction 表示 agent 请求服务端代操作固定目录映射的动作。
+type AgentSmartLinkDirectoryAction string
+
+const (
+	// AgentSmartLinkDirectoryActionGetByMappingKey 根据 mapping_key 查询固定目录索引。
+	AgentSmartLinkDirectoryActionGetByMappingKey AgentSmartLinkDirectoryAction = "get_by_mapping_key"
+	// AgentSmartLinkDirectoryActionExistsIndex 判断某目录索引是否已被固定映射占用。
+	AgentSmartLinkDirectoryActionExistsIndex AgentSmartLinkDirectoryAction = "exists_index"
+	// AgentSmartLinkDirectoryActionUpsert 写入或更新固定目录映射关系。
+	AgentSmartLinkDirectoryActionUpsert AgentSmartLinkDirectoryAction = "upsert"
+)
+
+// AgentSmartLinkDirectoryRequest 是 agent 访问固定目录映射代理接口的请求体。
+type AgentSmartLinkDirectoryRequest struct {
+	Action        AgentSmartLinkDirectoryAction `json:"action"`
+	MappingKey    string                        `json:"mapping_key,omitempty"`
+	SmartLinkID   int                           `json:"smart_link_id,omitempty"`
+	Label         string                        `json:"label,omitempty"`
+	AccountKey    string                        `json:"account_key,omitempty"`
+	UserDataIndex int                           `json:"user_data_index,omitempty"`
+}
+
+// AgentSmartLinkDirectoryResponse 是固定目录映射代理接口的响应数据。
+type AgentSmartLinkDirectoryResponse struct {
 	UserDataIndex int  `json:"user_data_index,omitempty"`
 	Exists        bool `json:"exists,omitempty"`
 }

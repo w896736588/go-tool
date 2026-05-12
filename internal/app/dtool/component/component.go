@@ -43,6 +43,7 @@ type VariableRuntime interface {
 var ShellClient *p_shell.Shell
 var TGins []*p_gin.Gin
 var MysqlClient *p_db.TMysql
+var PgsqlClient *p_db.TPgsql
 var RedisClient *p_db.TRedis
 var SqliteClient *gsdb.GsSqlite
 var LogSqliteClient *gsdb.GsSqlite
@@ -55,7 +56,10 @@ var VariableClient VariableRuntime
 var ShellOutClient *common.TShellOut
 var MemoryRuntime *common.MemoryStore
 var MainDBAutoSyncRuntime *common.MainDBAutoSync
-var CronScheduler *common.CronScheduler
+var CronSchedulers map[string]*common.CronScheduler
+
+// CronTaskFuncRegistry 存储定时任务类型到执行函数的映射，由 controller 在初始化时注册。
+var CronTaskFuncRegistry = make(map[string]func())
 var EnvClient *define.Env
 var ConfigViper *viper.Viper
 var GsLog *gstool.GsSlog

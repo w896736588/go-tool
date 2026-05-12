@@ -25,9 +25,39 @@ function HomeTaskDelete(id, callBack) {
   base.BasePost('/api/HomeTaskDelete', { id: id }, callBack)
 }
 
+// HomeTaskInfo 查询单条首页任务详情。
+function HomeTaskInfo(id, callBack) {
+  base.BasePost('/api/HomeTaskInfo', { id: id }, callBack)
+}
+
 // HomeTaskDailyReportGenerate 生成首页工作日报。
 function HomeTaskDailyReportGenerate(callBack) {
   base.BasePost('/api/HomeTaskDailyReportGenerate', {}, callBack)
+}
+
+// LocalDirList 浏览本地目录，返回子目录列表。
+function LocalDirList(dirPath, callBack) {
+  base.BasePost('/api/Set/LocalDirList', { path: dirPath || '' }, callBack)
+}
+
+// OpenLocalDir 使用系统文件管理器打开指定本地目录。
+function OpenLocalDir(dirPath, callBack) {
+  base.BasePost('/api/Set/OpenLocalDir', { path: dirPath }, callBack)
+}
+
+// LocalDirBatchCheck 批量检查本地目录是否存在。
+function LocalDirBatchCheck(paths, callBack) {
+  base.BasePost('/api/Set/LocalDirBatchCheck', { paths: paths }, callBack)
+}
+
+// HomeTaskLastDevConfigByGitId 根据 Git 仓库 ID 查找最近匹配的开发配置。
+function HomeTaskLastDevConfigByGitId(gitId, callBack) {
+  base.BasePost('/api/HomeTaskLastDevConfigByGitId', { git_id: gitId }, callBack)
+}
+
+// HomeTaskBranchNameGenerate 使用 AI 生成分支名。
+function HomeTaskBranchNameGenerate(taskName, parentBranch, callBack) {
+  base.BasePost('/api/HomeTaskBranchNameGenerate', { task_name: taskName, parent_branch: parentBranch }, callBack)
 }
 
 export default {
@@ -36,5 +66,11 @@ export default {
   HomeTaskArchiveToggle,
   HomeTaskStatusQuickUpdate,
   HomeTaskDelete,
+  HomeTaskInfo,
   HomeTaskDailyReportGenerate,
+  LocalDirList,
+  OpenLocalDir,
+  LocalDirBatchCheck,
+  HomeTaskLastDevConfigByGitId,
+  HomeTaskBranchNameGenerate,
 }

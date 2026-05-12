@@ -31,23 +31,22 @@ description: Use when operating the dtool 接口开发模块 and the task involv
 
 ### 场景 0：先检查当前分支改动的接口，再补接口文档
 
-1. 先在仓库根目录运行变更文件脚本，筛出当前分支相对基分支的改动文件：
-   - Windows / PowerShell：`powershell -File skills/dtool-api/scripts/show-branch-diff.ps1 [base-branch]`
-   - Linux / macOS / bash：`bash skills/dtool-api/scripts/show-branch-diff.sh [base-branch]`
-2. 重点关注接口相关文件，按“接口定义与入口优先”原则筛选，不要绑定当前仓库路径：
+1. 基分支必须向用户确认后再传入脚本参数，禁止自行默认为 `master`、`main` 或其他任何分支名。
+2. 先在仓库根目录运行变更文件脚本，筛出当前分支相对基分支的改动文件（基分支必须作为参数传入）：
+   - `python skills/dtool-common/scripts/show_branch_diff.py <基分支>`
+3. 重点关注接口相关文件，按”接口定义与入口优先”原则筛选，不要绑定当前仓库路径：
    - `.php` 文件，尤其是控制器、路由、请求类、资源类、服务入口等
    - `.go` 文件，尤其是 controller、router、handler、service entry、request binding、response struct 等
    - 用户明确指定的接口实现文件、路由文件、控制器文件
    - 只有当前端文件里直接定义了接口地址、请求参数或返回字段映射时，才把它们作为辅助参考，而不是主依据
-3. 对每个疑似有接口变更的文件，再查看单文件 diff：
-   - Windows / PowerShell：`powershell -File skills/dtool-api/scripts/show-file-diff.ps1 <file-path> [base-branch]`
-   - Linux / macOS / bash：`bash skills/dtool-api/scripts/show-file-diff.sh <file-path> [base-branch]`
-4. 从 diff 中确认以下信息后，再开始写接口文档：
+4. 对每个疑似有接口变更的文件，再查看单文件 diff（基分支必须作为参数传入）：
+   - `python skills/dtool-common/scripts/show_file_diff.py <基分支> <file-path>`
+5. 从 diff 中确认以下信息后，再开始写接口文档：
    - 是否新增接口、修改 URI、修改 method、修改请求参数、修改响应字段
    - 后端控制器实际如何接收参数，以决定 `content_type`、`query_params`、`body_form`、`body_json`、`body_raw`
    - 返回结构里哪些字段需要写入 `take_result`
-5. 如果变更里同时包含非接口文件，优先聚焦接口语义变更，不要把纯样式、dist、构建产物误当成接口改动
-6. 在没有确认 diff 之前，不得直接假设接口文档需要新增或修改
+6. 如果变更里同时包含非接口文件，优先聚焦接口语义变更，不要把纯样式、dist、构建产物误当成接口改动
+7. 在没有确认 diff 之前，不得直接假设接口文档需要新增或修改
 
 ### 场景 1：只做层级查询
 
@@ -85,6 +84,104 @@ description: Use when operating the dtool 接口开发模块 and the task involv
 6. 生成代码：`/api/ApiCode`
 7. 提取 JSON 路径：`/api/ApiTakeJsonResult`
 8. 下移权重：`/api/ApiWeightDown`
+9. 获取文件夹接口文档（Markdown）：`/api/FolderApisMarkdown`
+
+### 场景 6：执行接口（运行接口并获取结果）
+
+典型流程：**查找接口 → 确认环境 → 运行接口 → 查看结果 → 提取字段**
+
+#### 步骤 1：找到目标接口 ID
+
+根据集合 → 文件夹 → 接口的层级定位接口 ID：
+
+1. 调 `/api/CollectionListBasic` 选集合，拿到 `collection_id`
+2. 调 `/api/CollectionFoldersBasic` 选文件夹，拿到 `folder_id`
+3. 调 `/api/FolderApisBasic` 获取文件夹下的接口列表，拿到目标接口的 `id`
+
+#### 步骤 2：确认接口配置（可选但推荐）
+
+如果需要确认接口的请求参数、环境变量等是否正确：
+
+- 调 `/api/ApisDetailByIds` 查看接口完整详情
+- 调 `/api/CollectionEnvs` 确认集合环境配置
+- 调 `/api/CollectionEnvItems` 查看环境变量值
+
+#### 步骤 3：运行接口
+
+调 `/api/ApiRun`，传入接口 ID：
+
+```json
+{"id": 201}
+```
+
+返回完整的执行结果，包含：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `url` | string | 实际请求的完整 URL（环境变量已替换） |
+| `status_code` | int | HTTP 状态码 |
+| `errmsg` | string | 请求错误描述（成功时为空） |
+| `result` | string | 接口返回的原始响应体 |
+| `status` | string | 请求状态 |
+| `millisecond` | int | 请求耗时（毫秒） |
+| `request_headers` | object | 实际发送的请求头 |
+| `response_headers` | object | 服务端返回的响应头 |
+| `body_forms` | array | 提交的 Form 参数 |
+| `body_raw` | string | 提交的原始请求体 |
+| `response_take` | array | 按 take_result 配置提取的字段值 |
+| `request_time` | string | 发起请求的时间 |
+
+`response_take` 每项结构：
+
+| 字段 | 说明 |
+|---|---|
+| `description` | 字段描述（来自 take_result 的 desc） |
+| `item_key` | 字段路径 |
+| `value` | 实际值 |
+| `take_value` | 提取后的值 |
+
+#### 步骤 4：查看执行结果并处理
+
+根据 `status_code` 和 `errmsg` 判断请求是否成功：
+
+- `status_code` 为 2xx 且 `errmsg` 为空：请求成功
+- `status_code` 为 0 或 `errmsg` 非空：请求未发出或发送失败，检查 URL、网络、环境变量等
+- `status_code` 为 4xx/5xx：服务端返回错误，查看 `result` 中的错误信息
+
+#### 步骤 5：从响应中提取字段路径（辅助编写 take_result）
+
+如果需要分析接口返回的 JSON 结构，补充 `take_result`：
+
+调 `/api/ApiTakeJsonResult`，传入接口 ID 和 JSON 字符串：
+
+```json
+{
+  "id": 201,
+  "json": "{\"code\":0,\"data\":{\"token\":\"abc123\",\"user_id\":1001}}"
+}
+```
+
+返回 JSON 中所有可提取的路径，用于完善 `take_result` 配置。
+
+#### 步骤 6：生成调用代码（可选）
+
+调 `/api/ApiCode`，传入接口 ID 和代码类型：
+
+```json
+{
+  "id": 201,
+  "code_type": "curl bash(chrome)"
+}
+```
+
+返回对应语言/工具的调用代码，方便复用。
+
+#### 执行接口的注意事项
+
+1. 运行接口前必须确认环境变量已正确配置（如 `$Url$` 的实际值），否则请求可能失败
+2. 运行接口会实际发送 HTTP 请求，对写接口（POST/PUT/DELETE）请确认不会影响生产数据
+3. 接口自身未配置 `env_id` 时，会自动继承所属文件夹的 `env_id`
+4. 运行接口后，结果会自动保存到接口的 `last_result` 字段
 
 ### 场景 5：结构调整
 
@@ -207,11 +304,11 @@ description: Use when operating the dtool 接口开发模块 and the task involv
 需要自动执行导入/更新时，可优先查看：
 
 - `scripts/sync_api_by_uri.py`
-- `scripts/show-branch-diff.ps1`
-- `scripts/show-file-diff.ps1`
-- `scripts/show-branch-diff.sh`
-- `scripts/show-file-diff.sh`
-- `scripts/test_show_branch_diff.ps1`
+
+分支变更查看脚本已移至 dtool-common 模块：
+
+- `python skills/dtool-common/scripts/show_branch_diff.py <基分支>`（查看分支改动文件列表）
+- `python skills/dtool-common/scripts/show_file_diff.py <基分支> <文件路径>`（查看单文件 diff）
 
 使用前仍要先确认：
 
@@ -219,3 +316,130 @@ description: Use when operating the dtool 接口开发模块 and the task involv
 - 目标文件夹
 - 是否允许自动新建文件夹
 - 是否允许覆盖更新
+
+## 通过 Python 脚本调用接口
+
+所有 dtool 接口调用统一使用 Python 脚本发送请求（避免 bash 编码问题）。
+
+### 通用调用模板
+
+```python
+import json
+from urllib import request, error
+
+base_url = "http://localhost:17170"  # 用户提供的地址
+token = "用户提供的Token值"
+path = "/api/ApiRun"  # 替换为目标接口路径
+payload = {"id": 201}  # 替换为实际请求参数
+
+body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+req = request.Request(
+    url=f"{base_url}{path}",
+    data=body,
+    headers={"Content-Type": "application/json; charset=utf-8", "Token": token},
+    method="POST",
+)
+try:
+    with request.urlopen(req, timeout=30) as resp:
+        result = json.loads(resp.read().decode("utf-8"))
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+except error.HTTPError as exc:
+    print(f"HTTP {exc.code} 失败: {exc.read().decode('utf-8', errors='replace')}")
+```
+
+### 执行接口（ApiRun）示例
+
+```python
+import json
+from urllib import request
+
+base_url = "http://localhost:17170"
+token = "用户Token"
+
+# 运行接口
+req = request.Request(
+    url=f"{base_url}/api/ApiRun",
+    data=json.dumps({"id": 201}).encode("utf-8"),
+    headers={"Content-Type": "application/json; charset=utf-8", "Token": token},
+    method="POST",
+)
+with request.urlopen(req, timeout=30) as resp:
+    result = json.loads(resp.read().decode("utf-8"))
+    data = result.get("data", {})
+    print(f"状态码: {data.get('status_code')}")
+    print(f"耗时: {data.get('millisecond')}ms")
+    print(f"响应: {data.get('result')}")
+    # 查看提取的字段
+    for item in data.get("response_take", []):
+        print(f"  {item['item_key']} = {item['value']} ({item['description']})")
+```
+
+### 批量运行多个接口示例
+
+```python
+import json
+from urllib import request
+
+base_url = "http://localhost:17170"
+token = "用户Token"
+
+api_ids = [201, 202, 203]  # 要运行的接口ID列表
+
+for api_id in api_ids:
+    req = request.Request(
+        url=f"{base_url}/api/ApiRun",
+        data=json.dumps({"id": api_id}).encode("utf-8"),
+        headers={"Content-Type": "application/json; charset=utf-8", "Token": token},
+        method="POST",
+    )
+    with request.urlopen(req, timeout=30) as resp:
+        result = json.loads(resp.read().decode("utf-8"))
+        data = result.get("data", {})
+        status = data.get("status_code", 0)
+        ms = data.get("millisecond", 0)
+        print(f"接口 {api_id}: HTTP {status}, 耗时 {ms}ms")
+```
+
+### 生成代码（ApiCode）示例
+
+```python
+import json
+from urllib import request
+
+base_url = "http://localhost:17170"
+token = "用户Token"
+
+req = request.Request(
+    url=f"{base_url}/api/ApiCode",
+    data=json.dumps({"id": 201, "code_type": "curl bash(chrome)"}).encode("utf-8"),
+    headers={"Content-Type": "application/json; charset=utf-8", "Token": token},
+    method="POST",
+)
+with request.urlopen(req, timeout=30) as resp:
+    result = json.loads(resp.read().decode("utf-8"))
+    print(result.get("data", {}).get("code", ""))
+```
+
+### 提取 JSON 路径（ApiTakeJsonResult）示例
+
+```python
+import json
+from urllib import request
+
+base_url = "http://localhost:17170"
+token = "用户Token"
+
+req = request.Request(
+    url=f"{base_url}/api/ApiTakeJsonResult",
+    data=json.dumps({
+        "id": 201,
+        "json": '{"code":0,"data":{"token":"abc","user_id":1001}}'
+    }).encode("utf-8"),
+    headers={"Content-Type": "application/json; charset=utf-8", "Token": token},
+    method="POST",
+)
+with request.urlopen(req, timeout=30) as resp:
+    result = json.loads(resp.read().decode("utf-8"))
+    for item in result.get("data", []):
+        print(f"  {item.get('key')} ({item.get('type', '')}) - {item.get('desc', '')}")
+```

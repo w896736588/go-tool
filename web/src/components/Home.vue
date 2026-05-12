@@ -4,7 +4,7 @@
     <aside v-if="!hideAppSidebar" class="sidebar">
       <div class="sidebar-header">
         <span class="logo">🛠️</span>
-        <span class="title">DevTools</span>
+        <span class="title">DTools</span>
       </div>
       
       <el-menu
@@ -12,8 +12,8 @@
         active-text-color="#3a7a3a"
         background-color="#f5f5f0"
         text-color="#5a5a5a"
-        router
         class="sidebar-menu"
+        @click="onMenuNativeClick"
         @select="handleSelect"
       >
         <el-menu-item index="/Dashboard">
@@ -22,7 +22,7 @@
         </el-menu-item>
         <el-menu-item index="/HomeTask">
           <el-icon><List /></el-icon>
-          <span>Task</span>
+          <span>Workflow</span>
         </el-menu-item>
         <el-menu-item v-if="checkModuleOpen('redis')" index="/Redis">
           <el-icon><Coin /></el-icon>
@@ -50,7 +50,7 @@
         </el-menu-item>
         <el-menu-item v-if="checkModuleOpen('memory_fragment')" index="/MemoryFragment">
           <el-icon><Memo /></el-icon>
-          <span>Knowlange</span>
+          <span>Knowledge</span>
           <div v-if="gitPendingStatus.memoryPending" class="menu-countdown-bar">
             <div class="menu-countdown-bar__fill" :style="{ width: memoryCountdownPercent + '%' }"></div>
           </div>
@@ -62,6 +62,10 @@
         <el-menu-item v-if="checkModuleOpen('api')" index="/Api">
           <el-icon><Connection /></el-icon>
           <span>Api Manage</span>
+        </el-menu-item>
+        <el-menu-item index="/Mcp">
+          <el-icon><Connection /></el-icon>
+          <span>Mcp</span>
         </el-menu-item>
         <el-menu-item v-if="checkModuleOpen('shellout')" index="/shellout">
           <el-icon><Monitor /></el-icon>
@@ -314,6 +318,14 @@
                 >
                   源码
                 </GitActionButton>
+                 <GitActionButton
+
+                              compact
+                              :loading="asyncTaskRetrying"
+                              @click="retryAsyncTask"
+                            >
+                              重试
+                            </GitActionButton>
               </div>
             </div>
             <MarkdownRenderer
@@ -337,6 +349,14 @@
             </div>
           </div>
           <div class="async-task-detail__actions">
+            <GitActionButton
+
+              compact
+              :loading="asyncTaskRetrying"
+              @click="retryAsyncTask"
+            >
+              重试
+            </GitActionButton>
             <GitActionButton
               v-if="asyncTaskDetail.task_status === ASYNC_TASK_STATUS_AWAIT_CONFIRM && asyncTaskDetail.task_type === ASYNC_TASK_TYPE_DAILY_REPORT"
               compact
@@ -445,6 +465,7 @@ export default {
       safeLoginChecked: false,
       safeLoginMessage: '',
       menuName: '/Dashboard',
+      menuCtrlKey: false,
       minHeightMap: {},
       showShellMap: ['/Git', '/Consumer', '/WechatKefu'],
       tags: [],
@@ -472,6 +493,7 @@ export default {
       ASYNC_TASK_ACTION_DISCARD,
       ASYNC_TASK_STATUS_AWAIT_CONFIRM,
       ASYNC_TASK_STATUS_PENDING,
+      ASYNC_TASK_STATUS_FAILED,
       ASYNC_TASK_TYPE_DAILY_REPORT,
       ASYNC_TASK_TYPE_MEMORY_ARRANGE,
       ASYNC_TASK_TYPE_MAIN_DB_SYNC,
@@ -481,6 +503,7 @@ export default {
       asyncTaskLoading: false,
       asyncTaskActing: false,
       asyncTaskDeleting: false,
+      asyncTaskRetrying: false,
       asyncTaskSelectedId: 0,
       asyncTaskList: [],
       asyncTaskDetail: {},
@@ -613,7 +636,7 @@ export default {
           return
         }
         const data = response.Data || {}
-        _that.initSseAfterLoginStatus(data.sse_port)
+        _that.initSseAfterLoginStatus(data.sse_ports)
         // enabled=false：未启用密码保护，直接进入
         if (!data.enabled) {
           return
@@ -626,9 +649,9 @@ export default {
         _that.showSafeLogin()
       })
     },
-    initSseAfterLoginStatus: function (ssePort) {
-      sseDistribute.Create(ssePort)
-      sseDistribute.ReceiveMessage()
+    initSseAfterLoginStatus: function (ssePorts) {
+      // sse_distribute 内部会查询可用端口，无可用时自动弹窗
+      sseDistribute.ConnectToAvailablePort()
     },
     // 显示 Safe 登录弹窗
     showSafeLogin: function (options) {
@@ -899,6 +922,24 @@ export default {
         this.$helperNotify.success('异步任务记录已删除')
       })
     },
+    // retryAsyncTask 重试失败的异步任务。
+    retryAsyncTask() {
+      const taskId = Number(this.asyncTaskDetail?.id || 0)
+      if (taskId <= 0) {
+        return
+      }
+      this.asyncTaskRetrying = true
+      asyncTaskApi.AsyncTaskRetry(taskId, (response) => {
+        this.asyncTaskRetrying = false
+        if (!(response && response.ErrCode === 0 && response.Data)) {
+          this.$helperNotify.error(response?.ErrMsg || '异步任务重试失败')
+          return
+        }
+        this.asyncTaskDetail = this.normalizeAsyncTaskDetail(response.Data)
+        this.loadAsyncTaskSummary(false)
+        this.$helperNotify.success('异步任务已重新执行')
+      })
+    },
     // getAsyncTaskTypeText 统一格式化异步任务类型文案。
     getAsyncTaskTypeText(task) {
       const taskType = String(task?.task_type || '')
@@ -1122,6 +1163,9 @@ export default {
         }, 500)
       }
     },
+    onMenuNativeClick(event) {
+      this.menuCtrlKey = event.ctrlKey || event.metaKey
+    },
     handleSelect(key, keyPath) {
       if (keyPath[0].indexOf('Doc-') >= 0) {
         return
@@ -1129,7 +1173,15 @@ export default {
       if (keyPath[0].indexOf('Ignore-') >= 0) {
         return;
       }
+      // Ctrl/Cmd+Click: 在新标签页打开
+      if (this.menuCtrlKey) {
+        const resolved = this.$router.resolve(keyPath[0])
+        window.open(resolved.href, '_blank')
+        this.menuCtrlKey = false
+        return
+      }
       this.menuName = keyPath[0]
+      this.$router.push(keyPath[0])
     },
   },
   beforeUnmount() {

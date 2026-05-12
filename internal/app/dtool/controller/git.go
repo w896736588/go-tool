@@ -10,6 +10,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -1038,4 +1041,349 @@ func prepareGitOperationEnv(sshClient *gsssh.SshTerminal, codePath string) error
 	cmd.SetCommand(`grep -qi '\[credential\]' .git/config 2>/dev/null && grep -qi 'helper.*=.*store' .git/config 2>/dev/null || printf '[credential]\nhelper = store\n' >> .git/config`)
 	_, err := sshClient.RunCommandWait(cmd.GetCommand().ToStr(), 6*time.Second)
 	return err
+}
+
+const (
+	gitUploadFileMaxSize = 10 * 1024 * 1024 // 文件上传最大10MB
+)
+
+// GitUploadFile 上传本地文件到远程Git项目目录
+// 参数：git_id(Git配置ID), local_file_paths(文件路径数组,每项含full_file_path和relative_file_path), code_path(远程代码目录,为空则从tbl_git获取)
+func GitUploadFile(c *gin.Context) {
+	reqMap := make(map[string]interface{})
+	if err := gsgin.GinPostBody(c, &reqMap); err != nil {
+		gsgin.GinResponseError(c, `请求参数错误`, nil)
+		return
+	}
+
+	gitId := cast.ToString(reqMap[`git_id`])
+
+	// 解析 local_file_paths 为 [{full_file_path, relative_file_path}]
+	type fileItem struct {
+		FullFilePath     string
+		RelativeFilePath string
+	}
+	var fileItems []fileItem
+	if paths, ok := reqMap[`local_file_paths`]; ok {
+		if arr, ok := paths.([]interface{}); ok {
+			for _, item := range arr {
+				if m, ok := item.(map[string]interface{}); ok {
+					fileItems = append(fileItems, fileItem{
+						FullFilePath:     strings.TrimSpace(cast.ToString(m[`full_file_path`])),
+						RelativeFilePath: strings.TrimSpace(cast.ToString(m[`relative_file_path`])),
+					})
+				}
+			}
+		}
+	}
+
+	// 参数校验
+	if gitId == `` {
+		gsgin.GinResponseError(c, `git_id不能为空`, nil)
+		return
+	}
+	if len(fileItems) == 0 {
+		gsgin.GinResponseError(c, `local_file_paths不能为空`, nil)
+		return
+	}
+	for _, item := range fileItems {
+		if item.FullFilePath == `` {
+			gsgin.GinResponseError(c, `full_file_path不能为空`, nil)
+			return
+		}
+		if item.RelativeFilePath == `` {
+			gsgin.GinResponseError(c, `relative_file_path不能为空`, nil)
+			return
+		}
+		if strings.Contains(item.RelativeFilePath, `..`) {
+			gsgin.GinResponseError(c, `relative_file_path不合法: `+item.RelativeFilePath, nil)
+			return
+		}
+	}
+
+	// 根据git_id查询tbl_git配置
+	gitInfo, queryErr := common.DbMain.Client.QuickQuery(`tbl_git`, `*`, map[string]any{
+		`id`: gitId,
+	}).One()
+	if queryErr != nil || len(gitInfo) == 0 {
+		gsgin.GinResponseError(c, `未找到id为 "`+gitId+`" 的Git配置`, nil)
+		return
+	}
+
+	// 优先使用参数传入的 code_path，为空则使用 tbl_git 配置的 code_path
+	codePath := strings.TrimSpace(cast.ToString(reqMap[`code_path`]))
+	if codePath == `` {
+		codePath = cast.ToString(gitInfo[`code_path`])
+	}
+	if codePath == `` {
+		gsgin.GinResponseError(c, `Git项目未配置code_path`, nil)
+		return
+	}
+
+	sshId := gitInfo[`ssh_id`]
+	sshConfig, sshConfigErr := common.DbMain.GetSshConfig(sshId)
+	if sshConfigErr != nil {
+		gsgin.GinResponseError(c, `获取SSH配置失败: `+sshConfigErr.Error(), nil)
+		return
+	}
+	if len(sshConfig) == 0 {
+		gsgin.GinResponseError(c, `SSH配置为空`, nil)
+		return
+	}
+
+	// 创建一次性SSH连接
+	gstool.FmtPrintlnLogTime(`[GitUploadFile] 创建SSH连接 ssh_id=%s host=%s port=%s`, sshId, sshConfig[`host`], sshConfig[`port`])
+	sshOnce, sshErr := component.ShellClient.GetSshOnce(sshConfig)
+	if sshErr != nil {
+		gstool.FmtPrintlnLogTime(`[GitUploadFile] 创建SSH连接失败: %s`, sshErr.Error())
+		gsgin.GinResponseError(c, `创建SSH连接失败: `+sshErr.Error(), nil)
+		return
+	}
+
+	// 提前创建所有远程目标目录，避免因目录不存在导致上传失败
+	targetDirs := make(map[string]bool)
+	for _, item := range fileItems {
+		relativePath := strings.ReplaceAll(item.RelativeFilePath, `\`, `/`)
+		relativePath = strings.TrimLeft(relativePath, `/`)
+		targetPath := codePath + `/` + relativePath
+		targetDirs[path.Dir(targetPath)] = true
+	}
+	gstool.FmtPrintlnLogTime(`[GitUploadFile] 需要创建的远程目录: %v`, targetDirs)
+	for dir := range targetDirs {
+		gstool.FmtPrintlnLogTime(`[GitUploadFile] mkdir -p %s`, dir)
+		if out, mkdirErr := sshOnce.RunCommandOnce(fmt.Sprintf(`mkdir -p %s`, dir)); mkdirErr != nil {
+			gstool.FmtPrintlnLogTime(`[GitUploadFile] mkdir失败: dir=%s err=%s out=%s`, dir, mkdirErr.Error(), out)
+			gsgin.GinResponseError(c, `创建远程目录失败: `+mkdirErr.Error(), nil)
+			return
+		}
+		gstool.FmtPrintlnLogTime(`[GitUploadFile] mkdir成功: %s`, dir)
+	}
+
+	// 上传每个文件
+	results := make([]map[string]any, 0, len(fileItems))
+	gstool.FmtPrintlnLogTime(`[GitUploadFile] 开始上传 %d 个文件, code_path=%s`, len(fileItems), codePath)
+	for _, item := range fileItems {
+		gstool.FmtPrintlnLogTime(`[GitUploadFile] 上传文件: local=%s remote_relative=%s`, item.FullFilePath, item.RelativeFilePath)
+		// 校验本地文件
+		fileInfo, statErr := os.Stat(item.FullFilePath)
+		if statErr != nil {
+			gsgin.GinResponseError(c, `本地文件不存在或无法访问: `+statErr.Error(), nil)
+			return
+		}
+		if fileInfo.IsDir() {
+			gsgin.GinResponseError(c, `full_file_path不能是目录: `+item.FullFilePath, nil)
+			return
+		}
+		if fileInfo.Size() > gitUploadFileMaxSize {
+			gsgin.GinResponseError(c, fmt.Sprintf(`文件 %s 大小超过限制(最大%dMB)`, item.FullFilePath, gitUploadFileMaxSize/(1024*1024)), nil)
+			return
+		}
+
+		// 标准化 relative_file_path 并拼接目标路径
+		relativePath := strings.ReplaceAll(item.RelativeFilePath, `\`, `/`)
+		relativePath = strings.TrimLeft(relativePath, `/`)
+		targetPath := codePath + `/` + relativePath
+
+		// SCP传输到临时文件
+		fileName := filepath.Base(item.FullFilePath)
+		targetTempFile := targetPath + p_common.TBaseClient.GetUnique(`_upload`)
+		gstool.FmtPrintlnLogTime(`[GitUploadFile] SCP上传开始: local=%s remote=%s fileSize=%d`, item.FullFilePath, targetTempFile, fileInfo.Size())
+		if uploadErr := sshOnce.UploadFileProcessScp(targetTempFile, item.FullFilePath, func(int64, int64) {}); uploadErr != nil {
+			gstool.FmtPrintlnLogTime(`[GitUploadFile] SCP上传失败: local=%s remote=%s err=%s`, item.FullFilePath, targetTempFile, uploadErr.Error())
+			gsgin.GinResponseError(c, fmt.Sprintf(`文件上传失败[%s]: %s`, fileName, uploadErr.Error()), nil)
+			return
+		}
+
+		// mv临时文件到最终路径（已存在则覆盖），复用已有的sshOnce连接
+		gstool.FmtPrintlnLogTime(`[GitUploadFile] mv临时文件: %s -> %s`, targetTempFile, targetPath)
+		if _, mvErr := sshOnce.RunCommandOnce(fmt.Sprintf(`mv %s %s`, targetTempFile, targetPath)); mvErr != nil {
+			gstool.FmtPrintlnLogTime(`[GitUploadFile] mv失败: %s`, mvErr.Error())
+			gsgin.GinResponseError(c, fmt.Sprintf(`移动文件失败[%s]: %s`, fileName, mvErr.Error()), nil)
+			return
+		}
+
+		results = append(results, map[string]any{
+			`remote_path`: targetPath,
+			`file_name`:   fileName,
+			`file_size`:   fileInfo.Size(),
+			`git_id`:      gitId,
+		})
+	}
+
+	gstool.FmtPrintlnLogTime(`[GitUploadFile] 全部上传完成, 共%d个文件`, len(results))
+	gsgin.GinResponseSuccess(c, `文件上传成功`, map[string]any{
+		`list`: results,
+	})
+}
+
+// getGitInfoByGitId 通过 git_id 查询 tbl_git 获取信息，创建 SshTerminal 连接
+func getGitInfoByGitId(gitId string) (map[string]any, *gsssh.SshTerminal, error) {
+	if gitId == `` {
+		return nil, nil, errors.New(`git_id不能为空`)
+	}
+	gitInfo, queryErr := common.DbMain.Client.QuickQuery(`tbl_git`, `*`, map[string]any{
+		`id`: gitId,
+	}).One()
+	if queryErr != nil || len(gitInfo) == 0 {
+		return nil, nil, fmt.Errorf(`未找到id为 "%s" 的Git配置`, gitId)
+	}
+	codePath := cast.ToString(gitInfo[`code_path`])
+	if codePath == `` {
+		return nil, nil, errors.New(`Git项目未配置code_path`)
+	}
+	sshId := gitInfo[`ssh_id`]
+	sshConfig, sshConfigErr := common.DbMain.GetSshConfig(sshId)
+	if sshConfigErr != nil {
+		return nil, nil, fmt.Errorf(`获取SSH配置失败: %s`, sshConfigErr.Error())
+	}
+	if len(sshConfig) == 0 {
+		return nil, nil, errors.New(`SSH配置为空`)
+	}
+	uniqueKey := p_common.TBaseClient.GetCombineKey(sshId, gitId)
+	sshClient, sshErr := component.ShellClient.GetClient(sshConfig, uniqueKey, nil, nil, nil, nil)
+	if sshErr != nil {
+		return nil, nil, fmt.Errorf(`创建SSH连接失败: %s`, sshErr.Error())
+	}
+	return gitInfo, sshClient, nil
+}
+
+// GitCurrentBranchById 通过 git_id 查询当前分支
+func GitCurrentBranchById(c *gin.Context) {
+	reqMap := make(map[string]interface{})
+	if err := gsgin.GinPostBody(c, &reqMap); err != nil {
+		gsgin.GinResponseError(c, `请求参数错误`, nil)
+		return
+	}
+	gitId := cast.ToString(reqMap[`git_id`])
+	gitInfo, sshClient, err := getGitInfoByGitId(gitId)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	codePath := cast.ToString(gitInfo[`code_path`])
+	gstool.FmtPrintlnLogTime(`[GitCurrentBranchById] 开始查询远程分支 git_id=%s code_path=%s`, gitId, codePath)
+
+	if prepareErr := prepareGitOperationEnv(sshClient, codePath); prepareErr != nil {
+		gstool.FmtPrintlnLogTime(`[GitCurrentBranchById] 前置环境处理失败 err=%s`, prepareErr.Error())
+		gsgin.GinResponseError(c, prepareErr.Error(), nil)
+		return
+	}
+
+	command := p_shell.NewCommand()
+	command.Cd(codePath)
+	command.Echo(`当前分支：`)
+	command.GitShowBranch()
+	command.Echo(`远程分支：`)
+	command.GitShowOriginBranch()
+	result, runErr := sshClient.RunCommandWait(command.GetCommand().ToStr(), time.Second*4)
+	if runErr != nil {
+		gstool.FmtPrintlnLogTime(`[GitCurrentBranchById] 查询失败 err=%s result=%q`, runErr.Error(), result)
+		gsgin.GinResponseError(c, runErr.Error(), nil)
+		return
+	}
+	gstool.FmtPrintlnLogTime(`[GitCurrentBranchById] 查询完成 git_id=%s result=%q`, gitId, result)
+	gsgin.GinResponseSuccess(c, ``, result)
+}
+
+// GitPull 通过 git_id 拉取当前分支最新代码
+func GitPull(c *gin.Context) {
+	reqMap := make(map[string]interface{})
+	if err := gsgin.GinPostBody(c, &reqMap); err != nil {
+		gsgin.GinResponseError(c, `请求参数错误`, nil)
+		return
+	}
+	gitId := cast.ToString(reqMap[`git_id`])
+	gitInfo, sshClient, err := getGitInfoByGitId(gitId)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	codePath := cast.ToString(gitInfo[`code_path`])
+	gstool.FmtPrintlnLogTime(`[GitPull] 开始拉取代码 git_id=%s code_path=%s`, gitId, codePath)
+
+	if prepareErr := prepareGitOperationEnv(sshClient, codePath); prepareErr != nil {
+		gstool.FmtPrintlnLogTime(`[GitPull] 前置环境处理失败 err=%s`, prepareErr.Error())
+		gsgin.GinResponseError(c, prepareErr.Error(), nil)
+		return
+	}
+
+	command := p_shell.NewCommand()
+	command.Cd(codePath)
+	command.GitIgnoreAll()
+	command.GitCleanAll()
+	command.GitFetch()
+	command.GitPull()
+	command.GitPullOriginCurrentBranch()
+	command.Echo(`当前分支：`)
+	command.GitShowBranch()
+	command.Echo(`远程分支：`)
+	command.GitShowOriginBranch()
+	result, runErr := sshClient.RunCommandWait(command.GetCommand().ToStr(), getGitOperationTimeout(gitOperationPull))
+	if runErr != nil {
+		gstool.FmtPrintlnLogTime(`[GitPull] 拉取失败 err=%s result=%q`, runErr.Error(), result)
+		gsgin.GinResponseError(c, runErr.Error(), result)
+		return
+	}
+	gstool.FmtPrintlnLogTime(`[GitPull] 拉取完成 git_id=%s`, gitId)
+	gsgin.GinResponseSuccess(c, ``, result)
+}
+
+// GitChangeBranchById 通过 git_id 切换分支
+func GitChangeBranchById(c *gin.Context) {
+	reqMap := make(map[string]interface{})
+	if err := gsgin.GinPostBody(c, &reqMap); err != nil {
+		gsgin.GinResponseError(c, `请求参数错误`, nil)
+		return
+	}
+	gitId := cast.ToString(reqMap[`git_id`])
+	branchName := cast.ToString(reqMap[`branch_name`])
+	if branchName == `` {
+		gsgin.GinResponseError(c, `branch_name不能为空`, nil)
+		return
+	}
+	gitInfo, sshClient, err := getGitInfoByGitId(gitId)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	codePath := cast.ToString(gitInfo[`code_path`])
+	gstool.FmtPrintlnLogTime(`[GitChangeBranchById] 开始切换分支 git_id=%s code_path=%s branch=%s`, gitId, codePath, branchName)
+
+	if prepareErr := prepareGitOperationEnv(sshClient, codePath); prepareErr != nil {
+		gstool.FmtPrintlnLogTime(`[GitChangeBranchById] 前置环境处理失败 err=%s`, prepareErr.Error())
+		gsgin.GinResponseError(c, prepareErr.Error(), nil)
+		return
+	}
+
+	// 先查询当前分支
+	command1 := p_shell.NewCommand()
+	command1.Init()
+	command1.Cd(codePath)
+	command1.GitShowBranch()
+	currentBranch, _ := sshClient.RunCommandWait(command1.GetCommand().ToStr(), getGitOperationTimeout(gitOperationBranchChange))
+	currentBranch = CleanBranchName(currentBranch)
+
+	command := p_shell.NewCommand()
+	command.Cd(codePath)
+	command.GitIgnoreAll()
+	command.GitCleanAll()
+	command.GitFetch()
+	command.GitPull()
+	currentBranch = strings.Replace(currentBranch, "\n", "", -1)
+	if currentBranch != branchName {
+		command.GitCheckout(branchName)
+	}
+	command.GitPullOrigin(branchName)
+	command.Echo(`当前分支：`)
+	command.GitShowBranch()
+	command.Echo(`远程分支：`)
+	command.GitShowOriginBranch()
+	result, runErr := sshClient.RunCommandWait(command.GetCommand().ToStr(), getGitOperationTimeout(gitOperationBranchChange))
+	if runErr != nil {
+		gstool.FmtPrintlnLogTime(`[GitChangeBranchById] 切换分支失败 err=%s result=%q`, runErr.Error(), result)
+		gsgin.GinResponseError(c, runErr.Error(), result)
+		return
+	}
+	gstool.FmtPrintlnLogTime(`[GitChangeBranchById] 切换分支完成 git_id=%s branch=%s`, gitId, branchName)
+	gsgin.GinResponseSuccess(c, ``, result)
 }

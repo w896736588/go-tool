@@ -6,9 +6,10 @@ function MemoryFragmentStatus(callBack) {
 }
 
 // MemoryFragmentList 查询知识片段列表。
-function MemoryFragmentList(limit, callBack) {
+function MemoryFragmentList(limit, offset, callBack) {
   base.BasePost('/api/MemoryFragmentList', {
     limit: limit,
+    offset: offset,
   }, callBack)
 }
 
@@ -112,11 +113,51 @@ function MemoryFragmentImageUpload(file, callBack) {
   base.BasePostForm('/api/MemoryFragmentImageUpload', form, callBack)
 }
 
+// MemoryFragmentUploadZip 上传 ZIP 文件，解析 content.md + images/ 创建知识片段。
+function MemoryFragmentUploadZip(file, apiBaseURL, callBack) {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('api_base_url', apiBaseURL)
+  base.BasePostForm('/api/MemoryFragmentUploadZip', form, callBack)
+}
+
+// MemoryFragmentUpdateZip 上传 ZIP 文件更新已有知识片段。
+function MemoryFragmentUpdateZip(id, file, apiBaseURL, callBack) {
+  const form = new FormData()
+  form.append('id', id)
+  form.append('file', file)
+  form.append('api_base_url', apiBaseURL)
+  base.BasePostForm('/api/MemoryFragmentUpdateZip', form, callBack)
+}
+
 // MemoryFragmentBatchInfoByPaths 批量按文件路径查询片段摘要（id + title）。
 function MemoryFragmentBatchInfoByPaths(paths, callBack) {
   base.BasePost('/api/MemoryFragmentBatchInfoByPaths', {
     paths: paths,
   }, callBack)
+}
+
+// MemoryFragmentDownloadZip 下载知识片段及其图片为 ZIP 文件。
+function MemoryFragmentDownloadZip(id) {
+  const url = base.GetAbsoluteApiHost() + '/api/MemoryFragmentDownloadZip?id=' + encodeURIComponent(id) + '&token=' + encodeURIComponent(base.GetSafeToken())
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = ''
+  document.body.appendChild(anchor)
+  anchor.click()
+  document.body.removeChild(anchor)
+}
+
+// MemoryFragmentReferences 查询知识片段被工作流程和其他片段引用的情况。
+function MemoryFragmentReferences(fragmentIds, callBack) {
+  base.BasePost('/api/MemoryFragmentReferences', {
+    fragment_ids: fragmentIds,
+  }, callBack)
+}
+
+// MemoryGitPull 手动拉取记忆库远程仓库最新内容。
+function MemoryGitPull(callBack) {
+  base.BasePost('/api/MemoryGitPull', {}, callBack)
 }
 
 export default {
@@ -136,5 +177,10 @@ export default {
   MemoryFragmentShareCreate,
   MemoryFragmentShareInfo,
   MemoryFragmentImageUpload,
+  MemoryFragmentUploadZip,
+  MemoryFragmentUpdateZip,
+  MemoryFragmentDownloadZip,
   MemoryFragmentBatchInfoByPaths,
+  MemoryFragmentReferences,
+  MemoryGitPull,
 }

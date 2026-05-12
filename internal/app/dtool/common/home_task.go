@@ -2,6 +2,7 @@ package common
 
 import (
 	"dev_tool/internal/app/dtool/define"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -13,13 +14,18 @@ import (
 const (
 	// homeTaskListQuerySQL 用于查询首页任务列表。
 	homeTaskListQuerySQL = `
-select id,name,task_status,memory_fragment_id,is_archived,start_time,last_operated_at,create_time,update_time,tapd_url
+select id,name,task_status,memory_fragment_id,is_archived,start_time,last_operated_at,create_time,update_time,tapd_url,git_id,api_dev_enabled,api_collection_id,api_dir_id,git_ids,api_dev_entries,mysql_id,dev_configs,use_workflow
 from tbl_home_task
 where is_archived = ?
 order by id desc`
+	// homeTaskListAllQuerySQL 用于查询所有任务（包含已归档和未归档）。
+	homeTaskListAllQuerySQL = `
+select id,name,task_status,memory_fragment_id,is_archived,start_time,last_operated_at,create_time,update_time,tapd_url,git_id,api_dev_enabled,api_collection_id,api_dir_id,git_ids,api_dev_entries,mysql_id,dev_configs,use_workflow
+from tbl_home_task
+order by id desc`
 	// homeTaskListTodayUpdatedQuerySQL 用于查询今天变更过的任务，供工作日报使用。
 	homeTaskListTodayUpdatedQuerySQL = `
-select id,name,task_status,memory_fragment_id,is_archived,start_time,last_operated_at,create_time,update_time,tapd_url
+select id,name,task_status,memory_fragment_id,is_archived,start_time,last_operated_at,create_time,update_time,tapd_url,git_id,api_dev_enabled,api_collection_id,api_dir_id,git_ids,api_dev_entries,mysql_id,dev_configs,use_workflow
 from tbl_home_task
 where update_time >= ? or create_time >= ?
 order by id desc`
@@ -73,7 +79,7 @@ func (h *CSqlite) HomeTaskRow(id int) (map[string]any, error) {
 }
 
 // HomeTaskSave 保存首页任务。
-func (h *CSqlite) HomeTaskSave(id int, name, taskStatus string, startTime int64, memoryFragmentID string, tapdUrl string) (map[string]any, error) {
+func (h *CSqlite) HomeTaskSave(id int, name, taskStatus string, startTime int64, memoryFragmentID string, tapdUrl string, gitID int, apiDevEnabled int, apiCollectionID int, apiDirID int, mysqlID int, gitIDsJSON string, apiDevEntriesJSON string, devConfigsJSON string, useWorkflow int) (map[string]any, error) {
 	now := time.Now().Unix()
 	name = strings.TrimSpace(name)
 	taskStatus = strings.TrimSpace(taskStatus)
@@ -96,6 +102,15 @@ func (h *CSqlite) HomeTaskSave(id int, name, taskStatus string, startTime int64,
 		`last_operated_at`:   now,
 		`update_time`:        now,
 		`tapd_url`:           tapdUrl,
+		`git_id`:             gitID,
+		`api_dev_enabled`:    apiDevEnabled,
+		`api_collection_id`:  apiCollectionID,
+		`api_dir_id`:         apiDirID,
+		`mysql_id`:           mysqlID,
+		`git_ids`:            gitIDsJSON,
+		`api_dev_entries`:    apiDevEntriesJSON,
+		`dev_configs`:        devConfigsJSON,
+		`use_workflow`:       useWorkflow,
 	}
 	if id <= 0 {
 		updateData[`is_archived`] = define.HomeTaskArchivedNo
@@ -253,4 +268,142 @@ func isValidHomeTaskStatus(taskStatus string) bool {
 // isValidHomeTaskArchived 校验首页任务归档值是否合法。
 func isValidHomeTaskArchived(isArchived int) bool {
 	return isArchived == define.HomeTaskArchivedNo || isArchived == define.HomeTaskArchivedYes
+}
+
+// fragmentRefTypeWorkflow 表示引用来源为工作流程任务。
+const fragmentRefTypeWorkflow = `workflow`
+
+// fragmentReference 描述一个片段引用来源。
+type fragmentReference struct {
+	Type string `json:"type"`
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
+// HomeTaskFragmentReferences 批量查询知识片段被哪些工作流程任务引用。
+func (h *CSqlite) HomeTaskFragmentReferences(fragmentIDs []string) (map[string][]fragmentReference, error) {
+	result := make(map[string][]fragmentReference)
+	if len(fragmentIDs) == 0 {
+		return result, nil
+	}
+	// 构建 IN 子句的占位符和参数。
+	placeholders := make([]string, 0, len(fragmentIDs))
+	args := make([]any, 0, len(fragmentIDs))
+	for _, id := range fragmentIDs {
+		id = strings.TrimSpace(id)
+		if id == `` {
+			continue
+		}
+		placeholders = append(placeholders, `?`)
+		args = append(args, id)
+	}
+	if len(placeholders) == 0 {
+		return result, nil
+	}
+	phStr := strings.Join(placeholders, `,`)
+
+	// 查 tbl_home_task.memory_fragment_id。
+	homeTaskRows, err := h.Client.QueryBySql(
+		`SELECT id, name, memory_fragment_id FROM tbl_home_task WHERE memory_fragment_id IN (`+phStr+`) AND memory_fragment_id != ''`,
+		args...,
+	).All()
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range homeTaskRows {
+		fid := strings.TrimSpace(cast.ToString(row[`memory_fragment_id`]))
+		if fid == `` {
+			continue
+		}
+		result[fid] = append(result[fid], fragmentReference{
+			Type: fragmentRefTypeWorkflow,
+			ID:   cast.ToInt(row[`id`]),
+			Name: cast.ToString(row[`name`]),
+		})
+	}
+
+	// 查 tbl_task_workflow 中所有 fragment_id 字段。
+	workflowRows, err := h.Client.QueryBySql(
+		`SELECT tw.id, tw.home_task_id, ht.name,
+			tw.requirement_fragment_id, tw.dev_plan_fragment_id,
+			tw.plain_text_requirement_fragment_id, tw.design_plan_requirement_fragment_id,
+			tw.api_doc_fragment_id, tw.design_fragment_id
+		 FROM tbl_task_workflow tw
+		 LEFT JOIN tbl_home_task ht ON ht.id = tw.home_task_id
+		 WHERE tw.requirement_fragment_id IN (`+phStr+`)
+		    OR tw.dev_plan_fragment_id IN (`+phStr+`)
+		    OR tw.plain_text_requirement_fragment_id IN (`+phStr+`)
+		    OR tw.design_plan_requirement_fragment_id IN (`+phStr+`)
+		    OR tw.api_doc_fragment_id IN (`+phStr+`)
+		    OR tw.design_fragment_id IN (`+phStr+`)`,
+		func() []any {
+			combined := make([]any, 0, len(args)*6)
+			for i := 0; i < 6; i++ {
+				combined = append(combined, args...)
+			}
+			return combined
+		}()...,
+	).All()
+	if err != nil {
+		return nil, err
+	}
+	fragColumns := []string{`requirement_fragment_id`, `dev_plan_fragment_id`, `plain_text_requirement_fragment_id`, `design_plan_requirement_fragment_id`, `api_doc_fragment_id`, `design_fragment_id`}
+	for _, row := range workflowRows {
+		taskID := cast.ToInt(row[`home_task_id`])
+		taskName := cast.ToString(row[`name`])
+		if taskID <= 0 || taskName == `` {
+			continue
+		}
+		for _, col := range fragColumns {
+			fid := strings.TrimSpace(cast.ToString(row[col]))
+			if fid == `` {
+				continue
+			}
+			// 去重：同一任务对同一片段只记录一次。
+			exists := false
+			for _, ref := range result[fid] {
+				if ref.Type == fragmentRefTypeWorkflow && ref.ID == taskID {
+					exists = true
+					break
+				}
+			}
+			if !exists {
+				result[fid] = append(result[fid], fragmentReference{
+					Type: fragmentRefTypeWorkflow,
+					ID:   taskID,
+					Name: taskName,
+				})
+			}
+		}
+	}
+
+	return result, nil
+}
+
+// HomeTaskLastDevConfigByGitId 根据 git_id 查找最近一个包含该 Git 仓库的任务，返回匹配的 dev_config。
+func (h *CSqlite) HomeTaskLastDevConfigByGitId(gitID int) (map[string]any, error) {
+	if gitID <= 0 {
+		return nil, errors.New(`git_id不合法`)
+	}
+	// 查询所有任务（包含已归档），按 id 倒序，取最近匹配的一条。
+	list, err := h.Client.QueryBySql(homeTaskListAllQuerySQL).All()
+	if err != nil {
+		return nil, err
+	}
+	for _, task := range list {
+		devConfigsStr := cast.ToString(task[`dev_configs`])
+		if devConfigsStr == `` || devConfigsStr == `[]` {
+			continue
+		}
+		var configs []map[string]any
+		if err := json.Unmarshal([]byte(devConfigsStr), &configs); err != nil {
+			continue
+		}
+		for _, cfg := range configs {
+			if cast.ToInt(cfg[`git_id`]) == gitID {
+				return cfg, nil
+			}
+		}
+	}
+	return map[string]any{}, nil
 }

@@ -68,11 +68,20 @@ func SmartLinkDownloadPath(c *gin.Context) {
 	}
 	err := component.PlaywrightClient.SmartLinkDownloadPath()
 	if err != nil {
-		gsgin.GinResponseError(c, fmt.Sprintf(`释放失败 %s`, err.Error()), nil)
+		gsgin.GinResponseError(c, fmt.Sprintf(`打开失败 %s`, err.Error()), nil)
 		return
 	}
-	gsgin.GinResponseSuccess(c, `释放成功`, ``)
+	gsgin.GinResponseSuccess(c, `打开成功`, ``)
 	return
+}
+
+func SmartLinkOpenDataDir(c *gin.Context) {
+	err := p_common.TOsClient.OpenDirWindows(gstool.DirPathFormatToWindows(component.EnvClient.WebkitDataPath))
+	if err != nil {
+		gsgin.GinResponseError(c, fmt.Sprintf(`打开失败 %s`, err.Error()), nil)
+		return
+	}
+	gsgin.GinResponseSuccess(c, `打开成功`, ``)
 }
 
 // SmartLinkList 获取列表
@@ -171,6 +180,7 @@ func SmartLinkAdd(c *gin.Context) {
 	_ = gsgin.GinPostBody(c, &dataMap)
 	var id any
 	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `filter_uris`, `smart_link_group_id`, `links`, `is_error_continue`, `open_num`, `open_type`, `weight`, `combine_type`, `download_finds`, `auto_close_second`, `channel`, `show_cookies`, `process_id`})
+	updateData[`combine_type`] = define.CombineTypeFix
 	if cast.ToInt(dataMap[`id`]) == 0 {
 		updateData[`create_time`] = time.Now().Unix()
 		updateData[`update_time`] = time.Now().Unix()
@@ -271,10 +281,11 @@ func SmartLinkRunPlaywright(c *gin.Context) {
 	for i := 0; i < openNum; i++ {
 		go func() {
 			//生成一个唯一ID
-			runUniqueId := p_common.TBaseClient.GetUnique(`playwright_run_`)
+			//runUniqueId := p_common.TBaseClient.GetUnique(`playwright_run_`)
 			streamFunc := func(name, msg string) {
 				//输出到前端
-				sse.Send(p_common.TMarkDownClient.Bold(label+`,`+runUniqueId) + ` ` + name + ` ` + msg + "\n")
+				gstool.FmtPrintlnLogTime(name + ` ` + msg)
+				//sse.Send(p_common.TMarkDownClient.Bold(label+`,`+runUniqueId) + ` ` + name + ` ` + msg + "\n")
 			}
 			streamFunc(`构建run_params`, `开始`)
 			runParams, runParamsErr := plw.GetRunParams(id, label, userName, password, openType, openNum, replaceList)
@@ -532,7 +543,7 @@ func SmartProcessItemAdd(c *gin.Context) {
 		return
 	}
 	var id any
-	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `wait_mills`, `is_async`, `append_to_replace`, `smart_link_process_id`, `type`, `locator`, `tip`, `value`, `out_key`, `check_key`, `weight`, `domain_limit`, `x`, `y`, `next_ids`})
+	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `wait_mills`, `is_async`, `is_error_continue`, `append_to_replace`, `smart_link_process_id`, `type`, `locator`, `tip`, `value`, `out_key`, `check_key`, `weight`, `domain_limit`, `x`, `y`, `next_ids`})
 	if cast.ToInt(dataMap[`id`]) == 0 {
 		updateData[`create_time`] = time.Now().Unix()
 		updateData[`update_time`] = time.Now().Unix()

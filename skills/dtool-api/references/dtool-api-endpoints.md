@@ -153,6 +153,24 @@
 - `data.dir`
 - `data.dir.children[]` 为接口列表
 
+### 5. 通过文件夹 ID 获取接口文档（Markdown）：`/api/FolderApisMarkdown`
+
+用途：
+
+- 通过文件夹 ID 获取该文件夹下所有接口的 Markdown 格式文档，格式与前端"复制所有接口(Markdown)"按钮完全一致
+
+请求：
+
+```json
+{
+  "folder_id": 12
+}
+```
+
+关键返回：
+
+- `data.markdown` — 完整的 Markdown 字符串，包含文件夹下所有接口的文档
+
 ## 三、接口列表与详情相关
 
 ### 1. 按集合和文件夹查询接口：`/api/Apis`
@@ -235,9 +253,68 @@
 | `body_form` | array | 表单参数数组（用于 form-urlencoded / multipart），见下方字段格式 |
 | `body_json` | string | JSON 请求体字符串（用于 application/json）               |
 | `body_raw` | string | 原始请求体（用于 text/plain / raw）                     |
-| `env_id` | int | 环境变量 ID                                        |
+| `env_id` | int | 接口绑定的环境 ID。绑定后，接口中的 `$变量Key$` 会从该环境下的变量项取值 |
 | `take_result` | array | 结果字段备注，**必须填写**，用于写入返回字段描述、字段含义、示例等备注结构，见下方格式  |
 | `take_result_desc` | string | 不需要处理                                          |
+
+#### 环境变量在接口中的使用方式
+
+接口可以在以下位置引用环境变量：
+
+- `url`，例如：`$Url$/v1/login`
+- `headers`，例如：`{"Cookie":"$Cookie$","Token":"$Token$"}`
+- `query_params[].value`
+- `body_form[].value`
+- `body_json`
+- `body_raw`
+
+引用格式统一为：
+
+```text
+$变量Key$
+```
+
+例如环境变量项的 `key` 为 `Cookie`、`Token`、`Url`，则接口里应写成：
+
+```json
+{
+  "url": "$Url$/api/user/info",
+  "headers": {
+    "Cookie": "$Cookie$",
+    "Token": "$Token$"
+  }
+}
+```
+
+#### env_id 与变量引用的关系
+
+1. 先在集合下创建环境，例如“测试环境”“预发环境”
+2. 再在该环境下创建若干环境变量项，例如 `Url`、`Cookie`、`Token`
+3. 创建或更新接口时，把接口的 `env_id` 指向目标环境
+4. 接口中的 `url`、`headers`、请求参数里再使用 `$变量Key$` 引用实际值
+
+如果接口里写了 `$Cookie$`、`$Token$`，但没有绑定正确的 `env_id`，或目标环境下不存在对应 `key`，运行接口时就无法得到正确的请求值。
+
+#### 登录态相关请求头的推荐写法
+
+对于登录后抓取得到的请求头，尤其是 `Cookie`、`Token`、`Authorization`、`X-Token` 等认证字段，不要把真实值直接固化在接口定义里，而应优先：
+
+1. 在集合环境下创建同名或语义清晰的变量项
+2. 将真实值写入变量项的 `value`
+3. 在接口 `headers` 中改为 `$变量Key$` 引用
+
+示例：
+
+```json
+{
+  "env_id": 5,
+  "headers": {
+    "Cookie": "$Cookie$",
+    "Token": "$Token$",
+    "Authorization": "$Authorization$"
+  }
+}
+```
 
 #### 返回结果字段写入规则
 
@@ -512,6 +589,67 @@
 }
 ```
 
+### 5. 环境变量如何应用到接口中
+
+典型步骤：
+
+1. 先调用 `/api/CollectionEnvs` 确认集合下要使用的环境，拿到 `env_id`
+2. 再调用 `/api/CollectionEnvItems` 查看该环境已有变量项
+3. 如果缺少所需变量，调用 `/api/CreateCollectionEnvItem` 创建，例如 `Url`、`Cookie`、`Token`
+4. 创建或更新接口时，调用 `/api/CreateApi`，把接口的 `env_id` 设为该环境 ID
+5. 将接口中的真实值改成 `$变量Key$` 形式，例如：
+   - `url`: `$Url$/api/order/list`
+   - `headers.Cookie`: `$Cookie$`
+   - `headers.Token`: `$Token$`
+
+接口示例：
+
+```json
+{
+  "folder_id": 12,
+  "collection_id": 1,
+  "name": "订单列表",
+  "method": "GET",
+  "url": "$Url$/api/order/list",
+  "protocol": "https",
+  "desc": "查询订单列表",
+  "headers": {
+    "Cookie": "$Cookie$",
+    "Token": "$Token$"
+  },
+  "query_params": [],
+  "content_type": "",
+  "body_form": [],
+  "body_json": "",
+  "body_raw": "",
+  "env_id": 5,
+  "take_result": [
+    {"key": "code", "type": "number", "desc": "状态码"},
+    {"key": "data.list", "type": "array", "desc": "订单列表"}
+  ]
+}
+```
+
+### 6. 使用登录态请求头更新环境变量的推荐流程
+
+当 AI 通过浏览器或其他方式拿到登录后的请求头时，推荐按以下顺序处理：
+
+1. 确认目标接口所属集合和目标环境
+2. 对每个需要复用的请求头，优先查找是否已有对应环境变量项
+3. 已存在则调用 `/api/CreateCollectionEnvItem` 并带 `id` 更新 `value`
+4. 不存在则新建环境变量项，`key` 建议与请求头名称一致或保持稳定命名
+5. 将所有相关接口的 `headers` 改成 `$变量Key$`
+6. 确保这些接口都绑定了正确的 `env_id`
+
+常见登录态请求头示例：
+
+- `Cookie` -> `$Cookie$`
+- `Token` -> `$Token$`
+- `Authorization` -> `$Authorization$`
+- `X-Token` -> `$X-Token$`
+
+**重要**：登录态值应写入集合环境变量，不要直接把真实 Cookie 或 Token 固化在接口 `headers` 中。
+
 ## 五、运行、调试与辅助能力
 
 ### 1. 运行接口：`/api/ApiRun`
@@ -524,6 +662,85 @@
 }
 ```
 
+参数说明：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | int | 要运行的接口 ID（必填） |
+
+完整响应示例：
+
+```json
+{
+  "code": 0,
+  "msg": "",
+  "data": {
+    "url": "https://example.com/v1/login",
+    "status_code": 200,
+    "errmsg": "",
+    "result": "{\"code\":0,\"data\":{\"token\":\"abc123\",\"user_id\":1001}}",
+    "status": "success",
+    "millisecond": 156,
+    "request_headers": {
+      "Content-Type": "application/json",
+      "Token": "***"
+    },
+    "response_headers": {
+      "Content-Type": "application/json; charset=utf-8",
+      "Date": "Tue, 29 Apr 2026 08:00:00 GMT"
+    },
+    "body_forms": [],
+    "body_raw": "{\"username\":\"demo\",\"password\":\"123456\"}",
+    "response_take": [
+      {
+        "description": "状态码，0表示成功",
+        "item_key": "code",
+        "value": "0",
+        "take_value": "0"
+      },
+      {
+        "description": "认证令牌",
+        "item_key": "data.token",
+        "value": "abc123",
+        "take_value": "abc123"
+      }
+    ],
+    "request_time": "2026-04-29 16:00:00"
+  }
+}
+```
+
+响应字段说明：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `url` | string | 实际请求的完整 URL（环境变量已替换） |
+| `status_code` | int | HTTP 状态码；未发出请求时为 0 |
+| `errmsg` | string | 请求错误描述（成功时为空） |
+| `result` | string | 接口返回的原始响应体（JSON 字符串） |
+| `status` | string | 请求状态（success / error） |
+| `millisecond` | int | 请求耗时（毫秒） |
+| `request_headers` | object | 实际发送的请求头 |
+| `response_headers` | object | 服务端返回的响应头 |
+| `body_forms` | array | 提交的 Form 参数（POST form 时） |
+| `body_raw` | string | 提交的原始请求体（JSON/raw 时） |
+| `response_take` | array | 按 take_result 配置自动提取的字段值 |
+| `request_time` | string | 发起请求的时间 |
+
+`response_take` 每项结构：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `description` | string | 字段描述（来自 take_result 的 desc） |
+| `item_key` | string | 字段路径（如 `data.token`） |
+| `value` | string | 实际值 |
+| `take_value` | string | 提取后的值 |
+
+> **注意**：
+> - 运行接口会实际发送 HTTP 请求，对写接口（POST/PUT/DELETE）请确认不会影响生产数据
+> - 接口自身未配置 `env_id` 时，会自动继承所属文件夹的 `env_id`
+> - 运行结果会自动保存到接口的 `last_result` 字段
+
 ### 2. 生成代码：`/api/ApiCode`
 
 请求：
@@ -532,6 +749,25 @@
 {
   "id": 201,
   "code_type": "curl bash(chrome)"
+}
+```
+
+参数说明：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | int | 接口 ID（必填） |
+| `code_type` | string | 代码类型，如 `"curl bash(chrome)"`（必填） |
+
+完整响应示例：
+
+```json
+{
+  "code": 0,
+  "msg": "",
+  "data": {
+    "code": "curl 'https://example.com/v1/login' \\\n  -H 'Content-Type: application/json' \\\n  --data-raw '{\"username\":\"demo\",\"password\":\"123456\"}'"
+  }
 }
 ```
 
@@ -552,9 +788,32 @@
 ```json
 {
   "id": 201,
-  "json": "{\"code\":0,\"data\":{\"token\":\"abc\"}}"
+  "json": "{\"code\":0,\"data\":{\"token\":\"abc\",\"user_id\":1001}}"
 }
 ```
+
+参数说明：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | int | 接口 ID（必填），用于匹配已有的 take_result 描述 |
+| `json` | string | JSON 字符串（必填），会自动提取所有叶子节点路径 |
+
+完整响应示例：
+
+```json
+{
+  "code": 0,
+  "msg": "",
+  "data": [
+    {"key": "code", "type": "number", "desc": "状态码，0表示成功"},
+    {"key": "data.token", "type": "string", "desc": "认证令牌"},
+    {"key": "data.user_id", "type": "number", "desc": ""}
+  ]
+}
+```
+
+> **用途**：分析接口返回的 JSON 结构，提取所有可用的字段路径，辅助完善 `take_result` 配置。已配置 `take_result` 的字段会自动带上 `desc`。
 
 ### 5. 批量导入接口：`/api/ApiBatchImport`
 
@@ -683,4 +942,49 @@ curl -X POST "http://localhost:17170/api/CreateApi" \
 curl -X POST "http://localhost:17170/api/ApiBatchImport" \
   -F "collection_id=1" \
   -F "json={\"collection_id\":1,\"items\":[{\"type\":\"folder\",\"name\":\"用户中心\",\"children\":[]}]}"
+```
+
+### 8. 运行接口
+
+```bash
+curl -X POST "http://localhost:17170/api/ApiRun" \
+  -H "Content-Type: application/json" \
+  -H "Token: 用户Token值" \
+  -d "{\"id\":201}"
+```
+
+### 9. 生成接口调用代码
+
+```bash
+curl -X POST "http://localhost:17170/api/ApiCode" \
+  -H "Content-Type: application/json" \
+  -H "Token: 用户Token值" \
+  -d "{\"id\":201,\"code_type\":\"curl bash(chrome)\"}"
+```
+
+### 10. 提取 JSON 响应路径
+
+```bash
+curl -X POST "http://localhost:17170/api/ApiTakeJsonResult" \
+  -H "Content-Type: application/json" \
+  -H "Token: 用户Token值" \
+  -d "{\"id\":201,\"json\":\"{\\\"code\\\":0,\\\"data\\\":{\\\"token\\\":\\\"abc\\\"}}\"}"
+```
+
+### 11. 查询集合环境
+
+```bash
+curl -X POST "http://localhost:17170/api/CollectionEnvs" \
+  -H "Content-Type: application/json" \
+  -H "Token: 用户Token值" \
+  -d "{\"collection_id\":1}"
+```
+
+### 12. 查询环境变量
+
+```bash
+curl -X POST "http://localhost:17170/api/CollectionEnvItems" \
+  -H "Content-Type: application/json" \
+  -H "Token: 用户Token值" \
+  -d "{\"collection_id\":1,\"env_id\":5}"
 ```

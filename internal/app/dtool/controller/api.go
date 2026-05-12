@@ -5,6 +5,7 @@ import (
 	"dev_tool/internal/app/dtool/common"
 	"dev_tool/internal/app/dtool/define"
 	"dev_tool/internal/pkg/p_curl"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -195,18 +196,24 @@ func ApiDeleteApi(c *gin.Context) {
 func ApiDeleteDir(c *gin.Context) {
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
-	if cast.ToInt(dataMap[`id`]) == 0 {
-		gsgin.GinResponseError(c, `请选择集合`, nil)
+	folderId := cast.ToInt(dataMap[`id`])
+	collectionId := cast.ToInt(dataMap[`collection_id`])
+	if folderId == 0 {
+		gsgin.GinResponseError(c, `请选择文件夹`, nil)
 		return
-	} else {
-		_, _ = common.DbMain.Client.QuickDelete(`tbl_api_dir`,
-			map[string]any{
-				`id`: dataMap[`id`],
-			}).Exec()
 	}
-	go BroadcastApiChange(c.GetHeader("SseClientId"), `folder_deleted`, map[string]any{
-		`collection_id`: cast.ToInt(dataMap[`collection_id`]),
-		`folder_id`:     cast.ToInt(dataMap[`id`]),
+	// 软删除：标记为归档，记录原始集合ID
+	_, err := common.DbMain.Client.ExecBySql(
+		`UPDATE tbl_api_dir SET archived = 1, original_collection_id = ?, update_time = ? WHERE id = ?`,
+		collectionId, time.Now().Unix(), folderId,
+	).Exec()
+	if err != nil {
+		gsgin.GinResponseError(c, `删除失败 `+err.Error(), nil)
+		return
+	}
+	go BroadcastApiChange(c.GetHeader("SseClientId"), `folder_archived`, map[string]any{
+		`collection_id`: collectionId,
+		`folder_id`:     folderId,
 	})
 	gsgin.GinResponseSuccess(c, ``, nil)
 }
@@ -277,15 +284,22 @@ select c.id,
        c.update_time,
        count(d.id) as child_count
 from tbl_api_collection c
-left join tbl_api_dir d on d.collection_id = c.id
+left join tbl_api_dir d on d.collection_id = c.id and d.archived = 0
 group by c.id, c.name, c.create_time, c.update_time
 order by c.id asc`).All()
 	result := make([]map[string]any, 0, len(list))
 	for _, item := range list {
 		result = append(result, buildCollectionBasicInfo(item))
 	}
+	// query archive folder count
+	archiveRows, _ := common.DbMain.Client.QueryBySql(`select count(*) as cnt from tbl_api_dir where archived = 1`).All()
+	archiveCount := 0
+	if len(archiveRows) > 0 {
+		archiveCount = cast.ToInt(archiveRows[0][`cnt`])
+	}
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
-		`list`: result,
+		`list`:          result,
+		`archive_count`: archiveCount,
 	})
 }
 
@@ -309,7 +323,7 @@ select d.id,
        count(a.id) as child_count
 from tbl_api_dir d
 left join tbl_api a on a.folder_id = d.id
-where d.collection_id = ?
+where d.collection_id = ? and d.archived = 0
 group by d.id, d.collection_id, d.name, d.headers, d.env_id, d.create_time, d.update_time
 order by d.id asc`, collectionId).All()
 	result := make([]map[string]any, 0, len(list))
@@ -1163,5 +1177,352 @@ func ApiFolderDetail(c *gin.Context) {
 	dir[`children`] = apis
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`dir`: dir,
+	})
+}
+
+// ApiArchiveFolderList 查询所有已归档的文件夹列表。
+func ApiArchiveFolderList(c *gin.Context) {
+	list, _ := common.DbMain.Client.QueryBySql(`
+select d.id,
+       d.name,
+       d.headers,
+       d.env_id,
+       d.original_collection_id,
+       d.create_time,
+       d.update_time,
+       count(a.id) as child_count
+from tbl_api_dir d
+left join tbl_api a on a.folder_id = d.id
+where d.archived = 1
+group by d.id, d.name, d.headers, d.env_id, d.original_collection_id, d.create_time, d.update_time
+order by d.update_time desc`).All()
+	result := make([]map[string]any, 0, len(list))
+	for _, item := range list {
+		result = append(result, buildFolderBasicInfo(item))
+	}
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`list`: result,
+	})
+}
+
+// ApiRestoreFolder 从归档中恢复文件夹到原集合。
+func ApiRestoreFolder(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	folderId := cast.ToInt(dataMap[`id`])
+	if folderId == 0 {
+		gsgin.GinResponseError(c, `请选择文件夹`, nil)
+		return
+	}
+	folderInfo, _ := common.DbMain.Client.QueryBySql(
+		`SELECT original_collection_id FROM tbl_api_dir WHERE id = ?`, folderId,
+	).One()
+	if folderInfo == nil {
+		gsgin.GinResponseError(c, `文件夹不存在`, nil)
+		return
+	}
+	originalCollectionId := cast.ToInt(folderInfo[`original_collection_id`])
+	if originalCollectionId == 0 {
+		gsgin.GinResponseError(c, `无法确定原集合，请手动迁移`, nil)
+		return
+	}
+	_, _ = common.DbMain.Client.QueryBySql(
+		`UPDATE tbl_api_dir SET archived = 0, collection_id = ?, update_time = ? WHERE id = ?`,
+		originalCollectionId, time.Now().Unix(), folderId,
+	).Exec()
+	go BroadcastApiChange(c.GetHeader("SseClientId"), `folder_restored`, map[string]any{
+		`collection_id`: originalCollectionId,
+		`folder_id`:     folderId,
+	})
+	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
+// ApiPermanentDeleteDir 永久删除归档文件夹及其下所有接口。
+func ApiPermanentDeleteDir(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	folderId := cast.ToInt(dataMap[`id`])
+	if folderId == 0 {
+		gsgin.GinResponseError(c, `请选择文件夹`, nil)
+		return
+	}
+	// 删除该文件夹下的所有接口
+	_, _ = common.DbMain.Client.QueryBySql(
+		`DELETE FROM tbl_api WHERE folder_id = ?`, folderId,
+	).Exec()
+	// 删除文件夹
+	_, _ = common.DbMain.Client.QueryBySql(
+		`DELETE FROM tbl_api_dir WHERE id = ? AND archived = 1`, folderId,
+	).Exec()
+	go BroadcastApiChange(c.GetHeader("SseClientId"), `folder_permanent_deleted`, map[string]any{
+		`folder_id`: folderId,
+	})
+	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
+// parseJsonArrayMap 解析 JSON 数组字符串为 map 切片。
+func parseJsonArrayMap(s string) []map[string]any {
+	result := make([]map[string]any, 0)
+	if s == `` {
+		return result
+	}
+	_ = gstool.JsonDecode(s, &result)
+	return result
+}
+
+// formatMarkdownTimestamp 格式化 Unix 时间戳为可读字符串。
+func formatMarkdownTimestamp(unixTimestamp int64) string {
+	if unixTimestamp == 0 {
+		return `未知时间`
+	}
+	return time.Unix(unixTimestamp, 0).Format(`2006-01-02 15:04:05`)
+}
+
+// formatMarkdownBlockquote 将内容格式化为 Markdown 引用块。
+func formatMarkdownBlockquote(content string) string {
+	if content == `` {
+		return ``
+	}
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		if line == `` {
+			lines[i] = `>`
+		} else {
+			lines[i] = `> ` + line
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// formatEnterToMarkdown 将换行符替换为 <br> 并合并多余空格。
+func formatEnterToMarkdown(data string) string {
+	if data == `` {
+		return ``
+	}
+	replacer := strings.NewReplacer("\r\n", "<br>", "\n", "<br>", "\r", "<br>")
+	result := replacer.Replace(data)
+	var sb strings.Builder
+	prevSpace := false
+	for _, r := range result {
+		if r == ' ' {
+			if prevSpace {
+				continue
+			}
+			prevSpace = true
+		} else {
+			prevSpace = false
+		}
+		sb.WriteRune(r)
+	}
+	return strings.TrimSpace(sb.String())
+}
+
+// formatJsonBodyStr 格式化 JSON 字符串为缩进格式。
+func formatJsonBodyStr(s string) string {
+	var obj any
+	if gstool.JsonDecode(s, &obj) == nil {
+		b, err := json.MarshalIndent(obj, "", "  ")
+		if err == nil {
+			return string(b)
+		}
+	}
+	return s
+}
+
+// formatJsonValue 格式化任意值为缩进 JSON 字符串。
+func formatJsonValue(val any) string {
+	b, err := json.MarshalIndent(val, "", "  ")
+	if err == nil {
+		return string(b)
+	}
+	return fmt.Sprintf("%v", val)
+}
+
+// hasApiBodyContent 判断接口是否有请求体内容。
+func hasApiBodyContent(apiItem map[string]any) bool {
+	contentType := cast.ToString(apiItem[`content_type`])
+	if contentType == `application/json` {
+		bodyJson := cast.ToString(apiItem[`body_json`])
+		if bodyJson != `` {
+			var parsed map[string]any
+			if gstool.JsonDecode(bodyJson, &parsed) == nil && len(parsed) > 0 {
+				return true
+			}
+		}
+	} else if contentType == `application/x-www-form-urlencoded` || contentType == `multipart/form-data` {
+		bodyForm := cast.ToString(apiItem[`body_form`])
+		if bodyForm != `` {
+			parsed := make([]map[string]any, 0)
+			if gstool.JsonDecode(bodyForm, &parsed) == nil && len(parsed) > 0 {
+				return true
+			}
+		}
+	}
+	if bodyRaw := cast.ToString(apiItem[`body_raw`]); bodyRaw != `` {
+		return true
+	}
+	return false
+}
+
+// replaceApiEnvVars 替换 URL 中的环境变量占位符。
+func replaceApiEnvVars(url string, envItems []map[string]any) string {
+	for _, item := range envItems {
+		key := cast.ToString(item[`key`])
+		value := cast.ToString(item[`value`])
+		if key != `` && value != `` {
+			url = strings.ReplaceAll(url, `$`+key+`$`, value)
+		}
+	}
+	return url
+}
+
+// buildFolderApisMarkdown 根据文件夹 ID 生成该文件夹下所有接口的 Markdown 文档。
+func buildFolderApisMarkdown(folderId int) string {
+	if folderId <= 0 {
+		return ``
+	}
+	dir, _ := common.DbMain.Client.QuickQuery(`tbl_api_dir`, `*`, map[string]any{
+		`id`: folderId,
+	}).One()
+	if len(dir) == 0 {
+		return ``
+	}
+	folderName := cast.ToString(dir[`name`])
+	apis, _ := common.DbMain.Client.QuickQuery(`tbl_api`, `*`, map[string]any{
+		`folder_id`: folderId,
+	}).Order(`weight,id asc`).All()
+	dirEnvId := cast.ToInt(dir[`env_id`])
+	dirEnvItems := make([]map[string]any, 0)
+	if dirEnvId > 0 {
+		dirEnvItems, _ = common.DbMain.Client.QuickQuery(`tbl_api_env_item`, `*`, map[string]any{
+			`env_id`: dirEnvId,
+		}).All()
+	}
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf(`## %s 接口文档`, folderName))
+	sb.WriteString("\n\n")
+	for i, apiItem := range apis {
+		sb.WriteString(fmt.Sprintf(`### %d. %s`, i+1, cast.ToString(apiItem[`name`])))
+		sb.WriteString("\n\n")
+		sb.WriteString("| 项目 | 详情 |\n")
+		sb.WriteString("| --- | --- |\n")
+		apiMethod := cast.ToString(apiItem[`method`])
+		apiUrl := cast.ToString(apiItem[`url`])
+		contentType := cast.ToString(apiItem[`content_type`])
+		apiEnvId := cast.ToInt(apiItem[`env_id`])
+		if apiEnvId > 0 && apiEnvId != dirEnvId {
+			apiEnvItems, _ := common.DbMain.Client.QuickQuery(`tbl_api_env_item`, `*`, map[string]any{
+				`env_id`: apiEnvId,
+			}).All()
+			apiUrl = replaceApiEnvVars(apiUrl, apiEnvItems)
+		} else {
+			apiUrl = replaceApiEnvVars(apiUrl, dirEnvItems)
+		}
+		sb.WriteString(fmt.Sprintf("| 请求URL | `%s` `%s` |\n", apiMethod, apiUrl))
+		hasBody := hasApiBodyContent(apiItem)
+		if hasBody {
+			sb.WriteString(fmt.Sprintf("| 请求类型 | `%s` |\n", contentType))
+		}
+		sb.WriteString(fmt.Sprintf("| 创建时间 | %s |\n", formatMarkdownTimestamp(cast.ToInt64(apiItem[`create_time`]))))
+		sb.WriteString("\n")
+		desc := cast.ToString(apiItem[`desc`])
+		if desc != `` {
+			sb.WriteString("备注\n\n")
+			sb.WriteString(formatMarkdownBlockquote(desc))
+			sb.WriteString("\n\n")
+		}
+		queryParams := parseJsonArrayMap(cast.ToString(apiItem[`query_params`]))
+		if len(queryParams) > 0 {
+			sb.WriteString("请求参数\n\n")
+			sb.WriteString("| 字段名 | 类型 | 值 | 描述 |\n")
+			sb.WriteString("| --- | --- | --- | --- |\n")
+			for _, param := range queryParams {
+				sb.WriteString(fmt.Sprintf("| %s | %s | %s | %s |\n",
+					cast.ToString(param[`field`]),
+					cast.ToString(param[`type`]),
+					cast.ToString(param[`value`]),
+					formatEnterToMarkdown(cast.ToString(param[`description`]))))
+			}
+			sb.WriteString("\n")
+		}
+		if hasBody {
+			sb.WriteString("请求体\n\n")
+			if contentType == `application/json` {
+				bodyJson := cast.ToString(apiItem[`body_json`])
+				var parsed map[string]any
+				if gstool.JsonDecode(bodyJson, &parsed) == nil && len(parsed) > 0 {
+					sb.WriteString("json\n")
+					sb.WriteString(formatJsonBodyStr(bodyJson))
+					sb.WriteString("\n\n")
+				}
+			} else if contentType == `application/x-www-form-urlencoded` || contentType == `multipart/form-data` {
+				bodyForm := parseJsonArrayMap(cast.ToString(apiItem[`body_form`]))
+				if len(bodyForm) > 0 {
+					sb.WriteString("| 字段名 | 类型 | 值 | 描述 |\n")
+					sb.WriteString("| --- | --- | --- | --- |\n")
+					for _, param := range bodyForm {
+						sb.WriteString(fmt.Sprintf("| %s | %s | %s | %s |\n",
+							cast.ToString(param[`field`]),
+							cast.ToString(param[`type`]),
+							cast.ToString(param[`value`]),
+							formatEnterToMarkdown(cast.ToString(param[`description`]))))
+					}
+					sb.WriteString("\n")
+				}
+			} else if bodyRaw := cast.ToString(apiItem[`body_raw`]); bodyRaw != `` {
+				sb.WriteString("\n" + bodyRaw + "\n```\n\n")
+			}
+		}
+		takeResultData := parseJsonArrayMap(cast.ToString(apiItem[`take_result`]))
+		if len(takeResultData) > 0 {
+			sb.WriteString("返回结果说明\n\n")
+			sb.WriteString("| 字段名 | 类型 | 说明 |\n")
+			sb.WriteString("| --- | --- | --- |\n")
+			for _, item := range takeResultData {
+				sb.WriteString(fmt.Sprintf("| %s | %s | %s |\n",
+					cast.ToString(item[`key`]),
+					cast.ToString(item[`type`]),
+					cast.ToString(item[`desc`])))
+			}
+			sb.WriteString("\n")
+		}
+		lastResult := cast.ToString(apiItem[`last_result`])
+		if lastResult != `` && lastResult != `{}` && lastResult != `null` {
+			sb.WriteString("返回结果示例\n\n")
+			var lastResultData map[string]any
+			if gstool.JsonDecode(lastResult, &lastResultData) == nil {
+				if resultVal, exists := lastResultData[`result`]; exists {
+					sb.WriteString(formatMarkdownBlockquote(formatJsonValue(resultVal)))
+				} else {
+					sb.WriteString(formatMarkdownBlockquote(formatJsonValue(lastResultData)))
+				}
+			} else {
+				sb.WriteString(formatMarkdownBlockquote(lastResult))
+			}
+			sb.WriteString("\n\n")
+		}
+		if i < len(apis)-1 {
+			sb.WriteString("---\n\n")
+		}
+	}
+	return sb.String()
+}
+
+// ApiFolderApisMarkdown 通过文件夹 ID 获取接口文档（Markdown 格式），格式与前端"复制所有接口(Markdown)"按钮一致。
+func ApiFolderApisMarkdown(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	folderId := cast.ToInt(dataMap[`folder_id`])
+	if folderId <= 0 {
+		gsgin.GinResponseError(c, `请选择文件夹`, nil)
+		return
+	}
+	markdown := buildFolderApisMarkdown(folderId)
+	if markdown == `` {
+		gsgin.GinResponseError(c, `文件夹不存在或无接口`, nil)
+		return
+	}
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`markdown`: markdown,
 	})
 }

@@ -5,6 +5,8 @@ import (
 	"dev_tool/internal/app/dtool/component"
 	"dev_tool/internal/app/dtool/define"
 	_struct "dev_tool/internal/app/dtool/struct"
+	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -12,6 +14,11 @@ import (
 	"gitee.com/Sxiaobai/gs/v2/gstool"
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/cast"
+)
+
+const (
+	homeTaskApiDevDisabled = 0
+	homeTaskApiDevEnabled  = 1
 )
 
 // HomeTaskList 查询首页任务列表。
@@ -33,47 +40,120 @@ func HomeTaskList(c *gin.Context) {
 func HomeTaskSave(c *gin.Context) {
 	request := _struct.HomeTaskSaveRequest{}
 	_ = gsgin.GinPostBody(c, &request)
-	memoryFragmentID, err := ensureHomeTaskMemoryFragment(
-		request.ID, request.Name, normalizeHomeTaskMemoryFragmentID(request.MemoryFragmentID),
-		request.TapdUrl, request.ApiHost, request.ApiToken,
-	)
+
+	useWorkflow := request.UseWorkflow
+	if useWorkflow != 0 {
+		useWorkflow = 1
+	}
+
+	var memoryFragmentID string
+	if useWorkflow == 1 {
+		var err error
+		memoryFragmentID, err = ensureHomeTaskMemoryFragment(
+			request.ID, request.Name, normalizeHomeTaskMemoryFragmentID(request.MemoryFragmentID),
+			request.TapdUrl, request.ApiHost, request.ApiToken,
+		)
+		if err != nil {
+			gsgin.GinResponseError(c, err.Error(), nil)
+			return
+		}
+	}
+
+	// 解析 dev_configs JSON，从中派生旧字段实现向后兼容。
+	devConfigsJSON := resolveHomeTaskDevConfigsJSON(&request)
+	var devConfigs []_struct.DevConfig
+	_ = json.Unmarshal([]byte(devConfigsJSON), &devConfigs)
+
+	// 从 dev_configs 派生 git_ids。
+	gitIDsJSON := resolveHomeTaskGitIDsJSON(&request)
+	if len(devConfigs) > 0 {
+		var gitIDs []int
+		for _, cfg := range devConfigs {
+			if cfg.GitID > 0 {
+				gitIDs = append(gitIDs, cfg.GitID)
+			}
+		}
+		if len(gitIDs) > 0 {
+			gitIDsBytes, _ := json.Marshal(gitIDs)
+			gitIDsJSON = string(gitIDsBytes)
+		}
+	}
+
+	// 从 dev_configs 派生 api_dev_entries。
+	apiDevEntriesJSON := `[]`
+	var apiEntries []_struct.ApiDevEntry
+	for _, cfg := range devConfigs {
+		if cfg.CollectionID > 0 {
+			apiEntries = append(apiEntries, _struct.ApiDevEntry{CollectionID: cfg.CollectionID, DirID: cfg.DirID})
+		}
+	}
+	if len(apiEntries) > 0 {
+		entriesBytes, _ := json.Marshal(apiEntries)
+		apiDevEntriesJSON = string(entriesBytes)
+	} else {
+		apiDevEntriesJSON = resolveHomeTaskApiDevEntriesJSON(&request)
+	}
+
+	// 自动创建文件夹：遍历 dev_configs 中每个 dir_id=0 且 collection_id>0 的条目。
+	devConfigsJSON = autoCreateHomeTaskDevConfigDirs(request.Name, devConfigsJSON)
+	_ = json.Unmarshal([]byte(devConfigsJSON), &devConfigs)
+
+	apiDevEnabled := request.ApiDevEnabled
+	apiCollectionID := request.ApiCollectionID
+	apiDirID := request.ApiDirID
+	if len(apiEntries) > 0 {
+		apiDevEnabled = homeTaskApiDevEnabled
+		apiCollectionID = apiEntries[0].CollectionID
+		apiDirID = apiEntries[0].DirID
+	}
+	// 重新从 dev_configs 读取（dir_id 可能已被自动创建更新）。
+	if len(devConfigs) > 0 {
+		for i := range apiEntries {
+			for _, cfg := range devConfigs {
+				if cfg.CollectionID == apiEntries[i].CollectionID {
+					apiEntries[i].DirID = cfg.DirID
+				}
+			}
+		}
+		entriesBytes, _ := json.Marshal(apiEntries)
+		apiDevEntriesJSON = string(entriesBytes)
+		apiDirID = devConfigs[0].DirID
+	}
+
+	// 兼容旧字段：从 git_ids 回填 git_id。
+	var gitIDs []int
+	if json.Unmarshal([]byte(gitIDsJSON), &gitIDs) == nil && len(gitIDs) > 0 {
+		request.GitID = gitIDs[0]
+	}
+
+	// 兼容旧字段：从 dev_configs 回填 mysql_id。
+	if len(devConfigs) > 0 && devConfigs[0].MysqlID > 0 {
+		request.MysqlID = devConfigs[0].MysqlID
+	}
+
+	info, err := common.DbMain.HomeTaskSave(request.ID, request.Name, request.TaskStatus, request.StartTime, memoryFragmentID, request.TapdUrl, request.GitID, apiDevEnabled, apiCollectionID, apiDirID, request.MysqlID, gitIDsJSON, apiDevEntriesJSON, devConfigsJSON, useWorkflow)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	info, err := common.DbMain.HomeTaskSave(request.ID, request.Name, request.TaskStatus, request.StartTime, memoryFragmentID, request.TapdUrl)
+	if request.ID <= 0 && useWorkflow == 1 {
+		_, _ = common.DbMain.TaskWorkflowCreateOrGetByHomeTaskID(cast.ToInt(info[`id`]))
+	}
+	enrichHomeTaskListWithMemoryFragment([]map[string]any{info})
+
+	gsgin.GinResponseSuccess(c, ``, info)
+}
+
+// HomeTaskInfo 查询单条首页任务详情。
+func HomeTaskInfo(c *gin.Context) {
+	request := _struct.HomeTaskDeleteRequest{}
+	_ = gsgin.GinPostBody(c, &request)
+	info, err := common.DbMain.HomeTaskRow(request.ID)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
 	enrichHomeTaskListWithMemoryFragment([]map[string]any{info})
-
-	// 新建任务且指定了 tapd_url 时，自动创建 TAPD 网页抓取异步任务。
-	if strings.TrimSpace(request.TapdUrl) != `` && request.ID <= 0 && strings.TrimSpace(memoryFragmentID) != `` {
-		taskName := strings.TrimSpace(request.Name)
-		_, asyncErr := createAsyncTask(
-			asyncTaskTypeHomeTaskTapdScrape,
-			"抓取TAPD网页: "+taskName,
-			cast.ToString(info[`id`]),
-			map[string]any{
-				`tapd_url`:           request.TapdUrl,
-				`memory_fragment_id`: memoryFragmentID,
-				`task_name`:          taskName,
-			},
-			func(asyncTaskID int) {
-				runAsyncTaskAndPersistResult(asyncTaskID, func() (map[string]any, error) {
-					return buildAsyncHomeTaskTapdScrapeResultWithLog(request.TapdUrl, memoryFragmentID, func(step, message string) {
-						appendAsyncTaskRunLog(asyncTaskID, step, message)
-						BroadcastAsyncTasksUpdate()
-					})
-				})
-			},
-		)
-		if asyncErr != nil {
-			gstool.FmtPrintlnLogTime(`[HomeTaskSave] 创建 TAPD 抓取异步任务失败 err=%s`, asyncErr.Error())
-		}
-	}
-
 	gsgin.GinResponseSuccess(c, ``, info)
 }
 
@@ -116,6 +196,18 @@ func HomeTaskDelete(c *gin.Context) {
 }
 
 // HomeTaskDailyReportGenerate 创建首页工作日报异步任务。 // HomeTaskDailyReportGenerate creates an async home-task daily report task.
+
+// HomeTaskLastDevConfigByGitId 根据 Git 仓库 ID 查找最近一个使用该仓库的任务的开发配置。
+func HomeTaskLastDevConfigByGitId(c *gin.Context) {
+	request := _struct.HomeTaskLastDevConfigByGitIdRequest{}
+	_ = gsgin.GinPostBody(c, &request)
+	cfg, err := common.DbMain.HomeTaskLastDevConfigByGitId(request.GitID)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	gsgin.GinResponseSuccess(c, ``, cfg)
+}
 func HomeTaskDailyReportGenerate(c *gin.Context) {
 	if _, ok := memoryDBOrResponse(c); !ok {
 		return
@@ -194,18 +286,7 @@ func shouldAutoCreateHomeTaskMemoryFragment(taskID int, memoryFragmentID string)
 }
 
 func buildHomeTaskFragmentContent(taskName string, tapdUrl string, apiHost string, apiToken string) string {
-	content := "# " + taskName + "\n\n"
-	promptTemplate, _ := common.DbMain.HomeTaskConfigValue(define.HomeTaskConfigFragmentPrompt)
-	promptTemplate = strings.TrimSpace(promptTemplate)
-	if promptTemplate == `` {
-		return content
-	}
-	resolved := promptTemplate
-	resolved = strings.ReplaceAll(resolved, "{tapd_url}", tapdUrl)
-	resolved = strings.ReplaceAll(resolved, "{api_host}", apiHost)
-	resolved = strings.ReplaceAll(resolved, "{api_token}", apiToken)
-	content += resolved + "\n"
-	return content
+	return "# " + taskName + "\n"
 }
 
 func normalizeHomeTaskMemoryFragmentID(raw any) string {
@@ -249,4 +330,188 @@ func enrichHomeTaskListWithMemoryFragment(list []map[string]any) {
 			`missing`: false,
 		}
 	}
+}
+
+// autoCreateHomeTaskApiDir 自动在指定集合下创建接口文件夹，返回文件夹 ID。
+func autoCreateHomeTaskApiDir(taskName string, collectionID int) (int, error) {
+	taskName = strings.TrimSpace(taskName)
+	if taskName == `` {
+		taskName = `默认文件夹`
+	}
+	now := time.Now().Unix()
+	dirData := map[string]any{
+		`name`:          taskName,
+		`collection_id`: collectionID,
+		`headers`:       `{}`,
+		`create_time`:   now,
+		`update_time`:   now,
+	}
+	newID, err := common.DbMain.Client.QuickCreate(`tbl_api_dir`, dirData).Exec()
+	if err != nil {
+		return 0, err
+	}
+	return cast.ToInt(newID), nil
+}
+
+// resolveHomeTaskGitIDsJSON 解析 git_ids JSON，若前端未传则从旧字段回退。
+func resolveHomeTaskGitIDsJSON(req *_struct.HomeTaskSaveRequest) string {
+	raw := strings.TrimSpace(req.GitIds)
+	if raw != `` && raw != `[]` {
+		var ids []int
+		if err := json.Unmarshal([]byte(raw), &ids); err == nil && len(ids) > 0 {
+			return raw
+		}
+	}
+	if req.GitID > 0 {
+		bytes, _ := json.Marshal([]int{req.GitID})
+		return string(bytes)
+	}
+	return `[]`
+}
+
+// resolveHomeTaskApiDevEntriesJSON 解析 api_dev_entries JSON，若前端未传则从旧字段回退。
+func resolveHomeTaskApiDevEntriesJSON(req *_struct.HomeTaskSaveRequest) string {
+	raw := strings.TrimSpace(req.ApiDevEntries)
+	if raw != `` && raw != `[]` {
+		var entries []_struct.ApiDevEntry
+		if err := json.Unmarshal([]byte(raw), &entries); err == nil && len(entries) > 0 {
+			return raw
+		}
+	}
+	if req.ApiCollectionID > 0 {
+		entry := _struct.ApiDevEntry{CollectionID: req.ApiCollectionID, DirID: req.ApiDirID}
+		bytes, _ := json.Marshal([]_struct.ApiDevEntry{entry})
+		return string(bytes)
+	}
+	return `[]`
+}
+
+// autoCreateHomeTaskApiDirs 为 api_dev_entries 中每个没有 dir_id 的条目自动创建文件夹，返回更新后的 JSON。
+func autoCreateHomeTaskApiDirs(taskName string, entriesJSON string) string {
+	var entries []_struct.ApiDevEntry
+	if err := json.Unmarshal([]byte(entriesJSON), &entries); err != nil {
+		return entriesJSON
+	}
+	changed := false
+	for i, entry := range entries {
+		if entry.CollectionID > 0 && entry.DirID <= 0 {
+			dirID, err := autoCreateHomeTaskApiDir(taskName, entry.CollectionID)
+			if err != nil {
+				continue
+			}
+			entries[i].DirID = dirID
+			changed = true
+		}
+	}
+	if !changed {
+		return entriesJSON
+	}
+	bytes, _ := json.Marshal(entries)
+	return string(bytes)
+}
+
+// resolveHomeTaskDevConfigsJSON 解析 dev_configs JSON，若前端未传则从旧字段回退构建。
+func resolveHomeTaskDevConfigsJSON(req *_struct.HomeTaskSaveRequest) string {
+	raw := strings.TrimSpace(req.DevConfigs)
+	if raw != `` && raw != `[]` {
+		var configs []_struct.DevConfig
+		if err := json.Unmarshal([]byte(raw), &configs); err == nil && len(configs) > 0 {
+			return raw
+		}
+	}
+	// 从旧字段回退构建一个 dev_config 条目。
+	cfg := _struct.DevConfig{
+		GitID:        req.GitID,
+		CollectionID: req.ApiCollectionID,
+		DirID:        req.ApiDirID,
+	}
+	if cfg.GitID > 0 || cfg.CollectionID > 0 {
+		bytes, _ := json.Marshal([]_struct.DevConfig{cfg})
+		return string(bytes)
+	}
+	return `[]`
+}
+
+// autoCreateHomeTaskDevConfigDirs 为 dev_configs 中每个 dir_id=0 且 collection_id>0 的条目自动创建文件夹。
+func autoCreateHomeTaskDevConfigDirs(taskName string, configsJSON string) string {
+	var configs []_struct.DevConfig
+	if err := json.Unmarshal([]byte(configsJSON), &configs); err != nil {
+		return configsJSON
+	}
+	changed := false
+	for i, cfg := range configs {
+		if cfg.CollectionID > 0 && cfg.DirID <= 0 {
+			dirID, err := autoCreateHomeTaskApiDir(taskName, cfg.CollectionID)
+			if err != nil {
+				continue
+			}
+			configs[i].DirID = dirID
+			changed = true
+		}
+	}
+	if !changed {
+		return configsJSON
+	}
+	bytes, _ := json.Marshal(configs)
+	return string(bytes)
+}
+
+// HomeTaskBranchNameGenerate 使用 AI 生成分支名。
+func HomeTaskBranchNameGenerate(c *gin.Context) {
+	if _, ok := memoryDBOrResponse(c); !ok {
+		return
+	}
+	request := _struct.HomeTaskBranchNameGenerateRequest{}
+	_ = gsgin.GinPostBody(c, &request)
+	taskName := strings.TrimSpace(request.TaskName)
+	parentBranch := strings.TrimSpace(request.ParentBranch)
+	if taskName == "" {
+		gsgin.GinResponseError(c, "任务名称不能为空", nil)
+		return
+	}
+
+	modelIDText, err := common.DbMain.HomeTaskConfigValue(define.HomeTaskConfigBranchNameModelID)
+	if err != nil && !common.DbRowMissing(err) {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	modelID := cast.ToInt(modelIDText)
+	if modelID <= 0 {
+		gsgin.GinResponseError(c, "请先在设置中配置分支名生成模型", nil)
+		return
+	}
+	modelInfo, err := common.DbMain.AiModelInfo(modelID)
+	if err != nil {
+		gsgin.GinResponseError(c, "当前分支名生成模型不可用", nil)
+		return
+	}
+	if strings.ToLower(cast.ToString(modelInfo["model_type"])) != "llm" {
+		gsgin.GinResponseError(c, "分支名生成仅支持 LLM 模型", nil)
+		return
+	}
+
+	prompt, err := common.DbMain.HomeTaskConfigValue(define.HomeTaskConfigBranchNamePrompt)
+	if err != nil && !common.DbRowMissing(err) {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	prompt = strings.TrimSpace(prompt)
+	if prompt == "" {
+		prompt = "请根据以下信息生成分支名：\n需求名：{需求名}\n基于分支：{父分支}\n\n要求：只输出分支名，不要附加解释。分支名使用英文小写，单词间用下划线连接，格式如 feature_xxx 或 fix_xxx。"
+	}
+	prompt = strings.ReplaceAll(prompt, "{需求名}", taskName)
+	prompt = strings.ReplaceAll(prompt, "{父分支}", parentBranch)
+
+	systemPrompt := "你是一个分支名生成助手。根据用户提供的任务信息生成合适的 Git 分支名。只输出分支名本身，不要附加任何解释或说明。"
+	result, _, err := common.DbMain.AIChatByModel(modelID, systemPrompt, prompt)
+	if err != nil {
+		gsgin.GinResponseError(c, fmt.Sprintf("生成分支名失败：%s", err.Error()), nil)
+		return
+	}
+	result = strings.TrimSpace(result)
+	result = strings.Trim(result, "`")
+	result = strings.TrimSpace(result)
+	gsgin.GinResponseSuccess(c, "", map[string]any{
+		"branch_name": result,
+	})
 }

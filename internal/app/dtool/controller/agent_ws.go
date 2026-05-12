@@ -353,5 +353,7 @@ func BuildAgentRunParams(runParams *plw.PlaywrightRunParams) define.AgentRunPara
 		Channel:             runParams.Channel,
 		FilterUris:          runParams.FilterUris,
 		ShowCookies:         runParams.ShowCookies,
+		DirectoryMappingKey: runParams.DirectoryMappingKey,
+		AccountKey:          runParams.AccountKey,
 	}
 }

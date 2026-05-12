@@ -20,11 +20,6 @@ type TaskRunner struct {
 	mu          sync.Mutex
 }
 
-// resolveAgentTaskCombineType 统一 Agent 任务的会话目录策略。
-func resolveAgentTaskCombineType(taskType define.AgentTaskType, combineType int) (int, bool) {
-	return combineType, false
-}
-
 // summarizeAgentTaskData 输出 Agent 任务摘要，避免记录敏感明文。
 func summarizeAgentTaskData(taskData define.AgentTaskExecuteData) string {
 	return fmt.Sprintf(
@@ -103,7 +98,7 @@ func (t *TaskRunner) executeTask(taskData define.AgentTaskExecuteData) {
 
 	// 构造 StreamFunc：将日志实时回传
 	streamFunc := func(name, message string) {
-		gstool.FmtPrintlnLogTime(`任务日志 task_id=%s step=%s message=%s`, taskID, name, message)
+		gstool.FmtPrintlnLogTime(`[%s] %s`, name, message)
 		t.wsClient.SendTaskLog(taskID, sseDistributeId, name, message)
 	}
 
@@ -142,14 +137,11 @@ func (t *TaskRunner) executeTask(taskData define.AgentTaskExecuteData) {
 		ListenCurls:         nil, // Agent 不需要拦截请求功能，nil map 对 range 安全
 		FilterUris:          taskData.RunParams.FilterUris,
 		ShowCookies:         showCookies,
+		DirectoryMappingKey: taskData.RunParams.DirectoryMappingKey,
+		AccountKey:          taskData.RunParams.AccountKey,
 		// Agent 不连接配置库；历史目录索引通过服务端接口查询和写入。
-		SmartLinkLastStore: newAgentSmartLinkLastStore(t.wsClient.config.ServerURL, taskData.SafeToken),
-	}
-
-	// 普通任务与抓取任务统一走相同的数据目录策略，确保登录态来源一致。
-	if resolvedCombineType, changed := resolveAgentTaskCombineType(taskData.TaskType, runParams.CombineType); changed {
-		streamFunc("运行约束", fmt.Sprintf("Agent模式调整数据目录合并类型(原类型=%d，新类型=%d)", runParams.CombineType, resolvedCombineType))
-		runParams.CombineType = resolvedCombineType
+		SmartLinkLastStore:      newAgentSmartLinkLastStore(t.wsClient.config.ServerURL, taskData.SafeToken),
+		SmartLinkDirectoryStore: newAgentSmartLinkDirectoryStore(t.wsClient.config.ServerURL, taskData.SafeToken),
 	}
 
 	// Agent 模式强制使用有头浏览器（headful）

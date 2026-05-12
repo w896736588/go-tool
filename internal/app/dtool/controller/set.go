@@ -6,7 +6,11 @@ import (
 	"dev_tool/internal/app/dtool/component"
 	"dev_tool/internal/app/dtool/define"
 	"fmt"
+	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -80,16 +84,21 @@ func SetSshAdd(c *gin.Context) {
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
 	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `host`, `port`, `username`, `password`, `home`})
+	var err error
 	if cast.ToInt(dataMap[`id`]) == 0 {
 		updateData[`create_time`] = time.Now().Unix()
 		updateData[`update_time`] = time.Now().Unix()
-		_, _ = common.DbMain.Client.QuickCreate(`tbl_ssh`, updateData).Exec()
+		_, err = common.DbMain.Client.QuickCreate(`tbl_ssh`, updateData).Exec()
 	} else {
 		updateData[`update_time`] = time.Now().Unix()
-		_, _ = common.DbMain.Client.QuickUpdate(`tbl_ssh`,
+		_, err = common.DbMain.Client.QuickUpdate(`tbl_ssh`,
 			map[string]any{
 				`id`: dataMap[`id`],
 			}, updateData).Exec()
+	}
+	if err != nil {
+		gsgin.GinResponseError(c, `保存失败: `+err.Error(), nil)
+		return
 	}
 	gsgin.GinResponseSuccess(c, ``, nil)
 }
@@ -444,6 +453,67 @@ func testSshConn(sshConfig map[string]any) *gstask.Result {
 	}
 }
 
+func testDbConn(dbConfig map[string]any) *gstask.Result {
+	dbType := cast.ToString(dbConfig[`db_type`])
+	if dbType == `` {
+		dbType = DbTypeMysql
+	}
+	sshBridge := func() *gsssh.SshBridge {
+		if cast.ToInt(dbConfig[`ssh_id`]) == 0 {
+			return nil
+		}
+		sshConfig, sshConfigErr := common.DbMain.GetSshConfig(dbConfig[`ssh_id`])
+		if sshConfigErr != nil {
+			return nil
+		}
+		return gsssh.NewSshBridge(gsssh.NewSsh(&gsssh.SshConfig{
+			Name:     cast.ToString(sshConfig[`name`]),
+			Host:     cast.ToString(sshConfig[`host`]),
+			Port:     cast.ToString(sshConfig[`port`]),
+			UserName: cast.ToString(sshConfig[`username`]),
+			Password: cast.ToString(sshConfig[`password`]),
+		}))
+	}()
+	var connErr error
+	if dbType == DbTypePgsql {
+		gsPgsql := &gsdb.GsPgsql{
+			PgsqlConfig: &gsdb.PgsqlConfig{
+				Name:     cast.ToString(dbConfig[`name`]),
+				Host:     cast.ToString(dbConfig[`host`]),
+				Port:     cast.ToInt64(dbConfig[`port`]),
+				Password: cast.ToString(dbConfig[`password`]),
+				Username: cast.ToString(dbConfig[`username`]),
+				Dbname:   cast.ToString(dbConfig[`dbname`]),
+			},
+		}
+		gsPgsql.SshBridge = sshBridge
+		connErr = gsPgsql.CreateConn()
+	} else {
+		gsMysql := &gsdb.GsMysql{
+			MysqlConfig: &gsdb.MysqlConfig{
+				Name:     cast.ToString(dbConfig[`name`]),
+				Host:     cast.ToString(dbConfig[`host`]),
+				Port:     cast.ToInt64(dbConfig[`port`]),
+				Password: cast.ToString(dbConfig[`password`]),
+				Username: cast.ToString(dbConfig[`username`]),
+				Dbname:   cast.ToString(dbConfig[`dbname`]),
+			},
+		}
+		gsMysql.SshBridge = sshBridge
+		connErr = gsMysql.CreateConn()
+	}
+	if connErr != nil {
+		return &gstask.Result{
+			Err:    connErr,
+			Result: dbConfig[`id`],
+		}
+	}
+	return &gstask.Result{
+		Err:    nil,
+		Result: dbConfig[`id`],
+	}
+}
+
 func SetRedisAdd(c *gin.Context) {
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
@@ -477,6 +547,11 @@ func SetRedisDelete(c *gin.Context) {
 }
 
 func SetMysqlList(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	// 是否检查连接状态，1检查，0或未传不检查
+	isCheckConnection := cast.ToInt(dataMap[`check_status`])
+
 	allMysql, allErr := common.DbMain.Client.QuickQuery(`tbl_mysql`, `*`, nil).All()
 	if allErr != nil {
 		gsgin.GinResponseError(c, allErr.Error(), nil)
@@ -487,34 +562,69 @@ func SetMysqlList(c *gin.Context) {
 		gsgin.GinResponseError(c, allSshErr.Error(), nil)
 		return
 	}
-	for gitKey, gitValue := range allMysql {
-		allMysql[gitKey][`ssh_name`] = ``
-		gitSshId := cast.ToInt(gitValue[`ssh_id`])
+	for mysqlKey, mysqlValue := range allMysql {
+		allMysql[mysqlKey][`ssh_name`] = ``
+		gitSshId := cast.ToInt(mysqlValue[`ssh_id`])
 		if gitSshId != 0 {
 			for _, sshValue := range allSsh {
 				if cast.ToInt(sshValue[`id`]) == gitSshId {
-					allMysql[gitKey][`ssh_name`] = sshValue[`name`]
+					allMysql[mysqlKey][`ssh_name`] = sshValue[`name`]
 				}
 			}
 		}
 	}
+
+	if isCheckConnection == 1 {
+		task := gstask.NewTask()
+		for _, mysqlValue := range allMysql {
+			callBack := gstask.CallbackFunc{
+				Func: func() *gstask.Result {
+					return testDbConn(mysqlValue)
+				},
+				Timeout: 2 * time.Second,
+				Id:      cast.ToString(mysqlValue[`id`]),
+			}
+			task.Add(callBack)
+		}
+		resultList := task.RunAll()
+		for _, result := range resultList {
+			for mysqlKey, mysqlValue := range allMysql {
+				if cast.ToInt(mysqlValue[`id`]) == cast.ToInt(result.Id) {
+					if result.Err != nil {
+						allMysql[mysqlKey][`status`] = result.Err.Error()
+					} else {
+						allMysql[mysqlKey][`status`] = `success`
+					}
+				}
+			}
+		}
+	}
+
 	gsgin.GinResponseSuccess(c, ``, allMysql)
 }
 
 func SetMysqlAdd(c *gin.Context) {
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
-	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `host`, `port`, `username`, `dbname`, `password`, `ssh_id`})
+	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `host`, `port`, `username`, `dbname`, `password`, `ssh_id`, `db_type`})
 	if cast.ToInt(dataMap[`id`]) == 0 {
 		updateData[`create_time`] = time.Now().Unix()
 		updateData[`update_time`] = time.Now().Unix()
-		_, _ = common.DbMain.Client.QuickCreate(`tbl_mysql`, updateData).Exec()
+		_, createErr := common.DbMain.Client.QuickCreate(`tbl_mysql`, updateData).Exec()
+		if createErr != nil {
+			gsgin.GinResponseError(c, createErr.Error(), nil)
+			return
+		}
 	} else {
 		updateData[`update_time`] = time.Now().Unix()
-		_, _ = common.DbMain.Client.QuickUpdate(`tbl_mysql`,
+		_, updateErr := common.DbMain.Client.QuickUpdate(`tbl_mysql`,
 			map[string]any{
 				`id`: dataMap[`id`],
 			}, updateData).Exec()
+		if updateErr != nil {
+			gsgin.GinResponseError(c, updateErr.Error(), nil)
+			return
+		}
 	}
 	gsgin.GinResponseSuccess(c, ``, nil)
 }
@@ -831,37 +941,7 @@ func SetMemoryConfigGet(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	dailyReportPrompt, err := homeTaskConfigValue(define.HomeTaskConfigDailyReportPrompt)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	dailyReportModelID, err := homeTaskConfigValue(define.HomeTaskConfigDailyReportModelID)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	fragmentPrompt, err := homeTaskConfigValue(define.HomeTaskConfigFragmentPrompt)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	tapdSmartLinkID, err := homeTaskConfigValue(define.HomeTaskConfigTapdSmartLinkID)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	tapdLinkLabel, err := homeTaskConfigValue(define.HomeTaskConfigTapdLinkLabel)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	tapdCssSelector, err := homeTaskConfigValue(define.HomeTaskConfigTapdCssSelector)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	tapdWaitSeconds, err := homeTaskConfigValue(define.HomeTaskConfigTapdWaitSeconds)
+	aiSearchModelID, err := memoryConfigValue(define.MemoryConfigAiSearchModelID)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
@@ -880,13 +960,7 @@ func SetMemoryConfigGet(c *gin.Context) {
 		`memory_config_file`:                memoryConfigFilePath(),
 		`memory_arrange_prompt`:             arrangePrompt,
 		`memory_arrange_model_id`:           cast.ToInt(arrangeModelID),
-		`home_task_daily_report_prompt`:     dailyReportPrompt,
-		`home_task_daily_report_model_id`:   cast.ToInt(dailyReportModelID),
-		`home_task_fragment_prompt`:         fragmentPrompt,
-		`home_task_tapd_smart_link_id`:      cast.ToInt(tapdSmartLinkID),
-		`home_task_tapd_link_label`:         tapdLinkLabel,
-		`home_task_tapd_css_selector`:       tapdCssSelector,
-		`home_task_tapd_wait_seconds`:       cast.ToInt(tapdWaitSeconds),
+		`memory_ai_search_model_id`:         cast.ToInt(aiSearchModelID),
 		`safe_password`:                     component.ConfigViper.GetString(`safe.password`),
 		`run_mode`:                          component.EnvClient.SmartLinkConfig.RunMode,
 		`client_version`:                    component.EnvClient.SmartLinkConfig.ClientVersion,
@@ -922,53 +996,19 @@ func SetMemoryConfigSave(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	homeTaskDailyReportPrompt := strings.TrimSpace(cast.ToString(dataMap[`home_task_daily_report_prompt`]))
-	if homeTaskDailyReportPrompt == `` {
-		homeTaskDailyReportPrompt = defaultHomeTaskDailyReportPrompt()
-	}
-	homeTaskDailyReportModelID := cast.ToInt(dataMap[`home_task_daily_report_model_id`])
-	if homeTaskDailyReportModelID > 0 {
-		modelInfo, err := common.DbMain.AiModelInfo(homeTaskDailyReportModelID)
+	memoryAiSearchModelID := cast.ToInt(dataMap[`memory_ai_search_model_id`])
+	if memoryAiSearchModelID > 0 {
+		modelInfo, err := common.DbMain.AiModelInfo(memoryAiSearchModelID)
 		if err != nil {
-			gsgin.GinResponseError(c, `AI 模型不存在`, nil)
+			gsgin.GinResponseError(c, `AI 搜索模型不存在`, nil)
 			return
 		}
-		// 工作日报仅允许使用 LLM 模型 / only LLM models are allowed for daily report.
 		if strings.ToLower(cast.ToString(modelInfo[`model_type`])) != `llm` {
-			gsgin.GinResponseError(c, `工作日报仅支持选择 LLM 模型`, nil)
+			gsgin.GinResponseError(c, `AI 搜索仅支持选择 LLM 模型`, nil)
 			return
 		}
 	}
-	if err := common.DbMain.HomeTaskConfigSave(`工作日报提示词`, define.HomeTaskConfigDailyReportPrompt, homeTaskDailyReportPrompt, `首页任务工作日报 AI 提示词`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	if err := common.DbMain.HomeTaskConfigSave(`工作日报模型`, define.HomeTaskConfigDailyReportModelID, cast.ToString(homeTaskDailyReportModelID), `首页任务工作日报所用模型 id`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	homeTaskFragmentPrompt := strings.TrimSpace(cast.ToString(dataMap[`home_task_fragment_prompt`]))
-	if err := common.DbMain.HomeTaskConfigSave(`任务知识片段提示词`, define.HomeTaskConfigFragmentPrompt, homeTaskFragmentPrompt, `新建任务时自动创建知识片段的提示词模板`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	homeTaskTapdSmartLinkID := cast.ToString(cast.ToInt(dataMap[`home_task_tapd_smart_link_id`]))
-	if err := common.DbMain.HomeTaskConfigSave(`TAPD自定义网页ID`, define.HomeTaskConfigTapdSmartLinkID, homeTaskTapdSmartLinkID, `TAPD登录页所选自定义网页ID`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	homeTaskTapdLinkLabel := strings.TrimSpace(cast.ToString(dataMap[`home_task_tapd_link_label`]))
-	if err := common.DbMain.HomeTaskConfigSave(`TAPD链接标签`, define.HomeTaskConfigTapdLinkLabel, homeTaskTapdLinkLabel, `TAPD登录页所选链接的label`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	homeTaskTapdCssSelector := strings.TrimSpace(cast.ToString(dataMap[`home_task_tapd_css_selector`]))
-	if err := common.DbMain.HomeTaskConfigSave(`TAPD抓取CSS选择器`, define.HomeTaskConfigTapdCssSelector, homeTaskTapdCssSelector, `TAPD网页抓取区域CSS选择器`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	homeTaskTapdWaitSeconds := cast.ToString(cast.ToInt(dataMap[`home_task_tapd_wait_seconds`]))
-	if err := common.DbMain.HomeTaskConfigSave(`TAPD抓取等待秒数`, define.HomeTaskConfigTapdWaitSeconds, homeTaskTapdWaitSeconds, `TAPD网页抓取前等待秒数`); err != nil {
+	if err := common.DbMain.MemoryConfigSave(`AI搜索模型`, define.MemoryConfigAiSearchModelID, cast.ToString(memoryAiSearchModelID), `知识片段 AI 智能搜索所用模型 id`); err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
@@ -1362,25 +1402,54 @@ func SetAccountGroupAdd(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, ``, nil)
 }
 
-// SetCronConfigGet 返回定时任务配置。 // Return scheduled task settings.
+// SetCronConfigTypes 返回所有已注册但未入库的定时任务类型。
+func SetCronConfigTypes(c *gin.Context) {
+	result := make([]map[string]any, 0)
+	for taskType, def := range define.CronTaskRegistry {
+		result = append(result, map[string]any{
+			`type`: taskType,
+			`name`: def.Name,
+		})
+	}
+	gsgin.GinResponseSuccess(c, ``, result)
+}
+
+// SetCronConfigGet 返回所有定时任务配置列表。
 func SetCronConfigGet(c *gin.Context) {
-	one, err := common.DbMain.CronTaskByType(define.CronTaskTypeDailyReport)
-	if err != nil && !common.DbRowMissing(err) {
+	list, err := common.DbMain.CronTaskList()
+	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	gsgin.GinResponseSuccess(c, ``, map[string]any{
-		`cron_daily_report_enabled`: cast.ToInt(one[`enabled`]),
-		`cron_daily_report_time`:    strings.TrimSpace(cast.ToString(one[`trigger_time`])),
-	})
+	result := make([]map[string]any, 0, len(list))
+	for _, row := range list {
+		result = append(result, map[string]any{
+			`type`:              cast.ToString(row[`type`]),
+			`name`:              cast.ToString(row[`name`]),
+			`enabled`:           cast.ToInt(row[`enabled`]),
+			`trigger_time`:      strings.TrimSpace(cast.ToString(row[`trigger_time`])),
+			`last_trigger_time`: cast.ToInt64(row[`last_trigger_time`]),
+		})
+	}
+	gsgin.GinResponseSuccess(c, ``, result)
 }
 
-// SetCronConfigSave 保存定时任务配置并热重载调度器。 // Save scheduled task settings and hot-reload the scheduler.
+// SetCronConfigSave 保存单条定时任务配置并热重载对应调度器。
 func SetCronConfigSave(c *gin.Context) {
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
-	enabled := cast.ToInt(dataMap[`cron_daily_report_enabled`])
-	triggerTime := strings.TrimSpace(cast.ToString(dataMap[`cron_daily_report_time`]))
+	taskType := strings.TrimSpace(cast.ToString(dataMap[`type`]))
+	if taskType == `` {
+		gsgin.GinResponseError(c, `type 不能为空`, nil)
+		return
+	}
+	taskDef, ok := define.CronTaskRegistry[taskType]
+	if !ok {
+		gsgin.GinResponseError(c, `未知的定时任务类型`, nil)
+		return
+	}
+	enabled := cast.ToInt(dataMap[`enabled`])
+	triggerTime := strings.TrimSpace(cast.ToString(dataMap[`trigger_time`]))
 	if enabled == 1 {
 		if triggerTime == `` {
 			gsgin.GinResponseError(c, `启用定时任务时触发时间不能为空`, nil)
@@ -1391,11 +1460,11 @@ func SetCronConfigSave(c *gin.Context) {
 			return
 		}
 	}
-	if err := common.DbMain.CronTaskSave(define.CronTaskTypeDailyReport, `AI 生成工作日报`, enabled, triggerTime); err != nil {
+	if err := common.DbMain.CronTaskSave(taskType, taskDef.Name, enabled, triggerTime); err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	if err := business.HotReloadCronScheduler(); err != nil {
+	if err := business.HotReloadCronScheduler(taskType); err != nil {
 		gsgin.GinResponseError(c, fmt.Sprintf(`配置已保存但热重载失败: %s`, err.Error()), nil)
 		return
 	}
@@ -1414,4 +1483,399 @@ func SetAccountGroupDelete(c *gin.Context) {
 		}).Exec()
 	}
 	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
+// SetHomeTaskConfigGet 返回任务清单配置页面数据。
+func SetHomeTaskConfigGet(c *gin.Context) {
+	dailyReportPrompt, err := homeTaskConfigValue(define.HomeTaskConfigDailyReportPrompt)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	dailyReportModelID, err := homeTaskConfigValue(define.HomeTaskConfigDailyReportModelID)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	fragmentPrompt, err := homeTaskConfigValue(define.HomeTaskConfigFragmentPrompt)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	tapdSmartLinkID, err := homeTaskConfigValue(define.HomeTaskConfigTapdSmartLinkID)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	tapdLinkLabel, err := homeTaskConfigValue(define.HomeTaskConfigTapdLinkLabel)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	tapdCssSelector, err := homeTaskConfigValue(define.HomeTaskConfigTapdCssSelector)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	tapdWaitSeconds, err := homeTaskConfigValue(define.HomeTaskConfigTapdWaitSeconds)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	promptDev, err := homeTaskConfigValue(define.HomeTaskConfigPromptDev)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	promptApiGen, err := homeTaskConfigValue(define.HomeTaskConfigPromptApiGen)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	promptApiTest, err := homeTaskConfigValue(define.HomeTaskConfigPromptApiTest)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	promptDesign, err := homeTaskConfigValue(define.HomeTaskConfigPromptDesign)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	promptPlainTextRequirement, err := homeTaskConfigValue(define.HomeTaskConfigPromptPlainTextReq)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	promptBrowserTest, err := homeTaskConfigValue(define.HomeTaskConfigPromptBrowserTest)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	promptCodeReview, err := homeTaskConfigValue(define.HomeTaskConfigPromptCodeReview)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	devEnvironment, err := homeTaskConfigValue(define.HomeTaskConfigDevEnvironment)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	branchNamePrompt, err := homeTaskConfigValue(define.HomeTaskConfigBranchNamePrompt)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	branchNameModelID, err := homeTaskConfigValue(define.HomeTaskConfigBranchNameModelID)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`home_task_daily_report_prompt`:           dailyReportPrompt,
+		`home_task_daily_report_model_id`:         cast.ToInt(dailyReportModelID),
+		`home_task_fragment_prompt`:               fragmentPrompt,
+		`home_task_tapd_smart_link_id`:            cast.ToInt(tapdSmartLinkID),
+		`home_task_tapd_link_label`:               tapdLinkLabel,
+		`home_task_tapd_css_selector`:             tapdCssSelector,
+		`home_task_tapd_wait_seconds`:             cast.ToInt(tapdWaitSeconds),
+		`home_task_prompt_dev`:                    promptDev,
+		`home_task_prompt_api_gen`:                promptApiGen,
+		`home_task_prompt_api_test`:               promptApiTest,
+		`home_task_prompt_design`:                 promptDesign,
+		`home_task_prompt_plain_text_requirement`: promptPlainTextRequirement,
+		`home_task_prompt_browser_test`:           promptBrowserTest,
+		`home_task_prompt_code_review`:            promptCodeReview,
+		`home_task_dev_environment`:               devEnvironment,
+		`home_task_branch_name_prompt`:            branchNamePrompt,
+		`home_task_branch_name_model_id`:          cast.ToInt(branchNameModelID),
+	})
+}
+
+// promptConfigKeys 需要记录变更日志的提示词配置 key 及其中文名称。
+var promptConfigKeys = map[string]string{
+	define.HomeTaskConfigDailyReportPrompt:  `工作日报提示词`,
+	define.HomeTaskConfigFragmentPrompt:     `任务知识片段提示词`,
+	define.HomeTaskConfigPromptDev:          `需求分析设计提示词`,
+	define.HomeTaskConfigPromptApiGen:       `接口生成提示词`,
+	define.HomeTaskConfigPromptApiTest:      `接口自动化测试提示词`,
+	define.HomeTaskConfigPromptDesign:       `开发设计提示词`,
+	define.HomeTaskConfigPromptPlainTextReq: `纯文本TAPD需求提示词`,
+	define.HomeTaskConfigPromptBrowserTest:  `需求核对浏览器测试提示词`,
+	define.HomeTaskConfigPromptCodeReview:   `代码检查提示词`,
+	define.HomeTaskConfigDevEnvironment:     `开发环境`,
+	define.HomeTaskConfigBranchNamePrompt:   `分支名生成提示词`,
+}
+
+// saveHomeTaskPromptWithLog 保存提示词配置并记录变更日志（仅当值真正变化时才写日志）。
+func saveHomeTaskPromptWithLog(key, name, newValue, desc string) {
+	oldValue, _ := homeTaskConfigValue(key)
+	if oldValue == newValue {
+		return
+	}
+	_ = common.DbMain.PromptChangeLogSave(key, name, oldValue, newValue)
+}
+
+// SetHomeTaskConfigSave 保存任务清单配置。
+func SetHomeTaskConfigSave(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+
+	homeTaskDailyReportPrompt := strings.TrimSpace(cast.ToString(dataMap[`home_task_daily_report_prompt`]))
+	if homeTaskDailyReportPrompt == `` {
+		homeTaskDailyReportPrompt = defaultHomeTaskDailyReportPrompt()
+	}
+	homeTaskDailyReportModelID := cast.ToInt(dataMap[`home_task_daily_report_model_id`])
+	if homeTaskDailyReportModelID > 0 {
+		modelInfo, err := common.DbMain.AiModelInfo(homeTaskDailyReportModelID)
+		if err != nil {
+			gsgin.GinResponseError(c, `AI 模型不存在`, nil)
+			return
+		}
+		if strings.ToLower(cast.ToString(modelInfo[`model_type`])) != `llm` {
+			gsgin.GinResponseError(c, `工作日报仅支持选择 LLM 模型`, nil)
+			return
+		}
+	}
+	saveHomeTaskPromptWithLog(define.HomeTaskConfigDailyReportPrompt, `工作日报提示词`, homeTaskDailyReportPrompt, `首页任务工作日报 AI 提示词`)
+	if err := common.DbMain.HomeTaskConfigSave(`工作日报提示词`, define.HomeTaskConfigDailyReportPrompt, homeTaskDailyReportPrompt, `首页任务工作日报 AI 提示词`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	if err := common.DbMain.HomeTaskConfigSave(`工作日报模型`, define.HomeTaskConfigDailyReportModelID, cast.ToString(homeTaskDailyReportModelID), `首页任务工作日报所用模型 id`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskFragmentPrompt := strings.TrimSpace(cast.ToString(dataMap[`home_task_fragment_prompt`]))
+	saveHomeTaskPromptWithLog(define.HomeTaskConfigFragmentPrompt, `任务知识片段提示词`, homeTaskFragmentPrompt, `新建任务时自动创建知识片段的提示词模板`)
+	if err := common.DbMain.HomeTaskConfigSave(`任务知识片段提示词`, define.HomeTaskConfigFragmentPrompt, homeTaskFragmentPrompt, `新建任务时自动创建知识片段的提示词模板`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskTapdSmartLinkID := cast.ToString(cast.ToInt(dataMap[`home_task_tapd_smart_link_id`]))
+	if err := common.DbMain.HomeTaskConfigSave(`TAPD自定义网页ID`, define.HomeTaskConfigTapdSmartLinkID, homeTaskTapdSmartLinkID, `TAPD登录页所选自定义网页ID`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskTapdLinkLabel := strings.TrimSpace(cast.ToString(dataMap[`home_task_tapd_link_label`]))
+	if err := common.DbMain.HomeTaskConfigSave(`TAPD链接标签`, define.HomeTaskConfigTapdLinkLabel, homeTaskTapdLinkLabel, `TAPD登录页所选链接的label`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskTapdCssSelector := strings.TrimSpace(cast.ToString(dataMap[`home_task_tapd_css_selector`]))
+	if err := common.DbMain.HomeTaskConfigSave(`TAPD抓取CSS选择器`, define.HomeTaskConfigTapdCssSelector, homeTaskTapdCssSelector, `TAPD网页抓取区域CSS选择器`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskTapdWaitSeconds := cast.ToString(cast.ToInt(dataMap[`home_task_tapd_wait_seconds`]))
+	if err := common.DbMain.HomeTaskConfigSave(`TAPD抓取等待秒数`, define.HomeTaskConfigTapdWaitSeconds, homeTaskTapdWaitSeconds, `TAPD网页抓取前等待秒数`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskPromptDev := strings.TrimSpace(cast.ToString(dataMap[`home_task_prompt_dev`]))
+	saveHomeTaskPromptWithLog(define.HomeTaskConfigPromptDev, `需求分析设计提示词`, homeTaskPromptDev, `工作流-需求开发提示词模板`)
+	if err := common.DbMain.HomeTaskConfigSave(`需求分析设计提示词`, define.HomeTaskConfigPromptDev, homeTaskPromptDev, `工作流-需求开发提示词模板`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskPromptApiGen := strings.TrimSpace(cast.ToString(dataMap[`home_task_prompt_api_gen`]))
+	saveHomeTaskPromptWithLog(define.HomeTaskConfigPromptApiGen, `接口生成提示词`, homeTaskPromptApiGen, `工作流-接口生成提示词模板`)
+	if err := common.DbMain.HomeTaskConfigSave(`接口生成提示词`, define.HomeTaskConfigPromptApiGen, homeTaskPromptApiGen, `工作流-接口生成提示词模板`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskPromptApiTest := strings.TrimSpace(cast.ToString(dataMap[`home_task_prompt_api_test`]))
+	saveHomeTaskPromptWithLog(define.HomeTaskConfigPromptApiTest, `接口自动化测试提示词`, homeTaskPromptApiTest, `工作流-接口自动化测试提示词模板`)
+	if err := common.DbMain.HomeTaskConfigSave(`接口自动化测试提示词`, define.HomeTaskConfigPromptApiTest, homeTaskPromptApiTest, `工作流-接口自动化测试提示词模板`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskPromptDesign := strings.TrimSpace(cast.ToString(dataMap[`home_task_prompt_design`]))
+	saveHomeTaskPromptWithLog(define.HomeTaskConfigPromptDesign, `开发设计提示词`, homeTaskPromptDesign, `工作流-开发设计提示词模板`)
+	if err := common.DbMain.HomeTaskConfigSave(`开发设计提示词`, define.HomeTaskConfigPromptDesign, homeTaskPromptDesign, `工作流-开发设计提示词模板`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskPromptPlainTextRequirement := strings.TrimSpace(cast.ToString(dataMap[`home_task_prompt_plain_text_requirement`]))
+	saveHomeTaskPromptWithLog(define.HomeTaskConfigPromptPlainTextReq, `纯文本TAPD需求提示词`, homeTaskPromptPlainTextRequirement, `工作流-纯文本TAPD需求提示词模板`)
+	if err := common.DbMain.HomeTaskConfigSave(`纯文本TAPD需求提示词`, define.HomeTaskConfigPromptPlainTextReq, homeTaskPromptPlainTextRequirement, `工作流-纯文本TAPD需求提示词模板`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskPromptBrowserTest := strings.TrimSpace(cast.ToString(dataMap[`home_task_prompt_browser_test`]))
+	saveHomeTaskPromptWithLog(define.HomeTaskConfigPromptBrowserTest, `需求核对浏览器测试提示词`, homeTaskPromptBrowserTest, `工作流-需求核对浏览器测试提示词模板`)
+	if err := common.DbMain.HomeTaskConfigSave(`需求核对浏览器测试提示词`, define.HomeTaskConfigPromptBrowserTest, homeTaskPromptBrowserTest, `工作流-需求核对浏览器测试提示词模板`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskPromptCodeReview := strings.TrimSpace(cast.ToString(dataMap[`home_task_prompt_code_review`]))
+	saveHomeTaskPromptWithLog(define.HomeTaskConfigPromptCodeReview, `代码检查提示词`, homeTaskPromptCodeReview, `工作流-代码检查提示词模板`)
+	if err := common.DbMain.HomeTaskConfigSave(`代码检查提示词`, define.HomeTaskConfigPromptCodeReview, homeTaskPromptCodeReview, `工作流-代码检查提示词模板`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskDevEnvironment := strings.TrimSpace(cast.ToString(dataMap[`home_task_dev_environment`]))
+	saveHomeTaskPromptWithLog(define.HomeTaskConfigDevEnvironment, `开发环境`, homeTaskDevEnvironment, `工作流-开发环境描述`)
+	if err := common.DbMain.HomeTaskConfigSave(`开发环境`, define.HomeTaskConfigDevEnvironment, homeTaskDevEnvironment, `工作流-开发环境描述`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskBranchNamePrompt := strings.TrimSpace(cast.ToString(dataMap[`home_task_branch_name_prompt`]))
+	saveHomeTaskPromptWithLog(define.HomeTaskConfigBranchNamePrompt, `分支名生成提示词`, homeTaskBranchNamePrompt, `工作流-分支名生成提示词模板`)
+	if err := common.DbMain.HomeTaskConfigSave(`分支名生成提示词`, define.HomeTaskConfigBranchNamePrompt, homeTaskBranchNamePrompt, `工作流-分支名生成提示词模板`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskBranchNameModelID := cast.ToString(cast.ToInt(dataMap[`home_task_branch_name_model_id`]))
+	if err := common.DbMain.HomeTaskConfigSave(`分支名生成模型`, define.HomeTaskConfigBranchNameModelID, homeTaskBranchNameModelID, `分支名生成所用模型 id`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
+// SetLocalDirList 浏览本地目录，返回指定路径下的子目录列表。
+func SetLocalDirList(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	dirPath := strings.TrimSpace(cast.ToString(dataMap[`path`]))
+	if dirPath == `` {
+		// 未传路径时返回根目录（Windows 返回驱动器列表，其他返回 /）
+		if drives, err := listWindowsDrives(); err == nil && len(drives) > 0 {
+			gsgin.GinResponseSuccess(c, ``, drives)
+			return
+		}
+		dirPath = `/`
+	}
+
+	info, statErr := os.Stat(dirPath)
+	if statErr != nil {
+		gsgin.GinResponseError(c, fmt.Sprintf(`路径不可访问: %s`, statErr.Error()), nil)
+		return
+	}
+	if !info.IsDir() {
+		gsgin.GinResponseError(c, `指定路径不是目录`, nil)
+		return
+	}
+
+	entries, readErr := os.ReadDir(dirPath)
+	if readErr != nil {
+		gsgin.GinResponseError(c, fmt.Sprintf(`读取目录失败: %s`, readErr.Error()), nil)
+		return
+	}
+
+	result := make([]map[string]any, 0)
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if strings.HasPrefix(name, `.`) || name == `$RECYCLE.BIN` || name == `System Volume Information` {
+			continue
+		}
+		fullPath := filepath.Join(dirPath, name)
+		hasChildren := false
+		if subEntries, subErr := os.ReadDir(fullPath); subErr == nil {
+			for _, sub := range subEntries {
+				if sub.IsDir() && !strings.HasPrefix(sub.Name(), `.`) {
+					hasChildren = true
+					break
+				}
+			}
+		}
+		result = append(result, map[string]any{
+			`label`:        name,
+			`value`:        fullPath,
+			`has_children`: hasChildren,
+		})
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return cast.ToString(result[i][`label`]) < cast.ToString(result[j][`label`])
+	})
+
+	gsgin.GinResponseSuccess(c, ``, result)
+}
+
+// listWindowsDrives 返回 Windows 系统上可用的驱动器盘符列表。
+func listWindowsDrives() ([]map[string]any, error) {
+	drives := make([]map[string]any, 0)
+	for _, letter := range `ABCDEFGHIJKLMNOPQRSTUVWXYZ` {
+		drive := string(letter) + `:/`
+		if _, err := os.Stat(drive); err == nil {
+			drives = append(drives, map[string]any{
+				`label`:        drive,
+				`value`:        drive,
+				`has_children`: true,
+			})
+		}
+	}
+	return drives, nil
+}
+
+// SetOpenLocalDir 使用系统文件管理器打开指定本地目录。
+func SetOpenLocalDir(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	dirPath := strings.TrimSpace(cast.ToString(dataMap[`path`]))
+	if dirPath == `` {
+		gsgin.GinResponseError(c, `路径不能为空`, nil)
+		return
+	}
+	info, statErr := os.Stat(dirPath)
+	if statErr != nil {
+		gsgin.GinResponseError(c, fmt.Sprintf(`路径不可访问: %s`, statErr.Error()), nil)
+		return
+	}
+	if !info.IsDir() {
+		gsgin.GinResponseError(c, `指定路径不是目录`, nil)
+		return
+	}
+	var cmd *exec.Cmd
+	if runtime.GOOS == `windows` {
+		cmd = exec.Command(`explorer`, dirPath)
+	} else if runtime.GOOS == `darwin` {
+		cmd = exec.Command(`open`, dirPath)
+	} else {
+		cmd = exec.Command(`xdg-open`, dirPath)
+	}
+	if runErr := cmd.Start(); runErr != nil {
+		gsgin.GinResponseError(c, fmt.Sprintf(`打开目录失败: %s`, runErr.Error()), nil)
+		return
+	}
+	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
+// SetLocalDirBatchCheck 批量检查本地目录是否存在。
+func SetLocalDirBatchCheck(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	pathsRaw, _ := dataMap[`paths`].([]any)
+	result := make(map[string]bool, len(pathsRaw))
+	for _, p := range pathsRaw {
+		dirPath := strings.TrimSpace(cast.ToString(p))
+		if dirPath == `` {
+			continue
+		}
+		if _, ok := result[dirPath]; ok {
+			continue
+		}
+		info, statErr := os.Stat(dirPath)
+		result[dirPath] = statErr == nil && info.IsDir()
+	}
+	gsgin.GinResponseSuccess(c, ``, result)
+}
+
+// SetPromptChangeLogList 返回提示词变更日志（最近 20 条）。
+func SetPromptChangeLogList(c *gin.Context) {
+	list, err := common.DbMain.PromptChangeLogList(20)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	for i := range list {
+		list[i][`create_time_desc`] = gstool.TimeUnixToString(time.Unix(cast.ToInt64(list[i][`create_time`]), 0), `Y-m-d H:i:s`)
+	}
+	gsgin.GinResponseSuccess(c, ``, list)
 }

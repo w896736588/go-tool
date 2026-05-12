@@ -48,11 +48,15 @@ Copy-Item $WebExe (Join-Path $PackageDir "dtool.exe") -Force
 Copy-Item (Join-Path $RootDir "go.mod") (Join-Path $PackageDir "go.mod") -Force
 New-Item -ItemType Directory -Force -Path (Join-Path $PackageDir "config/dtool") | Out-Null
 Copy-Item (Join-Path $RootDir "config/dtool/company.ini") (Join-Path $PackageDir "config/dtool/config.ini") -Force
-Copy-Item (Join-Path $RootDir "config/dtool/frog.db") (Join-Path $PackageDir "config/dtool/frog.db") -Force
-Copy-Item $FrontendDistDir (Join-Path $PackageDir "web") -Recurse -Force
+if (Test-Path (Join-Path $RootDir "config/dtool/frog.db")) {
+    Copy-Item (Join-Path $RootDir "config/dtool/frog.db") (Join-Path $PackageDir "config/dtool/frog.db") -Force
+}
+New-Item -ItemType Directory -Force -Path (Join-Path $PackageDir "web") | Out-Null
+Copy-Item $FrontendDistDir (Join-Path $PackageDir "web/dist") -Recurse -Force
 Copy-Item (Join-Path $RootDir "internal/pkg/p_js") (Join-Path $PackageDir "internal/pkg/p_js") -Recurse -Force
 Copy-Item (Join-Path $RootDir "internal/app/dtool/database") (Join-Path $PackageDir "internal/app/dtool/database") -Recurse -Force
 Copy-Item (Join-Path $RootDir "internal/app/dtool/database_log") (Join-Path $PackageDir "internal/app/dtool/database_log") -Recurse -Force
+Copy-Item (Join-Path $RootDir "skills") (Join-Path $PackageDir "skills") -Recurse -Force
 
 Write-Step "[3/4] 生成启动脚本和说明文件"
 # 显式拼接多行文本，避免 here-string 在部分 PowerShell 环境下解析异常。

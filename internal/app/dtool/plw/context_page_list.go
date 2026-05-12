@@ -3,6 +3,7 @@ package plw
 import (
 	"dev_tool/internal/app/dtool/component"
 	"dev_tool/internal/app/dtool/define"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -19,6 +20,7 @@ var ContextLock sync.RWMutex
 
 type ContextPageList struct {
 	log                *gstool.GsSlog
+	smartLinkDirStore  SmartLinkDirectoryStore
 	smartLinkLastStore SmartLinkLastStore
 }
 
@@ -32,8 +34,24 @@ func getList() *[]*ContextPage {
 func NewContextList(log *gstool.GsSlog) *ContextPageList {
 	return &ContextPageList{
 		log:                log,
+		smartLinkDirStore:  NewDBSmartLinkDirectoryStore(),
 		smartLinkLastStore: NewDBSmartLinkLastStore(),
 	}
+}
+
+// SetSmartLinkDirectoryStore 允许 agent 注入远程固定目录映射存储实现，避免在 agent 侧访问 sqlite。
+func (h *ContextPageList) SetSmartLinkDirectoryStore(store SmartLinkDirectoryStore) {
+	if store != nil {
+		h.smartLinkDirStore = store
+	}
+}
+
+// getSmartLinkDirectoryStore 返回固定目录映射存储；未注入时使用服务端默认 DB 实现。
+func (h *ContextPageList) getSmartLinkDirectoryStore() SmartLinkDirectoryStore {
+	if h.smartLinkDirStore == nil {
+		h.smartLinkDirStore = NewDBSmartLinkDirectoryStore()
+	}
+	return h.smartLinkDirStore
 }
 
 // SetSmartLinkLastStore 允许 agent 注入远程存储实现，避免在 agent 侧访问 sqlite。
@@ -147,48 +165,40 @@ func (h *ContextPageList) GetPlaywrightRunList() []map[string]any {
 	return runList
 }
 
-// FindNotSaveUserDataContext 查找可用的 不需要保存数据的context
-func (h *ContextPageList) FindNotSaveUserDataContext(runParams *PlaywrightRunParams) *ContextPage {
-	runParams.StreamFunc(`获取无痕浏览器实例`, fmt.Sprintf(`查找可用的实例`))
+func (h *ContextPageList) FindAIContextByRunParams(runParams *PlaywrightRunParams) *ContextPage {
 	return h.FindContextList(func(context *ContextPage) *ContextPage {
-		//不保存数据过滤
-		if context.CombineType != define.CombineTypeNo {
-			runParams.StreamFunc(`获取无痕浏览器实例`, context.LinkIdLabel+`,`+context.LinkId+` 不是无痕实例，跳过`)
-			return nil
-		}
-		//打开方式
 		if context.OpenType != runParams.OpenType {
-			runParams.StreamFunc(`获取无痕浏览器实例`, context.LinkIdLabel+`,`+context.LinkId+` 无头有头不一致，跳过`)
 			return nil
 		}
-		//非同种类型的context跳过
-		if !component.PlaywrightClient.IsSameLink(context.LinkIdLabel, runParams.LinkIdLabel) {
-			runParams.StreamFunc(`获取无痕浏览器实例`, context.LinkIdLabel+`,`+context.LinkId+` 不属于同一链接类型，当前需要的链接类型为：`+context.LinkIdLabel)
+		// 这里沿用 smart-link 的“同一链接类型”判断，避免 AI 会话复用到别的配置实例上。
+		if !h.IsSameLink(context.LinkIdLabel, runParams.LinkIdLabel) {
 			return nil
 		}
-		//找到一个context没有当前域名的
-		existSameDomain := false
-		pageList := (*context.Context).Pages()
-		for _, v1 := range pageList {
-			if gstool.UrlGetHost(v1.URL()) == runParams.Domain {
-				existSameDomain = true
-				break
-			}
-		}
-		//h.RunParams.CombineType != define.CombineTypeNo
-		if !existSameDomain {
-			runParams.StreamFunc(`获取无痕浏览器实例`, context.LinkIdLabel+`,`+context.LinkId+` 没有打开准备打开的域名的网页，可以使用`)
-			return context
-		}
-		return nil
+		return context
 	})
+}
+
+func (h *ContextPageList) FindContextPageByPageKey(pageKey string) (*ContextPage, *playwright.Page) {
+	return h.findContextPageByPageKey(pageKey)
+}
+
+func (h *ContextPageList) findContextPageByPageKey(pageKey string) (*ContextPage, *playwright.Page) {
+	var resultContext *ContextPage
+	var resultPage *playwright.Page
+	h.EachContextList(func(context *ContextPage) bool {
+		page := context.FindPageByKey(pageKey)
+		if page != nil {
+			resultContext = context
+			resultPage = page
+			return true
+		}
+		return false
+	})
+	return resultContext, resultPage
 }
 
 // CleanContextPagesFixDataId 固定目录的，先关掉其他页面
 func (h *ContextPageList) CleanContextPagesFixDataId(runParams *PlaywrightRunParams) {
-	if runParams.CombineType != define.CombineTypeFix {
-		return
-	}
 	runParams.StreamFunc(`获取数据目录`, `当前为固定目录，开始清理旧页面`)
 	h.EachContextList(func(context *ContextPage) bool {
 		//打开方式
@@ -196,7 +206,7 @@ func (h *ContextPageList) CleanContextPagesFixDataId(runParams *PlaywrightRunPar
 			runParams.StreamFunc(`获取数据目录`, context.LinkIdLabel+`,`+context.LinkId+` 打开方式不一致，不进行清理`)
 			return false
 		}
-		if context.LinkId == runParams.LinkId {
+		if context.LinkId == runParams.LinkId && context.RunParams.Label == runParams.Label {
 			runParams.StreamFunc(`获取数据目录`, context.LinkIdLabel+`,`+context.LinkId+` 查找到当前实例，开始清理旧页面`)
 			context.CloseContextPages()
 		}
@@ -207,44 +217,88 @@ func (h *ContextPageList) CleanContextPagesFixDataId(runParams *PlaywrightRunPar
 	time.Sleep(time.Second * 1)
 }
 
-func (h *ContextPageList) GetUserDataIndex(runParams *PlaywrightRunParams) int {
-	combineNameMap := map[int]string{
-		define.CombineTypeFind: `自动查找`,
-		define.CombineTypeLast: `使用上次登录的`,
-		define.CombineTypeNo:   `每次打开新的`,
-		define.CombineTypeFix:  `固定目录`,
+func (h *ContextPageList) getUserDataIndex(runParams *PlaywrightRunParams) (int, error) {
+	userDataIndex, err := h.GetFixUserDataIndex(runParams)
+	if err != nil {
+		runParams.StreamFunc(`获取数据目录`, fmt.Sprintf(`固定目录获取失败，mappingKey=%s, err=%s`, runParams.DirectoryMappingKey, err.Error()))
+		return 0, err
 	}
-	runParams.StreamFunc(`获取数据目录`, fmt.Sprintf(`当前合并类型为 %s`, combineNameMap[runParams.CombineType]))
-	//固定索引目录
-	if runParams.CombineType == define.CombineTypeFix {
-		userDataIndex := 1000000 + runParams.Id
-		runParams.StreamFunc(`获取数据目录`, `固定目录，以`+cast.ToString(userDataIndex)+`作为数据目录`)
-		return userDataIndex
+	runParams.StreamFunc(`获取数据目录`, `固定目录，最终使用目录索引 `+cast.ToString(userDataIndex))
+	return userDataIndex, nil
+}
+
+func (h *ContextPageList) getMappedDirectoryIndex(runParams *PlaywrightRunParams, logPrefix string) (int, error) {
+	userDataIndex, err := h.getSmartLinkDirectoryStore().GetByMappingKey(runParams.DirectoryMappingKey)
+	if err != nil {
+		runParams.StreamFunc(`获取数据目录`, fmt.Sprintf(`%s查询固定目录映射失败，mappingKey=%s, err=%s`, logPrefix, runParams.DirectoryMappingKey, err.Error()))
+		return 0, err
 	}
-	//不需要合并 找到一个没有用到的就行
-	if runParams.CombineType == define.CombineTypeNo {
-		noUserDataIndex := h.GetNoUserDataIndex()
-		runParams.StreamFunc(`获取数据目录`, `不需要合并，开始寻找一个没有用过的目录,找到`+cast.ToString(noUserDataIndex))
-		if noUserDataIndex != 0 {
-			return noUserDataIndex
-		} else {
-			return 99 //找不到都给到99吧
+	if userDataIndex > 0 {
+		runParams.StreamFunc(`获取数据目录`, fmt.Sprintf(`%s固定目录映射命中，mappingKey=%s, 目录索引=%d`, logPrefix, runParams.DirectoryMappingKey, userDataIndex))
+	}
+	return userDataIndex, nil
+}
+
+func (h *ContextPageList) GetFixUserDataIndex(runParams *PlaywrightRunParams) (int, error) {
+	if runParams.DirectoryMappingKey == `` {
+		err := errors.New(`固定目录映射键为空，无法按 mapping table 分配目录`)
+		runParams.StreamFunc(`获取数据目录`, err.Error())
+		return 0, err
+	}
+	directoryStore := h.getSmartLinkDirectoryStore()
+	userDataIndex, err := h.getMappedDirectoryIndex(runParams, ``)
+	if err != nil {
+		return 0, err
+	}
+	if userDataIndex > 0 {
+		return userDataIndex, nil
+	}
+
+	runParams.StreamFunc(`获取数据目录`, fmt.Sprintf(`固定目录映射未命中，开始分配目录索引，mappingKey=%s`, runParams.DirectoryMappingKey))
+	for i := 1; i < define.MaxUserDataIndex; i++ {
+		occupied, occupiedErr := directoryStore.ExistsUserDataIndex(i)
+		if occupiedErr != nil {
+			runParams.StreamFunc(`获取数据目录`, fmt.Sprintf(`检查固定目录索引占用失败，mappingKey=%s, index=%d, err=%s`, runParams.DirectoryMappingKey, i, occupiedErr.Error()))
+			return 0, occupiedErr
 		}
-	}
-	//自动找到上一次登录的目录索引
-	if runParams.CombineType == define.CombineTypeLast {
-		lastUserDataIndex := h.GetLastUserDataIndex(runParams)
-		runParams.StreamFunc(`获取数据目录`, fmt.Sprintf(`根据上一次打开的来找到目录 %d`, lastUserDataIndex))
-		if lastUserDataIndex != 0 {
-			return lastUserDataIndex
+		if occupied {
+			runParams.StreamFunc(`获取数据目录`, fmt.Sprintf(`固定目录索引 %d 已被映射表占用，跳过`, i))
+			continue
 		}
+		if h.GetContextByIndexIgnoreOpenType(i) != nil {
+			runParams.StreamFunc(`获取数据目录`, fmt.Sprintf(`固定目录索引 %d 当前有活跃实例，跳过`, i))
+			continue
+		}
+		upsertErr := directoryStore.UpsertMapping(
+			runParams.DirectoryMappingKey,
+			runParams.Id,
+			runParams.Label,
+			runParams.AccountKey,
+			i,
+		)
+		if upsertErr == nil {
+			runParams.StreamFunc(`获取数据目录`, fmt.Sprintf(`固定目录映射分配成功，mappingKey=%s, 目录索引=%d`, runParams.DirectoryMappingKey, i))
+			return i, nil
+		}
+		if errors.Is(upsertErr, ErrSmartLinkDirectoryIndexOccupied) {
+			runParams.StreamFunc(`获取数据目录`, fmt.Sprintf(`固定目录索引 %d 并发占用，先重查 mappingKey=%s`, i, runParams.DirectoryMappingKey))
+			reloadedIndex, reloadErr := h.getMappedDirectoryIndex(runParams, `重查后`)
+			if reloadErr != nil {
+				return 0, reloadErr
+			}
+			if reloadedIndex > 0 {
+				runParams.StreamFunc(`获取数据目录`, fmt.Sprintf(`固定目录重查命中，mappingKey=%s, 目录索引=%d`, runParams.DirectoryMappingKey, reloadedIndex))
+				return reloadedIndex, nil
+			}
+			runParams.StreamFunc(`获取数据目录`, fmt.Sprintf(`固定目录重查仍未命中，mappingKey=%s，继续尝试下一个索引`, runParams.DirectoryMappingKey))
+			continue
+		}
+		runParams.StreamFunc(`获取数据目录`, fmt.Sprintf(`写入固定目录映射失败，mappingKey=%s, index=%d, err=%s`, runParams.DirectoryMappingKey, i, upsertErr.Error()))
+		return 0, upsertErr
 	}
-	//需要合并 找一下可以重复利用的index
-	findUserDataIndex := h.GetFindUserDataIndex(runParams)
-	if findUserDataIndex != 0 {
-		return findUserDataIndex
-	}
-	return 99 //错误
+	err = fmt.Errorf(`固定目录映射分配失败，mappingKey=%s，没有找到可用目录索引`, runParams.DirectoryMappingKey)
+	runParams.StreamFunc(`获取数据目录`, err.Error())
+	return 0, err
 }
 
 func (h *ContextPageList) GetLastUserDataIndex(runParams *PlaywrightRunParams) int {
@@ -261,89 +315,8 @@ func (h *ContextPageList) GetLastUserDataIndex(runParams *PlaywrightRunParams) i
 	}
 }
 
-func (h *ContextPageList) GetFindUserDataIndex(runParams *PlaywrightRunParams) int {
-	runParams.StreamFunc(`获取数据目录`, `开始寻找可复用context`)
-	ignoreIndexList := make([]int, 0)
-	rContext := h.FindContextList(func(context *ContextPage) *ContextPage {
-		//非同一类型打开方式 不管
-		if context.OpenType != runParams.OpenType {
-			runParams.StreamFunc(`获取数据目录`, context.LinkId+`非同一类型打开方式，不处理`)
-			ignoreIndexList = append(ignoreIndexList, context.UserDataIndex)
-			return nil
-		}
-		//非同一类型的链接 不管
-		if !h.IsSameLink(context.LinkIdLabel, runParams.LinkIdLabel) {
-			runParams.StreamFunc(`获取数据目录`, context.LinkId+`不属于同一类型链接，不处理，`+context.LinkIdLabel)
-			ignoreIndexList = append(ignoreIndexList, context.UserDataIndex)
-			return nil
-		}
-		//是否有相同域名的page存在
-		boolFindSameDomainPage := false
-		pageList := (*context.Context).Pages()
-		for _, page := range pageList {
-			if gstool.UrlGetHost(page.URL()) == runParams.Domain {
-				runParams.StreamFunc(`获取数据目录`, context.LinkId+`有当前域名的网页，不可以打开`)
-				boolFindSameDomainPage = true
-				break
-			}
-		}
-		//没有找到相同域名的page
-		if !boolFindSameDomainPage { //需要合并时才处理
-			runParams.StreamFunc(`获取数据目录`, fmt.Sprintf(`找到了已经存在的浏览器实例 %s`, context.LinkId))
-			return context
-		} else {
-			ignoreIndexList = append(ignoreIndexList, context.UserDataIndex)
-		}
-		return nil
-	})
-	if rContext != nil {
-		return rContext.UserDataIndex
-	}
-	//没有能够复用的数据索引 那么
-	for i := 1; i < define.MaxUserDataIndex; i++ {
-		if gstool.ArrayExistValue(&ignoreIndexList, i) {
-			runParams.StreamFunc(`获取数据目录`, fmt.Sprintf(`挨个判断，是否有可以用的目录，%d该目录已处于忽略列表`, i))
-			continue
-		}
-		//是否已存在相同域名在使用
-		if h.ExistDomainUserDataIndex(i, runParams) {
-			runParams.StreamFunc(`获取数据目录`, fmt.Sprintf(`挨个判断，是否有可以用的目录，%d该目录下有相同域名`, i))
-			continue
-		}
-		runParams.StreamFunc(`获取数据目录`, fmt.Sprintf(`挨个判断，是否有可以用的目录，%d该目录可用`, i))
-		return i
-	}
-	return 99
-}
-
-func (h *ContextPageList) ExistDomainUserDataIndex(userDataIndex int, runParams *PlaywrightRunParams) bool {
-	exist, smartLinkErr := h.getSmartLinkLastStore().ExistDomainUserDataIndex(runParams.Domain, userDataIndex)
-	if smartLinkErr != nil {
-		return false
-	} else {
-		return exist
-	}
-}
-
 func (h *ContextPageList) IsSameLink(smartLinkUniqueKeyS, smartLinkUniqueKeyT string) bool {
 	return strings.Split(smartLinkUniqueKeyS, `_`)[0] == strings.Split(smartLinkUniqueKeyT, `_`)[0]
-}
-
-func (h *ContextPageList) GetNoUserDataIndex() int {
-	for i := 1; i < define.MaxUserDataIndex; i++ {
-		boolExist := false
-		h.EachContextList(func(context *ContextPage) bool {
-			if context.UserDataIndex == i {
-				boolExist = true
-				return true
-			}
-			return false
-		})
-		if !boolExist {
-			return i
-		}
-	}
-	return 0
 }
 
 func (h *ContextPageList) GetContextByIndex(dataIndex int, openType define.OpenType) *ContextPage {
@@ -366,17 +339,20 @@ func (h *ContextPageList) GetContextByIndexIgnoreOpenType(dataIndex int) *Contex
 	})
 }
 
-func (h *ContextPageList) GetContextParam(runParams *PlaywrightRunParams) (*ContextPage, int, string) {
+func (h *ContextPageList) GetContextParam(runParams *PlaywrightRunParams) (*ContextPage, int, string, error) {
 	runParams.StreamFunc(`获取数据目录`, `开始`)
 	//固定打开数据索引 关闭此context下面的所有页面
 	h.CleanContextPagesFixDataId(runParams)
 	//获取数据索引目录
-	userDataIndex := h.GetUserDataIndex(runParams)
+	userDataIndex, err := h.getUserDataIndex(runParams)
+	if err != nil {
+		return nil, 0, ``, err
+	}
 	//通过索引目录拿到已存在的context
 	existContextPage := h.GetContextByIndex(userDataIndex, runParams.OpenType)
 	if existContextPage != nil {
 		runParams.StreamFunc(`获取数据目录`, fmt.Sprintf(`已存在浏览器实例 %s ,直接使用`, existContextPage.LinkId))
-		return existContextPage, existContextPage.UserDataIndex, existContextPage.UserDataPath
+		return existContextPage, existContextPage.UserDataIndex, existContextPage.UserDataPath, nil
 	}
 	mismatchContextPage := h.GetContextByIndexIgnoreOpenType(userDataIndex)
 	if mismatchContextPage != nil {
@@ -389,13 +365,17 @@ func (h *ContextPageList) GetContextParam(runParams *PlaywrightRunParams) (*Cont
 	runParams.StreamFunc(`获取数据目录`, fmt.Sprintf(`未找到已存在的浏览器实例，使用的数据目录 %s,开始创建实例`, userDataPath))
 	//创建数据索引目录
 	_ = gstool.DirCreatePath(userDataPath)
-	return nil, userDataIndex, userDataPath
+	return nil, userDataIndex, userDataPath, nil
 }
 
 // GetContextSaveUserData 获取context 需要保存用户数据
 func (h *ContextPageList) GetContextSaveUserData(runParams *PlaywrightRunParams) (*ContextPage, bool, error) {
 	runParams.StreamFunc(`获取浏览器实例`, `需要保存用户数据 `+runParams.LinkIdLabel+`,`+runParams.LinkId)
-	existContextPage, userDataIndex, userDataPath := h.GetContextParam(runParams)
+	existContextPage, userDataIndex, userDataPath, err := h.GetContextParam(runParams)
+	if err != nil {
+		runParams.StreamFunc(`获取浏览器实例`, fmt.Sprintf(`获取数据目录失败 %s`, err.Error()))
+		return nil, false, err
+	}
 	if existContextPage != nil {
 		runParams.StreamFunc(`获取浏览器实例`, fmt.Sprintf(`已存在实例：%s ,直接使用 数据保存目录：%s`, runParams.LinkIdLabel+`,`+runParams.LinkId, userDataPath))
 		return existContextPage, false, nil
@@ -427,9 +407,9 @@ func (h *ContextPageList) GetContextSaveUserData(runParams *PlaywrightRunParams)
 				Username: runParams.BrowserAuthUsername,
 				Password: runParams.BrowserAuthPassword,
 			},
-			Args: []string{
+			Args: append([]string{
 				`--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36`, //隐藏无头
-			},
+			}, runParams.ExtraBrowserArgs...),
 			IgnoreDefaultArgs: []string{
 				`--enable-automation`,
 				`--disable-infobars`,                            //禁用“正在使用自动化软件”提示信息栏。
@@ -455,9 +435,9 @@ func (h *ContextPageList) GetContextSaveUserData(runParams *PlaywrightRunParams)
 			IgnoreHttpsErrors: playwright.Bool(true),
 			Locale:            playwright.String(`zh-CN`),
 			Timeout:           &runParams.GetPageTimeout,
-			Args: []string{
+			Args: append([]string{
 				`--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36`, //隐藏无头
-			},
+			}, runParams.ExtraBrowserArgs...),
 			IgnoreDefaultArgs: []string{
 				`--enable-automation`,
 				`--disable-infobars`,                            //禁用“正在使用自动化软件”提示信息栏。
@@ -482,49 +462,4 @@ func (h *ContextPageList) GetContextSaveUserData(runParams *PlaywrightRunParams)
 	h.AddContextList(contextPage)
 	runParams.StreamFunc(`获取浏览器实例`, `创建实例对象成功，类型值：`+contextPage.LinkIdLabel+`,唯一值：`+contextPage.LinkId)
 	return contextPage, true, nil
-}
-
-// GetContextNotSaveUserData 获取context 不需要保存用户数据
-func (h *ContextPageList) GetContextNotSaveUserData(browser playwright.Browser, runParams *PlaywrightRunParams) (*ContextPage, error) {
-	//查找可用的context
-	rContext := h.FindNotSaveUserDataContext(runParams)
-	if rContext != nil {
-		return rContext, nil
-	}
-	runParams.StreamFunc(`获取无痕浏览器实例`, fmt.Sprintf(`没有找到可用的浏览器实例`))
-	var context playwright.BrowserContext
-	var contextErr error
-	if runParams.BrowserAuthUsername != `` && runParams.BrowserAuthPassword != `` {
-		context, contextErr = browser.NewContext(playwright.BrowserNewContextOptions{
-			HttpCredentials: &playwright.HttpCredentials{
-				Username: runParams.BrowserAuthUsername,
-				Password: runParams.BrowserAuthPassword,
-			},
-			NoViewport:        playwright.Bool(true),
-			JavaScriptEnabled: playwright.Bool(true),
-			AcceptDownloads:   playwright.Bool(true),
-			Locale:            playwright.String(`zh-CN`),
-		})
-		runParams.StreamFunc(`获取无痕浏览器实例`, fmt.Sprintf(`创建并传递浏览器验证 用户名%s`, runParams.BrowserAuthUsername))
-	} else {
-		context, contextErr = browser.NewContext(playwright.BrowserNewContextOptions{
-			NoViewport:        playwright.Bool(true),
-			JavaScriptEnabled: playwright.Bool(true),
-			AcceptDownloads:   playwright.Bool(true),
-			Locale:            playwright.String(`zh-CN`),
-		})
-		runParams.StreamFunc(`获取无痕浏览器实例`, fmt.Sprintf(`创建完全全新的浏览器实例`))
-	}
-	if contextErr != nil {
-		return nil, contextErr
-	}
-	closeEvent := func() {
-		runParams.StreamFunc(`无痕浏览器实例关闭事件`, `关闭 `+runParams.LinkIdLabel+`,`+runParams.LinkId)
-		h.CleanContextList(false)
-	}
-	runParams.StreamFunc(`获取无痕浏览器实例`, `成功，创建实例对象`)
-	contextPage := NewContextPage(&context, runParams, ``, 0, h.log, closeEvent)
-	h.AddContextList(contextPage)
-	runParams.StreamFunc(`获取无痕浏览器实例`, `创建实例对象成功，类型值：`+contextPage.LinkIdLabel+`,唯一值：`+contextPage.LinkId)
-	return contextPage, nil
 }

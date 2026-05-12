@@ -69,8 +69,24 @@ function CronConfigGet(callBack){
     base.BasePost('/api/Set/CronConfigGet', {}, callBack)
 }
 
+function CronConfigTypes(callBack){
+    base.BasePost('/api/Set/CronConfigTypes', {}, callBack)
+}
+
 function CronConfigSave(data , callBack){
     base.BasePost('/api/Set/CronConfigSave', data, callBack)
+}
+
+function HomeTaskConfigGet(callBack){
+    base.BasePost('/api/Set/HomeTaskConfigGet', {}, callBack)
+}
+
+function HomeTaskConfigSave(data , callBack){
+    base.BasePost('/api/Set/HomeTaskConfigSave', data, callBack)
+}
+
+function PromptChangeLogList(callBack){
+    base.BasePost('/api/Set/PromptChangeLogList', {}, callBack)
 }
 
 export default {
@@ -93,5 +109,9 @@ export default {
     RuntimeDatabaseGitSync,
     RuntimeConfigItemSave,
     CronConfigGet,
+    CronConfigTypes,
     CronConfigSave,
+    HomeTaskConfigGet,
+    HomeTaskConfigSave,
+    PromptChangeLogList,
 }

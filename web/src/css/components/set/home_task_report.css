@@ -3,3 +3,52 @@
 .memory-config-form {
   margin-bottom: 0;
 }
+
+.prompt-placeholder-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  margin-bottom: 16px;
+  border: 1px solid #e3e9dd;
+  border-radius: 10px;
+  background: #f8faf4;
+}
+
+.prompt-placeholder-bar__label {
+  font-size: 13px;
+  color: #70806b;
+  white-space: nowrap;
+}
+
+.prompt-placeholder-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: #3d6b3d;
+  background: #eef4ec;
+  border: 1px solid #d4e0cf;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.prompt-placeholder-tag:hover {
+  background: #e0ead8;
+  border-color: #b8d4b0;
+}
+
+.prompt-placeholder-tag__icon {
+  font-size: 12px;
+  color: #5a8a5a;
+}
+
+.daily-report-editor {
+  height: 480px;
+  max-height: calc(100vh - 390px);
+  min-height: 200px;
+}

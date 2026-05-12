@@ -1,13 +1,20 @@
 package controller
 
 import (
+	"archive/zip"
+	"bytes"
+	"dev_tool/internal/app/dtool/business"
 	"dev_tool/internal/app/dtool/common"
 	"dev_tool/internal/app/dtool/component"
 	"dev_tool/internal/app/dtool/define"
 	"dev_tool/internal/pkg/p_define"
 	"fmt"
+	"io"
+	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -132,12 +139,25 @@ func MemoryFragmentList(c *gin.Context) {
 	}
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
-	list, err := memoryDB.MemoryFragmentList(cast.ToInt(dataMap[`limit`]))
+	limit := cast.ToInt(dataMap[`limit`])
+	offset := cast.ToInt(dataMap[`offset`])
+	if limit <= 0 {
+		limit = 10
+	}
+	// 多查一条用于判断是否还有更多数据
+	list, err := memoryDB.MemoryFragmentList(limit+1, offset)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	gsgin.GinResponseSuccess(c, ``, list)
+	hasMore := len(list) > limit
+	if hasMore {
+		list = list[:limit]
+	}
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`list`:     list,
+		`has_more`: hasMore,
+	})
 }
 
 // MemoryFragmentInfo 查询单个知识片段详情。
@@ -595,4 +615,419 @@ func MemoryFragmentImageServe(c *gin.Context) {
 		return
 	}
 	c.File(imagePath)
+}
+
+// MemoryFragmentUploadZip 上传 ZIP 文件，解析 content.md + images/，创建知识片段。
+func MemoryFragmentUploadZip(c *gin.Context) {
+	memoryDB, ok := memoryDBOrResponse(c)
+	if !ok {
+		return
+	}
+	file, err := c.FormFile(`file`)
+	if err != nil {
+		gsgin.GinResponseError(c, `上传失败:`+err.Error(), nil)
+		return
+	}
+	if !strings.HasSuffix(strings.ToLower(file.Filename), `.zip`) {
+		gsgin.GinResponseError(c, `仅支持 .zip 文件`, nil)
+		return
+	}
+	// 前端传入的 API 基地址，用于拼接图片绝对路径
+	apiBaseURL := strings.TrimRight(c.PostForm(`api_base_url`), `/`)
+
+	// 保存到临时文件
+	tmpDir := os.TempDir()
+	tmpPath := filepath.Join(tmpDir, fmt.Sprintf(`fragment_upload_%d.zip`, time.Now().UnixMicro()))
+	if err := c.SaveUploadedFile(file, tmpPath); err != nil {
+		gsgin.GinResponseError(c, `保存临时文件失败:`+err.Error(), nil)
+		return
+	}
+	defer os.Remove(tmpPath)
+
+	// 解压 ZIP
+	reader, err := zip.OpenReader(tmpPath)
+	if err != nil {
+		gsgin.GinResponseError(c, `打开 ZIP 文件失败:`+err.Error(), nil)
+		return
+	}
+	defer reader.Close()
+
+	// 读取 content.md
+	var markdownContent string
+	for _, f := range reader.File {
+		if f.Name == `content.md` {
+			rc, openErr := f.Open()
+			if openErr != nil {
+				gsgin.GinResponseError(c, `打开 content.md 失败:`+openErr.Error(), nil)
+				return
+			}
+			content, readErr := io.ReadAll(rc)
+			_ = rc.Close()
+			if readErr != nil {
+				gsgin.GinResponseError(c, `读取 content.md 失败:`+readErr.Error(), nil)
+				return
+			}
+			markdownContent = string(content)
+			break
+		}
+	}
+	if markdownContent == `` {
+		gsgin.GinResponseError(c, `ZIP 中未找到 content.md`, nil)
+		return
+	}
+
+	// 从 content.md 提取标题（第一个 # 行）
+	title := `导入的知识片段`
+	lines := strings.Split(markdownContent, "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, `# `) {
+			title = strings.TrimPrefix(trimmed, `# `)
+			break
+		}
+	}
+
+	// 保存图片并重写路径
+	memoryDir := component.MemoryRuntime.Config().Dir
+	pathMapping, imgErr := saveScrapeImagesToMemoryDir(&reader.Reader, memoryDir)
+	if imgErr != nil {
+		gsgin.GinResponseError(c, `保存图片失败:`+imgErr.Error(), nil)
+		return
+	}
+	markdownContent = rewriteScrapeImagePaths(markdownContent, pathMapping)
+	// 用前端传入的 apiBaseURL 替换图片路径为绝对地址
+	if apiBaseURL != `` {
+		markdownContent = strings.ReplaceAll(markdownContent, "(/memory/images/", "("+apiBaseURL+"/memory/images/")
+	} else {
+		markdownContent = prefixMemoryImagePaths(markdownContent)
+	}
+
+	// 创建知识片段
+	info, saveErr := memoryDB.MemoryFragmentSave(``, title, markdownContent, nil)
+	if saveErr != nil {
+		gsgin.GinResponseError(c, `创建片段失败:`+saveErr.Error(), nil)
+		return
+	}
+	component.MemoryRuntime.ScheduleSync()
+	broadcastMemoryFragmentUpsert(info)
+	gsgin.GinResponseSuccess(c, ``, info)
+}
+
+// imageRefPattern 匹配 markdown 图片引用中的文件名，支持相对和绝对路径。
+var imageRefPattern = regexp.MustCompile(`!\[.*?\]\(.*?/memory/images/([^)\s]+?)\)`)
+
+// extractImageFilenames 从 markdown 内容中提取所有引用的图片文件名。
+func extractImageFilenames(markdown string) []string {
+	matches := imageRefPattern.FindAllStringSubmatch(markdown, -1)
+	seen := make(map[string]bool)
+	var names []string
+	for _, m := range matches {
+		name := strings.TrimSpace(m[1])
+		if name == `` || seen[name] {
+			continue
+		}
+		seen[name] = true
+		names = append(names, name)
+	}
+	return names
+}
+
+// rewriteImagePathsToRelative 将 markdown 中的图片绝对/服务端路径改写为相对 images/ 路径。
+func rewriteImagePathsToRelative(markdown string) string {
+	return imageRefPattern.ReplaceAllString(markdown, `![image](images/$1)`)
+}
+
+// MemoryFragmentDownloadZip 将知识片段及其图片打包为 ZIP 下载。
+func MemoryFragmentDownloadZip(c *gin.Context) {
+	memoryDB, ok := memoryDBOrResponse(c)
+	if !ok {
+		return
+	}
+	fragmentID := strings.TrimSpace(c.Query(`id`))
+	if fragmentID == `` || fragmentID == `0` {
+		gsgin.GinResponseError(c, `片段id不能为空`, nil)
+		return
+	}
+	info, err := memoryDB.MemoryFragmentInfo(fragmentID)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	markdownContent := cast.ToString(info[`content`])
+	title := cast.ToString(info[`title`])
+	if strings.TrimSpace(title) == `` {
+		title = `未命名片段`
+	}
+
+	// 收集图片文件并构造 ZIP
+	imageNames := extractImageFilenames(markdownContent)
+	rewrittenContent := rewriteImagePathsToRelative(markdownContent)
+	memoryDir := component.MemoryRuntime.Config().Dir
+	imageDir := filepath.Join(memoryDir, `images`)
+
+	tmpZipPath := filepath.Join(os.TempDir(), fmt.Sprintf(`fragment_download_%d_%d.zip`, time.Now().UnixMicro(), os.Getpid()))
+	zipFile, zipErr := os.Create(tmpZipPath)
+	if zipErr != nil {
+		gsgin.GinResponseError(c, `创建 ZIP 文件失败: `+zipErr.Error(), nil)
+		return
+	}
+	zipWriter := zip.NewWriter(zipFile)
+	defer zipFile.Close()
+	defer os.Remove(tmpZipPath)
+
+	// 写入 content.md
+	contentWriter, _ := zipWriter.Create(`content.md`)
+	_, _ = contentWriter.Write([]byte(rewrittenContent))
+
+	// 写入 images/
+	copiedCount := 0
+	for _, name := range imageNames {
+		srcPath := filepath.Join(imageDir, name)
+		srcFile, openErr := os.Open(srcPath)
+		if openErr != nil {
+			continue // 图片文件不存在则跳过
+		}
+		destWriter, createErr := zipWriter.Create(fmt.Sprintf(`images/%s`, name))
+		if createErr != nil {
+			srcFile.Close()
+			continue
+		}
+		_, copyErr := io.Copy(destWriter, srcFile)
+		srcFile.Close()
+		if copyErr != nil {
+			continue
+		}
+		copiedCount++
+	}
+	_ = zipWriter.Close()
+	_ = zipFile.Close()
+
+	safeTitle := strings.Map(func(r rune) rune {
+		if r == '/' || r == '\\' || r == ':' || r == '*' || r == '?' || r == '"' || r == '<' || r == '>' || r == '|' {
+			return '_'
+		}
+		return r
+	}, title)
+	downloadName := fmt.Sprintf(`%s.zip`, safeTitle)
+	c.Header(`Content-Disposition`, fmt.Sprintf(`attachment; filename=%s`, url.PathEscape(downloadName)))
+	c.Header(`Content-Type`, `application/zip`)
+	c.File(tmpZipPath)
+}
+
+// MemoryGitPull 手动拉取记忆库远程仓库最新内容。
+func MemoryGitPull(c *gin.Context) {
+	config := business.ReadMemoryConfigFromINI()
+	if !config.GitRepoEnabled {
+		gsgin.GinResponseError(c, `记忆库未开启 Git 同步`, nil)
+		return
+	}
+	memoryGit := business.NewMemoryGit()
+	if err := memoryGit.Pull(config.Dir); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	gsgin.GinResponseSuccess(c, `拉取成功`, nil)
+}
+
+// MemoryFragmentUpdateZip 上传 ZIP 文件更新已有知识片段，解析 content.md + images/ 覆盖更新。
+func MemoryFragmentUpdateZip(c *gin.Context) {
+	memoryDB, ok := memoryDBOrResponse(c)
+	if !ok {
+		return
+	}
+	fragmentID := strings.TrimSpace(c.PostForm(`id`))
+	if fragmentID == `` || fragmentID == `0` {
+		gsgin.GinResponseError(c, `片段ID不能为空`, nil)
+		return
+	}
+	// 确认片段存在
+	_, infoErr := memoryDB.MemoryFragmentInfo(fragmentID)
+	if infoErr != nil {
+		gsgin.GinResponseError(c, `片段不存在:`+infoErr.Error(), nil)
+		return
+	}
+
+	file, err := c.FormFile(`file`)
+	if err != nil {
+		gsgin.GinResponseError(c, `上传失败:`+err.Error(), nil)
+		return
+	}
+	if !strings.HasSuffix(strings.ToLower(file.Filename), `.zip`) {
+		gsgin.GinResponseError(c, `仅支持 .zip 文件`, nil)
+		return
+	}
+	apiBaseURL := strings.TrimRight(c.PostForm(`api_base_url`), `/`)
+
+	tmpDir := os.TempDir()
+	tmpPath := filepath.Join(tmpDir, fmt.Sprintf(`fragment_update_%d.zip`, time.Now().UnixMicro()))
+	if err := c.SaveUploadedFile(file, tmpPath); err != nil {
+		gsgin.GinResponseError(c, `保存临时文件失败:`+err.Error(), nil)
+		return
+	}
+	defer os.Remove(tmpPath)
+
+	reader, err := zip.OpenReader(tmpPath)
+	if err != nil {
+		gsgin.GinResponseError(c, `打开 ZIP 文件失败:`+err.Error(), nil)
+		return
+	}
+	defer reader.Close()
+
+	var markdownContent string
+	for _, f := range reader.File {
+		if f.Name == `content.md` {
+			rc, openErr := f.Open()
+			if openErr != nil {
+				gsgin.GinResponseError(c, `打开 content.md 失败:`+openErr.Error(), nil)
+				return
+			}
+			content, readErr := io.ReadAll(rc)
+			_ = rc.Close()
+			if readErr != nil {
+				gsgin.GinResponseError(c, `读取 content.md 失败:`+readErr.Error(), nil)
+				return
+			}
+			markdownContent = string(content)
+			break
+		}
+	}
+	if markdownContent == `` {
+		gsgin.GinResponseError(c, `ZIP 中未找到 content.md`, nil)
+		return
+	}
+
+	title := ``
+	lines := strings.Split(markdownContent, "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, `# `) {
+			title = strings.TrimPrefix(trimmed, `# `)
+			break
+		}
+	}
+
+	memoryDir := component.MemoryRuntime.Config().Dir
+	pathMapping, imgErr := saveScrapeImagesToMemoryDir(&reader.Reader, memoryDir)
+	if imgErr != nil {
+		gsgin.GinResponseError(c, `保存图片失败:`+imgErr.Error(), nil)
+		return
+	}
+	markdownContent = rewriteScrapeImagePaths(markdownContent, pathMapping)
+	if apiBaseURL != `` {
+		markdownContent = strings.ReplaceAll(markdownContent, "(/memory/images/", "("+apiBaseURL+"/memory/images/")
+	} else {
+		markdownContent = prefixMemoryImagePaths(markdownContent)
+	}
+
+	info, saveErr := memoryDB.MemoryFragmentSave(fragmentID, title, markdownContent, nil)
+	if saveErr != nil {
+		gsgin.GinResponseError(c, `更新片段失败:`+saveErr.Error(), nil)
+		return
+	}
+	component.MemoryRuntime.ScheduleSync()
+	broadcastMemoryFragmentUpsert(info)
+	gsgin.GinResponseSuccess(c, ``, info)
+}
+
+const (
+	// fragmentRefTypeFragment 表示引用来源为其他知识片段。
+	fragmentRefTypeFragment = `fragment`
+)
+
+// MemoryFragmentReferences 查询知识片段被哪些位置引用（工作流程 + 其他片段）。
+func MemoryFragmentReferences(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	idsRaw, _ := dataMap[`fragment_ids`].([]any)
+	fragmentIDs := make([]string, 0, len(idsRaw))
+	for _, item := range idsRaw {
+		id := strings.TrimSpace(cast.ToString(item))
+		if id != `` {
+			fragmentIDs = append(fragmentIDs, id)
+		}
+	}
+
+	// 初始化结果，确保每个 fragment_id 都有数组（即使为空）。
+	result := make(map[string][]map[string]any)
+	for _, fid := range fragmentIDs {
+		result[fid] = []map[string]any{}
+	}
+
+	if len(fragmentIDs) == 0 {
+		gsgin.GinResponseSuccess(c, ``, result)
+		return
+	}
+
+	// 1. 查工作流程引用。
+	workflowRefs, err := common.DbMain.HomeTaskFragmentReferences(fragmentIDs)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	for fid, refs := range workflowRefs {
+		for _, ref := range refs {
+			result[fid] = append(result[fid], map[string]any{
+				`type`: ref.Type,
+				`id`:   ref.ID,
+				`name`: ref.Name,
+			})
+		}
+	}
+
+	// 2. 用 rg 在记忆库搜索片段间引用（rg 不可用时跳过）。
+	_ = component.MemoryRuntime.EnsureConfigured()
+	memoryDB := component.MemoryRuntime.DB()
+	if memoryDB != nil {
+		for _, fid := range fragmentIDs {
+			fragmentRefs := searchFragmentRefsByRg(component.MemoryRuntime.Config().Dir, fid, memoryDB)
+			result[fid] = append(result[fid], fragmentRefs...)
+		}
+	}
+
+	gsgin.GinResponseSuccess(c, ``, result)
+}
+
+// rgAvailable 缓存 rg 是否可用的检测结果。
+var rgAvailable = !func() bool {
+	_, err := exec.LookPath(`rg`)
+	return err != nil
+}()
+
+// searchFragmentRefsByRg 用 rg 在记忆库目录搜索引用指定片段的其他片段。
+func searchFragmentRefsByRg(memoryDir, fragmentID string, memoryDB common.MemoryFragmentStore) []map[string]any {
+	if !rgAvailable {
+		return nil
+	}
+	if strings.TrimSpace(memoryDir) == `` || strings.TrimSpace(fragmentID) == `` {
+		return nil
+	}
+	cmd := exec.Command(`rg`, `-l`, `--fixed-strings`, fragmentID, memoryDir, `--glob`, `*.md`)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return nil
+	}
+	paths := strings.Split(strings.ReplaceAll(strings.TrimSpace(stdout.String()), "\r", ""), "\n")
+	if len(paths) == 0 {
+		return nil
+	}
+	// 批量查询匹配文件的片段信息。
+	infos := memoryDB.MemoryFragmentBatchInfoByPaths(paths)
+	refs := make([]map[string]any, 0, len(infos))
+	for _, info := range infos {
+		refID := strings.TrimSpace(cast.ToString(info[`id`]))
+		if refID == `` {
+			refID = strings.TrimSpace(cast.ToString(info[`file_id`]))
+		}
+		if refID == `` || refID == fragmentID {
+			continue
+		}
+		refs = append(refs, map[string]any{
+			`type`:  fragmentRefTypeFragment,
+			`id`:    refID,
+			`title`: cast.ToString(info[`title`]),
+		})
+	}
+	return refs
 }

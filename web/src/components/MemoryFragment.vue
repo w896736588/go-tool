@@ -1,54 +1,38 @@
-﻿<template>
+﻿﻿<template>
   <div class="memory-page">
     <aside v-if="memoryConfigured && !sidebarCollapsed" class="memory-sidebar">
       <div class="sidebar-header">
         <div class="sidebar-header-actions">
-          <pl-button type="primary" plain size="small" @click="createFragment">
-            <el-icon><Plus /></el-icon>
-            新建
-          </pl-button>
-          <pl-button plain size="small" @click="openTrashTab">
-            <el-icon><Delete /></el-icon>
-            回收站
-          </pl-button>
-          <pl-button plain size="small" @click="openSettingsDialog">
-            设置
-          </pl-button>
-        </div>
-      </div>
-
-      <div v-show="!sidebarCollapsed" class="search-card sidebar-search-card">
-        <div class="search-row">
-          <el-input
-            v-model="searchQuery"
-            clearable
-            :placeholder="searchPlaceholder"
-            @keydown.enter.prevent="submitSearch"
-            @clear="handleSearchClear"
-          >
-            <template #prefix>
+          <el-tooltip content="上传ZIP" placement="bottom">
+            <pl-button plain size="small" class="icon-only-btn" @click="triggerUploadZip" :loading="zipUploading">
+              <el-icon><Upload /></el-icon>
+            </pl-button>
+          </el-tooltip>
+          <input ref="zipFileInput" type="file" accept=".zip" style="display:none" @change="handleZipUpload" />
+          <el-tooltip content="搜索" placement="bottom">
+            <pl-button plain size="small" class="icon-only-btn" @click="searchDialogVisible = true">
               <el-icon><Search /></el-icon>
-            </template>
-          </el-input>
-          <el-switch
-            v-model="searchModeSemantic"
-            inline-prompt
-            active-text="智能"
-            inactive-text="全文"
-            class="search-mode-switch"
-            @change="handleSearchModeSwitch"
-          />
-        </div>
-        <div class="search-actions">
-          <pl-button type="primary" size="small" @click="submitSearch">
-            <el-icon><Search /></el-icon>
-            搜索
-          </pl-button>
-          <pl-button plain size="small" @click="clearFilter">清空条件</pl-button>
+            </pl-button>
+          </el-tooltip>
+          <el-tooltip content="新建" placement="bottom">
+            <pl-button type="primary" plain size="small" class="icon-only-btn" @click="createFragment">
+              <el-icon><Plus /></el-icon>
+            </pl-button>
+          </el-tooltip>
+          <el-tooltip content="回收站" placement="bottom">
+            <pl-button plain size="small" class="icon-only-btn" @click="openTrashTab">
+              <el-icon><Delete /></el-icon>
+            </pl-button>
+          </el-tooltip>
+          <el-tooltip content="设置" placement="bottom">
+            <pl-button plain size="small" class="icon-only-btn" @click="openSettingsDialog">
+              <el-icon><Setting /></el-icon>
+            </pl-button>
+          </el-tooltip>
         </div>
       </div>
 
-      <el-scrollbar v-show="!sidebarCollapsed" class="sidebar-scroll">
+      <el-scrollbar ref="sidebarScrollRef" v-show="!sidebarCollapsed" class="sidebar-scroll" @scroll="handleSidebarScroll">
         <div class="sidebar-filter-row">
           <el-input
             v-model="sidebarFilterQuery"
@@ -99,25 +83,58 @@
             </span>
             <div class="sidebar-item-time">{{ item.update_time_desc || '-' }}</div>
           </div>
+          <div v-if="fragmentRefCount(item.id) > 0" class="sidebar-item-refs" @click.stop="toggleFragmentRefs(item.id)">
+            <span class="sidebar-item-refs-badge">被 {{ fragmentRefCount(item.id) }} 个位置使用</span>
+            <div v-if="expandedFragmentRefs[normalizeFragmentId(item.id)]" class="sidebar-item-refs-list">
+              <div
+                v-for="ref in getFragmentRefs(item.id)"
+                :key="ref.type + '-' + ref.id"
+                class="sidebar-item-refs-item"
+                @click.stop="openFragmentRef(ref)"
+              >
+                <span class="sidebar-item-refs-type">{{ ref.type === 'workflow' ? '工作流程' : '知识片段' }}</span>
+                <span class="sidebar-item-refs-name">{{ ref.name || ref.title }}</span>
+              </div>
+            </div>
+          </div>
           <div v-if="saveFeedbackMap[item.id]" class="sidebar-item-check" aria-hidden="true">
             <el-icon><Check /></el-icon>
           </div>
         </button>
+        <div v-if="fragmentLoadingMore || !fragmentListHasMore" class="sidebar-load-status">
+          <span v-if="fragmentLoadingMore" class="sidebar-load-loading">
+            <el-icon class="is-loading"><Loading /></el-icon>
+            <span>加载中...</span>
+          </span>
+          <span v-else-if="!fragmentListHasMore && fragmentList.length > 0" class="sidebar-load-nomore">没有更多了</span>
+        </div>
       </el-scrollbar>
 
-      <div v-if="memoryGitRepoEnabled && !sidebarCollapsed" class="sidebar-footer">
-        <div class="sidebar-footer-row">
-          <span class="sidebar-footer-label">{{ pushStatusLabel }}</span>
-          <span class="sidebar-footer-value">{{ pushStatusDesc }}</span>
-        </div>
-        <div v-if="lastPushError" class="sidebar-footer-row sidebar-footer-error">
-          <span class="sidebar-footer-label">失败原因</span>
-          <span class="sidebar-footer-value">{{ lastPushError }}</span>
-        </div>
+      <div v-if="!sidebarCollapsed" class="sidebar-footer">
+        <el-tooltip content="返回首页" placement="right">
+          <button class="memory-home-btn" @click="goHome">
+            <el-icon :size="13"><HomeFilled /></el-icon>
+          </button>
+        </el-tooltip>
+        <span v-if="fragmentTotalCount > 0" class="sidebar-count-badge">{{ fragmentList.length }}/{{ fragmentTotalCount }}</span>
+        <template v-if="memoryGitRepoEnabled">
+          <span class="sidebar-git-actions">
+            <el-tooltip content="拉取" placement="top">
+              <button class="memory-git-action-btn" :disabled="gitActionLoading" @click="handleGitPull">
+                <el-icon :size="13"><Download /></el-icon>
+              </button>
+            </el-tooltip>
+            <el-tooltip content="推送" placement="top">
+              <button class="memory-git-action-btn" :disabled="gitActionLoading" @click="handleGitPush">
+                <el-icon :size="13"><Upload /></el-icon>
+              </button>
+            </el-tooltip>
+          </span>
+        </template>
       </div>
     </aside>
 
-    <button v-if="memoryConfigured" class="sidebar-collapse-btn" :title="sidebarCollapsed ? '展开列表' : '收起列表'" @click="toggleSidebar">
+    <button v-if="memoryConfigured && !isEmbedded" class="sidebar-collapse-btn" :title="sidebarCollapsed ? '展开列表' : '收起列表'" @click="toggleSidebar">
       <el-icon :size="12"><component :is="sidebarCollapsed ? 'DArrowRight' : 'DArrowLeft'" /></el-icon>
     </button>
 
@@ -127,10 +144,122 @@
           v-model="activeTab"
           type="card"
           closable
-          class="memory-tabs"
+          :class="['memory-tabs', { 'memory-tabs--embedded': isEmbedded }]"
           @tab-remove="closeTab"
           @tab-click="handleTabChange"
         >
+          <el-tab-pane
+            v-if="aiSearchTabVisible"
+            name="ai_search"
+          >
+            <template #label>
+              <span class="tab-label">AI 搜索: {{ aiSearchQuery }}</span>
+            </template>
+            <div class="ai-search-panel">
+              <div class="ai-search-timeline">
+                <div v-for="(event, index) in aiSearchEvents" :key="index"
+                  :class="['ai-search-step', `ai-search-step--` + event.status]"
+                >
+                  <div class="ai-search-step-row">
+                    <div class="ai-search-step-icon">
+                      <el-icon v-if="event.status === 'running'" class="is-loading"><Loading /></el-icon>
+                      <el-icon v-else-if="event.status === 'done'" class="ai-search-step-done-icon"><Check /></el-icon>
+                      <el-icon v-else-if="event.status === 'error'" class="ai-search-step-error-icon"><Close /></el-icon>
+                    </div>
+                    <div class="ai-search-step-content">
+                      <span v-if="event.status === 'running'" class="ai-search-step-message">
+                        {{ event.message || getStepLabel(event.step) }}（已用时 {{ aiSearchStepElapsed[event.step] || 0 }} 秒）...
+                      </span>
+                      <span v-else-if="event.status === 'done'" class="ai-search-step-message ai-search-step-done-text">
+                        {{ getStepDoneText(event) }}
+                      </span>
+                      <span v-else-if="event.status === 'error'" class="ai-search-step-message ai-search-step-error-text">
+                        {{ event.message }}
+                      </span>
+                    </div>
+                    <button
+                      v-if="event.status === 'done' && canExpandStep(event)"
+                      class="ai-search-step-expand-btn"
+                      @click="toggleStepExpand(event.step)"
+                    >
+                      <el-icon :size="12">
+                        <component :is="aiSearchExpandedSteps[event.step] ? 'ArrowDown' : 'ArrowRight'" />
+                      </el-icon>
+                    </button>
+                  </div>
+                  <div v-if="event.step === 'read' && event.status === 'running' && event.data" class="ai-search-step-progress">
+                    读取中 {{ event.data.current }}/{{ event.data.total }}：{{ event.data.title }}
+                  </div>
+                  <div v-if="aiSearchExpandedSteps[event.step] && event.status === 'done'" class="ai-search-step-detail-panel">
+                    <div v-if="event.step === 'keywords'" class="ai-search-detail-section">
+                      <div class="ai-search-detail-label">提示词</div>
+                      <pre class="ai-search-detail-code">{{ event.prompt }}</pre>
+                      <div class="ai-search-detail-label">AI 回复</div>
+                      <pre class="ai-search-detail-code">{{ event.response }}</pre>
+                      <div v-if="event.data && event.data.keywords" class="ai-search-detail-label">解析出的关键词</div>
+                      <div v-if="event.data && event.data.keywords" class="ai-search-detail-keywords">
+                        <span v-for="kw in event.data.keywords" :key="kw" class="ai-search-detail-keyword-chip">{{ kw }}</span>
+                      </div>
+                    </div>
+                    <div v-if="event.step === 'search'" class="ai-search-detail-section">
+                      <div class="ai-search-detail-label">搜索关键词</div>
+                      <pre class="ai-search-detail-code">{{ event.prompt }}</pre>
+                      <div v-if="event.data && event.data.fragments && event.data.fragments.length > 0" class="ai-search-detail-label">
+                        找到的片段（{{ event.data.fragments.length }} 个）
+                      </div>
+                      <div v-if="event.data && event.data.fragments" class="ai-search-detail-fragments">
+                        <a v-for="frag in event.data.fragments" :key="frag.id" class="ai-search-detail-fragment-link"
+                          href="javascript:void(0)" @click="openFragment(frag.id)"
+                        >{{ frag.title || '未命名片段' }}</a>
+                      </div>
+                    </div>
+                    <div v-if="event.step === 'judge'" class="ai-search-detail-section">
+                      <div class="ai-search-detail-label">提示词</div>
+                      <pre class="ai-search-detail-code">{{ event.prompt }}</pre>
+                      <div class="ai-search-detail-label">AI 回复</div>
+                      <pre class="ai-search-detail-code">{{ event.response }}</pre>
+                      <div v-if="event.data && event.data.selected_fragments" class="ai-search-detail-label">
+                        选中的片段（{{ event.data.selected_fragments.length }} 个）
+                      </div>
+                      <div v-if="event.data && event.data.selected_fragments" class="ai-search-detail-fragments">
+                        <a v-for="frag in event.data.selected_fragments" :key="frag.id" class="ai-search-detail-fragment-link"
+                          href="javascript:void(0)" @click="openFragment(frag.id)"
+                        >{{ frag.title || '未命名片段' }}</a>
+                      </div>
+                    </div>
+                    <div v-if="event.step === 'read'" class="ai-search-detail-section">
+                      <div v-if="event.data && event.data.read_fragments" class="ai-search-detail-label">
+                        已读取片段（{{ event.data.read_fragments.length }} 个，共 {{ event.data.total_chars || 0 }} 字）
+                      </div>
+                      <div v-if="event.data && event.data.read_fragments" class="ai-search-detail-fragments">
+                        <a v-for="frag in event.data.read_fragments" :key="frag.id" class="ai-search-detail-fragment-link"
+                          href="javascript:void(0)" @click="openFragment(frag.id)"
+                        >{{ frag.title || '未命名片段' }}</a>
+                      </div>
+                    </div>
+                    <div v-if="event.step === 'answer'" class="ai-search-detail-section">
+                      <div class="ai-search-detail-label">用户问题</div>
+                      <pre class="ai-search-detail-code">{{ event.prompt }}</pre>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div v-if="aiSearchAnswer" class="ai-search-answer">
+                <div class="ai-search-answer-header">搜索结果</div>
+                <div class="ai-search-answer-content markdown-body" v-html="renderMarkdown(aiSearchAnswer)"></div>
+              </div>
+              <div v-if="aiSearchReferencedFragments.length > 0 && !aiSearchLoading" class="ai-search-references">
+                <div class="ai-search-references-title">相关片段</div>
+                <div v-for="ref in aiSearchReferencedFragments" :key="ref.id"
+                  class="ai-search-reference-item"
+                >
+                  <a href="javascript:void(0)" @click="openFragment(ref.id)">{{ ref.title || '未命名片段' }}</a>
+                </div>
+              </div>
+              <div v-if="aiSearchLoading && !aiSearchAnswer" v-loading="true" class="ai-search-loading"></div>
+            </div>
+          </el-tab-pane>
+
           <el-tab-pane
             v-if="searchTabVisible"
             name="search"
@@ -285,18 +414,57 @@
     >
       <MemorySettingPage ref="memorySettingPage" @changed="handleMemorySettingsChanged" />
     </SettingsDialog>
+
+    <el-dialog
+      v-model="searchDialogVisible"
+      title="搜索知识片段"
+      width="580px"
+      :close-on-click-modal="true"
+      destroy-on-close
+      class="search-dialog"
+    >
+      <div class="search-dialog-body">
+        <el-input
+          v-model="searchQuery"
+          type="textarea"
+          :autosize="{ minRows: 4, maxRows: 10 }"
+          :placeholder="searchPlaceholder"
+          @keydown.enter.prevent="submitSearchFromDialog"
+        />
+        <div class="search-dialog-mode-row">
+          <span class="search-dialog-mode-label">搜索模式</span>
+          <el-switch
+            v-model="searchModeSemantic"
+            active-text="智能搜索"
+            inactive-text="全文搜索"
+            class="search-mode-switch"
+            @change="handleSearchModeSwitch"
+          />
+        </div>
+        <div class="search-dialog-actions">
+          <pl-button type="primary" @click="submitSearchFromDialog">
+            <el-icon><Search /></el-icon>
+            搜索
+          </pl-button>
+          <pl-button plain @click="clearFilterAndCloseDialog">清空条件</pl-button>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script>
-import { Check, DArrowLeft, DArrowRight, Delete, Loading, Plus, Search } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowRight, Check, Close, DArrowLeft, DArrowRight, Delete, Download, HomeFilled, Loading, Plus, Search, Setting, Upload } from '@element-plus/icons-vue'
 import MemoryFragmentApi from '@/utils/base/memory_fragment'
+import set from '@/utils/base/git_set'
 import MemoryEditor from '@/components/memory/MemoryEditor.vue'
 import MemoryHistoryDialog from '@/components/memory/MemoryHistoryDialog.vue'
 import MemorySettingPage from '@/components/set/memory.vue'
 import GitActionButton from '@/components/base/GitActionButton.vue'
 import SettingsDialog from '@/components/base/SettingsDialog.vue'
 import sseDistribute from '@/utils/base/sse_distribute'
+import base from '@/utils/base'
+import { marked } from 'marked'
 const {
   isMemoryFragmentTabName,
   activateMemorySaveFeedback,
@@ -311,6 +479,8 @@ const TAG_FILTER_TOGGLE_MIN_COUNT = 10
 const SEARCH_TAB_NAME = 'search'
 // TRASH_TAB_NAME 统一定义回收站标签页名称，避免散落硬编码。
 const TRASH_TAB_NAME = 'trash'
+// AI_SEARCH_TAB_NAME 统一定义 AI 智能搜索标签页名称。
+const AI_SEARCH_TAB_NAME = 'ai_search'
 // KEYWORD_SEARCH_MODE 统一定义关键词搜索模式值，避免散落硬编码。
 const KEYWORD_SEARCH_MODE = 'keyword'
 // SEMANTIC_SEARCH_MODE 统一定义语义搜索模式值，避免散落硬编码。
@@ -327,12 +497,18 @@ const MEMORY_FRAGMENT_SSE_ACTION_DELETE = 'delete'
 export default {
   name: 'MemoryFragment',
   components: {
+    ArrowDown,
+    ArrowRight,
     Check,
+    Close,
     DArrowLeft,
     DArrowRight,
     Delete,
+    Download,
+    HomeFilled,
     Plus,
     Search,
+    Setting,
     GitActionButton,
     MemoryEditor,
     MemoryHistoryDialog,
@@ -342,11 +518,17 @@ export default {
   data() {
     return {
       fragmentList: [],
+      fragmentPageSize: 10,
+      fragmentOffset: 0,
+      fragmentHasMore: true,
+      fragmentLoadingMore: false,
+      fragmentTotalCount: 0,
       trashList: [],
       searchResults: [],
       searchQuery: '',
       searchMode: KEYWORD_SEARCH_MODE,
       searchModeSemantic: false,
+      searchDialogVisible: false,
       searchTabVisible: false,
       trashTabVisible: false,
       submittedSearchQuery: '',
@@ -360,6 +542,7 @@ export default {
       memoryConfigured: true,
       memoryGitRepoEnabled: false,
       memoryIsGitRepo: false,
+      gitActionLoading: false,
       nextPushTime: 0,
       lastPushTime: 0,
       lastPushTimeDesc: '-',
@@ -378,6 +561,19 @@ export default {
       sidebarFilterTimer: null,
       sidebarFilterLoading: false,
       sidebarFilterResults: [],
+      aiSearchTabVisible: false,
+      aiSearchQuery: '',
+      aiSearchEvents: [],
+      aiSearchAnswer: '',
+      aiSearchLoading: false,
+      aiSearchSseClient: null,
+      aiSearchReferencedFragments: [],
+      aiSearchStepElapsed: {},
+      aiSearchExpandedSteps: {},
+      aiSearchStepTimerId: null,
+      zipUploading: false,
+      fragmentReferences: {},
+      expandedFragmentRefs: {},
     }
   },
   computed: {
@@ -390,6 +586,9 @@ export default {
     routeFragmentId() {
       return this.normalizeFragmentId(this.$route.query.fragment_id)
     },
+    isEmbedded() {
+      return String(this.$route.query.embed || '') === '1'
+    },
     // searchTabLabel 返回搜索结果标签名称。
     searchTabLabel() {
       if (this.submittedSearchQuery.trim() !== '') {
@@ -401,20 +600,7 @@ export default {
     trashTabLabel() {
       return `回收站${this.trashList.length > 0 ? ` (${this.trashList.length})` : ''}`
     },
-    // pushStatusLabel 返回记忆库 push 状态标签，优先展示下一次 push。
-    pushStatusLabel() {
-      return this.nextPushTime > 0 ? '下一次 push 记忆库' : '上一次 push 记忆库'
-    },
-    // pushStatusDesc 返回记忆库 push 状态文案，优先展示下一次 push 倒计时。
-    pushStatusDesc() {
-      if (this.nextPushTime > 0) {
-        return this.formatRelativeTime(this.nextPushTime, 'future')
-      }
-      if (this.lastPushTime > 0) {
-        return this.formatRelativeTime(this.lastPushTime, 'past')
-      }
-      return this.lastPushTimeDesc || '-'
-    },
+    // searchPlaceholder 根据搜索模式返回对应的输入框提示文本。
     // searchPlaceholder 根据搜索模式返回对应的输入框提示文本。
     searchPlaceholder() {
       if (this.searchMode === 'semantic') {
@@ -426,9 +612,18 @@ export default {
     filteredFragmentList() {
       if (!this.sidebarFilterQuery.trim()) return this.fragmentList
       return this.sidebarFilterResults
+    },
+    // fragmentListHasMore 侧边栏列表是否还有更多数据可加载。
+    fragmentListHasMore() {
+      if (this.sidebarFilterQuery.trim()) return false
+      return this.fragmentHasMore
     }
   },
+  created() {
+    this.applySidebarHiddenQuery()
+  },
   mounted() {
+    this.aiSearchStepStartTimes = {}
     this.bindGlobalSaveShortcut()
     this.registerMemoryFragmentUpdatesSse()
     this.registerMemoryFragmentStatusSse()
@@ -451,12 +646,15 @@ export default {
     this.unbindGlobalSaveShortcut()
     this.unregisterMemoryFragmentUpdatesSse()
     this.unregisterMemoryFragmentStatusSse()
+    this.stopAiSearchSse()
+    this.clearAllStepTimers()
     this.clearSaveFeedbackTimers()
   },
   watch: {
     '$route.fullPath'() {
       this.routeFragmentHandled = false
       this.tryOpenRouteFragmentOnEntry()
+      this.applySidebarHiddenQuery()
     },
     sidebarFilterQuery() {
       clearTimeout(this.sidebarFilterTimer)
@@ -527,6 +725,7 @@ export default {
       this.lastPushTime = data && data.last_push_time ? Number(data.last_push_time) : 0
       this.lastPushTimeDesc = data && data.last_push_time_desc ? data.last_push_time_desc : '-'
       this.lastPushError = data && data.last_push_error ? data.last_push_error : ''
+      this.fragmentTotalCount = data && data.fragment_count ? Number(data.fragment_count) : 0
       if (!this.memoryConfigured) {
         this.fragmentList = []
         this.trashList = []
@@ -666,24 +865,6 @@ export default {
       }, this.saveFeedbackDurationMs)
     },
 
-    // formatRelativeTime 把 unix 秒时间格式化为“xx小时xx分钟前/后”。
-    formatRelativeTime(unixTime, direction) {
-      const targetTime = Number(unixTime || 0)
-      if (targetTime <= 0) {
-        return '-'
-      }
-      const now = this.statusNowTick
-      let diffSeconds = direction === 'future' ? targetTime - now : now - targetTime
-      if (diffSeconds <= 0) {
-        return direction === 'future' ? '1分钟内' : '刚刚'
-      }
-      diffSeconds = Math.ceil(diffSeconds / 60) * 60
-      const totalMinutes = Math.floor(diffSeconds / 60)
-      const hours = Math.floor(totalMinutes / 60)
-      const minutes = totalMinutes % 60
-      const durationText = hours > 0 ? `${hours}小时${minutes}分钟` : `${minutes}分钟`
-      return direction === 'future' ? `${durationText}后` : `${durationText}前`
-    },
     // copyFragmentPath 复制知识片段所属文件路径。
     async copyFragmentPath(filePath) {
       if (!filePath || !navigator.clipboard) {
@@ -706,6 +887,7 @@ export default {
         this.lastPushTime = response.Data && response.Data.last_push_time ? Number(response.Data.last_push_time) : 0
         this.lastPushTimeDesc = response.Data && response.Data.last_push_time_desc ? response.Data.last_push_time_desc : '-'
         this.lastPushError = response.Data && response.Data.last_push_error ? response.Data.last_push_error : ''
+        this.fragmentTotalCount = response.Data && response.Data.fragment_count ? Number(response.Data.fragment_count) : 0
         if (!this.memoryConfigured) {
           this.fragmentList = []
           this.trashList = []
@@ -725,25 +907,50 @@ export default {
         this.tryOpenRouteFragmentOnEntry()
       })
     },
-    // loadFragmentList 加载左侧片段列表。
-    loadFragmentList() {
+    // loadFragmentList 加载左侧片段列表，append 为 true 时追加到现有列表。
+    loadFragmentList(append = false) {
       if (!this.memoryConfigured) {
         return
       }
-      MemoryFragmentApi.MemoryFragmentList(0, (response) => {
-        this.fragmentList = Array.isArray(response.Data) ? response.Data : []
+      if (this.fragmentLoadingMore) {
+        return
+      }
+      if (append && !this.fragmentHasMore) {
+        return
+      }
+      const offset = append ? this.fragmentOffset : 0
+      if (!append) {
+        this.fragmentOffset = 0
+        this.fragmentHasMore = true
+      }
+      this.fragmentLoadingMore = true
+      MemoryFragmentApi.MemoryFragmentList(this.fragmentPageSize, offset, (response) => {
+        this.fragmentLoadingMore = false
+        const list = Array.isArray(response.Data && response.Data.list) ? response.Data.list : (Array.isArray(response.Data) ? response.Data : [])
+        const hasMore = typeof response.Data === 'object' && response.Data !== null && 'has_more' in response.Data ? response.Data.has_more : false
+        if (append) {
+          this.fragmentList = this.fragmentList.concat(list)
+        } else {
+          this.fragmentList = list
+        }
+        this.fragmentOffset = offset + list.length
+        this.fragmentHasMore = hasMore
         this.ensureDefaultFragmentTab()
+        // 批量查询当前列表片段的引用信息。
+        const ids = list.map(item => this.normalizeFragmentId(item.id || item.file_id)).filter(Boolean)
+        this.loadFragmentReferences(ids)
       })
     },
-    // loadFragmentListPreservingOrder 加载最新数据但保持侧边栏列表的原有顺序，避免过滤状态下保存后顺序跳动。
+    // loadFragmentListPreservingOrder 重置分页并加载最新数据，保持侧边栏列表的原有顺序。
     loadFragmentListPreservingOrder() {
       if (!this.memoryConfigured) {
         return
       }
       const currentOrderIds = this.fragmentList.map(item => this.normalizeFragmentId(item.id || item.file_id))
-      MemoryFragmentApi.MemoryFragmentList(0, (response) => {
-        const newList = Array.isArray(response.Data) ? response.Data : []
-        const newMap = new Map(newList.map(item => [this.normalizeFragmentId(item.id || item.file_id), item]))
+      MemoryFragmentApi.MemoryFragmentList(this.fragmentPageSize, 0, (response) => {
+        const rawList = Array.isArray(response.Data && response.Data.list) ? response.Data.list : (Array.isArray(response.Data) ? response.Data : [])
+        const hasMore = typeof response.Data === 'object' && response.Data !== null && 'has_more' in response.Data ? response.Data.has_more : false
+        const newMap = new Map(rawList.map(item => [this.normalizeFragmentId(item.id || item.file_id), item]))
         const ordered = []
         currentOrderIds.forEach(id => {
           const item = newMap.get(id)
@@ -754,15 +961,36 @@ export default {
         })
         newMap.forEach(item => ordered.push(item))
         this.fragmentList = ordered
+        this.fragmentOffset = ordered.length
+        this.fragmentHasMore = hasMore
         this.ensureDefaultFragmentTab()
       })
+    },
+    // loadMoreFragments 上拉加载更多片段。
+    loadMoreFragments() {
+      this.loadFragmentList(true)
+    },
+    // handleSidebarScroll 监听侧边栏滚动事件，到达底部时触发加载更多。
+    handleSidebarScroll({ scrollTop }) {
+      const scrollbarEl = this.$refs.sidebarScrollRef
+      if (!scrollbarEl) {
+        return
+      }
+      const wrap = scrollbarEl.wrapRef
+      if (!wrap) {
+        return
+      }
+      const distanceToBottom = wrap.scrollHeight - wrap.clientHeight - scrollTop
+      if (distanceToBottom < 60) {
+        this.loadMoreFragments()
+      }
     },
     // ensureDefaultFragmentTab 在没有激活片段时自动打开列表中的第一个知识片段。
     ensureDefaultFragmentTab() {
       if (!this.memoryConfigured) {
         return
       }
-      if (this.activeTab === SEARCH_TAB_NAME || this.activeTab === TRASH_TAB_NAME) {
+      if (this.activeTab === SEARCH_TAB_NAME || this.activeTab === TRASH_TAB_NAME || this.activeTab === AI_SEARCH_TAB_NAME) {
         return
       }
       const hasActiveFragmentTab = this.fragmentTabs.some(item => item.name === this.activeTab)
@@ -851,11 +1079,25 @@ export default {
         this.clearFilter()
         return
       }
+      if (this.searchMode === SEMANTIC_SEARCH_MODE) {
+        this.openAiSearchTab(this.searchQuery.trim())
+        return
+      }
       this.submittedSearchQuery = this.searchQuery.trim()
       this.submittedSearchMode = this.searchMode
       this.searchTabVisible = true
       this.activeTab = SEARCH_TAB_NAME
       this.runSearch(this.submittedSearchQuery, this.submittedSearchMode)
+    },
+    // submitSearchFromDialog 从弹窗提交搜索，搜索后关闭弹窗。
+    submitSearchFromDialog() {
+      this.searchDialogVisible = false
+      this.submitSearch()
+    },
+    // clearFilterAndCloseDialog 清空搜索条件并关闭弹窗。
+    clearFilterAndCloseDialog() {
+      this.clearFilter()
+      this.searchDialogVisible = false
     },
     // escapeHtml 对文本做 HTML 转义，避免高亮时插入原始标签。
     escapeHtml(text) {
@@ -1059,6 +1301,32 @@ export default {
       return String(text || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     },
     // createFragment 创建一个新片段并自动打开。
+    // triggerUploadZip 触发隐藏的文件选择框。
+    triggerUploadZip() {
+      if (!this.memoryConfigured || this.zipUploading) {
+        return
+      }
+      this.$refs.zipFileInput.click()
+    },
+    // handleZipUpload 处理 ZIP 文件上传，成功后创建片段并打开。
+    handleZipUpload(event) {
+      const file = event.target.files[0]
+      if (!file) {
+        return
+      }
+      this.zipUploading = true
+      const apiBaseURL = base.GetAbsoluteApiHost()
+      MemoryFragmentApi.MemoryFragmentUploadZip(file, apiBaseURL, (response) => {
+        this.zipUploading = false
+        // 重置 input，允许重复选择同一文件
+        event.target.value = ''
+        if (response.ErrCode !== 0 || !response.Data) {
+          return
+        }
+        this.loadFragmentList()
+        this.upsertFragmentTab(response.Data, true)
+      })
+    },
     createFragment() {
       if (!this.memoryConfigured) {
         return
@@ -1267,6 +1535,19 @@ export default {
     },
     // closeTab 关闭一个编辑 tab 或搜索结果 tab。
     closeTab(tabName) {
+      if (tabName === AI_SEARCH_TAB_NAME) {
+        this.aiSearchTabVisible = false
+        this.stopAiSearchSse()
+        this.aiSearchEvents = []
+        this.aiSearchAnswer = ''
+        this.aiSearchLoading = false
+        this.aiSearchReferencedFragments = []
+        if (this.activeTab === AI_SEARCH_TAB_NAME) {
+          this.activeTab = ''
+          this.ensureDefaultFragmentTab()
+        }
+        return
+      }
       if (tabName === SEARCH_TAB_NAME) {
         this.searchTabVisible = false
         this.searchResults = []
@@ -1298,9 +1579,314 @@ export default {
     handleTabChange(tabPane) {
       this.activeTab = tabPane.paneName
     },
+    goHome() {
+      this.$router.push('/Dashboard')
+    },
+    // openAiSearchTab 打开 AI 智能搜索 tab 并启动 SSE 连接。
+    openAiSearchTab(query) {
+      this.stopAiSearchSse()
+      this.clearAllStepTimers()
+      this.aiSearchQuery = query
+      this.aiSearchTabVisible = true
+      this.aiSearchEvents = []
+      this.aiSearchAnswer = ''
+      this.aiSearchLoading = true
+      this.aiSearchReferencedFragments = []
+      this.aiSearchStepStartTimes = {}
+      this.aiSearchStepElapsed = {}
+      this.aiSearchExpandedSteps = {}
+      this.activeTab = AI_SEARCH_TAB_NAME
+      this.$nextTick(() => {
+        this.startAiSearchSse(query)
+      })
+    },
+    // startAiSearchSse 创建 EventSource 连接到 AI 搜索 SSE 端点。
+    startAiSearchSse(query) {
+      const sseHost = base.GetSseApiHost()
+      if (!sseHost) {
+        this.aiSearchEvents.push({ step: 'error', status: 'error', message: 'SSE 连接不可用', data: null })
+        this.aiSearchLoading = false
+        return
+      }
+      const params = 'query=' + encodeURIComponent(query) + '&token=' + encodeURIComponent(base.GetSafeToken()) + '&t=' + Date.now()
+      const url = sseHost + '/api/MemoryFragmentAiSearch?' + params
+      const eventSource = new EventSource(url)
+      this.aiSearchSseClient = eventSource
+
+      eventSource.onmessage = (event) => {
+        const rawData = event.data
+        if (rawData === '[DONE]' || rawData === '[CONNECT]') {
+          return
+        }
+        try {
+          const parsed = JSON.parse(rawData)
+          if (parsed.step) {
+            this.handleAiSearchEvent(parsed)
+            return
+          }
+        } catch (e) {
+          // 非 JSON，当作 answer 流式文本
+        }
+        this.aiSearchAnswer += rawData
+      }
+
+      eventSource.onerror = () => {
+        this.aiSearchLoading = false
+        this.stopAiSearchSse()
+        this.clearAllStepTimers()
+      }
+    },
+    // stopAiSearchSse 关闭 AI 搜索 SSE 连接。
+    stopAiSearchSse() {
+      if (this.aiSearchSseClient) {
+        this.aiSearchSseClient.close()
+        this.aiSearchSseClient = null
+      }
+    },
+    // handleAiSearchEvent 处理 AI 搜索 SSE 事件。
+    handleAiSearchEvent(event) {
+      if (event.step === 'answer' && event.status === 'streaming') {
+        this.aiSearchAnswer += event.data || ''
+        return
+      }
+      if (event.step === 'answer' && event.status === 'running') {
+        if (event.message) {
+          this.aiSearchEvents.push(event)
+        }
+        this.startStepTimer(event.step)
+        return
+      }
+      // 同一步骤可能有多条 running（如 read 进度更新），只保留最后一条
+      if (event.status === 'running' && event.step !== 'done') {
+        // 去掉同 step 之前的 running 事件，只保留最新进度
+        const prevRunningIdx = this.aiSearchEvents.findLastIndex(e => e.step === event.step && e.status === 'running')
+        if (prevRunningIdx >= 0) {
+          this.aiSearchEvents.splice(prevRunningIdx, 1, event)
+        } else {
+          this.aiSearchEvents.push(event)
+        }
+        this.startStepTimer(event.step)
+      } else if (event.status === 'done' && event.step !== 'done') {
+        const runningIdx = this.aiSearchEvents.findLastIndex(e => e.step === event.step && e.status === 'running')
+        if (runningIdx >= 0) {
+          this.aiSearchEvents.splice(runningIdx, 1, event)
+        } else {
+          this.aiSearchEvents.push(event)
+        }
+        this.stopStepTimer(event.step)
+      } else {
+        this.aiSearchEvents.push(event)
+      }
+      if (event.step === 'done') {
+        this.aiSearchLoading = false
+        this.stopAiSearchSse()
+        this.clearAllStepTimers()
+        if (event.data && event.data.referenced_fragments) {
+          this.aiSearchReferencedFragments = event.data.referenced_fragments
+        }
+      }
+      if (event.step === 'error') {
+        this.aiSearchLoading = false
+        this.stopAiSearchSse()
+        this.clearAllStepTimers()
+      }
+    },
+    // startStepTimer 为指定步骤启动已用时间计时器。
+    startStepTimer(step) {
+      if (this.aiSearchStepStartTimes[step]) {
+        return
+      }
+      this.aiSearchStepStartTimes[step] = Date.now()
+      this.ensureStepTimer()
+    },
+    // ensureStepTimer 确保全局步骤计时器在运行。
+    ensureStepTimer() {
+      if (this.aiSearchStepTimerId) {
+        return
+      }
+      this.aiSearchStepTimerId = setInterval(() => {
+        const startTimes = this.aiSearchStepStartTimes
+        const keys = Object.keys(startTimes)
+        if (keys.length === 0) {
+          return
+        }
+        const now = Date.now()
+        const updated = {}
+        keys.forEach(s => {
+          updated[s] = Math.floor((now - startTimes[s]) / 1000)
+        })
+        this.aiSearchStepElapsed = updated
+      }, 1000)
+    },
+    // stopStepTimer 停止指定步骤的计时器。
+    stopStepTimer(step) {
+      if (!this.aiSearchStepStartTimes[step]) {
+        return
+      }
+      const elapsed = Math.floor((Date.now() - this.aiSearchStepStartTimes[step]) / 1000)
+      const newElapsed = Object.assign({}, this.aiSearchStepElapsed)
+      newElapsed[step] = elapsed
+      this.aiSearchStepElapsed = newElapsed
+      delete this.aiSearchStepStartTimes[step]
+    },
+    // clearAllStepTimers 清除所有步骤计时器。
+    clearAllStepTimers() {
+      if (this.aiSearchStepTimerId) {
+        clearInterval(this.aiSearchStepTimerId)
+        this.aiSearchStepTimerId = null
+      }
+      this.aiSearchStepStartTimes = {}
+    },
+    // toggleStepExpand 切换步骤详情的展开/收起状态。
+    toggleStepExpand(step) {
+      this.aiSearchExpandedSteps[step] = !this.aiSearchExpandedSteps[step]
+    },
+    // getStepLabel 返回步骤的中文名称。
+    getStepLabel(step) {
+      const labels = {
+        keywords: '扩展搜索关键词',
+        search: '搜索知识片段',
+        judge: '评估片段相关性',
+        read: '读取片段内容',
+        answer: '生成综合回答',
+      }
+      return labels[step] || step
+    },
+    // getStepDoneText 返回步骤完成时的摘要文字。
+    getStepDoneText(event) {
+      const label = this.getStepLabel(event.step)
+      const parts = [label]
+      if (event.duration_ms) {
+        parts.push(`用时 ${this.formatDuration(event.duration_ms)}`)
+      }
+      if (event.input_tokens || event.output_tokens) {
+        parts.push(`输入 ${event.input_tokens || 0} token，输出 ${event.output_tokens || 0} token`)
+      }
+      if (event.step === 'search' && event.data && event.data.total !== undefined) {
+        parts.splice(1, 0, `找到 ${event.data.total} 个片段`)
+      }
+      if (event.step === 'judge' && event.data && event.data.selected_count !== undefined) {
+        parts.splice(1, 0, `选中 ${event.data.selected_count} 个片段`)
+      }
+      if (event.step === 'read' && event.data && event.data.read_fragments) {
+        parts.splice(1, 0, `读取 ${event.data.read_fragments.length} 个片段`)
+      }
+      if (event.step === 'keywords' && event.data && event.data.keywords) {
+        parts.splice(1, 0, `生成 ${event.data.keywords.length} 个关键词`)
+      }
+      return parts.join('，')
+    },
+    // canExpandStep 判断步骤是否可以展开查看详情。
+    canExpandStep(event) {
+      if (event.prompt) return true
+      if (event.response) return true
+      if (event.data && event.data.fragments && event.data.fragments.length > 0) return true
+      if (event.data && event.data.selected_fragments && event.data.selected_fragments.length > 0) return true
+      if (event.data && event.data.read_fragments && event.data.read_fragments.length > 0) return true
+      if (event.data && event.data.keywords && event.data.keywords.length > 0) return true
+      return false
+    },
+    // renderMarkdown 将 Markdown 文本渲染为 HTML。
+    renderMarkdown(content) {
+      if (!content) return ''
+      try {
+        return marked(content || '')
+      } catch (e) {
+        return this.escapeHtml(content)
+      }
+    },
+    // formatDuration 将毫秒格式化为可读的时间文本。
+    formatDuration(ms) {
+      if (!ms || ms <= 0) return '-'
+      if (ms < 1000) return ms + 'ms'
+      const seconds = (ms / 1000).toFixed(1)
+      return seconds + 's'
+    },
+    // handleGitPull 执行 git pull 拉取记忆库最新内容。
+    handleGitPull() {
+      this.gitActionLoading = true
+      MemoryFragmentApi.MemoryGitPull((response) => {
+        this.gitActionLoading = false
+        if (response.__loginRequired) return
+        if (response.ErrCode !== 0) {
+          this.$message.error(response.ErrMsg || '拉取失败')
+          return
+        }
+        this.$message.success('拉取成功')
+        this.loadFragmentList(true)
+      })
+    },
+    // handleGitPush 执行 git commit + push 推送记忆库变更。
+    handleGitPush() {
+      this.gitActionLoading = true
+      set.RuntimeDatabaseGitSync({ target: 'memory' }, (response) => {
+        this.gitActionLoading = false
+        if (response.__loginRequired) return
+        if (response.ErrCode !== 0) {
+          this.$message.error(response.ErrMsg || '推送失败')
+          return
+        }
+        if (!response.Data || !response.Data.changed) {
+          this.$message.info('未检测到变更，无需推送')
+          return
+        }
+        this.$message.success('推送成功')
+      })
+    },
+    applySidebarHiddenQuery() {
+      if (this.isEmbedded || String(this.$route.query.hide_sidebar || '') === '1') {
+        this.sidebarCollapsed = true
+      }
+    },
+    // fragmentRefCount 返回指定片段被引用的次数。
+    fragmentRefCount(fragmentId) {
+      const refs = this.getFragmentRefs(fragmentId)
+      return refs.length
+    },
+    // getFragmentRefs 返回指定片段的引用列表。
+    getFragmentRefs(fragmentId) {
+      const normalized = this.normalizeFragmentId(fragmentId)
+      if (!normalized) return []
+      return this.fragmentReferences[normalized] || []
+    },
+    // toggleFragmentRefs 展开/收起片段的引用列表。
+    toggleFragmentRefs(fragmentId) {
+      const normalized = this.normalizeFragmentId(fragmentId)
+      if (!normalized) return
+      this.expandedFragmentRefs[normalized] = !this.expandedFragmentRefs[normalized]
+    },
+    // openFragmentRef 根据引用类型跳转到工作流程或打开知识片段。
+    openFragmentRef(ref) {
+      if (!ref) return
+      if (ref.type === 'workflow') {
+        const routeData = this.$router.resolve({ path: '/TaskWorkflow/' + ref.id })
+        window.open(routeData.href, '_blank')
+        return
+      }
+      if (ref.type === 'fragment') {
+        this.openFragment(ref.id)
+      }
+    },
+    // loadFragmentReferences 批量查询片段引用信息。
+    loadFragmentReferences(fragmentIds) {
+      if (!fragmentIds || fragmentIds.length === 0) return
+      MemoryFragmentApi.MemoryFragmentReferences(fragmentIds, (response) => {
+        if (response.ErrCode !== 0) return
+        const data = response.Data || {}
+        Object.keys(data).forEach((fid) => {
+          this.fragmentReferences[fid] = data[fid] || []
+        })
+      })
+    },
   }
 }
 </script>
 
 <style scoped src="@/css/components/MemoryFragment.css"></style>
+
+<style>
+.memory-tabs--embedded .el-tabs__header {
+  display: none !important;
+}
+</style>
 

@@ -31,3 +31,4 @@ tmp/build-errors.log
 /dtool.exe
 /skills/dtool-api.zip
 /web/download/*
+/test-results/.last-run.json

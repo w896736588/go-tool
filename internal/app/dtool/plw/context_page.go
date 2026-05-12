@@ -60,6 +60,33 @@ func (h *ContextPage) Pages() []playwright.Page {
 	return (*h.Context).Pages()
 }
 
+func (h *ContextPage) PageKey(page *playwright.Page) string {
+	if page == nil || *page == nil {
+		return ``
+	}
+	// page 指针在当前进程内可稳定区分 tab，拼上 LinkId 便于跨 context 排查问题。
+	return fmt.Sprintf("%s_page_%p", h.LinkId, page)
+}
+
+func (h *ContextPage) FindPageByKey(pageKey string) *playwright.Page {
+	for _, page := range h.Pages() {
+		pageCopy := page
+		if h.PageKey(&pageCopy) == pageKey {
+			return &pageCopy
+		}
+	}
+	return nil
+}
+
+func (h *ContextPage) FindFirstPage() *playwright.Page {
+	pageList := h.Pages()
+	if len(pageList) == 0 {
+		return nil
+	}
+	page := pageList[0]
+	return &page
+}
+
 func (h *ContextPage) CloseFirstPage() {
 	contextPageList := h.Pages()
 	if len(contextPageList) > 0 {
