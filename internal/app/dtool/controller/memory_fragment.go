@@ -9,8 +9,10 @@ import (
 	"dev_tool/internal/pkg/p_define"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -707,6 +709,107 @@ func MemoryFragmentUploadZip(c *gin.Context) {
 	component.MemoryRuntime.ScheduleSync()
 	broadcastMemoryFragmentUpsert(info)
 	gsgin.GinResponseSuccess(c, ``, info)
+}
+
+// imageRefPattern 匹配 markdown 图片引用中的文件名，支持相对和绝对路径。
+var imageRefPattern = regexp.MustCompile(`!\[.*?\]\(.*?/memory/images/([^)\s]+?)\)`)
+
+// extractImageFilenames 从 markdown 内容中提取所有引用的图片文件名。
+func extractImageFilenames(markdown string) []string {
+	matches := imageRefPattern.FindAllStringSubmatch(markdown, -1)
+	seen := make(map[string]bool)
+	var names []string
+	for _, m := range matches {
+		name := strings.TrimSpace(m[1])
+		if name == `` || seen[name] {
+			continue
+		}
+		seen[name] = true
+		names = append(names, name)
+	}
+	return names
+}
+
+// rewriteImagePathsToRelative 将 markdown 中的图片绝对/服务端路径改写为相对 images/ 路径。
+func rewriteImagePathsToRelative(markdown string) string {
+	return imageRefPattern.ReplaceAllString(markdown, `![image](images/$1)`)
+}
+
+// MemoryFragmentDownloadZip 将知识片段及其图片打包为 ZIP 下载。
+func MemoryFragmentDownloadZip(c *gin.Context) {
+	memoryDB, ok := memoryDBOrResponse(c)
+	if !ok {
+		return
+	}
+	fragmentID := strings.TrimSpace(c.Query(`id`))
+	if fragmentID == `` || fragmentID == `0` {
+		gsgin.GinResponseError(c, `片段id不能为空`, nil)
+		return
+	}
+	info, err := memoryDB.MemoryFragmentInfo(fragmentID)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	markdownContent := cast.ToString(info[`content`])
+	title := cast.ToString(info[`title`])
+	if strings.TrimSpace(title) == `` {
+		title = `未命名片段`
+	}
+
+	// 收集图片文件并构造 ZIP
+	imageNames := extractImageFilenames(markdownContent)
+	rewrittenContent := rewriteImagePathsToRelative(markdownContent)
+	memoryDir := component.MemoryRuntime.Config().Dir
+	imageDir := filepath.Join(memoryDir, `images`)
+
+	tmpZipPath := filepath.Join(os.TempDir(), fmt.Sprintf(`fragment_download_%d_%d.zip`, time.Now().UnixMicro(), os.Getpid()))
+	zipFile, zipErr := os.Create(tmpZipPath)
+	if zipErr != nil {
+		gsgin.GinResponseError(c, `创建 ZIP 文件失败: `+zipErr.Error(), nil)
+		return
+	}
+	zipWriter := zip.NewWriter(zipFile)
+	defer zipFile.Close()
+	defer os.Remove(tmpZipPath)
+
+	// 写入 content.md
+	contentWriter, _ := zipWriter.Create(`content.md`)
+	_, _ = contentWriter.Write([]byte(rewrittenContent))
+
+	// 写入 images/
+	copiedCount := 0
+	for _, name := range imageNames {
+		srcPath := filepath.Join(imageDir, name)
+		srcFile, openErr := os.Open(srcPath)
+		if openErr != nil {
+			continue // 图片文件不存在则跳过
+		}
+		destWriter, createErr := zipWriter.Create(fmt.Sprintf(`images/%s`, name))
+		if createErr != nil {
+			srcFile.Close()
+			continue
+		}
+		_, copyErr := io.Copy(destWriter, srcFile)
+		srcFile.Close()
+		if copyErr != nil {
+			continue
+		}
+		copiedCount++
+	}
+	_ = zipWriter.Close()
+	_ = zipFile.Close()
+
+	safeTitle := strings.Map(func(r rune) rune {
+		if r == '/' || r == '\\' || r == ':' || r == '*' || r == '?' || r == '"' || r == '<' || r == '>' || r == '|' {
+			return '_'
+		}
+		return r
+	}, title)
+	downloadName := fmt.Sprintf(`%s.zip`, safeTitle)
+	c.Header(`Content-Disposition`, fmt.Sprintf(`attachment; filename=%s`, url.PathEscape(downloadName)))
+	c.Header(`Content-Type`, `application/zip`)
+	c.File(tmpZipPath)
 }
 
 // MemoryGitPull 手动拉取记忆库远程仓库最新内容。

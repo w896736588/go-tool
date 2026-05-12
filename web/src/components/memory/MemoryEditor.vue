@@ -54,6 +54,17 @@
                     <el-icon><CopyDocument /></el-icon>
                   </GitActionButton>
                 </el-tooltip>
+                <el-tooltip :content="downloadZipButtonText" placement="top">
+                  <GitActionButton
+                    variant="info"
+                    compact
+                    class="toolbar-icon-button"
+                    :aria-label="downloadZipButtonText"
+                    @click="handleDownloadZip"
+                  >
+                    <el-icon><Download /></el-icon>
+                  </GitActionButton>
+                </el-tooltip>
                 <el-tooltip :content="saveButtonText" placement="top">
                   <GitActionButton
                     compact
@@ -282,7 +293,7 @@
 <script>
 import { MdEditor, MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
-import { Check, CopyDocument, Edit, MagicStick, MoreFilled, Search, Share, View } from '@element-plus/icons-vue'
+import { Check, CopyDocument, Download, Edit, MagicStick, MoreFilled, Search, Share, View } from '@element-plus/icons-vue'
 import DiffMarkdown from '@/components/base/diff_markwodn.vue'
 import GitActionButton from '@/components/base/GitActionButton.vue'
 import MemoryFragmentApi from '@/utils/base/memory_fragment'
@@ -351,6 +362,8 @@ const ORGANIZE_SUCCESS_TEXT = 'AI整理结果已写入'
 const COPY_PATH_BUTTON_TEXT = '复制文件地址'
 // COPY_CONTENT_BUTTON_TEXT 统一定义复制完整内容按钮文案。
 const COPY_CONTENT_BUTTON_TEXT = '复制'
+// DOWNLOAD_ZIP_BUTTON_TEXT 统一定义下载 ZIP 按钮文案。
+const DOWNLOAD_ZIP_BUTTON_TEXT = '下载ZIP'
 // INLINE_TAG_VISIBLE_LIMIT / 内容区右侧最多展示的标签数量 / Max visible inline tags beside content actions.
 const INLINE_TAG_VISIBLE_LIMIT = 5
 // TOOLBAR_ACTION_HISTORY_COMMAND / 工具栏下拉历史记录命令 / Dropdown command for history action.
@@ -381,6 +394,7 @@ export default {
       MdPreview,
       Check,
       CopyDocument,
+      Download,
       Edit,
       MagicStick,
       MoreFilled,
@@ -431,6 +445,7 @@ export default {
       lastSaveLabelText: LAST_SAVE_LABEL_TEXT,
       copyPathButtonText: COPY_PATH_BUTTON_TEXT,
       copyContentButtonText: COPY_CONTENT_BUTTON_TEXT,
+      downloadZipButtonText: DOWNLOAD_ZIP_BUTTON_TEXT,
       historyButtonText: HISTORY_BUTTON_TEXT,
       deleteButtonText: DELETE_BUTTON_TEXT,
       saveButtonText: SAVE_BUTTON_TEXT,
@@ -692,6 +707,14 @@ export default {
       } catch (error) {
         this.$helperNotify.error(this.copyContentButtonText + '失败')
       }
+    },
+    // handleDownloadZip 下载当前片段及其图片为 ZIP 文件。
+    handleDownloadZip() {
+      if (!this.draftFragment.id) {
+        this.$helperNotify.error('请先保存片段后再下载')
+        return
+      }
+      MemoryFragmentApi.MemoryFragmentDownloadZip(this.draftFragment.id)
     },
     // handleShareLink 创建 24 小时只读分享链接并复制到剪贴板。
     handleShareLink() {

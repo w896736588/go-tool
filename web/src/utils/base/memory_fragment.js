@@ -128,6 +128,17 @@ function MemoryFragmentBatchInfoByPaths(paths, callBack) {
   }, callBack)
 }
 
+// MemoryFragmentDownloadZip 下载知识片段及其图片为 ZIP 文件。
+function MemoryFragmentDownloadZip(id) {
+  const url = base.GetAbsoluteApiHost() + '/api/MemoryFragmentDownloadZip?id=' + encodeURIComponent(id) + '&token=' + encodeURIComponent(base.GetSafeToken())
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = ''
+  document.body.appendChild(anchor)
+  anchor.click()
+  document.body.removeChild(anchor)
+}
+
 // MemoryGitPull 手动拉取记忆库远程仓库最新内容。
 function MemoryGitPull(callBack) {
   base.BasePost('/api/MemoryGitPull', {}, callBack)
@@ -151,6 +162,7 @@ export default {
   MemoryFragmentShareInfo,
   MemoryFragmentImageUpload,
   MemoryFragmentUploadZip,
+  MemoryFragmentDownloadZip,
   MemoryFragmentBatchInfoByPaths,
   MemoryGitPull,
 }
