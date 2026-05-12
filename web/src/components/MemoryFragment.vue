@@ -120,7 +120,7 @@
       </div>
     </aside>
 
-    <button v-if="memoryConfigured" class="sidebar-collapse-btn" :title="sidebarCollapsed ? '展开列表' : '收起列表'" @click="toggleSidebar">
+    <button v-if="memoryConfigured && !isEmbedded" class="sidebar-collapse-btn" :title="sidebarCollapsed ? '展开列表' : '收起列表'" @click="toggleSidebar">
       <el-icon :size="12"><component :is="sidebarCollapsed ? 'DArrowRight' : 'DArrowLeft'" /></el-icon>
     </button>
 
@@ -130,7 +130,7 @@
           v-model="activeTab"
           type="card"
           closable
-          class="memory-tabs"
+          :class="['memory-tabs', { 'memory-tabs--embedded': isEmbedded }]"
           @tab-remove="closeTab"
           @tab-click="handleTabChange"
         >
@@ -570,6 +570,9 @@ export default {
     routeFragmentId() {
       return this.normalizeFragmentId(this.$route.query.fragment_id)
     },
+    isEmbedded() {
+      return String(this.$route.query.embed || '') === '1'
+    },
     // searchTabLabel 返回搜索结果标签名称。
     searchTabLabel() {
       if (this.submittedSearchQuery.trim() !== '') {
@@ -599,6 +602,9 @@ export default {
       if (this.sidebarFilterQuery.trim()) return false
       return this.fragmentHasMore
     }
+  },
+  created() {
+    this.applySidebarHiddenQuery()
   },
   mounted() {
     this.aiSearchStepStartTimes = {}
@@ -632,6 +638,7 @@ export default {
     '$route.fullPath'() {
       this.routeFragmentHandled = false
       this.tryOpenRouteFragmentOnEntry()
+      this.applySidebarHiddenQuery()
     },
     sidebarFilterQuery() {
       clearTimeout(this.sidebarFilterTimer)
@@ -1807,9 +1814,20 @@ export default {
         this.$message.success('推送成功')
       })
     },
+    applySidebarHiddenQuery() {
+      if (this.isEmbedded || String(this.$route.query.hide_sidebar || '') === '1') {
+        this.sidebarCollapsed = true
+      }
+    },
   }
 }
 </script>
 
 <style scoped src="@/css/components/MemoryFragment.css"></style>
+
+<style>
+.memory-tabs--embedded .el-tabs__header {
+  display: none !important;
+}
+</style>
 

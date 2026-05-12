@@ -590,9 +590,9 @@ func buildTaskWorkflowResponse(c *gin.Context, workflowInfo map[string]any) (map
 	}
 	// 新创建的工作流提示词为空时，从配置模板初始化。
 	workflowID := cast.ToInt(workflowInfo[`id`])
-	if workflowID > 0 && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_requirement`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_api_dev`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_api_test`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_design`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_plain_text_requirement`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_design_plan_requirement`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_browser_test`])) == `` {
+	if workflowID > 0 && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_requirement`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_api_dev`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_api_test`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_design`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_plain_text_requirement`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_design_plan_requirement`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_browser_test`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_code_review`])) == `` {
 		prompts := resolveTaskWorkflowPrompts(c, homeTaskInfo, workflowInfo)
-		_ = common.DbMain.TaskWorkflowUpdatePrompts(workflowID, prompts[`requirement`], prompts[`api_dev`], prompts[`api_test`], prompts[`design`], prompts[`plain_text_requirement`], prompts[`design_plan_requirement`], prompts[`browser_test`])
+		_ = common.DbMain.TaskWorkflowUpdatePrompts(workflowID, prompts[`requirement`], prompts[`api_dev`], prompts[`api_test`], prompts[`design`], prompts[`plain_text_requirement`], prompts[`design_plan_requirement`], prompts[`browser_test`], prompts[`code_review`])
 		updatedInfo, updateErr := common.DbMain.TaskWorkflowInfo(workflowID)
 		if updateErr == nil {
 			workflowInfo = updatedInfo
@@ -1309,6 +1309,7 @@ func TaskWorkflowPromptsSave(c *gin.Context) {
 		request.PromptPlainTextRequirement,
 		request.PromptDesignPlanRequirement,
 		request.PromptBrowserTest,
+		request.PromptCodeReview,
 	)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
@@ -1356,6 +1357,7 @@ func TaskWorkflowPromptsRestore(c *gin.Context) {
 		prompts[`plain_text_requirement`],
 		prompts[`design_plan_requirement`],
 		prompts[`browser_test`],
+		prompts[`code_review`],
 	); updateErr != nil {
 		gsgin.GinResponseError(c, updateErr.Error(), nil)
 		return
@@ -1380,6 +1382,7 @@ func resolveTaskWorkflowPrompts(c *gin.Context, homeTaskInfo map[string]any, wor
 	promptPlainTextRequirement, _ := common.DbMain.HomeTaskConfigValue(define.HomeTaskConfigPromptPlainTextReq)
 	promptDesignPlanRequirement, _ := common.DbMain.HomeTaskConfigValue(define.HomeTaskConfigPromptDesignPlanReq)
 	promptBrowserTest, _ := common.DbMain.HomeTaskConfigValue(define.HomeTaskConfigPromptBrowserTest)
+	promptCodeReview, _ := common.DbMain.HomeTaskConfigValue(define.HomeTaskConfigPromptCodeReview)
 	return map[string]string{
 		`requirement`:             taskWorkflowResolvePlaceholders(promptDev, placeholders),
 		`api_dev`:                 taskWorkflowResolvePlaceholders(promptApiGen, placeholders),
@@ -1388,6 +1391,7 @@ func resolveTaskWorkflowPrompts(c *gin.Context, homeTaskInfo map[string]any, wor
 		`plain_text_requirement`:  taskWorkflowResolvePlaceholders(promptPlainTextRequirement, placeholders),
 		`design_plan_requirement`: taskWorkflowResolvePlaceholders(promptDesignPlanRequirement, placeholders),
 		`browser_test`:            taskWorkflowResolvePlaceholders(promptBrowserTest, placeholders),
+		`code_review`:             taskWorkflowResolvePlaceholders(promptCodeReview, placeholders),
 	}
 }
 
@@ -1884,6 +1888,9 @@ func taskWorkflowNormalizeFetchStep(step string) string {
 
 // ensureTaskWorkflowPlainTextReqFragment 确保纯文本需求知识片段存在，不存在则自动创建。
 func ensureTaskWorkflowPlainTextReqFragment(workflowInfo map[string]any, homeTaskInfo map[string]any) {
+	if strings.TrimSpace(cast.ToString(workflowInfo[`plain_text_requirement_fragment_id`])) != `` {
+		return
+	}
 	if component.MemoryRuntime == nil {
 		return
 	}
@@ -1945,6 +1952,9 @@ func taskWorkflowBuildPlainTextFragmentRelativePath(workflowInfo map[string]any)
 
 // ensureTaskWorkflowDesignPlanReqFragment 确保需求设计方案知识片段存在，不存在则自动创建。
 func ensureTaskWorkflowDesignPlanReqFragment(workflowInfo map[string]any, homeTaskInfo map[string]any) {
+	if strings.TrimSpace(cast.ToString(workflowInfo[`design_plan_requirement_fragment_id`])) != `` {
+		return
+	}
 	if component.MemoryRuntime == nil {
 		return
 	}
@@ -2031,6 +2041,9 @@ func taskWorkflowBuildDesignPlanFragmentRelativePath(workflowInfo map[string]any
 
 // ensureTaskWorkflowApiDocFragment 确保接口文档知识片段存在，不存在则自动创建。
 func ensureTaskWorkflowApiDocFragment(workflowInfo map[string]any, homeTaskInfo map[string]any) {
+	if strings.TrimSpace(cast.ToString(workflowInfo[`api_doc_fragment_id`])) != `` {
+		return
+	}
 	if component.MemoryRuntime == nil {
 		return
 	}

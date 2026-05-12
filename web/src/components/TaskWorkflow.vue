@@ -130,7 +130,7 @@
                 </el-table-column>
                 <el-table-column label="操作" width="100">
                   <template #default="{ row }">
-                    <el-button v-if="row.id" size="small" text type="primary" @click="openFragmentById(row.id)">
+                    <el-button v-if="row.id" size="small" text type="primary" @click="openFragmentInDialog(row.id, row.label)">
                       <el-icon><Link /></el-icon>
                       打开
                     </el-button>
@@ -164,7 +164,7 @@
                 <GitActionButton compact :loading="requirementFetchRunning" @click="triggerRequirementFetch(false)">
                   重新抓取
                 </GitActionButton>
-                <GitActionButton compact variant="info" @click="openRequirementFragment" :disabled="!requirementFragmentId">
+                <GitActionButton compact variant="info" @click="openFragmentInDialog(requirementFragmentId, 'TAPD需求文档')" :disabled="!requirementFragmentId">
                   <template #icon><el-icon><Link /></el-icon></template>
                   打开知识片段
                 </GitActionButton>
@@ -200,7 +200,7 @@
                 <GitActionButton compact variant="warning" :loading="promptRestoring === 'plain_text_requirement'" @click="restorePrompts('plain_text_requirement')">
                   还原为默认提示词
                 </GitActionButton>
-                <GitActionButton compact variant="info" @click="openPlainTextReqFragment" :disabled="!plainTextReqFragmentId">
+                <GitActionButton compact variant="info" @click="openFragmentInDialog(plainTextReqFragmentId, '纯文本需求文档')" :disabled="!plainTextReqFragmentId">
                   <template #icon><el-icon><Link /></el-icon></template>
                   打开知识片段
                 </GitActionButton>
@@ -240,7 +240,7 @@
 
             <div v-show="requirementActiveTab === 'requirement-prompt'" class="task-workflow-prompt-section">
               <div class="task-workflow-card__switch" style="margin-bottom: 12px;">
-                <GitActionButton compact variant="info" @click="openDesignPlanReqFragment" :disabled="!designPlanReqFragmentId">
+                <GitActionButton compact variant="info" @click="openFragmentInDialog(designPlanReqFragmentId, '需求设计方案文档')" :disabled="!designPlanReqFragmentId">
                   <template #icon><el-icon><Link /></el-icon></template>
                   需求设计方案文档
                 </GitActionButton>
@@ -289,7 +289,7 @@
                 <GitActionButton compact variant="warning" :loading="promptRestoring === 'design_plan_requirement'" @click="restorePrompts('design_plan_requirement')">
                   还原为默认提示词
                 </GitActionButton>
-                <GitActionButton compact variant="info" @click="openDesignPlanReqFragment" :disabled="!designPlanReqFragmentId">
+                <GitActionButton compact variant="info" @click="openFragmentInDialog(designPlanReqFragmentId, '需求设计方案文档')" :disabled="!designPlanReqFragmentId">
                   <template #icon><el-icon><Link /></el-icon></template>
                   打开知识片段
                 </GitActionButton>
@@ -318,7 +318,7 @@
         <div v-else-if="activeNode === 'design'" class="task-workflow-tab">
           <div class="task-workflow-card">
             <div class="task-workflow-card__header">
-              <div class="task-workflow-card__title">开发设计提示词</div>
+              <div class="task-workflow-card__title">开发提示词</div>
               <div class="task-workflow-card__switch">
                 <GitActionButton compact :loading="promptSaving === 'design'" @click="savePrompts('design')">
                   保存提示词
@@ -357,7 +357,7 @@
             <div class="task-workflow-card__header">
               <div class="task-workflow-card__title">接口开发生成提示词</div>
               <div class="task-workflow-card__switch">
-                <GitActionButton compact @click="openApiDocFragment">
+                <GitActionButton compact @click="openFragmentInDialog(workflow.api_doc_fragment_id, '接口文档')">
                   <template #icon><el-icon><Link /></el-icon></template>
                   接口文档
                 </GitActionButton>
@@ -508,6 +508,26 @@
         </div>
       </section>
     </div>
+
+    <el-dialog
+      v-model="fragmentDialogVisible"
+      :title="fragmentDialogTitle"
+      width="80%"
+      top="3vh"
+      destroy-on-close
+      class="task-workflow-fragment-dialog"
+    >
+      <div class="task-workflow-fragment-dialog__body">
+        <iframe
+          v-if="fragmentDialogUrl"
+          :src="fragmentDialogUrl"
+          class="task-workflow-fragment-dialog__iframe"
+        />
+        <div v-else class="task-workflow-fragment-dialog__empty">
+          暂无内容
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -577,7 +597,7 @@ const WORKFLOW_NODES = [
   { key: 'requirement', label: '2.需求分析', desc: '编写提示词，AI自动结合数据库和代码分析需求，形成开发文档' },
   { key: 'design', label: '3.开发执行', desc: '编写提示词，AI自动结合数据库，代码和开发文档进行开发' },
   { key: 'api-dev', label: '4.接口生成', desc: '编写提示词，AI自动获取登录态，将所有改动接口写入接口开发中' },
-  { key: 'api-test-fix', label: '5.自动化测试+修复', desc: '编写提示词，AI自动根据接口开发中的接口设计测试流程，自动上传代码+自动重启服务+自动修复BUG，支持多项目联调' },
+  { key: 'api-test-fix', label: '5.自动化测试+修复', desc: 'AI自动根据接口开发中的接口设计测试流程，自动上传代码+自动重启服务+自动修复BUG' },
   { key: 'code-review', label: '6.代码检查', desc: '让AI进行code review' },
   { key: 'browser-test', label: '7.需求核对浏览器测试', desc: '编写提示词，AI核对浏览器测试结果是否满足需求' },
 ]
@@ -621,6 +641,10 @@ export default {
       taskConfigApiFolderMap: {},
       nodeStatuses: {},
       nodeStatusSaving: false,
+      fragmentDialogVisible: false,
+      fragmentDialogUrl: '',
+      fragmentDialogTitle: '',
+      fragmentDialogLoading: false,
     }
   },
   computed: {
@@ -1221,6 +1245,17 @@ export default {
         this.$helperNotify.success('状态已切换')
         this.homeTask = { ...this.homeTask, task_status: newStatus }
       })
+    },
+    openFragmentInDialog(fragmentId, title) {
+      if (!fragmentId) {
+        this.$helperNotify.error('片段ID不存在')
+        return
+      }
+      this.fragmentDialogVisible = true
+      this.fragmentDialogTitle = title || `知识片段 #${fragmentId}`
+      this.fragmentDialogUrl = ''
+      this.fragmentDialogLoading = false
+      this.fragmentDialogUrl = new URL(`/#/MemoryFragment?fragment_id=${encodeURIComponent(fragmentId)}&hide_menu=1&embed=1`, window.location.origin).toString()
     },
     getTaskStatusTagType(taskStatus) {
       if (taskStatus === TASK_STATUS_DEVELOPING) {
@@ -1847,5 +1882,37 @@ export default {
 
 .task-workflow-node-status-inline__btn--pending:hover:not(:disabled) {
   background: #e9e9eb;
+}
+</style>
+
+<style>
+/* 知识片段弹窗 — 非 scoped，因为 el-dialog 被 teleport 到 body */
+.task-workflow-fragment-dialog .el-dialog__body {
+  padding: 0 !important;
+  height: calc(90vh - 54px) !important;
+  overflow: hidden !important;
+}
+
+.task-workflow-fragment-dialog__body {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.task-workflow-fragment-dialog__iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  flex: 1;
+}
+
+.task-workflow-fragment-dialog__empty {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #909399;
+  font-size: 14px;
 }
 </style>

@@ -85,7 +85,7 @@
               class="prompt-template-editor"
             />
           </el-tab-pane>
-          <el-tab-pane label="开发设计提示词" name="design">
+          <el-tab-pane label="开发提示词" name="design">
             <MdEditor
               v-model="form.home_task_prompt_design"
               preview-theme="github"
