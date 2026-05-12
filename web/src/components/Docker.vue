@@ -548,11 +548,16 @@ export default {
     getDefaultServiceLoadingKey: function (row, serviceName) {
       return `${row.id}_${serviceName}`
     },
+    // stripHtmlTags 清除搜索高亮产生的 HTML 标签，防止保存时将富文本写入数据库。
+    stripHtmlTags: function (value) {
+      if (typeof value !== 'string') return value
+      return value.replace(/<[^>]*>/g, '')
+    },
     buildComposeSavePayload: function (row, defaultService) {
       return {
         id: row.id,
-        name: row.name,
-        compose_yml_path: row.compose_yml_path,
+        name: this.stripHtmlTags(row.name),
+        compose_yml_path: this.stripHtmlTags(row.compose_yml_path),
         env_file: row.env_file,
         ssh_id: row.ssh_id,
         docker_cmd: row.docker_cmd,

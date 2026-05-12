@@ -51,7 +51,8 @@ Copy-Item (Join-Path $RootDir "config/dtool/company.ini") (Join-Path $PackageDir
 if (Test-Path (Join-Path $RootDir "config/dtool/frog.db")) {
     Copy-Item (Join-Path $RootDir "config/dtool/frog.db") (Join-Path $PackageDir "config/dtool/frog.db") -Force
 }
-Copy-Item $FrontendDistDir (Join-Path $PackageDir "web") -Recurse -Force
+New-Item -ItemType Directory -Force -Path (Join-Path $PackageDir "web") | Out-Null
+Copy-Item $FrontendDistDir (Join-Path $PackageDir "web/dist") -Recurse -Force
 Copy-Item (Join-Path $RootDir "internal/pkg/p_js") (Join-Path $PackageDir "internal/pkg/p_js") -Recurse -Force
 Copy-Item (Join-Path $RootDir "internal/app/dtool/database") (Join-Path $PackageDir "internal/app/dtool/database") -Recurse -Force
 Copy-Item (Join-Path $RootDir "internal/app/dtool/database_log") (Join-Path $PackageDir "internal/app/dtool/database_log") -Recurse -Force
