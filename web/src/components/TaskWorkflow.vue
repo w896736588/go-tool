@@ -129,6 +129,7 @@
                 <el-table-column label="操作" width="100">
                   <template #default="{ row }">
                     <el-button v-if="row.id" size="small" text type="primary" @click="openFragmentById(row.id)">
+                      <el-icon><Link /></el-icon>
                       打开
                     </el-button>
                   </template>
@@ -162,6 +163,7 @@
                   重新抓取
                 </GitActionButton>
                 <GitActionButton compact variant="info" @click="openRequirementFragment" :disabled="!requirementFragmentId">
+                  <template #icon><el-icon><Link /></el-icon></template>
                   打开知识片段
                 </GitActionButton>
               </div>
@@ -190,12 +192,14 @@
                   保存提示词
                 </GitActionButton>
                 <GitActionButton compact @click="copyText(workflow.prompt_plain_text_requirement || '', '提示词已复制')">
+                  <template #icon><el-icon><CopyDocument /></el-icon></template>
                   复制提示词
                 </GitActionButton>
                 <GitActionButton compact variant="warning" :loading="promptRestoring === 'plain_text_requirement'" @click="restorePrompts('plain_text_requirement')">
                   还原为默认提示词
                 </GitActionButton>
                 <GitActionButton compact variant="info" @click="openPlainTextReqFragment" :disabled="!plainTextReqFragmentId">
+                  <template #icon><el-icon><Link /></el-icon></template>
                   打开知识片段
                 </GitActionButton>
               </div>
@@ -235,12 +239,14 @@
             <div v-show="requirementActiveTab === 'requirement-prompt'" class="task-workflow-prompt-section">
               <div class="task-workflow-card__switch" style="margin-bottom: 12px;">
                 <GitActionButton compact variant="info" @click="openDesignPlanReqFragment" :disabled="!designPlanReqFragmentId">
+                  <template #icon><el-icon><Link /></el-icon></template>
                   需求设计方案文档
                 </GitActionButton>
                 <GitActionButton compact :loading="promptSaving === 'requirement'" @click="savePrompts('requirement')">
                   保存提示词
                 </GitActionButton>
                 <GitActionButton compact @click="copyText(workflow.prompt_requirement || '', '提示词已复制')">
+                  <template #icon><el-icon><CopyDocument /></el-icon></template>
                   复制提示词
                 </GitActionButton>
                 <GitActionButton compact variant="warning" :loading="promptRestoring === 'requirement'" @click="restorePrompts('requirement')">
@@ -266,12 +272,14 @@
                   保存提示词
                 </GitActionButton>
                 <GitActionButton compact @click="copyText(workflow.prompt_design_plan_requirement || '', '提示词已复制')">
+                  <template #icon><el-icon><CopyDocument /></el-icon></template>
                   复制提示词
                 </GitActionButton>
                 <GitActionButton compact variant="warning" :loading="promptRestoring === 'design_plan_requirement'" @click="restorePrompts('design_plan_requirement')">
                   还原为默认提示词
                 </GitActionButton>
                 <GitActionButton compact variant="info" @click="openDesignPlanReqFragment" :disabled="!designPlanReqFragmentId">
+                  <template #icon><el-icon><Link /></el-icon></template>
                   打开知识片段
                 </GitActionButton>
               </div>
@@ -305,6 +313,7 @@
                   保存提示词
                 </GitActionButton>
                 <GitActionButton compact @click="copyText(workflow.prompt_design || '', '提示词已复制')">
+                  <template #icon><el-icon><CopyDocument /></el-icon></template>
                   复制提示词
                 </GitActionButton>
                 <GitActionButton compact variant="warning" :loading="promptRestoring === 'design'" @click="restorePrompts('design')">
@@ -338,6 +347,7 @@
               <div class="task-workflow-card__title">接口开发生成提示词</div>
               <div class="task-workflow-card__switch">
                 <GitActionButton compact @click="openApiDocFragment">
+                  <template #icon><el-icon><Link /></el-icon></template>
                   接口文档
                 </GitActionButton>
                 <GitActionButton compact variant="warning" :loading="apiDocResetting" @click="resetApiDoc">
@@ -347,6 +357,7 @@
                   保存提示词
                 </GitActionButton>
                 <GitActionButton compact @click="copyText(workflow.prompt_api_dev || '', '提示词已复制')">
+                  <template #icon><el-icon><CopyDocument /></el-icon></template>
                   复制提示词
                 </GitActionButton>
                 <GitActionButton compact variant="warning" :loading="promptRestoring === 'api_dev'" @click="restorePrompts('api_dev')">
@@ -383,6 +394,7 @@
                   保存提示词
                 </GitActionButton>
                 <GitActionButton compact @click="copyText(workflow.prompt_browser_test || '', '提示词已复制')">
+                  <template #icon><el-icon><CopyDocument /></el-icon></template>
                   复制提示词
                 </GitActionButton>
                 <GitActionButton compact variant="warning" :loading="promptRestoring === 'browser_test'" @click="restorePrompts('browser_test')">
@@ -419,6 +431,7 @@
                   保存提示词
                 </GitActionButton>
                 <GitActionButton compact @click="copyText(workflow.prompt_api_test || '', '提示词已复制')">
+                  <template #icon><el-icon><CopyDocument /></el-icon></template>
                   复制提示词
                 </GitActionButton>
                 <GitActionButton compact variant="warning" :loading="promptRestoring === 'api_test'" @click="restorePrompts('api_test')">
