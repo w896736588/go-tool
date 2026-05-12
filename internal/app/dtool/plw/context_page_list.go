@@ -206,7 +206,7 @@ func (h *ContextPageList) CleanContextPagesFixDataId(runParams *PlaywrightRunPar
 			runParams.StreamFunc(`获取数据目录`, context.LinkIdLabel+`,`+context.LinkId+` 打开方式不一致，不进行清理`)
 			return false
 		}
-		if context.LinkId == runParams.LinkId {
+		if context.LinkId == runParams.LinkId && context.RunParams.Label == runParams.Label {
 			runParams.StreamFunc(`获取数据目录`, context.LinkIdLabel+`,`+context.LinkId+` 查找到当前实例，开始清理旧页面`)
 			context.CloseContextPages()
 		}
