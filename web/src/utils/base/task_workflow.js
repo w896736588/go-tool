@@ -55,6 +55,13 @@ function TaskWorkflowNodeStatusUpdate(workflowId, nodeStatuses, callBack) {
   }, callBack)
 }
 
+// TaskWorkflowIssueFixResolve 解析问题修改提示词模板。
+function TaskWorkflowIssueFixResolve(workflowId, callBack) {
+  base.BasePost('/api/task/workflow/issue-fix/resolve', {
+    workflow_id: workflowId,
+  }, callBack)
+}
+
 export default {
   TaskWorkflowBatchNodeStatus,
   TaskWorkflowCreateOrGet,
@@ -64,4 +71,5 @@ export default {
   TaskWorkflowRequirementFetch,
   TaskWorkflowApiDocReset,
   TaskWorkflowNodeStatusUpdate,
+  TaskWorkflowIssueFixResolve,
 }
