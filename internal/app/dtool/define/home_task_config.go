@@ -19,4 +19,5 @@ const (
 	HomeTaskConfigPromptDesignPlanReq = `home_task_prompt_design_plan_requirement`
 	HomeTaskConfigPromptBrowserTest   = `home_task_prompt_browser_test`
 	HomeTaskConfigPromptCodeReview    = `home_task_prompt_code_review`
+	HomeTaskConfigPromptIssueFix     = `home_task_prompt_issue_fix`
 )

@@ -1730,6 +1730,12 @@ func SetHomeTaskConfigSave(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
+	homeTaskPromptIssueFix := strings.TrimSpace(cast.ToString(dataMap[`home_task_prompt_issue_fix`]))
+	saveHomeTaskPromptWithLog(define.HomeTaskConfigPromptIssueFix, `问题修改提示词`, homeTaskPromptIssueFix, `工作流-问题修改提示词模板`)
+	if err := common.DbMain.HomeTaskConfigSave(`问题修改提示词`, define.HomeTaskConfigPromptIssueFix, homeTaskPromptIssueFix, `工作流-问题修改提示词模板`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
 	homeTaskDevEnvironment := strings.TrimSpace(cast.ToString(dataMap[`home_task_dev_environment`]))
 	saveHomeTaskPromptWithLog(define.HomeTaskConfigDevEnvironment, `开发环境`, homeTaskDevEnvironment, `工作流-开发环境描述`)
 	if err := common.DbMain.HomeTaskConfigSave(`开发环境`, define.HomeTaskConfigDevEnvironment, homeTaskDevEnvironment, `工作流-开发环境描述`); err != nil {
