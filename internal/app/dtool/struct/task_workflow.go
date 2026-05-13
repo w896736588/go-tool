@@ -71,3 +71,25 @@ type TaskWorkflowNodeStatusUpdateRequest struct {
 type TaskWorkflowBatchNodeStatusRequest struct {
 	HomeTaskIDs []int `json:"home_task_ids"`
 }
+
+// TaskWorkflowChatSendRequest 发送对话到 claude code 请求。
+type TaskWorkflowChatSendRequest struct {
+	WorkflowID int    `json:"workflow_id"`
+	Prompt     string `json:"prompt"`
+}
+
+// TaskWorkflowChatContinueRequest 继续已有对话请求。
+type TaskWorkflowChatContinueRequest struct {
+	ChatID int    `json:"chat_id"`
+	Prompt string `json:"prompt"`
+}
+
+// TaskWorkflowChatListRequest 列出对话列表请求。
+type TaskWorkflowChatListRequest struct {
+	WorkflowID int `json:"workflow_id"`
+}
+
+// TaskWorkflowChatDetailRequest 获取对话详情请求。
+type TaskWorkflowChatDetailRequest struct {
+	ChatID int `json:"chat_id"`
+}

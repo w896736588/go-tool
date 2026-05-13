@@ -62,6 +62,36 @@ function TaskWorkflowIssueFixResolve(workflowId, callBack) {
   }, callBack)
 }
 
+// TaskWorkflowChatSend 发送对话到 claude code。
+function TaskWorkflowChatSend(workflowId, prompt, callBack) {
+  base.BasePost('/api/task/workflow/chat/send', {
+    workflow_id: workflowId,
+    prompt: prompt,
+  }, callBack)
+}
+
+// TaskWorkflowChatContinue 继续已有对话。
+function TaskWorkflowChatContinue(chatId, prompt, callBack) {
+  base.BasePost('/api/task/workflow/chat/continue', {
+    chat_id: chatId,
+    prompt: prompt,
+  }, callBack)
+}
+
+// TaskWorkflowChatList 列出对话列表。
+function TaskWorkflowChatList(workflowId, callBack) {
+  base.BasePost('/api/task/workflow/chat/list', {
+    workflow_id: workflowId,
+  }, callBack)
+}
+
+// TaskWorkflowChatDetail 获取对话详情。
+function TaskWorkflowChatDetail(chatId, callBack) {
+  base.BasePost('/api/task/workflow/chat/detail', {
+    chat_id: chatId,
+  }, callBack)
+}
+
 export default {
   TaskWorkflowBatchNodeStatus,
   TaskWorkflowCreateOrGet,
@@ -72,4 +102,8 @@ export default {
   TaskWorkflowApiDocReset,
   TaskWorkflowNodeStatusUpdate,
   TaskWorkflowIssueFixResolve,
+  TaskWorkflowChatSend,
+  TaskWorkflowChatContinue,
+  TaskWorkflowChatList,
+  TaskWorkflowChatDetail,
 }

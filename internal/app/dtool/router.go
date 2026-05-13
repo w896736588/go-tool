@@ -354,6 +354,10 @@ func taskWorkflow(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/task/workflow/node-status/update`, controller.TaskWorkflowNodeStatusUpdate)
 	tGin.GinPost(`/api/task/workflow/batch-node-status`, controller.TaskWorkflowBatchNodeStatus)
 	tGin.GinPost(`/api/task/workflow/issue-fix/resolve`, controller.TaskWorkflowIssueFixResolve)
+	tGin.GinPost(`/api/task/workflow/chat/send`, controller.TaskWorkflowChatSend)
+	tGin.GinPost(`/api/task/workflow/chat/continue`, controller.TaskWorkflowChatContinue)
+	tGin.GinPost(`/api/task/workflow/chat/list`, controller.TaskWorkflowChatList)
+	tGin.GinPost(`/api/task/workflow/chat/detail`, controller.TaskWorkflowChatDetail)
 }
 
 func shellOut(tGin *p_gin.Gin) {

@@ -21,6 +21,9 @@
           <GitActionButton compact variant="warning" @click="openIssueFixDialog">
             问题修改提示词
           </GitActionButton>
+          <GitActionButton compact @click="openChatHistoryDialog">
+            历史对话
+          </GitActionButton>
         </div>
       </header>
 
@@ -542,6 +545,11 @@
       <div class="task-workflow-issue-fix__close-bar">
         <el-button @click="issueFixDialogVisible = false" type="danger">关闭</el-button>
       </div>
+        <div style="margin-bottom: 12px; display: flex; gap: 8px;">
+          <el-button type="primary" :loading="sendingToClaude" @click="sendToClaudeCode">
+            发送到 claude code 执行
+          </el-button>
+        </div>
       <div class="task-workflow-issue-fix">
         <div class="task-workflow-issue-fix__input">
           <div class="task-workflow-issue-fix__label">改动要求</div>
@@ -569,6 +577,119 @@
       </template>
     </el-dialog>
   </div>
+
+    <!-- 历史对话列表弹窗 -->
+    <el-dialog
+      v-model="chatHistoryDialogVisible"
+      title="历史对话"
+      width="700px"
+      :close-on-click-modal="false"
+      destroy-on-close
+    >
+      <el-table :data="chatHistoryList" style="width: 100%" v-loading="chatHistoryLoading" @row-click="openChatDetail" row-style="cursor: pointer;">
+        <el-table-column prop="id" label="ID" width="60" />
+        <el-table-column prop="created_at" label="时间" width="170" />
+        <el-table-column prop="prompt" label="提示词" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ (row.prompt || '').substring(0, 80) }}{{ (row.prompt || '').length > 80 ? '...' : '' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="status" label="状态" width="90">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 'running' ? 'warning' : 'success'" size="small">
+              {{ row.status === 'running' ? '执行中' : '已完成' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button @click="chatHistoryDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 对话详情弹窗 -->
+    <el-dialog
+      v-model="chatDetailDialogVisible"
+      :title="'对话 #' + chatDetailId"
+      width="1200px"
+      :close-on-click-modal="false"
+      destroy-on-close
+      @closed="closeChatDetail"
+    >
+      <div class="chat-detail-container" style="max-height: 70vh; overflow-y: auto; background: #1e1e1e; border-radius: 8px; padding: 16px; color: #d4d4d4; font-family: 'Consolas', monospace; font-size: 13px;">
+        <div v-if="chatDetailMessages.length === 0 && chatDetailStatus === 'running'" style="text-align: center; padding: 40px; color: #888;">
+          <div>等待 claude code 响应...</div>
+        </div>
+        <div v-for="(msg, idx) in chatDetailMessages" :key="idx" style="margin-bottom: 8px;">
+          <!-- system_init -->
+          <div v-if="msg.type === 'system_init'" style="color: #6a9955; font-size: 12px; padding: 4px 0;">
+            ✔ {{ msg.text }} | model: {{ msg.model }}
+          </div>
+          <!-- system_hook -->
+          <div v-else-if="msg.type === 'system_hook'" style="color: #888; font-size: 12px;">
+            <span @click="msg.collapsed = !msg.collapsed" style="cursor: pointer;">{{ msg.collapsed ? '▶' : '▼' }} {{ msg.text }}</span>
+          </div>
+          <!-- system (generic) -->
+          <div v-else-if="msg.type === 'system'" style="color: #888; font-size: 11px;">{{ msg.text }}</div>
+          <!-- assistant message -->
+          <div v-else-if="msg.type === 'assistant'" style="background: #2d2d2d; border-radius: 8px; padding: 12px; margin: 8px 0;">
+            <!-- thinking -->
+            <div v-if="msg.thinking" style="color: #888; font-size: 12px; margin-bottom: 8px;">
+              <span @click="msg._thinkingCollapsed = !msg._thinkingCollapsed" style="cursor: pointer; font-weight: bold;">
+                {{ msg._thinkingCollapsed ? '▶ 思考过程' : '▼ 思考过程' }}
+              </span>
+              <pre v-if="!msg._thinkingCollapsed" style="white-space: pre-wrap; margin-top: 4px; color: #999;">{{ msg.thinking }}</pre>
+            </div>
+            <!-- content blocks -->
+            <div v-for="(block, bi) in msg.content" :key="bi">
+              <div v-if="block.type === 'text'" style="white-space: pre-wrap; line-height: 1.5;">{{ block.text }}</div>
+              <div v-else-if="block.type === 'tool_use'" style="background: #1a3a1a; border-radius: 4px; padding: 8px; margin: 4px 0;">
+                <span style="color: #4ec9b0;">🔧 {{ block.name }}</span>
+                <pre style="white-space: pre-wrap; font-size: 12px; color: #ce9178; margin-top: 4px;">{{ block.input }}</pre>
+              </div>
+            </div>
+            <!-- usage -->
+            <div v-if="msg.usage" style="color: #888; font-size: 11px; margin-top: 8px; border-top: 1px solid #444; padding-top: 4px;">
+              input: {{ msg.usage.input_tokens }} | output: {{ msg.usage.output_tokens }}
+            </div>
+          </div>
+          <!-- tool_result -->
+          <div v-else-if="msg.type === 'tool_result'" style="color: #888; font-size: 12px;">
+            <span @click="msg.collapsed = !msg.collapsed" style="cursor: pointer;">{{ msg.collapsed ? '▶' : '▼' }} 工具执行结果</span>
+            <pre v-if="!msg.collapsed" style="white-space: pre-wrap; font-size: 11px; margin-top: 4px; max-height: 200px; overflow-y: auto;">{{ msg.text }}</pre>
+          </div>
+          <!-- assistant_text -->
+          <div v-else-if="msg.type === 'assistant_text'" style="white-space: pre-wrap; line-height: 1.5;">{{ msg.text }}</div>
+          <!-- assistant_thinking -->
+          <div v-else-if="msg.type === 'assistant_thinking'" style="color: #888; font-size: 12px;">
+            <span @click="msg.collapsed = !msg.collapsed" style="cursor: pointer;">{{ msg.collapsed ? '▶ 思考' : '▼ 思考' }}</span>
+            <pre v-if="!msg.collapsed" style="white-space: pre-wrap; margin-top: 4px;">{{ msg.text }}</pre>
+          </div>
+          <!-- result -->
+          <div v-else-if="msg.type === 'result'" style="color: #6a9955; font-size: 12px; border-top: 1px solid #444; padding-top: 8px; margin-top: 8px;">
+            {{ msg.isError ? '✘ 错误' : '✔ 完成' }} | 耗时: {{ (msg.durationMs / 1000).toFixed(1) }}s | {{ msg.numTurns }} 轮
+            <span v-if="msg.usage"> | input: {{ msg.usage.input_tokens }} output: {{ msg.usage.output_tokens }}</span>
+          </div>
+          <!-- chat_completed -->
+          <div v-else-if="msg.type === 'chat_completed'" style="color: #6a9955; text-align: center; padding: 16px;">
+            ✔ {{ msg.text }}
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <el-input
+            v-if="chatDetailStatus !== 'running'"
+            v-model="chatContinueInput"
+            placeholder="输入新消息继续对话..."
+            @keyup.enter="continueChat"
+            style="flex: 1;"
+          />
+          <el-button v-if="chatDetailStatus !== 'running'" type="primary" :loading="chatContinueLoading" @click="continueChat">发送</el-button>
+          <el-button @click="chatDetailDialogVisible = false">关闭</el-button>
+        </div>
+      </template>
+    </el-dialog>
 </template>
 
 <script>
@@ -579,6 +700,7 @@ import taskWorkflowApi from '@/utils/base/task_workflow'
 import homeTaskApi from '@/utils/base/home_task'
 import baseUtils from '@/utils/base'
 import sseDistribute from '@/utils/base/sse_distribute'
+import chatParser from '@/utils/chat_parser'
 import gitApi from '@/utils/base/git'
 import mysqlSetApi from '@/utils/base/mysql_set'
 import apiManagement from '@/utils/base/api'
@@ -688,6 +810,20 @@ export default {
       issueFixDialogVisible: false,
       issueFixInput: '',
       issueFixResolvedTemplate: '',
+      // claude code 对话
+      chatHistoryDialogVisible: false,
+      chatHistoryList: [],
+      chatHistoryLoading: false,
+      chatDetailDialogVisible: false,
+      chatDetailId: 0,
+      chatDetailPrompt: '',
+      chatDetailSessionId: '',
+      chatDetailStatus: '',
+      chatDetailMessages: [],
+      chatDetailSSERegistered: false,
+      sendingToClaude: false,
+      chatContinueInput: '',
+      chatContinueLoading: false,
     }
   },
   computed: {
@@ -1215,6 +1351,116 @@ export default {
     },
     copyIssueFixText() {
       this.copyText(this.issueFixCombinedText, '已复制到剪贴板')
+    },
+    // 打开历史对话列表
+    openChatHistoryDialog() {
+      this.chatHistoryDialogVisible = true
+      this.chatHistoryLoading = true
+      taskWorkflowApi.TaskWorkflowChatList(this.workflowId, (res) => {
+        this.chatHistoryLoading = false
+        if (res.ErrCode === 0 && res.Data) {
+          this.chatHistoryList = res.Data.list || []
+        }
+      })
+    },
+    // 打开对话详情
+    openChatDetail(row) {
+      this.chatDetailId = row.id
+      this.chatDetailDialogVisible = true
+      this.chatDetailStatus = row.status
+      this.loadChatDetail()
+      if (row.status === 'running') {
+        this.registerChatSSE(row.id)
+      }
+    },
+    // 加载对话详情
+    loadChatDetail() {
+      if (!this.chatDetailId) return
+      taskWorkflowApi.TaskWorkflowChatDetail(this.chatDetailId, (res) => {
+        if (res.ErrCode === 0 && res.Data) {
+          const data = res.Data
+          this.chatDetailPrompt = data.prompt || ''
+          this.chatDetailSessionId = data.session_id || ''
+          this.chatDetailStatus = data.status || ''
+          this.chatDetailMessages = chatParser.parseChatLines(data.lines || [])
+        }
+      })
+    },
+    // 注册 SSE 接收
+    registerChatSSE(chatId) {
+      if (this.chatDetailSSERegistered) return
+      this.chatDetailSSERegistered = true
+      const sseId = 'task_workflow_chat_' + chatId
+      sseDistribute.RegisterReceive(sseId, (data) => {
+        if (data && data.line) {
+          const line = data.line
+          try {
+            const obj = JSON.parse(line)
+            if (obj.type === 'chat' && obj.subtype === 'completed') {
+              this.chatDetailStatus = 'completed'
+              this.chatDetailSSERegistered = false
+              sseDistribute.UnRegisterReceive(sseId)
+              return
+            }
+          } catch (e) { /* ignore parse errors */ }
+          const newMsgs = chatParser.parseChatLines([line])
+          if (newMsgs.length > 0) {
+            this.chatDetailMessages = [...this.chatDetailMessages, ...newMsgs]
+          }
+        }
+      })
+    },
+    // 关闭对话详情
+    closeChatDetail() {
+      if (this.chatDetailSSERegistered) {
+        const sseId = 'task_workflow_chat_' + this.chatDetailId
+        sseDistribute.UnRegisterReceive(sseId)
+        this.chatDetailSSERegistered = false
+      }
+      this.chatDetailMessages = []
+      this.chatDetailId = 0
+      this.chatContinueInput = ''
+    },
+    // 发送到 claude code
+    sendToClaudeCode() {
+      const prompt = this.issueFixCombinedText
+      if (!prompt || !prompt.trim()) {
+        this.$helperNotify.warning('提示词为空，无法发送')
+        return
+      }
+      this.sendingToClaude = true
+      taskWorkflowApi.TaskWorkflowChatSend(this.workflowId, prompt, (res) => {
+        this.sendingToClaude = false
+        if (res.ErrCode === 0 && res.Data) {
+          const chatId = res.Data.chat_id
+          this.$helperNotify.success('已发送到 claude code 执行')
+          this.issueFixDialogVisible = false
+          this.chatDetailId = chatId
+          this.chatDetailStatus = 'running'
+          this.chatDetailDialogVisible = true
+          this.registerChatSSE(chatId)
+          setTimeout(() => { this.loadChatDetail() }, 500)
+        } else {
+          this.$helperNotify.error(res.ErrMsg || '发送失败')
+        }
+      })
+    },
+    // 继续对话
+    continueChat() {
+      const input = this.chatContinueInput.trim()
+      if (!input) return
+      this.chatContinueLoading = true
+      taskWorkflowApi.TaskWorkflowChatContinue(this.chatDetailId, input, (res) => {
+        this.chatContinueLoading = false
+        if (res.ErrCode === 0) {
+          this.chatContinueInput = ''
+          this.chatDetailStatus = 'running'
+          this.registerChatSSE(this.chatDetailId)
+          setTimeout(() => { this.loadChatDetail() }, 500)
+        } else {
+          this.$helperNotify.error(res.ErrMsg || '发送失败')
+        }
+      })
     },
     formatUnixTime(unixTime) {
       const value = Number(unixTime || 0)

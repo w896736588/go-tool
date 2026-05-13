@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"bufio"
 	"dev_tool/internal/app/dtool/api"
 	"dev_tool/internal/app/dtool/common"
 	"dev_tool/internal/app/dtool/component"
@@ -10,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -2227,4 +2229,280 @@ func TaskWorkflowIssueFixResolve(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, ``, map[string]string{
 		`prompt`: resolved,
 	})
+}
+
+// broadcastChatOutput 向所有 SSE 客户端广播对话输出行。
+func broadcastChatOutput(chatID int64, line string) {
+	distributeID := define.SseTaskWorkflowChatPrefix + cast.ToString(chatID)
+	msg := gstool.JsonEncode(p_define.SseData{
+		SseDistributeId: distributeID,
+		Data: map[string]any{
+			`chat_id`: chatID,
+			`line`:    line,
+			`time`:    time.Now().Unix(),
+		},
+		Type: p_define.SseContentTypeMsg,
+	})
+	for _, item := range gsgin.SseStatus() {
+		clientID := strings.TrimSpace(strings.TrimPrefix(item, apiDataChangeSseStatusPrefix))
+		if clientID == `` || clientID == item {
+			continue
+		}
+		sse := gsgin.SseGetByClientId(clientID)
+		if sse == nil {
+			continue
+		}
+		_ = sse.SendToChan(msg)
+	}
+}
+
+// extractSessionID 从首行 init JSON 中提取 session_id。
+func extractSessionID(line string) string {
+	var data map[string]any
+	if err := json.Unmarshal([]byte(line), &data); err != nil {
+		return ``
+	}
+	return cast.ToString(data[`session_id`])
+}
+
+// TaskWorkflowChatSend 启动新的 claude code 对话。
+func TaskWorkflowChatSend(c *gin.Context) {
+	var req _struct.TaskWorkflowChatSendRequest
+	if err := gsgin.GinPostBody(c, &req); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	if req.WorkflowID <= 0 {
+		gsgin.GinResponseError(c, `工作流id不能为空`, nil)
+		return
+	}
+	if strings.TrimSpace(req.Prompt) == `` {
+		gsgin.GinResponseError(c, `提示词不能为空`, nil)
+		return
+	}
+
+	workflowInfo, err := common.DbMain.TaskWorkflowInfo(req.WorkflowID)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskInfo, err := common.DbMain.HomeTaskRow(cast.ToInt(workflowInfo[`home_task_id`]))
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	devConfigs := homeTaskDevConfigs(homeTaskInfo)
+	var localDir string
+	for _, cfg := range devConfigs {
+		if strings.TrimSpace(cfg.LocalDir) != `` {
+			localDir = strings.TrimSpace(cfg.LocalDir)
+			break
+		}
+	}
+	if localDir == `` {
+		gsgin.GinResponseError(c, `开发配置中没有本地目录，无法执行 claude code`, nil)
+		return
+	}
+
+	chatID, err := common.DbMain.TaskWorkflowChatCreate(req.WorkflowID, req.Prompt)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+
+	go runClaudeCommand(chatID, localDir, req.Prompt, false, ``)
+
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`chat_id`: chatID,
+	})
+}
+
+// TaskWorkflowChatContinue 继续已有对话。
+func TaskWorkflowChatContinue(c *gin.Context) {
+	var req _struct.TaskWorkflowChatContinueRequest
+	if err := gsgin.GinPostBody(c, &req); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	if req.ChatID <= 0 {
+		gsgin.GinResponseError(c, `对话id不能为空`, nil)
+		return
+	}
+	if strings.TrimSpace(req.Prompt) == `` {
+		gsgin.GinResponseError(c, `提示词不能为空`, nil)
+		return
+	}
+
+	chatInfo, err := common.DbMain.TaskWorkflowChatInfo(int64(req.ChatID))
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	sessionID := cast.ToString(chatInfo[`session_id`])
+	if sessionID == `` {
+		gsgin.GinResponseError(c, `对话未找到有效的 session_id`, nil)
+		return
+	}
+
+	workflowInfo, err := common.DbMain.TaskWorkflowInfo(cast.ToInt(chatInfo[`workflow_id`]))
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskInfo, err := common.DbMain.HomeTaskRow(cast.ToInt(workflowInfo[`home_task_id`]))
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	devConfigs := homeTaskDevConfigs(homeTaskInfo)
+	var localDir string
+	for _, cfg := range devConfigs {
+		if strings.TrimSpace(cfg.LocalDir) != `` {
+			localDir = strings.TrimSpace(cfg.LocalDir)
+			break
+		}
+	}
+	if localDir == `` {
+		gsgin.GinResponseError(c, `开发配置中没有本地目录`, nil)
+		return
+	}
+
+	_ = common.DbMain.TaskWorkflowChatMarkRunning(int64(req.ChatID))
+
+	go runClaudeCommand(int64(req.ChatID), localDir, req.Prompt, true, sessionID)
+
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`chat_id`: req.ChatID,
+	})
+}
+
+// TaskWorkflowChatList 列出工作流的所有对话。
+func TaskWorkflowChatList(c *gin.Context) {
+	var req _struct.TaskWorkflowChatListRequest
+	if err := gsgin.GinPostBody(c, &req); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	if req.WorkflowID <= 0 {
+		gsgin.GinResponseError(c, `工作流id不能为空`, nil)
+		return
+	}
+	rows, err := common.DbMain.TaskWorkflowChatList(req.WorkflowID)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	type chatItem struct {
+		ID        int64  `json:"id"`
+		SessionID string `json:"session_id"`
+		Prompt    string `json:"prompt"`
+		Status    string `json:"status"`
+		CreatedAt string `json:"created_at"`
+	}
+	list := make([]chatItem, 0, len(rows))
+	for _, row := range rows {
+		list = append(list, chatItem{
+			ID:        cast.ToInt64(row[`id`]),
+			SessionID: cast.ToString(row[`session_id`]),
+			Prompt:    cast.ToString(row[`prompt`]),
+			Status:    cast.ToString(row[`status`]),
+			CreatedAt: cast.ToString(row[`created_at`]),
+		})
+	}
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`list`: list,
+	})
+}
+
+// TaskWorkflowChatDetail 获取对话详情（含原始输出行）。
+func TaskWorkflowChatDetail(c *gin.Context) {
+	var req _struct.TaskWorkflowChatDetailRequest
+	if err := gsgin.GinPostBody(c, &req); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	if req.ChatID <= 0 {
+		gsgin.GinResponseError(c, `对话id不能为空`, nil)
+		return
+	}
+	info, err := common.DbMain.TaskWorkflowChatInfo(int64(req.ChatID))
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	if len(info) == 0 {
+		gsgin.GinResponseError(c, `对话不存在`, nil)
+		return
+	}
+
+	rawOutput := cast.ToString(info[`raw_output`])
+	lines := []string{}
+	if rawOutput != `` {
+		lines = strings.Split(rawOutput, "\n")
+	}
+
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`chat_id`:    info[`id`],
+		`session_id`: info[`session_id`],
+		`prompt`:     info[`prompt`],
+		`status`:     info[`status`],
+		`created_at`: info[`created_at`],
+		`lines`:      lines,
+	})
+}
+
+// runClaudeCommand 后台执行 claude 命令并捕获输出。
+func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sessionID string) {
+	args := []string{}
+	if isResume {
+		args = append(args, `--resume`, sessionID)
+	}
+	args = append(args,
+		`-p`, prompt,
+		`--add-dir`, localDir,
+		`--model`, `deepseek-v4-pro[1m]`,
+		`--permission-mode`, `bypassPermissions`,
+		`--output-format`, `stream-json`,
+		`--include-partial-messages`,
+		`--verbose`,
+	)
+
+	cmd := exec.Command(`claude`, args...)
+	cmd.Dir = localDir
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		_ = common.DbMain.TaskWorkflowChatAppendOutput(chatID, fmt.Sprintf(`{"error":"stdout pipe failed: %s"}`, err.Error()))
+		_ = common.DbMain.TaskWorkflowChatMarkCompleted(chatID)
+		return
+	}
+
+	if err := cmd.Start(); err != nil {
+		_ = common.DbMain.TaskWorkflowChatAppendOutput(chatID, fmt.Sprintf(`{"error":"start failed: %s"}`, err.Error()))
+		_ = common.DbMain.TaskWorkflowChatMarkCompleted(chatID)
+		return
+	}
+
+	sessionExtracted := false
+	scanner := bufio.NewScanner(stdout)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == `` {
+			continue
+		}
+
+		_ = common.DbMain.TaskWorkflowChatAppendOutput(chatID, line)
+		broadcastChatOutput(chatID, line)
+
+		if !sessionExtracted && !isResume {
+			if sid := extractSessionID(line); sid != `` {
+				_ = common.DbMain.TaskWorkflowChatUpdateSessionID(chatID, sid)
+				sessionExtracted = true
+			}
+		}
+	}
+
+	_ = cmd.Wait()
+	_ = common.DbMain.TaskWorkflowChatMarkCompleted(chatID)
+	broadcastChatOutput(chatID, fmt.Sprintf(`{"type":"chat","subtype":"completed","chat_id":%d}`, chatID))
 }

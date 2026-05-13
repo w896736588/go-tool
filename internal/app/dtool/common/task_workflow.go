@@ -19,6 +19,11 @@ const (
 	taskWorkflowRequirementFetchFailed  = `failed`
 )
 
+const (
+	taskWorkflowChatStatusRunning   = `running`
+	taskWorkflowChatStatusCompleted = `completed`
+)
+
 // TaskWorkflowCreateOrGetByHomeTaskID 查询或创建任务工作流主记录。
 func (h *CSqlite) TaskWorkflowCreateOrGetByHomeTaskID(homeTaskID int) (map[string]any, error) {
 	if homeTaskID <= 0 {
@@ -397,6 +402,95 @@ func (h *CSqlite) TaskWorkflowBindApiDocFragment(workflowID int, fragmentID stri
 	}, map[string]any{
 		`api_doc_fragment_id`: fragmentID,
 		`update_time`:         time.Now().Unix(),
+	}).Exec()
+	return err
+}
+
+// TaskWorkflowChatCreate 创建对话记录。
+func (h *CSqlite) TaskWorkflowChatCreate(workflowID int, prompt string) (int64, error) {
+	now := time.Now().Format(`2006-01-02 15:04:05`)
+	id, err := h.Client.QuickCreate(`tbl_task_workflow_chat`, map[string]any{
+		`workflow_id`: workflowID,
+		`prompt`:      prompt,
+		`status`:      taskWorkflowChatStatusRunning,
+		`raw_output`:  ``,
+		`created_at`:  now,
+		`updated_at`:  now,
+	}).Exec()
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+// TaskWorkflowChatUpdateSessionID 更新 session_id。
+func (h *CSqlite) TaskWorkflowChatUpdateSessionID(chatID int64, sessionID string) error {
+	now := time.Now().Format(`2006-01-02 15:04:05`)
+	_, err := h.Client.QuickUpdate(`tbl_task_workflow_chat`, map[string]any{
+		`id`: chatID,
+	}, map[string]any{
+		`session_id`: sessionID,
+		`updated_at`: now,
+	}).Exec()
+	return err
+}
+
+// TaskWorkflowChatAppendOutput 追加一行 raw_output。
+func (h *CSqlite) TaskWorkflowChatAppendOutput(chatID int64, line string) error {
+	now := time.Now().Format(`2006-01-02 15:04:05`)
+	info, err := h.TaskWorkflowChatInfo(chatID)
+	if err != nil {
+		return err
+	}
+	current := cast.ToString(info[`raw_output`])
+	newOutput := current
+	if current != `` {
+		newOutput += "\n"
+	}
+	newOutput += line
+	_, err = h.Client.QuickUpdate(`tbl_task_workflow_chat`, map[string]any{
+		`id`: chatID,
+	}, map[string]any{
+		`raw_output`: newOutput,
+		`updated_at`: now,
+	}).Exec()
+	return err
+}
+
+// TaskWorkflowChatMarkCompleted 标记对话完成。
+func (h *CSqlite) TaskWorkflowChatMarkCompleted(chatID int64) error {
+	now := time.Now().Format(`2006-01-02 15:04:05`)
+	_, err := h.Client.QuickUpdate(`tbl_task_workflow_chat`, map[string]any{
+		`id`: chatID,
+	}, map[string]any{
+		`status`:     taskWorkflowChatStatusCompleted,
+		`updated_at`: now,
+	}).Exec()
+	return err
+}
+
+// TaskWorkflowChatInfo 获取单条对话记录。
+func (h *CSqlite) TaskWorkflowChatInfo(chatID int64) (map[string]any, error) {
+	return h.Client.QuickQuery(`tbl_task_workflow_chat`, `*`, map[string]any{
+		`id`: chatID,
+	}).One()
+}
+
+// TaskWorkflowChatList 获取 workflow 下所有对话记录。
+func (h *CSqlite) TaskWorkflowChatList(workflowID int) ([]map[string]any, error) {
+	return h.Client.QuickQuery(`tbl_task_workflow_chat`, `*`, map[string]any{
+		`workflow_id`: workflowID,
+	}).Order(`id DESC`).All()
+}
+
+// TaskWorkflowChatMarkRunning 标记对话为运行中（用于继续对话）。
+func (h *CSqlite) TaskWorkflowChatMarkRunning(chatID int64) error {
+	now := time.Now().Format(`2006-01-02 15:04:05`)
+	_, err := h.Client.QuickUpdate(`tbl_task_workflow_chat`, map[string]any{
+		`id`: chatID,
+	}, map[string]any{
+		`status`:     taskWorkflowChatStatusRunning,
+		`updated_at`: now,
 	}).Exec()
 	return err
 }
