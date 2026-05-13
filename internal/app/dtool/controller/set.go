@@ -83,7 +83,7 @@ func SetSshList(c *gin.Context) {
 func SetSshAdd(c *gin.Context) {
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
-	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `host`, `port`, `username`, `password`, `home`, `connect_timeout`})
+	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `host`, `port`, `username`, `password`, `home`, `connect_timeout`, `post_connect_cmds`, `cmd_timeout`})
 	var err error
 	if cast.ToInt(dataMap[`id`]) == 0 {
 		updateData[`create_time`] = time.Now().Unix()
@@ -1565,6 +1565,11 @@ func SetHomeTaskConfigGet(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
+	promptIssueFix, err := homeTaskConfigValue(define.HomeTaskConfigPromptIssueFix)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
 	devEnvironment, err := homeTaskConfigValue(define.HomeTaskConfigDevEnvironment)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
@@ -1595,6 +1600,7 @@ func SetHomeTaskConfigGet(c *gin.Context) {
 		`home_task_prompt_plain_text_requirement`: promptPlainTextRequirement,
 		`home_task_prompt_browser_test`:           promptBrowserTest,
 		`home_task_prompt_code_review`:            promptCodeReview,
+		`home_task_prompt_issue_fix`:              promptIssueFix,
 		`home_task_dev_environment`:               devEnvironment,
 		`home_task_branch_name_prompt`:            branchNamePrompt,
 		`home_task_branch_name_model_id`:          cast.ToInt(branchNameModelID),
@@ -1612,6 +1618,7 @@ var promptConfigKeys = map[string]string{
 	define.HomeTaskConfigPromptPlainTextReq: `纯文本TAPD需求提示词`,
 	define.HomeTaskConfigPromptBrowserTest:  `需求核对浏览器测试提示词`,
 	define.HomeTaskConfigPromptCodeReview:   `代码检查提示词`,
+	define.HomeTaskConfigPromptIssueFix:    `问题修改提示词`,
 	define.HomeTaskConfigDevEnvironment:     `开发环境`,
 	define.HomeTaskConfigBranchNamePrompt:   `分支名生成提示词`,
 }
