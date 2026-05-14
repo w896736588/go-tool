@@ -497,7 +497,7 @@ func HomeTaskBranchNameGenerate(c *gin.Context) {
 	}
 	prompt = strings.TrimSpace(prompt)
 	if prompt == "" {
-		prompt = "请根据以下信息生成分支名：\n需求名：{需求名}\n基于分支：{父分支}\n\n要求：只输出分支名，不要附加解释。分支名使用英文小写，单词间用下划线连接，格式如 feature_xxx 或 fix_xxx。"
+		prompt = "请根据以下信息生成分支名：\n需求名：{需求名}\n基于分支：{父分支}\n\n要求：只输出分支名，不要附加解释。分支名使用英文小写，单词间用下划线连接，格式如 feature_xxx 或 fix_xxx，分支名中最多包含1-3个业务单词。"
 	}
 	prompt = strings.ReplaceAll(prompt, "{需求名}", taskName)
 	prompt = strings.ReplaceAll(prompt, "{父分支}", parentBranch)

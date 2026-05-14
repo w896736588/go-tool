@@ -994,6 +994,7 @@ export default {
       this.workflowId = Number(this.workflow.id || 0)
       this.requirementFetchConfig = data.requirement_fetch_config || this.requirementFetchConfig || {}
       this.parseNodeStatuses()
+      document.title = this.homeTask.name || '任务工作流程'
     },
     // 解析后端返回的 node_statuses JSON 字符串
     parseNodeStatuses() {

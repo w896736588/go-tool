@@ -1800,6 +1800,7 @@ func TaskWorkflowRequirementFetch(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
+	taskWorkflowAutoCompleteNode(workflowInfo, `requirement-fetch`)
 	updatedWorkflowInfo, err := common.DbMain.TaskWorkflowInfo(request.WorkflowID)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
@@ -2522,4 +2523,20 @@ func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sess
 	_ = cmd.Wait()
 	_ = common.DbMain.TaskWorkflowChatMarkCompleted(chatID)
 	broadcastChatOutput(chatID, fmt.Sprintf(`{"type":"chat","subtype":"completed","chat_id":%d}`, chatID))
+}
+
+// taskWorkflowAutoCompleteNode 自动将指定节点标记为已完成。
+func taskWorkflowAutoCompleteNode(workflowInfo map[string]any, nodeKey string) {
+	workflowID := cast.ToInt(workflowInfo[`id`])
+	if workflowID <= 0 {
+		return
+	}
+	nodeStatuses := make(map[string]string)
+	if raw := strings.TrimSpace(cast.ToString(workflowInfo[`node_statuses`])); raw != `` {
+		_ = json.Unmarshal([]byte(raw), &nodeStatuses)
+	}
+	nodeStatuses[nodeKey] = `completed`
+	if data, err := json.Marshal(nodeStatuses); err == nil {
+		_ = common.DbMain.TaskWorkflowUpdateNodeStatuses(workflowID, string(data))
+	}
 }
