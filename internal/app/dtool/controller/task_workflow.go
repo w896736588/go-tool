@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"os
 	"os/exec"
 	"path/filepath"
 	"regexp"
