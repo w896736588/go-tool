@@ -92,6 +92,23 @@ function TaskWorkflowChatDetail(chatId, callBack) {
   }, callBack)
 }
 
+// TaskWorkflowZcodeSave 保存 zcode 工作目录配置。
+function TaskWorkflowZcodeSave(zcodeDir, callBack) {
+  base.BasePost('/api/task/workflow/zcode/save', {
+    zcode_dir: zcodeDir,
+  }, callBack)
+}
+
+// TaskWorkflowZcodeGet 获取当前 zcode 配置及项目映射。
+function TaskWorkflowZcodeGet(callBack) {
+  base.BasePost('/api/task/workflow/zcode/get', {}, callBack)
+}
+
+// TaskWorkflowZcodeDelete 删除 zcode 配置。
+function TaskWorkflowZcodeDelete(callBack) {
+  base.BasePost('/api/task/workflow/zcode/delete', {}, callBack)
+}
+
 export default {
   TaskWorkflowBatchNodeStatus,
   TaskWorkflowCreateOrGet,
@@ -106,4 +123,7 @@ export default {
   TaskWorkflowChatContinue,
   TaskWorkflowChatList,
   TaskWorkflowChatDetail,
+  TaskWorkflowZcodeSave,
+  TaskWorkflowZcodeGet,
+  TaskWorkflowZcodeDelete,
 }

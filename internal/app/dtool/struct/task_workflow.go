@@ -93,3 +93,15 @@ type TaskWorkflowChatListRequest struct {
 type TaskWorkflowChatDetailRequest struct {
 	ChatID int `json:"chat_id"`
 }
+
+// TaskWorkflowZcodeSaveRequest 保存 zcode 配置请求。
+type TaskWorkflowZcodeSaveRequest struct {
+	ZcodeDir string `json:"zcode_dir"`
+}
+
+// TaskWorkflowZcodeProjectItem 项目映射条目（用于响应）。
+type TaskWorkflowZcodeProjectItem struct {
+	ProjectKey    string `json:"project_key"`
+	WorkspacePath string `json:"workspace_path"`
+	SettingsPath  string `json:"settings_path"`
+}

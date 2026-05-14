@@ -24,6 +24,9 @@
           <GitActionButton compact @click="openChatHistoryDialog">
             历史对话
           </GitActionButton>
+          <GitActionButton compact variant="success" @click="openZcodeConfigDialog">
+            zcode配置
+          </GitActionButton>
         </div>
       </header>
 
@@ -51,7 +54,7 @@
             'task-workflow-node--status-completed': getNodeStatus(node.key) === 'completed',
             'task-workflow-node--status-skipped': getNodeStatus(node.key) === 'skipped',
           }"
-          @click="activeNode = node.key"
+          @click="selectNode(node.key)"
         >
           <span class="task-workflow-node__status-icon">
             <span v-if="getNodeStatus(node.key) === 'completed'" class="status-icon status-icon--completed">&#10003;</span>
@@ -540,7 +543,6 @@
       title="问题修改提示词"
       width="1200px"
       top="3vh"
-      :close-on-click-modal="false"
       destroy-on-close
       class="task-workflow-issue-fix-dialog"
     >
@@ -551,6 +553,13 @@
           <el-button type="primary" :loading="sendingToClaude" @click="sendToClaudeCode">
             发送到 claude code 执行
           </el-button>
+        </div>
+        <div v-if="issueFixZcodeMappings.length > 0" style="margin-bottom: 12px;">
+          <div style="font-size: 13px; color: #909399; margin-bottom: 4px;">当前任务本地目录对应的 Settings 配置</div>
+          <el-table :data="issueFixZcodeMappings" border size="small" max-height="160">
+            <el-table-column prop="workspace_path" label="本地工作目录" show-overflow-tooltip />
+            <el-table-column prop="settings_path" label="Settings 配置文件" show-overflow-tooltip />
+          </el-table>
         </div>
       <div class="task-workflow-issue-fix">
         <div class="task-workflow-issue-fix__input">
@@ -696,6 +705,36 @@
         </div>
       </template>
     </el-dialog>
+
+    <!-- zcode 配置弹窗 -->
+    <el-dialog
+      v-model="zcodeConfigDialogVisible"
+      title="zcode 配置"
+      width="800px"
+      destroy-on-close
+    >
+      <div style="margin-bottom: 16px;">
+        <div style="font-size: 14px; font-weight: 500; margin-bottom: 8px; color: #303133;">zcode 工作目录地址</div>
+        <div style="display: flex; gap: 8px;">
+          <el-input
+            v-model="zcodeDirInput"
+            placeholder="例如: C:\Users\test\.zcode\v2\acp-config\claude"
+            style="flex: 1;"
+          />
+          <el-button type="primary" :loading="zcodeSaving" @click="saveZcodeConfig">解析并保存</el-button>
+          <el-button type="danger" plain :disabled="!zcodeProjectList.length" @click="deleteZcodeConfig">删除配置</el-button>
+        </div>
+      </div>
+      <el-table v-if="zcodeProjectList.length > 0" :data="zcodeProjectList" border size="small" empty-text="暂无项目映射">
+        <el-table-column prop="project_key" label="项目Key" width="200" />
+        <el-table-column prop="workspace_path" label="工作目录" show-overflow-tooltip />
+        <el-table-column prop="settings_path" label="Settings 配置文件" show-overflow-tooltip />
+      </el-table>
+      <div v-else style="color: #909399; text-align: center; padding: 20px;">暂无 zcode 项目映射</div>
+      <template #footer>
+        <el-button @click="zcodeConfigDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
 </template>
 
 <script>
@@ -737,6 +776,8 @@ const NODE_STATUS_LABELS = {
   [NODE_STATUS_COMPLETED]: '已完成',
   [NODE_STATUS_SKIPPED]: '已跳过',
 }
+
+const ACTIVE_NODE_CACHE_PREFIX = 'task_workflow_active_node_'
 
 const TASK_STATUS_TODO = '待开始'
 const TASK_STATUS_DEVELOPING = '开发中'
@@ -830,6 +871,12 @@ export default {
       sendingToClaude: false,
       chatContinueInput: '',
       chatContinueLoading: false,
+      // zcode 配置
+      zcodeConfigDialogVisible: false,
+      zcodeDirInput: '',
+      zcodeProjectList: [],
+      zcodeSaving: false,
+      issueFixZcodeMappings: [],
     }
   },
   computed: {
@@ -980,7 +1027,7 @@ export default {
           return
         }
         this.applyWorkflowPayload(response.Data)
-        this.activeNode = this.firstRunningNodeKey
+        this.activeNode = this.restoreActiveNodeCache() || this.firstRunningNodeKey
         this.loadRequirementFragment(() => {
           this.loading = false
           this.ensureWorkflowSse()
@@ -1349,15 +1396,71 @@ export default {
       this.issueFixDialogVisible = true
       this.issueFixInput = ''
       this.issueFixResolvedTemplate = ''
+      this.issueFixZcodeMappings = []
+      // 获取当前任务所有本地目录
+      const taskDirs = this.parsedTaskDevConfigs
+        .map(cfg => (cfg.local_dir || '').trim())
+        .filter(Boolean)
       if (this.workflowId <= 0) return
       taskWorkflowApi.TaskWorkflowIssueFixResolve(this.workflowId, (response) => {
         if (response && response.ErrCode === 0 && response.Data) {
           this.issueFixResolvedTemplate = response.Data.prompt || ''
         }
       })
+      // 只显示与当前任务本地目录匹配的 zcode 配置
+      taskWorkflowApi.TaskWorkflowZcodeGet((res) => {
+        if (res && res.ErrCode === 0 && res.Data) {
+          const allProjects = res.Data.projects || []
+          const workspaceSet = new Set(taskDirs)
+          this.issueFixZcodeMappings = allProjects.filter(p => workspaceSet.has(p.workspace_path))
+        }
+      })
     },
     copyIssueFixText() {
       this.copyText(this.issueFixCombinedText, '已复制到剪贴板')
+    },
+    // zcode 配置弹窗
+    openZcodeConfigDialog() {
+      this.zcodeConfigDialogVisible = true
+      this.zcodeDirInput = ''
+      this.zcodeProjectList = []
+      taskWorkflowApi.TaskWorkflowZcodeGet((res) => {
+        if (res && res.ErrCode === 0 && res.Data) {
+          this.zcodeDirInput = res.Data.zcode_dir || ''
+          this.zcodeProjectList = res.Data.projects || []
+        }
+      })
+    },
+    saveZcodeConfig() {
+      const dir = (this.zcodeDirInput || '').trim()
+      if (!dir) {
+        this.$helperNotify.warning('请输入 zcode 工作目录地址')
+        return
+      }
+      this.zcodeSaving = true
+      taskWorkflowApi.TaskWorkflowZcodeSave(dir, (res) => {
+        this.zcodeSaving = false
+        if (res && res.ErrCode === 0 && res.Data) {
+          this.$helperNotify.success('zcode 配置已保存')
+          this.zcodeDirInput = res.Data.zcode_dir || ''
+          this.zcodeProjectList = res.Data.projects || []
+        }
+      })
+    },
+    deleteZcodeConfig() {
+      this.$confirm('确定要删除 zcode 配置吗？关联的项目映射也会被清空。', '提示', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }).then(() => {
+        taskWorkflowApi.TaskWorkflowZcodeDelete((res) => {
+          if (res && res.ErrCode === 0) {
+            this.$helperNotify.success('zcode 配置已删除')
+            this.zcodeDirInput = ''
+            this.zcodeProjectList = []
+          }
+        })
+      }).catch(() => {})
     },
     // 打开历史对话列表
     openChatHistoryDialog() {
@@ -1589,6 +1692,22 @@ export default {
         return 'info'
       }
       return ''
+    },
+    selectNode(key) {
+      this.activeNode = key
+      this.saveActiveNodeCache()
+    },
+    getActiveNodeCacheKey() {
+      return ACTIVE_NODE_CACHE_PREFIX + this.taskId
+    },
+    saveActiveNodeCache() {
+      if (this.taskId > 0 && this.activeNode) {
+        localStorage.setItem(this.getActiveNodeCacheKey(), this.activeNode)
+      }
+    },
+    restoreActiveNodeCache() {
+      if (this.taskId <= 0) return null
+      return localStorage.getItem(this.getActiveNodeCacheKey())
     },
   },
 }

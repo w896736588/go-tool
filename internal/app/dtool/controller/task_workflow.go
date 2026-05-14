@@ -3,6 +3,7 @@ package controller
 import (
 	"bufio"
 	"dev_tool/internal/app/dtool/api"
+	"os"
 	"dev_tool/internal/app/dtool/common"
 	"dev_tool/internal/app/dtool/component"
 	"dev_tool/internal/app/dtool/define"
@@ -1423,6 +1424,7 @@ func buildTaskWorkflowPlaceholderMap(c *gin.Context, homeTaskInfo map[string]any
 		devEnvironment = strings.ReplaceAll(devEnvironment, key, value)
 	}
 	result[`{开发环境}`] = devEnvironment
+	result[`{zcode配置列表}`] = taskWorkflowBuildZcodeMarkdown()
 	return result
 }
 
@@ -2311,7 +2313,10 @@ func TaskWorkflowChatSend(c *gin.Context) {
 		return
 	}
 
-	go runClaudeCommand(chatID, localDir, req.Prompt, false, ``)
+	// 查找匹配的 zcode settings 路径
+	settingsPath := zcodeLookupSettingsPath(localDir)
+
+	go runClaudeCommand(chatID, localDir, req.Prompt, false, ``, settingsPath)
 
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`chat_id`: chatID,
@@ -2370,7 +2375,10 @@ func TaskWorkflowChatContinue(c *gin.Context) {
 
 	_ = common.DbMain.TaskWorkflowChatMarkRunning(int64(req.ChatID))
 
-	go runClaudeCommand(int64(req.ChatID), localDir, req.Prompt, true, sessionID)
+	// 查找匹配的 zcode settings 路径
+	settingsPath := zcodeLookupSettingsPath(localDir)
+
+	go runClaudeCommand(int64(req.ChatID), localDir, req.Prompt, true, sessionID, settingsPath)
 
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`chat_id`: req.ChatID,
@@ -2452,8 +2460,169 @@ func TaskWorkflowChatDetail(c *gin.Context) {
 	})
 }
 
+// TaskWorkflowZcodeSave 保存 zcode 工作目录配置，自动扫描子文件夹解析项目映射。
+func TaskWorkflowZcodeSave(c *gin.Context) {
+	var req _struct.TaskWorkflowZcodeSaveRequest
+	if err := gsgin.GinPostBody(c, &req); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	zcodeDir := strings.TrimSpace(req.ZcodeDir)
+	if zcodeDir == `` {
+		gsgin.GinResponseError(c, `zcode 工作目录地址不能为空`, nil)
+		return
+	}
+	info, err := os.Stat(zcodeDir)
+	if err != nil || !info.IsDir() {
+		gsgin.GinResponseError(c, `zcode 工作目录不存在或不是目录: `+zcodeDir, nil)
+		return
+	}
+	configID, err := common.DbMain.ZcodeConfigSave(zcodeDir)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	// 扫描子文件夹，解析 workspace-path.txt
+	projects, scanErr := scanZcodeProjects(zcodeDir)
+	if scanErr != nil {
+		gsgin.GinResponseError(c, scanErr.Error(), nil)
+		return
+	}
+	// 批量替换映射
+	items := make([]common.ZcodeProjectMappingItem, 0, len(projects))
+	for _, p := range projects {
+		items = append(items, common.ZcodeProjectMappingItem{
+			ProjectKey:    p.ProjectKey,
+			WorkspacePath: p.WorkspacePath,
+			SettingsPath:  p.SettingsPath,
+		})
+	}
+	if err := common.DbMain.ZcodeProjectMappingReplace(configID, items); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`zcode_dir`: zcodeDir,
+		`projects`:  projects,
+	})
+}
+
+// TaskWorkflowZcodeGet 获取当前 zcode 配置及所有项目映射。
+func TaskWorkflowZcodeGet(c *gin.Context) {
+	config, err := common.DbMain.ZcodeConfigGet()
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	zcodeDir := ``
+	if config != nil {
+		zcodeDir = cast.ToString(config[`zcode_dir`])
+	}
+	rows, err := common.DbMain.ZcodeProjectMappingList()
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	projects := make([]_struct.TaskWorkflowZcodeProjectItem, 0, len(rows))
+	for _, row := range rows {
+		projects = append(projects, _struct.TaskWorkflowZcodeProjectItem{
+			ProjectKey:    cast.ToString(row[`project_key`]),
+			WorkspacePath: cast.ToString(row[`workspace_path`]),
+			SettingsPath:  cast.ToString(row[`settings_path`]),
+		})
+	}
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`zcode_dir`: zcodeDir,
+		`projects`:  projects,
+	})
+}
+
+// TaskWorkflowZcodeDelete 删除 zcode 配置及所有关联的项目映射。
+func TaskWorkflowZcodeDelete(c *gin.Context) {
+	config, err := common.DbMain.ZcodeConfigGet()
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	if config == nil {
+		gsgin.GinResponseSuccess(c, `已删除`, nil)
+		return
+	}
+	configID := cast.ToInt64(config[`id`])
+	_ = common.DbMain.ZcodeProjectMappingReplace(configID, nil)
+	if err := common.DbMain.ZcodeConfigDelete(); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	gsgin.GinResponseSuccess(c, `已删除`, nil)
+}
+
+// zcodeLookupSettingsPath 根据本地目录精确匹配 zcode 项目映射中的 settings 路径。
+func zcodeLookupSettingsPath(localDir string) string {
+	localDir = strings.TrimSpace(localDir)
+	if localDir == `` {
+		return ``
+	}
+	row, err := common.DbMain.ZcodeProjectMappingGetByWorkspacePath(localDir)
+	if err != nil || row == nil {
+		return ``
+	}
+	return cast.ToString(row[`settings_path`])
+}
+
+// scanZcodeProjects 遍历 zcode 目录下的子文件夹，读取 workspace-path.txt 并构建映射。
+func scanZcodeProjects(zcodeDir string) ([]_struct.TaskWorkflowZcodeProjectItem, error) {
+	entries, err := os.ReadDir(zcodeDir)
+	if err != nil {
+		return nil, err
+	}
+	var projects []_struct.TaskWorkflowZcodeProjectItem
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		subDir := filepath.Join(zcodeDir, entry.Name())
+		wsPathFile := filepath.Join(subDir, `workspace-path.txt`)
+		data, err := os.ReadFile(wsPathFile)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				return nil, err
+			}
+			continue
+		}
+		workspacePath := strings.TrimSpace(string(data))
+		if workspacePath == `` {
+			continue
+		}
+		settingsPath := filepath.Join(subDir, `settings.json`)
+		projects = append(projects, _struct.TaskWorkflowZcodeProjectItem{
+			ProjectKey:    entry.Name(),
+			WorkspacePath: workspacePath,
+			SettingsPath:  filepath.ToSlash(settingsPath),
+		})
+	}
+	return projects, nil
+}
+
+// taskWorkflowBuildZcodeMarkdown 构建 zcode 配置列表的 Markdown 文本用于占位符替换。
+func taskWorkflowBuildZcodeMarkdown() string {
+	rows, err := common.DbMain.ZcodeProjectMappingList()
+	if err != nil || len(rows) == 0 {
+		return ``
+	}
+	var sb strings.Builder
+	sb.WriteString("| 工作目录 | Settings 配置文件 |\n")
+	sb.WriteString("|----------|------------------|\n")
+	for _, row := range rows {
+		ws := cast.ToString(row[`workspace_path`])
+		sp := cast.ToString(row[`settings_path`])
+		sb.WriteString(fmt.Sprintf("| %s | %s |\n", ws, sp))
+	}
+	return sb.String()
+}
+
 // runClaudeCommand 后台执行 claude 命令并捕获输出。
-func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sessionID string) {
+func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sessionID, settingsPath string) {
 	args := []string{}
 	if isResume {
 		args = append(args, `--resume`, sessionID)
@@ -2467,6 +2636,9 @@ func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sess
 		`--include-partial-messages`,
 		`--verbose`,
 	)
+	if settingsPath != `` {
+		args = append(args, `--settings`, settingsPath)
+	}
 
 	// 构建命令展示字符串
 	displayParts := []string{`claude`}
