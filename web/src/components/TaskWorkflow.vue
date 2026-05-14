@@ -538,9 +538,11 @@
     <el-dialog
       v-model="issueFixDialogVisible"
       title="问题修改提示词"
-      width="900px"
+      width="1200px"
+      top="3vh"
       :close-on-click-modal="false"
       destroy-on-close
+      class="task-workflow-issue-fix-dialog"
     >
       <div class="task-workflow-issue-fix__close-bar">
         <el-button @click="issueFixDialogVisible = false" type="danger">关闭</el-button>
@@ -624,6 +626,10 @@
           <!-- system_init -->
           <div v-if="msg.type === 'system_init'" style="color: #6a9955; font-size: 12px; padding: 4px 0;">
             ✔ {{ msg.text }} | model: {{ msg.model }}
+          </div>
+          <!-- system_command -->
+          <div v-else-if="msg.type === 'system_command'" style="background: #1e1e3f; border-radius: 4px; padding: 8px 12px; margin: 4px 0; color: #ce9178; font-size: 12px; word-break: break-all;">
+            <span style="color: #569cd6;">$</span> {{ msg.text }}
           </div>
           <!-- system_hook -->
           <div v-else-if="msg.type === 'system_hook'" style="color: #888; font-size: 12px;">
@@ -2245,6 +2251,16 @@ export default {
   margin-top: 16px;
 }
 .task-workflow-issue-fix__editor {
-  min-height: 300px;
+  height: 400px;
+}
+
+.task-workflow-issue-fix-dialog .el-dialog__body {
+  max-height: calc(90vh - 54px);
+  overflow-y: auto;
+}
+
+.task-workflow-issue-fix-dialog .el-dialog {
+  max-height: 90vh;
+  overflow: hidden;
 }
 </style>

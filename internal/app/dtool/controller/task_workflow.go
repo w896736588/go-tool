@@ -2467,6 +2467,23 @@ func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sess
 		`--verbose`,
 	)
 
+	// 构建命令展示字符串
+	displayParts := []string{`claude`}
+	for _, a := range args {
+		escaped := strings.ReplaceAll(a, `\`, `\\`)
+		escaped = strings.ReplaceAll(escaped, `"`, `\"`)
+		displayParts = append(displayParts, `"`+escaped+`"`)
+	}
+	cmdDisplay := strings.Join(displayParts, ` `)
+
+	cmdLineBytes, _ := json.Marshal(map[string]string{
+		`type`:    `system`,
+		`subtype`: `command`,
+		`text`:    cmdDisplay,
+	})
+	_ = common.DbMain.TaskWorkflowChatAppendOutput(chatID, string(cmdLineBytes))
+	broadcastChatOutput(chatID, string(cmdLineBytes))
+
 	cmd := exec.Command(`claude`, args...)
 	cmd.Dir = localDir
 

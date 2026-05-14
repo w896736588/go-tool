@@ -20,6 +20,8 @@ function parseChatLines(lines) {
       const subtype = obj.subtype || ''
       if (subtype === 'init') {
         messages.push({ type: 'system_init', text: '会话已创建', model: obj.model || '', sessionId: obj.session_id || '' })
+      } else if (subtype === 'command') {
+        messages.push({ type: 'system_command', text: obj.text || '' })
       } else if (subtype === 'hook_started' || subtype === 'hook_response') {
         messages.push({ type: 'system_hook', text: subtype === 'hook_started' ? 'Hook started: ' + (obj.hook_name || '') : 'Hook response: ' + (obj.hook_name || ''), collapsed: true })
       } else {
