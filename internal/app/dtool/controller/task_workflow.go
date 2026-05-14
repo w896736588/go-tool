@@ -3,7 +3,6 @@ package controller
 import (
 	"bufio"
 	"dev_tool/internal/app/dtool/api"
-	"os"
 	"dev_tool/internal/app/dtool/common"
 	"dev_tool/internal/app/dtool/component"
 	"dev_tool/internal/app/dtool/define"
@@ -12,6 +11,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"os"
+	"os
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -591,17 +592,8 @@ func buildTaskWorkflowResponse(c *gin.Context, workflowInfo map[string]any) (map
 	if err != nil {
 		return nil, err
 	}
-	// 新创建的工作流提示词为空时，从配置模板初始化。
 	workflowID := cast.ToInt(workflowInfo[`id`])
-	if workflowID > 0 && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_requirement`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_api_dev`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_api_test`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_design`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_plain_text_requirement`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_design_plan_requirement`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_browser_test`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_code_review`])) == `` {
-		prompts := resolveTaskWorkflowPrompts(c, homeTaskInfo, workflowInfo)
-		_ = common.DbMain.TaskWorkflowUpdatePrompts(workflowID, prompts[`requirement`], prompts[`api_dev`], prompts[`api_test`], prompts[`design`], prompts[`plain_text_requirement`], prompts[`design_plan_requirement`], prompts[`browser_test`], prompts[`code_review`])
-		updatedInfo, updateErr := common.DbMain.TaskWorkflowInfo(workflowID)
-		if updateErr == nil {
-			workflowInfo = updatedInfo
-		}
-	}
-	// 纯文本需求知识片段不存在时自动创建。
+	// 先创建关联的知识片段，确保后续提示词占位符解析时片段ID已存在。
 	if workflowID > 0 && strings.TrimSpace(cast.ToString(workflowInfo[`plain_text_requirement_fragment_id`])) == `` {
 		ensureTaskWorkflowPlainTextReqFragment(workflowInfo, homeTaskInfo)
 		updatedInfo, updateErr := common.DbMain.TaskWorkflowInfo(workflowID)
@@ -609,7 +601,6 @@ func buildTaskWorkflowResponse(c *gin.Context, workflowInfo map[string]any) (map
 			workflowInfo = updatedInfo
 		}
 	}
-	// 需求设计方案知识片段不存在时自动创建。
 	if workflowID > 0 && strings.TrimSpace(cast.ToString(workflowInfo[`design_plan_requirement_fragment_id`])) == `` {
 		ensureTaskWorkflowDesignPlanReqFragment(workflowInfo, homeTaskInfo)
 		updatedInfo, updateErr := common.DbMain.TaskWorkflowInfo(workflowID)
@@ -617,13 +608,17 @@ func buildTaskWorkflowResponse(c *gin.Context, workflowInfo map[string]any) (map
 			workflowInfo = updatedInfo
 		}
 	}
-	// 接口文档知识片段不存在时自动创建。
 	if workflowID > 0 && strings.TrimSpace(cast.ToString(workflowInfo[`api_doc_fragment_id`])) == `` {
 		ensureTaskWorkflowApiDocFragment(workflowInfo, homeTaskInfo)
 		updatedInfo, updateErr := common.DbMain.TaskWorkflowInfo(workflowID)
 		if updateErr == nil {
 			workflowInfo = updatedInfo
 		}
+	}
+	// 知识片段创建完成后，再从配置模板初始化提示词。
+	if workflowID > 0 && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_requirement`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_api_dev`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_api_test`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_design`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_plain_text_requirement`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_design_plan_requirement`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_browser_test`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_code_review`])) == `` {
+		prompts := resolveTaskWorkflowPrompts(c, homeTaskInfo, workflowInfo)
+		_ = common.DbMain.TaskWorkflowUpdatePrompts(workflowID, prompts[`requirement`], prompts[`api_dev`], prompts[`api_test`], prompts[`design`], prompts[`plain_text_requirement`], prompts[`design_plan_requirement`], prompts[`browser_test`], prompts[`code_review`])
 	}
 	return map[string]any{
 		`workflow`:                 workflowInfo,

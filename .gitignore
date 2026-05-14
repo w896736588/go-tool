@@ -35,3 +35,4 @@ tmp/build-errors.log
 *.log
 *verify.png
 node
+/skills/superpowers/
