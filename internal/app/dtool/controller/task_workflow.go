@@ -2235,31 +2235,6 @@ func TaskWorkflowIssueFixResolve(c *gin.Context) {
 	})
 }
 
-// broadcastChatOutput 向所有 SSE 客户端广播对话输出行。
-func broadcastChatOutput(chatID int64, line string) {
-	distributeID := define.SseTaskWorkflowChatPrefix + cast.ToString(chatID)
-	msg := gstool.JsonEncode(p_define.SseData{
-		SseDistributeId: distributeID,
-		Data: map[string]any{
-			`chat_id`: chatID,
-			`line`:    line,
-			`time`:    time.Now().Unix(),
-		},
-		Type: p_define.SseContentTypeMsg,
-	})
-	for _, item := range gsgin.SseStatus() {
-		clientID := strings.TrimSpace(strings.TrimPrefix(item, apiDataChangeSseStatusPrefix))
-		if clientID == `` || clientID == item {
-			continue
-		}
-		sse := gsgin.SseGetByClientId(clientID)
-		if sse == nil {
-			continue
-		}
-		_ = sse.SendToChan(msg)
-	}
-}
-
 // extractSessionID 从首行 init JSON 中提取 session_id。
 func extractSessionID(line string) string {
 	var data map[string]any
@@ -2267,6 +2242,81 @@ func extractSessionID(line string) string {
 		return ``
 	}
 	return cast.ToString(data[`session_id`])
+}
+
+// TaskWorkflowChatStreamOpen 是 /api/task/workflow/chat/stream 的 SSE open 函数。
+// 从 DB 加载 chat 记录后启动 Claude Code 并将输出推送到专用 SSE 连接。
+func TaskWorkflowChatStreamOpen(urlValues url.Values, stopC chan int, c *gin.Context) (*gsgin.Sse, error) {
+	chatIDStr := strings.TrimSpace(urlValues.Get(`chat_id`))
+	if chatIDStr == `` {
+		return nil, fmt.Errorf(`chat_id 不能为空`)
+	}
+	chatID := cast.ToInt64(chatIDStr)
+	if chatID <= 0 {
+		return nil, fmt.Errorf(`chat_id 无效`)
+	}
+	chatInfo, err := common.DbMain.TaskWorkflowChatInfo(chatID)
+	if err != nil {
+		return nil, err
+	}
+	if len(chatInfo) == 0 {
+		return nil, fmt.Errorf(`对话记录不存在`)
+	}
+	localDir := cast.ToString(chatInfo[`local_dir`])
+	if localDir == `` {
+		return nil, fmt.Errorf(`对话未找到工作目录`)
+	}
+	modelID := cast.ToInt(chatInfo[`model_id`])
+	if modelID <= 0 {
+		return nil, fmt.Errorf(`对话未找到模型配置`)
+	}
+
+	prompt := strings.TrimSpace(urlValues.Get(`prompt`))
+	isContinue := strings.TrimSpace(urlValues.Get(`continue`)) == `1`
+	sessionID := cast.ToString(chatInfo[`session_id`])
+
+	if !isContinue {
+		// 新对话：从 DB 取 prompt
+		if prompt == `` {
+			prompt = cast.ToString(chatInfo[`prompt`])
+		}
+		if prompt == `` {
+			return nil, fmt.Errorf(`提示词不能为空`)
+		}
+	} else {
+		// 继续对话：prompt 由前端传入
+		if prompt == `` {
+			return nil, fmt.Errorf(`继续对话的提示词不能为空`)
+		}
+		if sessionID == `` {
+			return nil, fmt.Errorf(`对话未找到有效的 session_id`)
+		}
+	}
+
+	modelInfo, err := common.DbMain.AiModelInfo(modelID)
+	if err != nil {
+		return nil, err
+	}
+	providerType := strings.ToLower(cast.ToString(modelInfo[`provider_type`]))
+	if providerType != `anthropic` {
+		return nil, fmt.Errorf(`仅支持 anthropic 服务商的模型`)
+	}
+	baseURL := strings.TrimSpace(cast.ToString(modelInfo[`base_url`]))
+	apiKey := strings.TrimSpace(cast.ToString(modelInfo[`api_key`]))
+	modelName := strings.TrimSpace(cast.ToString(modelInfo[`model`]))
+
+	distributeID := define.SseTaskWorkflowChatPrefix + chatIDStr
+	sse := gsgin.SseRegister(distributeID, stopC, c)
+	go runClaudeCommand(chatID, localDir, prompt, isContinue, sessionID, modelID, baseURL, apiKey, modelName, sse, stopC)
+	return sse, nil
+}
+
+// TaskWorkflowChatStreamClose 是 /api/task/workflow/chat/stream 的 SSE close 函数。
+func TaskWorkflowChatStreamClose(sse *gsgin.Sse) {
+	if sse == nil {
+		return
+	}
+	sse.UnRegister()
 }
 
 // TaskWorkflowChatSend 启动新的 claude code 对话。
@@ -2309,28 +2359,11 @@ func TaskWorkflowChatSend(c *gin.Context) {
 	// prompt_type 为可选，仅在非空时追踪 chat_session_ids
 	promptType := strings.TrimSpace(req.PromptType)
 
-	// 校验模型信息
-	modelInfo, err := common.DbMain.AiModelInfo(modelID)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	providerType := strings.ToLower(cast.ToString(modelInfo[`provider_type`]))
-	if providerType != `anthropic` {
-		gsgin.GinResponseError(c, `仅支持 anthropic (Claude Code) 服务商的模型`, nil)
-		return
-	}
-	baseURL := strings.TrimSpace(cast.ToString(modelInfo[`base_url`]))
-	apiKey := strings.TrimSpace(cast.ToString(modelInfo[`api_key`]))
-	modelName := strings.TrimSpace(cast.ToString(modelInfo[`model`]))
-
 	chatID, err := common.DbMain.TaskWorkflowChatCreate(req.WorkflowID, req.Prompt, promptType, req.CliType, modelID, req.LocalDir)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-
-	go runClaudeCommand(chatID, req.LocalDir, req.Prompt, false, ``, modelID, baseURL, apiKey, modelName)
 
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`chat_id`: chatID,
@@ -2373,19 +2406,7 @@ func TaskWorkflowChatContinue(c *gin.Context) {
 		gsgin.GinResponseError(c, `对话未找到模型配置`, nil)
 		return
 	}
-
-	modelInfo, err := common.DbMain.AiModelInfo(modelID)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	baseURL := strings.TrimSpace(cast.ToString(modelInfo[`base_url`]))
-	apiKey := strings.TrimSpace(cast.ToString(modelInfo[`api_key`]))
-	modelName := strings.TrimSpace(cast.ToString(modelInfo[`model`]))
-
 	_ = common.DbMain.TaskWorkflowChatMarkRunning(int64(req.ChatID))
-
-	go runClaudeCommand(int64(req.ChatID), localDir, req.Prompt, true, sessionID, modelID, baseURL, apiKey, modelName)
 
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`chat_id`: req.ChatID,
@@ -2770,15 +2791,26 @@ func taskWorkflowBuildZcodeMarkdown() string {
 	return sb.String()
 }
 
-// runClaudeCommand 后台执行 claude 命令并捕获输出。
-func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sessionID string, modelID int, baseURL, apiKey, modelName string) {
+// runClaudeCommand 后台执行 claude 命令并将输出推送到专用 SSE。
+func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sessionID string, modelID int, baseURL, apiKey, modelName string, sse *gsgin.Sse, stopC chan int) {
 	defer func() {
 		if r := recover(); r != nil {
 			gstool.FmtPrintlnLogTime("[chat-run] chat_id=%d panic: %v", chatID, r)
 			_ = common.DbMain.TaskWorkflowChatMarkError(chatID)
-			broadcastChatOutput(chatID, fmt.Sprintf(`{"type":"chat","subtype":"completed","chat_id":%d}`, chatID))
+			if sse != nil {
+				_ = sse.SendToChan(fmt.Sprintf(`{"type":"chat","subtype":"completed","chat_id":%d}`, chatID))
+			}
 		}
+		close(stopC)
 	}()
+
+	// sendLine 发送一行输出到专用 SSE。
+	sendLine := func(line string) {
+		_ = common.DbMain.TaskWorkflowChatAppendOutput(chatID, line)
+		if sse != nil {
+			_ = sse.SendToChan(line)
+		}
+	}
 	cfg := p_claude.RunConfig{
 		Prompt:      prompt,
 		SessionID:   sessionID,
@@ -2796,8 +2828,7 @@ func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sess
 		`subtype`: `command`,
 		`text`:    cmdDisplay,
 	})
-	_ = common.DbMain.TaskWorkflowChatAppendOutput(chatID, string(cmdLineJSON))
-	broadcastChatOutput(chatID, string(cmdLineJSON))
+	sendLine(string(cmdLineJSON))
 
 	ctx := context.Background()
 	sessionExtracted := false
@@ -2810,8 +2841,7 @@ func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sess
 		if callbackCount <= 3 {
 			gstool.FmtPrintlnLogTime("[chat-run] callback:%d type=%s subtype=%s len=%d", callbackCount, msg.Type, msg.Subtype, len(msg.RawJSON))
 		}
-		_ = common.DbMain.TaskWorkflowChatAppendOutput(chatID, msg.RawJSON)
-		broadcastChatOutput(chatID, msg.RawJSON)
+		sendLine(msg.RawJSON)
 
 		if !sessionExtracted && !isResume && msg.Type == `system` && msg.Subtype == `init` {
 			if sid, ok := msg.Data[`session_id`].(string); ok && sid != `` {
@@ -2828,13 +2858,12 @@ func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sess
 			`type`: `error`,
 			`text`: err.Error(),
 		})
-		_ = common.DbMain.TaskWorkflowChatAppendOutput(chatID, string(errJSON))
-		broadcastChatOutput(chatID, string(errJSON))
+		sendLine(string(errJSON))
 		_ = common.DbMain.TaskWorkflowChatMarkError(chatID)
 	} else {
 		_ = common.DbMain.TaskWorkflowChatMarkCompleted(chatID)
 	}
-	broadcastChatOutput(chatID, fmt.Sprintf(`{"type":"chat","subtype":"completed","chat_id":%d}`, chatID))
+	sendLine(fmt.Sprintf(`{"type":"chat","subtype":"completed","chat_id":%d}`, chatID))
 }
 
 // buildClaudeCmdDisplay 构建命令展示字符串。

@@ -67,6 +67,10 @@
           <el-icon><Connection /></el-icon>
           <span>Mcp</span>
         </el-menu-item>
+        <el-menu-item index="/AgentCli">
+          <el-icon><Monitor /></el-icon>
+          <span>Agent Cli</span>
+        </el-menu-item>
         <el-menu-item v-if="checkModuleOpen('shellout')" index="/shellout">
           <el-icon><Monitor /></el-icon>
           <span>Log Witch</span>

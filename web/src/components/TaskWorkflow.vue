@@ -1274,6 +1274,10 @@ export default {
   beforeUnmount() {
     window.removeEventListener('keydown', this.handleCtrlS)
     this.unregisterWorkflowSse()
+    if (this._chatEventSource) {
+      this._chatEventSource.close()
+      this._chatEventSource = null
+    }
   },
   watch: {
     parsedTaskDevConfigs: {
@@ -1801,7 +1805,7 @@ export default {
       this.chatDetailMessages = []
       this.loadChatDetail()
       if (row.status === 'running') {
-        this.registerChatSSE(row.id)
+        this.connectChatStream(row.id)
       }
     },
     // 加载对话详情
@@ -1827,37 +1831,49 @@ export default {
         }
       })
     },
-    // 注册 SSE 接收
-    registerChatSSE(chatId) {
-      const sseId = 'task_workflow_chat_' + chatId
-      if (this._sseChatId === chatId) return
-      // 取消上一个 chat 的 SSE 注册
-      if (this._sseChatId) {
-        sseDistribute.UnRegisterReceive('task_workflow_chat_' + this._sseChatId)
+    // connectChatStream 创建专用 EventSource 连接以实时接收对话输出。
+    connectChatStream(chatId, continuePrompt) {
+      if (this._sseChatId === chatId && this._chatEventSource && this._chatEventSource.readyState !== EventSource.CLOSED) return
+      // 关闭上一个 chat 的 SSE 连接
+      if (this._chatEventSource) {
+        this._chatEventSource.close()
+        this._chatEventSource = null
       }
       this._sseChatId = chatId
       this.chatDetailSSERegistered = true
-      sseDistribute.RegisterReceive(sseId, (data) => {
-        if (data && data.line) {
-          const line = data.line
-          try {
-            const obj = JSON.parse(line)
-            if (obj.type === 'chat' && obj.subtype === 'completed') {
-              this._sseChatId = 0
-              this.chatDetailSSERegistered = false
-              sseDistribute.UnRegisterReceive(sseId)
-              this.chatDetailSSELines.push(line)
-              // 重载详情以获取 DB 最终状态（completed/error）
-              this.loadChatDetail()
-              this.$nextTick(() => { this.scrollChatToBottom() })
-              return
-            }
-          } catch (e) { /* ignore parse errors */ }
-          this.chatDetailSSELines.push(line)
-          this.chatDetailMessages = chatParser.parseChatLines(this.chatDetailSSELines)
-          this.$nextTick(() => { this.scrollChatToBottom() })
-        }
-      })
+      const sseHost = baseUtils.GetSseApiHost()
+      let url = sseHost + '/api/task/workflow/chat/stream?chat_id=' + chatId + '&token=' + encodeURIComponent(baseUtils.GetSafeToken())
+      if (continuePrompt) {
+        url += '&continue=1&prompt=' + encodeURIComponent(continuePrompt)
+      }
+      const es = new EventSource(url)
+      this._chatEventSource = es
+      es.onmessage = (event) => {
+        const line = event.data
+        if (!line) return
+        try {
+          const obj = JSON.parse(line)
+          if (obj.type === 'chat' && obj.subtype === 'completed') {
+            this.chatDetailSSELines.push(line)
+            this._sseChatId = 0
+            this.chatDetailSSERegistered = false
+            es.close()
+            this._chatEventSource = null
+            this.loadChatDetail()
+            this.$nextTick(() => { this.scrollChatToBottom() })
+            return
+          }
+        } catch (e) { /* ignore parse errors */ }
+        this.chatDetailSSELines.push(line)
+        this.chatDetailMessages = chatParser.parseChatLines(this.chatDetailSSELines)
+        this.$nextTick(() => { this.scrollChatToBottom() })
+      }
+      es.onerror = () => {
+        this.chatDetailSSERegistered = false
+        es.close()
+        this._chatEventSource = null
+        this.loadChatDetail()
+      }
     },
     // 滚动对话详情到底部
     scrollChatToBottom(force) {
@@ -1891,11 +1907,12 @@ export default {
     },
     // 关闭对话详情
     closeChatDetail() {
-      if (this._sseChatId) {
-        sseDistribute.UnRegisterReceive('task_workflow_chat_' + this._sseChatId)
-        this._sseChatId = 0
-        this.chatDetailSSERegistered = false
+      if (this._chatEventSource) {
+        this._chatEventSource.close()
+        this._chatEventSource = null
       }
+      this._sseChatId = 0
+      this.chatDetailSSERegistered = false
       this.chatDetailMessages = []
       this.chatDetailSSELines = []
       this.chatDetailId = 0
@@ -1945,7 +1962,7 @@ export default {
           this.chatCombinedDialogVisible = true
           this.chatDetailSSELines = []
           this.chatDetailMessages = []
-          this.registerChatSSE(chatId)
+          this.connectChatStream(chatId)
           setTimeout(() => { this.loadChatDetail() }, 500)
         } else {
           this.$helperNotify.error(res.ErrMsg || '发送失败')
@@ -1962,7 +1979,7 @@ export default {
         if (res.ErrCode === 0) {
           this.chatContinueInput = ''
           this.chatDetailStatus = 'running'
-          this.registerChatSSE(this.chatDetailId)
+          this.connectChatStream(this.chatDetailId, input)
           setTimeout(() => { this.loadChatDetail() }, 500)
         } else {
           this.$helperNotify.error(res.ErrMsg || '发送失败')
@@ -2068,7 +2085,7 @@ export default {
       this.chatDetailMessages = []
       this.loadChatDetail()
       if (row.status === 'running') {
-        this.registerChatSSE(row.id)
+        this.connectChatStream(row.id)
       }
     },
     // 执行历史对话框滚动
@@ -2099,11 +2116,12 @@ export default {
     },
     // 关闭执行历史弹窗
     closePromptChatDetail() {
-      if (this._sseChatId) {
-        sseDistribute.UnRegisterReceive('task_workflow_chat_' + this._sseChatId)
-        this._sseChatId = 0
-        this.chatDetailSSERegistered = false
+      if (this._chatEventSource) {
+        this._chatEventSource.close()
+        this._chatEventSource = null
       }
+      this._sseChatId = 0
+      this.chatDetailSSERegistered = false
       this.chatDetailMessages = []
       this.chatDetailSSELines = []
       this.promptChatDetailId = 0
