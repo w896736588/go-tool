@@ -1795,6 +1795,8 @@ export default {
       this.chatDetailStatus = row.status
       this.chatDetailAutoScroll = true
       this.chatDetailShowScrollBtn = false
+      this.chatDetailSSELines = []
+      this.chatDetailMessages = []
       this.loadChatDetail()
       if (row.status === 'running') {
         this.registerChatSSE(row.id)
@@ -1811,17 +1813,26 @@ export default {
           this.chatDetailStatus = data.status || ''
           this.chatDetailModelName = data.model_id ? '#' + data.model_id : ''
           this.chatDetailLocalDir = data.local_dir || ''
-          this.chatDetailMessages = chatParser.parseChatLines(data.lines || [])
+          // 合并历史行 + SSE 加载期间收到的新行（有则去重）
+          const historicalLines = data.lines || []
+          const sseLines = this.chatDetailSSELines
+          const newSseLines = sseLines.filter(l => !historicalLines.includes(l))
+          this.chatDetailSSELines = [...historicalLines, ...newSseLines]
+          this.chatDetailMessages = chatParser.parseChatLines(this.chatDetailSSELines)
           this.$nextTick(() => { this.scrollChatToBottom(true) })
         }
       })
     },
     // 注册 SSE 接收
     registerChatSSE(chatId) {
-      if (this.chatDetailSSERegistered) return
-      this.chatDetailSSERegistered = true
       const sseId = 'task_workflow_chat_' + chatId
-      this.chatDetailSSELines = []
+      if (this._sseChatId === chatId) return
+      // 取消上一个 chat 的 SSE 注册
+      if (this._sseChatId) {
+        sseDistribute.UnRegisterReceive('task_workflow_chat_' + this._sseChatId)
+      }
+      this._sseChatId = chatId
+      this.chatDetailSSERegistered = true
       sseDistribute.RegisterReceive(sseId, (data) => {
         if (data && data.line) {
           const line = data.line
@@ -1829,9 +1840,10 @@ export default {
             const obj = JSON.parse(line)
             if (obj.type === 'chat' && obj.subtype === 'completed') {
               this.chatDetailStatus = 'completed'
+              this._sseChatId = 0
               this.chatDetailSSERegistered = false
               sseDistribute.UnRegisterReceive(sseId)
-              // 最终用全量数据重新解析一次，确保状态性事件（message_start→deltas→message_stop）完整
+              this.chatDetailSSELines.push(line)
               this.chatDetailMessages = chatParser.parseChatLines(this.chatDetailSSELines)
               this.$nextTick(() => { this.scrollChatToBottom() })
               return
@@ -1875,9 +1887,9 @@ export default {
     },
     // 关闭对话详情
     closeChatDetail() {
-      if (this.chatDetailSSERegistered) {
-        const sseId = 'task_workflow_chat_' + this.chatDetailId
-        sseDistribute.UnRegisterReceive(sseId)
+      if (this._sseChatId) {
+        sseDistribute.UnRegisterReceive('task_workflow_chat_' + this._sseChatId)
+        this._sseChatId = 0
         this.chatDetailSSERegistered = false
       }
       this.chatDetailMessages = []
@@ -1927,6 +1939,8 @@ export default {
           this.chatDetailId = chatId
           this.chatDetailStatus = 'running'
           this.chatCombinedDialogVisible = true
+          this.chatDetailSSELines = []
+          this.chatDetailMessages = []
           this.registerChatSSE(chatId)
           setTimeout(() => { this.loadChatDetail() }, 500)
         } else {
@@ -2046,6 +2060,8 @@ export default {
       this.chatDetailStatus = row.status
       this.chatDetailAutoScroll = true
       this.promptChatDetailShowScrollBtn = false
+      this.chatDetailSSELines = []
+      this.chatDetailMessages = []
       this.loadChatDetail()
       if (row.status === 'running') {
         this.registerChatSSE(row.id)
@@ -2079,9 +2095,9 @@ export default {
     },
     // 关闭执行历史弹窗
     closePromptChatDetail() {
-      if (this.chatDetailSSERegistered) {
-        const sseId = 'task_workflow_chat_' + this.promptChatDetailId
-        sseDistribute.UnRegisterReceive(sseId)
+      if (this._sseChatId) {
+        sseDistribute.UnRegisterReceive('task_workflow_chat_' + this._sseChatId)
+        this._sseChatId = 0
         this.chatDetailSSERegistered = false
       }
       this.chatDetailMessages = []

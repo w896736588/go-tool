@@ -33,6 +33,7 @@ func startClaude(ctx context.Context, args []string, workDir string, env []strin
 	}
 
 	lineCh := make(chan string, 256)
+	stderrCh := make(chan string, 64)
 
 	// 实时读取 stdout
 	go func() {
@@ -44,11 +45,14 @@ func startClaude(ctx context.Context, args []string, workDir string, env []strin
 		}
 	}()
 
-	// 实时读取 stderr
+	// 实时读取 stderr，收集内容用于错误定位
 	go func() {
+		defer close(stderrCh)
 		scanner := bufio.NewScanner(stderr)
 		for scanner.Scan() {
-			log.Printf("[claude-exec] stderr: %s", scanner.Text())
+			text := scanner.Text()
+			log.Printf("[claude-exec] stderr: %s", text)
+			stderrCh <- text
 		}
 	}()
 
@@ -76,8 +80,9 @@ func startClaude(ctx context.Context, args []string, workDir string, env []strin
 	}()
 
 	return ptyResult{
-		lineCh: lineCh,
-		pid:    cmd.Process.Pid,
+		lineCh:   lineCh,
+		stderrCh: stderrCh,
+		pid:      cmd.Process.Pid,
 		waitFn: func() (int, error) {
 			<-waitDone
 			return exitCode, waitErr

@@ -17,10 +17,11 @@ const maxScanTokenSize = 10 * 1024 * 1024
 
 // ptyResult 进程启动结果，由各平台 startClaude 实现返回。
 type ptyResult struct {
-	lineCh  <-chan string       // stdout 行数据通道
-	pid     int                 // 进程 ID
-	waitFn  func() (int, error) // 等待进程退出并返回退出码
-	closeFn func()              // 强制终止进程
+	lineCh   <-chan string       // stdout 行数据通道
+	stderrCh <-chan string       // stderr 行数据通道
+	pid      int                 // 进程 ID
+	waitFn   func() (int, error) // 等待进程退出并返回退出码
+	closeFn  func()              // 强制终止进程
 }
 
 // RunClaudeStream 执行 claude 命令并逐行推送解析后的消息。
@@ -39,6 +40,16 @@ func RunClaudeStream(ctx context.Context, cfg RunConfig, callback func(msg Strea
 	}
 	defer result.closeFn()
 	log.Printf("[claude-exec] 进程已启动, pid=%d", result.pid)
+
+	// 后台收集 stderr
+	var stderrLines []string
+	stderrDone := make(chan struct{})
+	go func() {
+		defer close(stderrDone)
+		for line := range result.stderrCh {
+			stderrLines = append(stderrLines, line)
+		}
+	}()
 
 	sessionID := ``
 	sessionExtracted := false
@@ -65,14 +76,22 @@ func RunClaudeStream(ctx context.Context, cfg RunConfig, callback func(msg Strea
 	}
 
 	log.Printf("[claude-exec] 行通道关闭, 总行数=%d", lineCount)
+	<-stderrDone
 
 	exitCode, waitErr := result.waitFn()
-	log.Printf("[claude-exec] 进程结束, exitCode=%d waitErr=%v", exitCode, waitErr)
+	stderrSummary := strings.Join(stderrLines, "\n")
+	log.Printf("[claude-exec] 进程结束, exitCode=%d waitErr=%v stderr=%s", exitCode, waitErr, stderrSummary)
 	if waitErr != nil {
-		return sessionID, fmt.Errorf("claude exited with error: %w", waitErr)
+		if stderrSummary != `` {
+			return sessionID, fmt.Errorf("claude 退出异常: %s (stderr: %s)", waitErr.Error(), stderrSummary)
+		}
+		return sessionID, fmt.Errorf("claude 退出异常: %w", waitErr)
 	}
 	if exitCode != 0 {
-		return sessionID, fmt.Errorf("claude exited with code %d", exitCode)
+		if stderrSummary != `` {
+			return sessionID, fmt.Errorf("claude 返回失败 (exit code %d): %s", exitCode, stderrSummary)
+		}
+		return sessionID, fmt.Errorf("claude 返回失败 (exit code %d)，无更多错误详情", exitCode)
 	}
 	return sessionID, nil
 }
