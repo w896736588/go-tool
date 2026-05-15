@@ -690,7 +690,7 @@
               <span v-if="chatDetailModelName && chatDetailLocalDir"> | </span>
               <span v-if="chatDetailLocalDir">目录: {{ chatDetailLocalDir }}</span>
             </div>
-            <div class="chat-detail-container">
+            <div ref="chatDetailContainer" class="chat-detail-container" @scroll="onChatDetailScroll">
               <div v-if="chatDetailMessages.length === 0 && chatDetailStatus === 'running'" style="text-align: center; padding: 40px; color: #888;">
                 <div>等待 claude code 响应...</div>
               </div>
@@ -767,6 +767,9 @@
                 </div>
               </div>
             </div>
+            <div :class="['chat-detail-scroll-btn', { 'chat-detail-scroll-btn--visible': chatDetailShowScrollBtn }]" @click="scrollChatToBottom(true)">
+              ↓
+            </div>
             <div v-if="chatDetailStatus !== 'running'" class="chat-detail-input-row">
               <el-input
                 v-model="chatContinueInput"
@@ -809,6 +812,27 @@
       <template #footer>
         <el-button @click="zcodeConfigDialogVisible = false">关闭</el-button>
       </template>
+    </el-dialog>
+
+    <!-- 接口开发弹窗 -->
+    <el-dialog
+      v-model="apiDevDialogVisible"
+      :title="apiDevDialogTitle"
+      width="90%"
+      top="2vh"
+      destroy-on-close
+      class="task-workflow-api-dev-dialog"
+    >
+      <div class="task-workflow-api-dev-dialog__body">
+        <iframe
+          v-if="apiDevDialogUrl"
+          :src="apiDevDialogUrl"
+          class="task-workflow-api-dev-dialog__iframe"
+        />
+        <div v-else class="task-workflow-api-dev-dialog__empty">
+          暂无内容
+        </div>
+      </div>
     </el-dialog>
 </template>
 
@@ -951,6 +975,8 @@ export default {
       chatDetailSSERegistered: false,
       chatDetailSSELines: [], // SSE 累积的原始行，用于全量重解析
       sendingToClaude: false,
+      chatDetailAutoScroll: true,
+      chatDetailShowScrollBtn: false,
       chatContinueInput: '',
       chatContinueLoading: false,
       chatConfigDialogVisible: false,
@@ -967,6 +993,10 @@ export default {
       zcodeProjectList: [],
       zcodeSaving: false,
       issueFixZcodeMappings: [],
+      // 接口开发弹窗
+      apiDevDialogVisible: false,
+      apiDevDialogUrl: '',
+      apiDevDialogTitle: '',
     }
   },
   computed: {
@@ -1571,6 +1601,8 @@ export default {
     onChatRowClick(row) {
       this.chatDetailId = row.id
       this.chatDetailStatus = row.status
+      this.chatDetailAutoScroll = true
+      this.chatDetailShowScrollBtn = false
       this.loadChatDetail()
       if (row.status === 'running') {
         this.registerChatSSE(row.id)
@@ -1588,6 +1620,7 @@ export default {
           this.chatDetailModelName = data.model_id ? '#' + data.model_id : ''
           this.chatDetailLocalDir = data.local_dir || ''
           this.chatDetailMessages = chatParser.parseChatLines(data.lines || [])
+          this.$nextTick(() => { this.scrollChatToBottom(true) })
         }
       })
     },
@@ -1608,13 +1641,41 @@ export default {
               sseDistribute.UnRegisterReceive(sseId)
               // 最终用全量数据重新解析一次，确保状态性事件（message_start→deltas→message_stop）完整
               this.chatDetailMessages = chatParser.parseChatLines(this.chatDetailSSELines)
+              this.$nextTick(() => { this.scrollChatToBottom() })
               return
             }
           } catch (e) { /* ignore parse errors */ }
           this.chatDetailSSELines.push(line)
           this.chatDetailMessages = chatParser.parseChatLines(this.chatDetailSSELines)
+          this.$nextTick(() => { this.scrollChatToBottom() })
         }
       })
+    },
+    // 滚动对话详情到底部
+    scrollChatToBottom(force) {
+      if (force) {
+        this.chatDetailAutoScroll = true
+        this.chatDetailShowScrollBtn = false
+      }
+      this.$nextTick(() => {
+        const el = this.$refs.chatDetailContainer
+        if (el) {
+          el.scrollTop = el.scrollHeight
+        }
+      })
+    },
+    // 监听对话详情区域滚动
+    onChatDetailScroll() {
+      const el = this.$refs.chatDetailContainer
+      if (!el) return
+      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30
+      if (atBottom) {
+        this.chatDetailAutoScroll = true
+        this.chatDetailShowScrollBtn = false
+      } else {
+        this.chatDetailAutoScroll = false
+        this.chatDetailShowScrollBtn = true
+      }
     },
     // 关闭对话详情
     closeChatDetail() {
@@ -1800,6 +1861,24 @@ export default {
       this.fragmentDialogLoading = false
       this.fragmentDialogUrl = new URL(`/#/MemoryFragment?fragment_id=${encodeURIComponent(fragmentId)}&hide_menu=1&embed=1`, window.location.origin).toString()
     },
+    openApiDevDialog(cfg) {
+      const colId = Number(cfg.collection_id || 0)
+      if (colId <= 0) {
+        this.$helperNotify.warning('未配置接口集合')
+        return
+      }
+      const dirId = Number(cfg.dir_id || 0)
+      const label = this.getTaskConfigApiLabel(cfg)
+      this.apiDevDialogTitle = '接口开发 - ' + label
+      const params = new URLSearchParams()
+      params.set('collection_id', String(colId))
+      if (dirId > 0) {
+        params.set('folder_id', String(dirId))
+      }
+      params.set('hide_menu', '1')
+      this.apiDevDialogUrl = new URL(`/#/Api?${params.toString()}`, window.location.origin).toString()
+      this.apiDevDialogVisible = true
+    },
     getTaskStatusTagType(taskStatus) {
       if (taskStatus === TASK_STATUS_DEVELOPING) {
         return 'success'
@@ -1927,6 +2006,17 @@ export default {
 }
 
 .task-workflow-header__branch:hover {
+  color: #2d5f2d;
+  text-decoration: underline;
+}
+
+.task-workflow-header__dev-item--link {
+  color: #3a7a3a;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.task-workflow-header__dev-item--link:hover {
   color: #2d5f2d;
   text-decoration: underline;
 }
@@ -2626,6 +2716,7 @@ export default {
   flex-direction: column;
   min-width: 0;
   overflow: hidden;
+  position: relative;
 }
 
 .chat-combined-detail__placeholder {
@@ -2647,6 +2738,56 @@ export default {
   font-family: 'Consolas', monospace;
   font-size: 13px;
   min-height: 0;
+  scroll-behavior: smooth;
+}
+
+.chat-detail-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-detail-container::-webkit-scrollbar-track {
+  background: #2d2d2d;
+  border-radius: 3px;
+}
+
+.chat-detail-container::-webkit-scrollbar-thumb {
+  background: #6a6a6a;
+  border-radius: 3px;
+}
+
+.chat-detail-container::-webkit-scrollbar-thumb:hover {
+  background: #888;
+}
+
+/* 滚动到底部按钮 */
+.chat-detail-scroll-btn {
+  position: absolute;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 36px;
+  height: 36px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #d4d4d4;
+  font-size: 18px;
+  transition: background 0.2s, opacity 0.2s;
+  z-index: 10;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.chat-detail-scroll-btn--visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.chat-detail-scroll-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
 }
 
 .chat-detail-input-row {
@@ -2656,5 +2797,35 @@ export default {
   padding-top: 10px;
   border-top: 1px solid #ebeef5;
   flex-shrink: 0;
+}
+
+/* 接口开发弹窗 */
+.task-workflow-api-dev-dialog .el-dialog__body {
+  padding: 0 !important;
+  height: calc(96vh - 54px) !important;
+  overflow: hidden !important;
+}
+
+.task-workflow-api-dev-dialog__body {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.task-workflow-api-dev-dialog__iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  flex: 1;
+}
+
+.task-workflow-api-dev-dialog__empty {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #909399;
+  font-size: 14px;
 }
 </style>

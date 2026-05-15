@@ -3,55 +3,85 @@
 package p_claude
 
 import (
+	"bufio"
 	"context"
-	"fmt"
+	"log"
 	"os/exec"
 
-	"github.com/UserExistsError/conpty"
+	"gitee.com/Sxiaobai/gs/v2/gstool"
 )
 
-// startClaude Windows 实现，使用 ConPTY API 创建伪终端，恢复子进程行缓冲。
+// startClaude Windows 实现。
+// 与 chat_test.go 一致：stdout/stderr 均通过 goroutine 实时消费，
+// cmd.Wait() 在后台 goroutine 执行，确保管道数据被实时读取。
 func startClaude(ctx context.Context, args []string, workDir string, env []string) (ptyResult, error) {
-	claudePath, err := exec.LookPath(`claude`)
-	if err != nil {
-		return ptyResult{}, fmt.Errorf("claude not found in PATH: %w", err)
-	}
-	cmdLine := buildWindowsCmdLine(append([]string{claudePath}, args...))
+	cmd := exec.Command(`claude`, args...)
+	cmd.Dir = workDir
+	cmd.Env = env
 
-	cpty, err := conpty.Start(cmdLine,
-		conpty.ConPtyWorkDir(workDir),
-		conpty.ConPtyEnv(env),
-		conpty.ConPtyDimensions(200, 40),
-	)
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return ptyResult{}, err
 	}
 
-	closed := false
-	closeOnce := func() {
-		if !closed {
-			closed = true
-			cpty.Close()
-		}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return ptyResult{}, err
 	}
 
-	done := make(chan struct{})
+	if err := cmd.Start(); err != nil {
+		return ptyResult{}, err
+	}
+
+	lineCh := make(chan string, 256)
+
+	// 实时读取 stdout
 	go func() {
-		select {
-		case <-ctx.Done():
-			closeOnce()
-		case <-done:
+		defer close(lineCh)
+		scanner := bufio.NewScanner(stdout)
+		scanner.Buffer(make([]byte, maxScanTokenSize), maxScanTokenSize)
+		for scanner.Scan() {
+			lineCh <- scanner.Text()
+			gstool.FmtPrintlnLogTime(`输出 %s`, 11)
 		}
 	}()
 
+	// 实时读取 stderr
+	go func() {
+		scanner := bufio.NewScanner(stderr)
+		for scanner.Scan() {
+			log.Printf("[claude-exec] stderr: %s", scanner.Text())
+		}
+	}()
+
+	// 后台等待进程退出
+	waitDone := make(chan struct{})
+	var exitCode int
+	var waitErr error
+	go func() {
+		defer close(waitDone)
+		err := cmd.Wait()
+		if err == nil {
+			exitCode = 0
+			return
+		}
+		if ee, ok := err.(*exec.ExitError); ok {
+			exitCode = ee.ExitCode()
+			return
+		}
+		exitCode = 1
+		waitErr = err
+	}()
+
 	return ptyResult{
-		reader: cpty,
-		pid:    cpty.Pid(),
+		lineCh: lineCh,
+		pid:    cmd.Process.Pid,
 		waitFn: func() (int, error) {
-			defer close(done)
-			code, err := cpty.Wait(context.Background())
-			return int(code), err
+			<-waitDone
+			return exitCode, waitErr
 		},
-		closeFn: func() { closeOnce() },
+		closeFn: func() {
+			cmd.Process.Kill()
+		},
 	}, nil
 }

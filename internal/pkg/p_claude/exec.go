@@ -1,11 +1,9 @@
 package p_claude
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"strings"
@@ -17,12 +15,12 @@ import (
 // stream-json 输出中单行可能远超默认 64KB（尤其是工具调用结果）。
 const maxScanTokenSize = 10 * 1024 * 1024
 
-// ptyResult PTY 启动结果，由各平台 startClaude 实现返回。
+// ptyResult 进程启动结果，由各平台 startClaude 实现返回。
 type ptyResult struct {
-	reader  io.ReadCloser
-	pid     int
-	waitFn  func() (int, error)
-	closeFn func()
+	lineCh  <-chan string       // stdout 行数据通道
+	pid     int                 // 进程 ID
+	waitFn  func() (int, error) // 等待进程退出并返回退出码
+	closeFn func()              // 强制终止进程
 }
 
 // RunClaudeStream 执行 claude 命令并逐行推送解析后的消息。
@@ -45,10 +43,8 @@ func RunClaudeStream(ctx context.Context, cfg RunConfig, callback func(msg Strea
 	sessionID := ``
 	sessionExtracted := false
 	lineCount := 0
-	sc := bufio.NewScanner(result.reader)
-	sc.Buffer(make([]byte, maxScanTokenSize), maxScanTokenSize)
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
+	for line := range result.lineCh {
+		line = strings.TrimSpace(line)
 		if line == `` {
 			continue
 		}
@@ -68,11 +64,7 @@ func RunClaudeStream(ctx context.Context, cfg RunConfig, callback func(msg Strea
 		}
 	}
 
-	log.Printf("[claude-exec] scanner 循环结束, 总行数=%d", lineCount)
-	if err := sc.Err(); err != nil {
-		log.Printf("[claude-exec] scanner 错误: %v", err)
-		return sessionID, fmt.Errorf("scan stdout: %w", err)
-	}
+	log.Printf("[claude-exec] 行通道关闭, 总行数=%d", lineCount)
 
 	exitCode, waitErr := result.waitFn()
 	log.Printf("[claude-exec] 进程结束, exitCode=%d waitErr=%v", exitCode, waitErr)
@@ -92,7 +84,7 @@ func buildArgs(cfg RunConfig) []string {
 		args = append(args, `--resume`, cfg.SessionID)
 	}
 	args = append(args,
-		`-p`, cfg.Prompt,
+		`-p`, sanitizePrompt(cfg.Prompt),
 		`--add-dir`, cfg.WorkingDir,
 		`--output-format`, `stream-json`,
 		`--include-partial-messages`,
@@ -108,7 +100,7 @@ func buildArgs(cfg RunConfig) []string {
 	return args
 }
 
-// buildEnv 构建环境变量（在系统环境基础上追加）。
+// buildEnv 构建环境变量。
 func buildEnv(cfg RunConfig) []string {
 	env := os.Environ()
 	if cfg.BaseURL != `` {
@@ -118,24 +110,6 @@ func buildEnv(cfg RunConfig) []string {
 		env = append(env, `ANTHROPIC_API_KEY=`+cfg.APIKey)
 	}
 	return env
-}
-
-// buildWindowsCmdLine 将参数列表转为 Windows CreateProcess 命令行字符串。
-func buildWindowsCmdLine(args []string) string {
-	var b strings.Builder
-	for i, arg := range args {
-		if i > 0 {
-			b.WriteByte(' ')
-		}
-		if strings.ContainsAny(arg, " \t\n\v\"") {
-			b.WriteByte('"')
-			b.WriteString(strings.ReplaceAll(arg, `"`, `\"`))
-			b.WriteByte('"')
-		} else {
-			b.WriteString(arg)
-		}
-	}
-	return b.String()
 }
 
 // parseLine 解析单行 stream-json 为 StreamMessage。
@@ -157,6 +131,13 @@ func parseLine(line string) StreamMessage {
 	}
 	msg.Data = raw
 	return msg
+}
+
+// sanitizePrompt 将 prompt 中的换行符替换为空格，避免多行内容作为命令行参数传递时导致 claude CLI 解析异常。
+func sanitizePrompt(prompt string) string {
+	s := strings.ReplaceAll(prompt, "\r\n", " ")
+	s = strings.ReplaceAll(s, "\n", " ")
+	return strings.ReplaceAll(s, "\r", " ")
 }
 
 // extractSessionIDFromLine 从 stream-json 行提取 session_id。

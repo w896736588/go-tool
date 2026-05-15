@@ -21,4 +21,5 @@ type RunConfig struct {
 }
 
 // DefaultUserDataDir 默认 Claude Code 用户数据目录。
-const DefaultUserDataDir = `~/.dtool/claude`
+// 空字符串表示使用 claude 默认目录（~/.claude），该目录已配置好 provider 信息。
+const DefaultUserDataDir = ``

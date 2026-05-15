@@ -48,8 +48,8 @@ func SetAiProviderAdd(c *gin.Context) {
 	if requestFormat == `` {
 		requestFormat = `openai`
 	}
-	if requestFormat != `openai` && requestFormat != `anthropic` {
-		gsgin.GinResponseError(c, `请求格式仅支持 openai 或 anthropic`, nil)
+	if requestFormat != `openai` && requestFormat != `anthropic` && requestFormat != `deepseek` {
+		gsgin.GinResponseError(c, `请求格式仅支持 openai、anthropic 或 deepseek`, nil)
 		return
 	}
 	updateData[`base_url`] = normalizeAiProviderBaseURL(cast.ToString(updateData[`base_url`]))

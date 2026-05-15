@@ -3,42 +3,87 @@
 package p_claude
 
 import (
+	"bufio"
 	"context"
+	"log"
 	"os/exec"
 	"syscall"
-
-	"github.com/creack/pty"
 )
 
-// startClaude Unix 实现，使用 PTY 伪终端恢复子进程行缓冲。
+// startClaude Unix 实现。
+// 与 chat_test.go 一致：stdout/stderr 均通过 goroutine 实时消费，
+// cmd.Wait() 在后台 goroutine 执行，确保管道数据被实时读取。
 func startClaude(ctx context.Context, args []string, workDir string, env []string) (ptyResult, error) {
-	cmd := exec.CommandContext(ctx, `claude`, args...)
+	cmd := exec.Command(`claude`, args...)
 	cmd.Dir = workDir
 	cmd.Env = env
 
-	ptyFile, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: 200, Rows: 40})
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return ptyResult{}, err
 	}
 
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return ptyResult{}, err
+	}
+
+	if err := cmd.Start(); err != nil {
+		return ptyResult{}, err
+	}
+
+	lineCh := make(chan string, 256)
+
+	// 实时读取 stdout
+	go func() {
+		defer close(lineCh)
+		scanner := bufio.NewScanner(stdout)
+		scanner.Buffer(make([]byte, maxScanTokenSize), maxScanTokenSize)
+		for scanner.Scan() {
+			lineCh <- scanner.Text()
+		}
+	}()
+
+	// 实时读取 stderr
+	go func() {
+		scanner := bufio.NewScanner(stderr)
+		for scanner.Scan() {
+			log.Printf("[claude-exec] stderr: %s", scanner.Text())
+		}
+	}()
+
+	// 后台等待进程退出
+	waitDone := make(chan struct{})
+	var exitCode int
+	var waitErr error
+	go func() {
+		defer close(waitDone)
+		err := cmd.Wait()
+		if err == nil {
+			exitCode = 0
+			return
+		}
+		if ee, ok := err.(*exec.ExitError); ok {
+			if ws, ok := ee.Sys().(syscall.WaitStatus); ok {
+				exitCode = ws.ExitStatus()
+				return
+			}
+			exitCode = 1
+			return
+		}
+		exitCode = 1
+		waitErr = err
+	}()
+
 	return ptyResult{
-		reader: ptyFile,
+		lineCh: lineCh,
 		pid:    cmd.Process.Pid,
 		waitFn: func() (int, error) {
-			err := cmd.Wait()
-			if err == nil {
-				return 0, nil
-			}
-			if ee, ok := err.(*exec.ExitError); ok {
-				if ws, ok := ee.Sys().(syscall.WaitStatus); ok {
-					return ws.ExitStatus(), nil
-				}
-				return 1, err
-			}
-			return 1, err
+			<-waitDone
+			return exitCode, waitErr
 		},
 		closeFn: func() {
-			ptyFile.Close()
+			cmd.Process.Kill()
 		},
 	}, nil
 }
