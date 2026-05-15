@@ -5,6 +5,8 @@ go 1.26.1
 require (
 	gitee.com/Sxiaobai/gs/v2 v2.0.60
 	github.com/JohannesKaufmann/html-to-markdown v1.6.0
+	github.com/UserExistsError/conpty v0.1.4
+	github.com/creack/pty v1.1.21
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/gin-gonic/gin v1.9.1
 	github.com/go-viper/encoding/ini v0.1.1

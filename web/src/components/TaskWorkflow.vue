@@ -3,17 +3,16 @@
     <div class="task-workflow-shell">
       <header class="task-workflow-header">
         <div class="task-workflow-header__main">
-          <div class="task-workflow-header__eyebrow">任务工作流程</div>
           <h1 class="task-workflow-header__title">{{ homeTask.name || `任务 #${taskId}` }}</h1>
           <div v-if="parsedTaskDevConfigs.length > 0" class="task-workflow-header__meta">
             <div v-for="(cfg, idx) in parsedTaskDevConfigs" :key="idx" class="task-workflow-header__dev-row">
               <span class="task-workflow-header__dev-item">Git仓库: {{ getTaskConfigName('git', cfg.git_id) }}</span>
               <span class="task-workflow-header__dev-sep">|</span>
-              <span class="task-workflow-header__dev-item">接口集合: {{ getTaskConfigApiLabel(cfg) }}</span>
+              <span class="task-workflow-header__dev-item task-workflow-header__dev-item--link" @click="openApiDevDialog(cfg)">接口集合: {{ truncateWorkflowLabel(getTaskConfigApiLabel(cfg)) }}</span>
               <span class="task-workflow-header__dev-sep">|</span>
               <span class="task-workflow-header__dev-item">父分支: {{ cfg.parent_branch || '-' }}</span>
               <span class="task-workflow-header__dev-sep">|</span>
-              <span class="task-workflow-header__dev-item">分支名: <span class="task-workflow-header__branch" @click="copyText(cfg.branch_name, '分支名已复制')" :title="cfg.branch_name">{{ cfg.branch_name || '-' }}</span></span>
+              <span class="task-workflow-header__dev-item">分支名: <span class="task-workflow-header__branch" @click="copyText(cfg.branch_name, '分支名已复制')" :title="cfg.branch_name">{{ truncateWorkflowLabel(cfg.branch_name || '-') }}</span></span>
               <span class="task-workflow-header__dev-sep">|</span>
               <span class="task-workflow-header__dev-item">本地目录: {{ cfg.local_dir || '-' }}</span>
             </div>
@@ -25,6 +24,23 @@
               <el-icon :size="18"><HomeFilled /></el-icon>
             </el-button>
           </el-tooltip>
+          <el-dropdown trigger="click" @command="handleTaskStatusChange">
+            <GitActionButton compact :loading="statusUpdating">
+              状态切换（{{ homeTask.task_status }}）
+            </GitActionButton>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item
+                  v-for="status in taskStatusOptions"
+                  :key="status"
+                  :command="status"
+                  :disabled="homeTask.task_status === status"
+                >
+                  {{ status }}
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
           <GitActionButton compact variant="info" @click="goBackToTaskList">
             返回任务清单
           </GitActionButton>
@@ -130,10 +146,10 @@
                     <el-descriptions-item label="Git仓库">{{ getTaskConfigName('git', cfg.git_id) }}</el-descriptions-item>
                     <el-descriptions-item label="Docker">{{ getTaskConfigName('docker', cfg.docker_id) }}</el-descriptions-item>
                     <el-descriptions-item label="Db">{{ getTaskConfigName('mysql', cfg.mysql_id) }}</el-descriptions-item>
-                    <el-descriptions-item label="接口集合">{{ getTaskConfigApiLabel(cfg) }}</el-descriptions-item>
+                    <el-descriptions-item label="接口集合"><span class="task-workflow-config-link" @click="openApiDevDialog(cfg)">{{ truncateWorkflowLabel(getTaskConfigApiLabel(cfg)) }}</span></el-descriptions-item>
                     <el-descriptions-item label="本地目录">{{ cfg.local_dir || '-' }}</el-descriptions-item>
                     <el-descriptions-item label="父分支">{{ cfg.parent_branch || '-' }}</el-descriptions-item>
-                    <el-descriptions-item label="分支名">{{ cfg.branch_name || '-' }}</el-descriptions-item>
+                    <el-descriptions-item label="分支名">{{ truncateWorkflowLabel(cfg.branch_name || '-') }}</el-descriptions-item>
                     <el-descriptions-item label="规则入口">{{ cfg.rule_entry_file || '-' }}</el-descriptions-item>
                     <el-descriptions-item label="自定义网页">{{ getTaskConfigName('smart_link', cfg.smart_link_id) }}</el-descriptions-item>
                     <el-descriptions-item label="网页标签">{{ cfg.smart_link_label || '-' }}</el-descriptions-item>
@@ -641,139 +657,128 @@
     </el-dialog>
   </div>
 
-    <!-- 历史对话列表弹窗 -->
+    <!-- 历史对话合并弹窗（左侧列表+右侧详情） -->
     <el-dialog
-      v-model="chatHistoryDialogVisible"
+      v-model="chatCombinedDialogVisible"
       title="历史对话"
-      width="700px"
-      :close-on-click-modal="false"
-      destroy-on-close
-    >
-      <el-table :data="chatHistoryList" style="width: 100%" v-loading="chatHistoryLoading" @row-click="openChatDetail" row-style="cursor: pointer;">
-        <el-table-column prop="id" label="ID" width="60" />
-        <el-table-column prop="created_at" label="时间" width="170" />
-        <el-table-column prop="prompt" label="提示词" show-overflow-tooltip>
-          <template #default="{ row }">
-            {{ (row.prompt || '').substring(0, 80) }}{{ (row.prompt || '').length > 80 ? '...' : '' }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="status" label="状态" width="90">
-          <template #default="{ row }">
-            <el-tag :type="row.status === 'running' ? 'warning' : 'success'" size="small">
-              {{ row.status === 'running' ? '执行中' : '已完成' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-      </el-table>
-      <template #footer>
-        <el-button @click="chatHistoryDialogVisible = false">关闭</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 对话详情弹窗 -->
-    <el-dialog
-      v-model="chatDetailDialogVisible"
-      :title="'对话 #' + chatDetailId"
-      width="1200px"
-      :close-on-click-modal="false"
+      width="80vw"
+      top="3vh"
       destroy-on-close
       @closed="closeChatDetail"
     >
-      <div v-if="chatDetailModelName || chatDetailLocalDir" style="margin-bottom: 12px; color: #888; font-size: 12px;">
-        <span v-if="chatDetailModelName">模型: {{ chatDetailModelName }}</span>
-        <span v-if="chatDetailModelName && chatDetailLocalDir"> | </span>
-        <span v-if="chatDetailLocalDir">目录: {{ chatDetailLocalDir }}</span>
-      </div>
-      <div class="chat-detail-container" style="max-height: 70vh; overflow-y: auto; background: #1e1e1e; border-radius: 8px; padding: 16px; color: #d4d4d4; font-family: 'Consolas', monospace; font-size: 13px;">
-        <div v-if="chatDetailMessages.length === 0 && chatDetailStatus === 'running'" style="text-align: center; padding: 40px; color: #888;">
-          <div>等待 claude code 响应...</div>
+      <div class="chat-combined-body" v-loading="chatHistoryLoading">
+        <div class="chat-combined-list">
+          <div
+            v-for="item in chatHistoryList"
+            :key="item.id"
+            :class="['chat-list-item', { 'chat-list-item--active': chatDetailId === item.id }]"
+            @click="onChatRowClick(item)"
+          >
+            <div class="chat-list-item__name">{{ (item.prompt || '').substring(0, 10) || '未命名' }}</div>
+            <div class="chat-list-item__time">{{ item.created_at || '-' }}</div>
+            <span :class="['chat-list-item__dot', item.status === 'running' ? 'chat-list-item__dot--running' : 'chat-list-item__dot--done']"></span>
+          </div>
+          <div v-if="chatHistoryList.length === 0 && !chatHistoryLoading" class="chat-combined-list__empty">暂无对话</div>
         </div>
-        <div v-for="(msg, idx) in chatDetailMessages" :key="idx" style="margin-bottom: 8px;">
-          <!-- system_init -->
-          <div v-if="msg.type === 'system_init'" style="color: #6a9955; font-size: 12px; padding: 4px 0;">
-            ✔ {{ msg.text }} | model: {{ msg.model }}
+        <div class="chat-combined-detail">
+          <div v-if="!chatDetailId" class="chat-combined-detail__placeholder">
+            请选择一条对话
           </div>
-          <!-- system_command -->
-          <div v-else-if="msg.type === 'system_command'" style="background: #1e1e3f; border-radius: 4px; padding: 8px 12px; margin: 4px 0; color: #ce9178; font-size: 12px; word-break: break-all;">
-            <span style="color: #569cd6;">$</span> {{ msg.text }}
-          </div>
-          <!-- system_hook -->
-          <div v-else-if="msg.type === 'system_hook'" style="color: #888; font-size: 12px;">
-            <span @click="msg.collapsed = !msg.collapsed" style="cursor: pointer;">{{ msg.collapsed ? '▶' : '▼' }} {{ msg.text }}</span>
-          </div>
-          <!-- system (generic) -->
-          <div v-else-if="msg.type === 'system'" style="color: #888; font-size: 11px;">{{ msg.text }}</div>
-          <!-- assistant message -->
-          <div v-else-if="msg.type === 'assistant'" style="background: #2d2d2d; border-radius: 8px; padding: 12px; margin: 8px 0;">
-            <!-- thinking -->
-            <div v-if="msg.thinking" style="color: #888; font-size: 12px; margin-bottom: 8px;">
-              <span @click="msg._thinkingCollapsed = !msg._thinkingCollapsed" style="cursor: pointer; font-weight: bold;">
-                {{ msg._thinkingCollapsed ? '▶ 思考过程' : '▼ 思考过程' }}
-              </span>
-              <pre v-if="!msg._thinkingCollapsed" style="white-space: pre-wrap; margin-top: 4px; color: #999;">{{ msg.thinking }}</pre>
+          <template v-else>
+            <div v-if="chatDetailModelName || chatDetailLocalDir" style="margin-bottom: 12px; color: #888; font-size: 12px;">
+              <span v-if="chatDetailModelName">模型: {{ chatDetailModelName }}</span>
+              <span v-if="chatDetailModelName && chatDetailLocalDir"> | </span>
+              <span v-if="chatDetailLocalDir">目录: {{ chatDetailLocalDir }}</span>
             </div>
-            <!-- content blocks -->
-            <div v-for="(block, bi) in msg.content" :key="bi">
-              <div v-if="block.type === 'text'" style="white-space: pre-wrap; line-height: 1.5;">{{ block.text }}</div>
-              <div v-else-if="block.type === 'tool_use'" style="background: #1a3a1a; border-radius: 4px; padding: 8px; margin: 4px 0;">
-                <span style="color: #4ec9b0;">🔧 {{ block.name }}</span>
-                <pre style="white-space: pre-wrap; font-size: 12px; color: #ce9178; margin-top: 4px;">{{ block.input }}</pre>
+            <div class="chat-detail-container">
+              <div v-if="chatDetailMessages.length === 0 && chatDetailStatus === 'running'" style="text-align: center; padding: 40px; color: #888;">
+                <div>等待 claude code 响应...</div>
+              </div>
+              <div v-for="(msg, idx) in chatDetailMessages" :key="idx" style="margin-bottom: 8px;">
+                <!-- system_init -->
+                <div v-if="msg.type === 'system_init'" style="color: #6a9955; font-size: 12px; padding: 4px 0;">
+                  ✔ {{ msg.text }} | model: {{ msg.model }}
+                </div>
+                <!-- system_command -->
+                <div v-else-if="msg.type === 'system_command'" style="background: #1e1e3f; border-radius: 4px; padding: 8px 12px; margin: 4px 0; color: #ce9178; font-size: 12px; word-break: break-all;">
+                  <span style="color: #569cd6;">$</span> {{ msg.text }}
+                </div>
+                <!-- system_hook -->
+                <div v-else-if="msg.type === 'system_hook'" style="color: #888; font-size: 12px;">
+                  <span @click="msg.collapsed = !msg.collapsed" style="cursor: pointer;">{{ msg.collapsed ? '▶' : '▼' }} {{ msg.text }}</span>
+                </div>
+                <!-- system (generic) -->
+                <div v-else-if="msg.type === 'system'" style="color: #888; font-size: 11px;">{{ msg.text }}</div>
+                <!-- assistant message -->
+                <div v-else-if="msg.type === 'assistant'" style="background: #2d2d2d; border-radius: 8px; padding: 12px; margin: 8px 0;">
+                  <!-- thinking -->
+                  <div v-if="msg.thinking" style="color: #888; font-size: 12px; margin-bottom: 8px;">
+                    <span @click="msg._thinkingCollapsed = !msg._thinkingCollapsed" style="cursor: pointer; font-weight: bold;">
+                      {{ msg._thinkingCollapsed ? '▶ 思考过程' : '▼ 思考过程' }}
+                    </span>
+                    <pre v-if="!msg._thinkingCollapsed" style="white-space: pre-wrap; margin-top: 4px; color: #999;">{{ msg.thinking }}</pre>
+                  </div>
+                  <!-- content blocks -->
+                  <div v-for="(block, bi) in msg.content" :key="bi">
+                    <div v-if="block.type === 'text'" style="white-space: pre-wrap; line-height: 1.5;">{{ block.text }}</div>
+                    <div v-else-if="block.type === 'tool_use'" style="background: #1a3a1a; border-radius: 4px; padding: 8px; margin: 4px 0;">
+                      <span style="color: #4ec9b0;">🔧 {{ block.name }}</span>
+                      <pre style="white-space: pre-wrap; font-size: 12px; color: #ce9178; margin-top: 4px;">{{ block.input }}</pre>
+                    </div>
+                  </div>
+                  <!-- usage -->
+                  <div v-if="msg.usage" style="color: #888; font-size: 11px; margin-top: 8px; border-top: 1px solid #444; padding-top: 4px;">
+                    input: {{ msg.usage.input_tokens }} | output: {{ msg.usage.output_tokens }}
+                  </div>
+                </div>
+                <!-- tool_result -->
+                <div v-else-if="msg.type === 'tool_result'" style="color: #888; font-size: 12px;">
+                  <span @click="msg.collapsed = !msg.collapsed" style="cursor: pointer;">{{ msg.collapsed ? '▶' : '▼' }} 工具执行结果</span>
+                  <pre v-if="!msg.collapsed" style="white-space: pre-wrap; font-size: 11px; margin-top: 4px; max-height: 200px; overflow-y: auto;">{{ msg.text }}</pre>
+                </div>
+                <!-- assistant_text -->
+                <div v-else-if="msg.type === 'assistant_text'" style="white-space: pre-wrap; line-height: 1.5;">{{ msg.text }}</div>
+                <!-- assistant_thinking -->
+                <div v-else-if="msg.type === 'assistant_thinking'" style="color: #888; font-size: 12px;">
+                  <span @click="msg.collapsed = !msg.collapsed" style="cursor: pointer;">{{ msg.collapsed ? '▶ 思考' : '▼ 思考' }}</span>
+                  <pre v-if="!msg.collapsed" style="white-space: pre-wrap; margin-top: 4px;">{{ msg.text }}</pre>
+                </div>
+                <!-- result -->
+                <div v-else-if="msg.type === 'result'" style="color: #6a9955; font-size: 12px; border-top: 1px solid #444; padding-top: 8px; margin-top: 8px;">
+                  {{ msg.isError ? '✘ 错误' : '✔ 完成' }} | 耗时: {{ (msg.durationMs / 1000).toFixed(1) }}s | {{ msg.numTurns }} 轮
+                  <span v-if="msg.usage"> | input: {{ msg.usage.input_tokens }} output: {{ msg.usage.output_tokens }}</span>
+                </div>
+                <!-- chat_completed -->
+                <div v-else-if="msg.type === 'chat_completed'" style="color: #6a9955; text-align: center; padding: 16px;">
+                  ✔ {{ msg.text }}
+                </div>
+                <!-- raw_text: 非 JSON 文本行 -->
+                <div v-else-if="msg.type === 'raw_text'" style="white-space: pre-wrap; color: #ce9178; padding: 4px 0; word-break: break-all;">{{ msg.text }}</div>
+                <!-- parse_error: 后端解析错误 -->
+                <div v-else-if="msg.type === 'parse_error'" style="background: #5a1d1d; border-left: 3px solid #f44747; border-radius: 4px; padding: 8px 12px; margin: 4px 0;">
+                  <div style="color: #f44747; font-weight: bold;">解析错误</div>
+                  <div v-if="msg.error" style="color: #ce9178; font-size: 11px; margin-top: 4px;">{{ msg.error }}</div>
+                  <pre style="white-space: pre-wrap; font-size: 12px; margin-top: 4px; color: #d4d4d4;">{{ msg.text }}</pre>
+                </div>
+                <!-- error: claude 进程错误 -->
+                <div v-else-if="msg.type === 'error'" style="background: #5a1d1d; border-left: 3px solid #f44747; border-radius: 4px; padding: 8px 12px; margin: 4px 0;">
+                  <span style="color: #f44747;">错误: </span>
+                  <span style="color: #d4d4d4;">{{ msg.text }}</span>
+                </div>
               </div>
             </div>
-            <!-- usage -->
-            <div v-if="msg.usage" style="color: #888; font-size: 11px; margin-top: 8px; border-top: 1px solid #444; padding-top: 4px;">
-              input: {{ msg.usage.input_tokens }} | output: {{ msg.usage.output_tokens }}
+            <div v-if="chatDetailStatus !== 'running'" class="chat-detail-input-row">
+              <el-input
+                v-model="chatContinueInput"
+                placeholder="输入新消息继续对话..."
+                @keyup.enter="continueChat"
+                style="flex: 1;"
+              />
+              <el-button type="primary" :loading="chatContinueLoading" @click="continueChat">发送</el-button>
             </div>
-          </div>
-          <!-- tool_result -->
-          <div v-else-if="msg.type === 'tool_result'" style="color: #888; font-size: 12px;">
-            <span @click="msg.collapsed = !msg.collapsed" style="cursor: pointer;">{{ msg.collapsed ? '▶' : '▼' }} 工具执行结果</span>
-            <pre v-if="!msg.collapsed" style="white-space: pre-wrap; font-size: 11px; margin-top: 4px; max-height: 200px; overflow-y: auto;">{{ msg.text }}</pre>
-          </div>
-          <!-- assistant_text -->
-          <div v-else-if="msg.type === 'assistant_text'" style="white-space: pre-wrap; line-height: 1.5;">{{ msg.text }}</div>
-          <!-- assistant_thinking -->
-          <div v-else-if="msg.type === 'assistant_thinking'" style="color: #888; font-size: 12px;">
-            <span @click="msg.collapsed = !msg.collapsed" style="cursor: pointer;">{{ msg.collapsed ? '▶ 思考' : '▼ 思考' }}</span>
-            <pre v-if="!msg.collapsed" style="white-space: pre-wrap; margin-top: 4px;">{{ msg.text }}</pre>
-          </div>
-          <!-- result -->
-          <div v-else-if="msg.type === 'result'" style="color: #6a9955; font-size: 12px; border-top: 1px solid #444; padding-top: 8px; margin-top: 8px;">
-            {{ msg.isError ? '✘ 错误' : '✔ 完成' }} | 耗时: {{ (msg.durationMs / 1000).toFixed(1) }}s | {{ msg.numTurns }} 轮
-            <span v-if="msg.usage"> | input: {{ msg.usage.input_tokens }} output: {{ msg.usage.output_tokens }}</span>
-          </div>
-          <!-- chat_completed -->
-          <div v-else-if="msg.type === 'chat_completed'" style="color: #6a9955; text-align: center; padding: 16px;">
-            ✔ {{ msg.text }}
-          </div>
-          <!-- raw_text: 非 JSON 文本行 -->
-          <div v-else-if="msg.type === 'raw_text'" style="white-space: pre-wrap; color: #ce9178; padding: 4px 0; word-break: break-all;">{{ msg.text }}</div>
-          <!-- parse_error: 后端解析错误 -->
-          <div v-else-if="msg.type === 'parse_error'" style="background: #5a1d1d; border-left: 3px solid #f44747; border-radius: 4px; padding: 8px 12px; margin: 4px 0;">
-            <div style="color: #f44747; font-weight: bold;">解析错误</div>
-            <div v-if="msg.error" style="color: #ce9178; font-size: 11px; margin-top: 4px;">{{ msg.error }}</div>
-            <pre style="white-space: pre-wrap; font-size: 12px; margin-top: 4px; color: #d4d4d4;">{{ msg.text }}</pre>
-          </div>
-          <!-- error: claude 进程错误 -->
-          <div v-else-if="msg.type === 'error'" style="background: #5a1d1d; border-left: 3px solid #f44747; border-radius: 4px; padding: 8px 12px; margin: 4px 0;">
-            <span style="color: #f44747;">错误: </span>
-            <span style="color: #d4d4d4;">{{ msg.text }}</span>
-          </div>
+          </template>
         </div>
       </div>
-      <template #footer>
-        <div style="display: flex; gap: 8px; align-items: center;">
-          <el-input
-            v-if="chatDetailStatus !== 'running'"
-            v-model="chatContinueInput"
-            placeholder="输入新消息继续对话..."
-            @keyup.enter="continueChat"
-            style="flex: 1;"
-          />
-          <el-button v-if="chatDetailStatus !== 'running'" type="primary" :loading="chatContinueLoading" @click="continueChat">发送</el-button>
-          <el-button @click="chatDetailDialogVisible = false">关闭</el-button>
-        </div>
-      </template>
     </el-dialog>
 
     <!-- zcode 配置弹窗 -->
@@ -859,6 +864,8 @@ const TASK_STATUS_INTEGRATING = '对接中'
 const TASK_STATUS_TESTING = '测试中'
 const TASK_STATUS_RELEASING = '上线中'
 const TASK_STATUS_ONLINE = '已上线'
+const TASK_STATUS_PENDING_TEST = '待测试'
+const TASK_STATUS_ABANDONED = '已废弃'
 const TASK_STATUS_OPTIONS = [
   TASK_STATUS_TODO,
   TASK_STATUS_DEVELOPING,
@@ -867,9 +874,13 @@ const TASK_STATUS_OPTIONS = [
   TASK_STATUS_PENDING_INTEGRATION,
   TASK_STATUS_INTEGRATING,
   TASK_STATUS_TESTING,
+  TASK_STATUS_PENDING_TEST,
   TASK_STATUS_RELEASING,
   TASK_STATUS_ONLINE,
+  TASK_STATUS_ABANDONED,
 ]
+
+const TASK_WORKFLOW_CONFIG_MAX_CHARS = 20
 
 const WORKFLOW_NODES = [
   { key: 'task-config', label: '任务配置', desc: '查看当前任务的所有配置信息' },
@@ -929,10 +940,9 @@ export default {
       issueFixInput: '',
       issueFixResolvedTemplate: '',
       // claude code 对话
-      chatHistoryDialogVisible: false,
+      chatCombinedDialogVisible: false,
       chatHistoryList: [],
       chatHistoryLoading: false,
-      chatDetailDialogVisible: false,
       chatDetailId: 0,
       chatDetailPrompt: '',
       chatDetailSessionId: '',
@@ -1542,21 +1552,24 @@ export default {
         })
       }).catch(() => {})
     },
-    // 打开历史对话列表
+    // 打开历史对话合并弹窗
     openChatHistoryDialog() {
-      this.chatHistoryDialogVisible = true
+      this.chatCombinedDialogVisible = true
       this.chatHistoryLoading = true
+      this.chatDetailId = 0
       taskWorkflowApi.TaskWorkflowChatList(this.workflowId, (res) => {
         this.chatHistoryLoading = false
         if (res.ErrCode === 0 && res.Data) {
           this.chatHistoryList = res.Data.list || []
+          if (this.chatHistoryList.length > 0) {
+            this.onChatRowClick(this.chatHistoryList[0])
+          }
         }
       })
     },
-    // 打开对话详情
-    openChatDetail(row) {
+    // 点击左侧列表行，加载右侧详情
+    onChatRowClick(row) {
       this.chatDetailId = row.id
-      this.chatDetailDialogVisible = true
       this.chatDetailStatus = row.status
       this.loadChatDetail()
       if (row.status === 'running') {
@@ -1656,7 +1669,7 @@ export default {
           this.issueFixDialogVisible = false
           this.chatDetailId = chatId
           this.chatDetailStatus = 'running'
-          this.chatDetailDialogVisible = true
+          this.chatCombinedDialogVisible = true
           this.registerChatSSE(chatId)
           setTimeout(() => { this.loadChatDetail() }, 500)
         } else {
@@ -1800,6 +1813,12 @@ export default {
       if (taskStatus === TASK_STATUS_ONLINE) {
         return 'info'
       }
+      if (taskStatus === TASK_STATUS_PENDING_TEST) {
+        return 'info'
+      }
+      if (taskStatus === TASK_STATUS_ABANDONED) {
+        return 'danger'
+      }
       return ''
     },
     selectNode(key) {
@@ -1817,6 +1836,13 @@ export default {
     restoreActiveNodeCache() {
       if (this.taskId <= 0) return null
       return localStorage.getItem(this.getActiveNodeCacheKey())
+    },
+    truncateWorkflowLabel(label) {
+      const str = String(label || '-')
+      if (str.length <= TASK_WORKFLOW_CONFIG_MAX_CHARS) {
+        return str
+      }
+      return str.slice(0, TASK_WORKFLOW_CONFIG_MAX_CHARS) + '...'
     },
   },
 }
@@ -2519,5 +2545,116 @@ export default {
 .task-workflow-issue-fix-dialog .el-dialog {
   max-height: 90vh;
   overflow: hidden;
+}
+
+/* 历史对话合并弹窗 */
+.chat-combined-body {
+  display: flex;
+  gap: 12px;
+  height: calc(90vh - 120px);
+  min-height: 500px;
+}
+
+.chat-combined-list {
+  width: 240px;
+  min-width: 240px;
+  border-right: 1px solid #e8e8e0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chat-combined-list__empty {
+  padding: 24px 12px;
+  text-align: center;
+  color: #909399;
+  font-size: 13px;
+}
+
+.chat-list-item {
+  position: relative;
+  padding: 10px 12px 10px 16px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+
+.chat-list-item:hover {
+  background: #f0f2f5;
+}
+
+.chat-list-item--active {
+  background: #edf3e8;
+}
+
+.chat-list-item__name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #303133;
+  line-height: 1.4;
+  padding-right: 14px;
+}
+
+.chat-list-item__time {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 2px;
+}
+
+.chat-list-item__dot {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.chat-list-item__dot--running {
+  background: #e6a23c;
+}
+
+.chat-list-item__dot--done {
+  background: #67c23a;
+}
+
+.chat-combined-detail {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.chat-combined-detail__placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #909399;
+  font-size: 14px;
+}
+
+.chat-detail-container {
+  flex: 1;
+  overflow-y: auto;
+  background: #1e1e1e;
+  border-radius: 8px;
+  padding: 16px;
+  color: #d4d4d4;
+  font-family: 'Consolas', monospace;
+  font-size: 13px;
+  min-height: 0;
+}
+
+.chat-detail-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding-top: 10px;
+  border-top: 1px solid #ebeef5;
+  flex-shrink: 0;
 }
 </style>

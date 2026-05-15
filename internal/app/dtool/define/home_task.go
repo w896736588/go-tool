@@ -26,6 +26,10 @@ const (
 	HomeTaskStatusReleasing = `上线中`
 	// HomeTaskStatusOnline 表示任务已上线。
 	HomeTaskStatusOnline = `已上线`
+	// HomeTaskStatusPendingTest 表示任务待测试。
+	HomeTaskStatusPendingTest = `待测试`
+	// HomeTaskStatusAbandoned 表示任务已废弃。
+	HomeTaskStatusAbandoned = `已废弃`
 )
 
 var (
@@ -40,5 +44,7 @@ var (
 		HomeTaskStatusTesting,
 		HomeTaskStatusReleasing,
 		HomeTaskStatusOnline,
+		HomeTaskStatusPendingTest,
+		HomeTaskStatusAbandoned,
 	}
 )

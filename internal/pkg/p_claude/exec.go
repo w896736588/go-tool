@@ -5,9 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
-	"os/exec"
 	"strings"
 
 	"github.com/spf13/cast"
@@ -16,6 +16,14 @@ import (
 // maxScanTokenSize bufio.Scanner 最大缓冲区大小（10MB）。
 // stream-json 输出中单行可能远超默认 64KB（尤其是工具调用结果）。
 const maxScanTokenSize = 10 * 1024 * 1024
+
+// ptyResult PTY 启动结果，由各平台 startClaude 实现返回。
+type ptyResult struct {
+	reader  io.ReadCloser
+	pid     int
+	waitFn  func() (int, error)
+	closeFn func()
+}
 
 // RunClaudeStream 执行 claude 命令并逐行推送解析后的消息。
 // callback 每收到一行 stream-json 时同步调用。
@@ -26,30 +34,21 @@ func RunClaudeStream(ctx context.Context, cfg RunConfig, callback func(msg Strea
 
 	log.Printf("[claude-exec] 启动进程, dir=%s model=%s", cfg.WorkingDir, cfg.Model)
 
-	cmd := exec.CommandContext(ctx, `claude`, args...)
-	cmd.Dir = cfg.WorkingDir
-	cmd.Env = env
-	cmd.Stderr = os.Stderr
-
-	stdout, err := cmd.StdoutPipe()
+	result, err := startClaude(ctx, args, cfg.WorkingDir, env)
 	if err != nil {
-		log.Printf("[claude-exec] stdout pipe 失败: %v", err)
-		return ``, fmt.Errorf("stdout pipe failed: %w", err)
-	}
-
-	if err := cmd.Start(); err != nil {
 		log.Printf("[claude-exec] 启动失败: %v", err)
 		return ``, fmt.Errorf("claude start failed: %w", err)
 	}
-	log.Printf("[claude-exec] 进程已启动, pid=%d", cmd.Process.Pid)
+	defer result.closeFn()
+	log.Printf("[claude-exec] 进程已启动, pid=%d", result.pid)
 
 	sessionID := ``
 	sessionExtracted := false
 	lineCount := 0
-	scanner := bufio.NewScanner(stdout)
-	scanner.Buffer(make([]byte, maxScanTokenSize), maxScanTokenSize)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
+	sc := bufio.NewScanner(result.reader)
+	sc.Buffer(make([]byte, maxScanTokenSize), maxScanTokenSize)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
 		if line == `` {
 			continue
 		}
@@ -70,15 +69,18 @@ func RunClaudeStream(ctx context.Context, cfg RunConfig, callback func(msg Strea
 	}
 
 	log.Printf("[claude-exec] scanner 循环结束, 总行数=%d", lineCount)
-	if err := scanner.Err(); err != nil {
+	if err := sc.Err(); err != nil {
 		log.Printf("[claude-exec] scanner 错误: %v", err)
 		return sessionID, fmt.Errorf("scan stdout: %w", err)
 	}
 
-	waitErr := cmd.Wait()
-	log.Printf("[claude-exec] 进程结束, waitErr=%v", waitErr)
+	exitCode, waitErr := result.waitFn()
+	log.Printf("[claude-exec] 进程结束, exitCode=%d waitErr=%v", exitCode, waitErr)
 	if waitErr != nil {
 		return sessionID, fmt.Errorf("claude exited with error: %w", waitErr)
+	}
+	if exitCode != 0 {
+		return sessionID, fmt.Errorf("claude exited with code %d", exitCode)
 	}
 	return sessionID, nil
 }
@@ -118,13 +120,29 @@ func buildEnv(cfg RunConfig) []string {
 	return env
 }
 
+// buildWindowsCmdLine 将参数列表转为 Windows CreateProcess 命令行字符串。
+func buildWindowsCmdLine(args []string) string {
+	var b strings.Builder
+	for i, arg := range args {
+		if i > 0 {
+			b.WriteByte(' ')
+		}
+		if strings.ContainsAny(arg, " \t\n\v\"") {
+			b.WriteByte('"')
+			b.WriteString(strings.ReplaceAll(arg, `"`, `\"`))
+			b.WriteByte('"')
+		} else {
+			b.WriteString(arg)
+		}
+	}
+	return b.String()
+}
+
 // parseLine 解析单行 stream-json 为 StreamMessage。
 func parseLine(line string) StreamMessage {
 	msg := StreamMessage{RawJSON: line}
 	var raw map[string]any
 	if err := json.Unmarshal([]byte(line), &raw); err != nil {
-		// stream-json 模式下偶有非 JSON 文本行（如帮助信息、中文提示），
-		// 不视为错误，直接透传原始内容作为普通文本展示
 		msg.Type = `raw_text`
 		msg.Data = map[string]any{`text`: line}
 		if errJSON, e := json.Marshal(msg); e == nil {

@@ -55,7 +55,7 @@
                             v-if="tag.type === col.key"
                             :content="tag.label"
                             placement="top"
-                            :disabled="tag.type === 'branch_name' || tag.type === 'local_dir' || tag.label.length <= HOME_TASK_CONFIG_TAG_MAX_LENGTH"
+                            :disabled="!shouldTruncateTagLabel(tag)"
                           >
                             <span class="home-task-config-tag-wrapper">
                               <el-tag
@@ -65,7 +65,7 @@
                                 :class="['home-task-config-tag', tag.type === 'branch_name' ? 'home-task-config-tag--copy' : '']"
                                 @click.stop="tag.type === 'branch_name' ? copyHomeTaskBranchName(tag.label) : navigateToDevConfig(tag)"
                               >
-                                {{ (tag.type === 'branch_name' || tag.type === 'local_dir') ? tag.label : (tag.label.length > HOME_TASK_CONFIG_TAG_MAX_LENGTH ? tag.label.slice(0, HOME_TASK_CONFIG_TAG_MAX_LENGTH) + '...' : tag.label) }}
+                                {{ shouldTruncateTagLabel(tag) ? truncateTagLabel(tag.label) : tag.label }}
                               </el-tag>
                               <span v-if="tag.type === 'local_dir' && homeTaskLocalDirStatusMap[tag.label] !== undefined" class="home-task-dir-status" :class="homeTaskLocalDirStatusMap[tag.label] ? 'home-task-dir-status--ok' : 'home-task-dir-status--err'">
                                 <svg v-if="homeTaskLocalDirStatusMap[tag.label]" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
@@ -188,7 +188,7 @@
                             v-if="tag.type === col.key"
                             :content="tag.label"
                             placement="top"
-                            :disabled="tag.type === 'branch_name' || tag.type === 'local_dir' || tag.label.length <= HOME_TASK_CONFIG_TAG_MAX_LENGTH"
+                            :disabled="!shouldTruncateTagLabel(tag)"
                           >
                             <span class="home-task-config-tag-wrapper">
                               <el-tag
@@ -198,7 +198,7 @@
                                 :class="['home-task-config-tag', tag.type === 'branch_name' ? 'home-task-config-tag--copy' : '']"
                                 @click.stop="tag.type === 'branch_name' ? copyHomeTaskBranchName(tag.label) : navigateToDevConfig(tag)"
                               >
-                                {{ (tag.type === 'branch_name' || tag.type === 'local_dir') ? tag.label : (tag.label.length > HOME_TASK_CONFIG_TAG_MAX_LENGTH ? tag.label.slice(0, HOME_TASK_CONFIG_TAG_MAX_LENGTH) + '...' : tag.label) }}
+                                {{ shouldTruncateTagLabel(tag) ? truncateTagLabel(tag.label) : tag.label }}
                               </el-tag>
                               <span v-if="tag.type === 'local_dir' && homeTaskLocalDirStatusMap[tag.label] !== undefined" class="home-task-dir-status" :class="homeTaskLocalDirStatusMap[tag.label] ? 'home-task-dir-status--ok' : 'home-task-dir-status--err'">
                                 <svg v-if="homeTaskLocalDirStatusMap[tag.label]" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
@@ -634,6 +634,8 @@ const HOME_TASK_STATUS_INTEGRATING = '对接中'
 const HOME_TASK_STATUS_TESTING = '测试中'
 const HOME_TASK_STATUS_RELEASING = '上线中'
 const HOME_TASK_STATUS_ONLINE = '已上线'
+const HOME_TASK_STATUS_PENDING_TEST = '待测试'
+const HOME_TASK_STATUS_ABANDONED = '已废弃'
 const HOME_TASK_OPERATE_SAVE = 'save'
 const HOME_TASK_OPERATE_STATUS = 'status'
 const HOME_TASK_OPERATE_ARCHIVE = 'archive'
@@ -650,7 +652,7 @@ const HOME_TASK_DAILY_REPORT_BUTTON_TEXT = 'AI 生成工作日报'
 const HOME_TASK_DAILY_REPORT_SUCCESS_MESSAGE = '工作日报任务已加入异步任务列表'
 const HOME_TASK_DAILY_REPORT_FAILED_MESSAGE = '工作日报生成失败'
 const HOME_TASK_ACTION_COMMAND_STATUS_PREFIX = 'status:'
-const HOME_TASK_CONFIG_TAG_MAX_LENGTH = 15
+const HOME_TASK_CONFIG_TAG_MAX_LENGTH = 20
 const HOME_TASK_USE_WORKFLOW_YES = 1
 const HOME_TASK_USE_WORKFLOW_NO = 0
 const HOME_TASK_WORKFLOW_NODE_KEYS = [
@@ -670,8 +672,10 @@ const HOME_TASK_STATUS_OPTIONS = [
   HOME_TASK_STATUS_PENDING_INTEGRATION,
   HOME_TASK_STATUS_INTEGRATING,
   HOME_TASK_STATUS_TESTING,
+  HOME_TASK_STATUS_PENDING_TEST,
   HOME_TASK_STATUS_RELEASING,
   HOME_TASK_STATUS_ONLINE,
+  HOME_TASK_STATUS_ABANDONED,
 ]
 
 function getTodayDateText() {
@@ -1530,6 +1534,12 @@ export default {
       if (taskStatus === HOME_TASK_STATUS_ONLINE) {
         return 'info'
       }
+      if (taskStatus === HOME_TASK_STATUS_PENDING_TEST) {
+        return 'info'
+      }
+      if (taskStatus === HOME_TASK_STATUS_ABANDONED) {
+        return 'danger'
+      }
       return ''
     },
     getHomeTaskActionButtonVariant(taskStatus) {
@@ -1609,6 +1619,20 @@ export default {
         }
         this.homeTaskWorkflowCountMap = newMap
       })
+    },
+    shouldTruncateTagLabel(tag) {
+      // 接口集合(api)和分支名(branch_name)需要截断显示
+      if (tag.type === 'api' || tag.type === 'branch_name') {
+        return tag.label.length > HOME_TASK_CONFIG_TAG_MAX_LENGTH
+      }
+      // 其他类型保持原有逻辑：除 local_dir, parent_branch 外截断
+      if (tag.type === 'local_dir' || tag.type === 'parent_branch') {
+        return false
+      }
+      return tag.label.length > HOME_TASK_CONFIG_TAG_MAX_LENGTH
+    },
+    truncateTagLabel(label) {
+      return label.slice(0, HOME_TASK_CONFIG_TAG_MAX_LENGTH) + '...'
     },
     getHomeTaskWorkflowCountText(task) {
       const taskId = Number(task?.id || 0)
