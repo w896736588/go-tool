@@ -6,6 +6,7 @@ import (
 	"dev_tool/internal/app/dtool/middleware"
 	"dev_tool/internal/pkg/p_define"
 	"dev_tool/internal/pkg/p_gin"
+	"fmt"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -216,6 +217,7 @@ func setGroupRouter(tGin *p_gin.Gin) {
 // 设置相关
 func setRouter(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/Set/SshList`, controller.SetSshList)
+	tGin.GinPost(`/api/Set/SshStatus`, controller.SetSshStatus)
 	tGin.GinPost(`/api/Set/SshAdd`, controller.SetSshAdd)
 	tGin.GinPost(`/api/Set/SshDelete`, controller.SetSshDelete)
 	tGin.GinPost(`/api/Set/GitList`, controller.SetGitList)
@@ -330,6 +332,7 @@ func homeTask(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/HomeTaskDailyReportGenerate`, controller.HomeTaskDailyReportGenerate)
 	tGin.GinPost(`/api/HomeTaskLastDevConfigByGitId`, controller.HomeTaskLastDevConfigByGitId)
 	tGin.GinPost(`/api/HomeTaskBranchNameGenerate`, controller.HomeTaskBranchNameGenerate)
+	tGin.GinPost(`/api/HomeTaskZcodeSessionIdAppend`, controller.HomeTaskZcodeSessionIdAppend)
 }
 
 func taskWorkflow(tGin *p_gin.Gin) {
@@ -352,6 +355,15 @@ func taskWorkflow(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/task/workflow/api-doc/reset`, controller.TaskWorkflowApiDocReset)
 	tGin.GinPost(`/api/task/workflow/node-status/update`, controller.TaskWorkflowNodeStatusUpdate)
 	tGin.GinPost(`/api/task/workflow/batch-node-status`, controller.TaskWorkflowBatchNodeStatus)
+	tGin.GinPost(`/api/task/workflow/issue-fix/resolve`, controller.TaskWorkflowIssueFixResolve)
+	tGin.GinPost(`/api/task/workflow/chat/send`, controller.TaskWorkflowChatSend)
+	tGin.GinPost(`/api/task/workflow/chat/continue`, controller.TaskWorkflowChatContinue)
+	tGin.GinPost(`/api/task/workflow/chat/list`, controller.TaskWorkflowChatList)
+	tGin.GinPost(`/api/task/workflow/chat/detail`, controller.TaskWorkflowChatDetail)
+	tGin.GinPost(`/api/task/workflow/chat/dirs`, controller.TaskWorkflowChatDirs)
+	tGin.GinPost(`/api/task/workflow/zcode/save`, controller.TaskWorkflowZcodeSave)
+	tGin.GinPost(`/api/task/workflow/zcode/get`, controller.TaskWorkflowZcodeGet)
+	tGin.GinPost(`/api/task/workflow/zcode/delete`, controller.TaskWorkflowZcodeDelete)
 }
 
 func shellOut(tGin *p_gin.Gin) {
@@ -512,6 +524,23 @@ func apiUse(tGin *p_gin.Gin) {
 		_ = sse.SendToChan(gstool.JsonEncode(p_define.SseData{
 			Data: "[DONE]",
 			Type: p_define.SseContentTypeMsg,
+		}))
+		sse.UnRegister()
+	})
+	// Claude Code 对话实时推送 SSE
+	tGin.SseRoute(`/api/task/workflow/chat/stream`, func(urlValues url.Values, stopC chan int, c *gin.Context) (*gsgin.Sse, error) {
+		chatID := strings.TrimSpace(urlValues.Get(`chat_id`))
+		if chatID == `` {
+			return nil, fmt.Errorf(`chat_id 不能为空`)
+		}
+		distributeID := define.SseTaskWorkflowChatPrefix + chatID
+		sse := gsgin.SseRegister(distributeID, stopC, c)
+		return sse, nil
+	}, func(sse *gsgin.Sse) {
+		_ = sse.SendToChan(gstool.JsonEncode(p_define.SseData{
+			SseDistributeId: ``,
+			Data:            `[DONE]`,
+			Type:            p_define.SseContentTypeMsg,
 		}))
 		sse.UnRegister()
 	})

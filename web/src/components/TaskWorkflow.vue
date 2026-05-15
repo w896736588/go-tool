@@ -18,6 +18,17 @@
           <GitActionButton compact :loading="loading" @click="reloadWorkflowPage">
             刷新
           </GitActionButton>
+          <GitActionButton compact variant="warning" @click="openIssueFixDialog">
+            问题修改提示词
+          </GitActionButton>
+          <GitActionButton compact @click="openChatHistoryDialog">
+            历史对话
+          </GitActionButton>
+          <!--
+          <GitActionButton compact variant="success" @click="openZcodeConfigDialog">
+            zcode配置
+          </GitActionButton>
+          -->
         </div>
       </header>
 
@@ -45,7 +56,7 @@
             'task-workflow-node--status-completed': getNodeStatus(node.key) === 'completed',
             'task-workflow-node--status-skipped': getNodeStatus(node.key) === 'skipped',
           }"
-          @click="activeNode = node.key"
+          @click="selectNode(node.key)"
         >
           <span class="task-workflow-node__status-icon">
             <span v-if="getNodeStatus(node.key) === 'completed'" class="status-icon status-icon--completed">&#10003;</span>
@@ -528,7 +539,261 @@
         </div>
       </div>
     </el-dialog>
+
+    <el-dialog
+      v-model="issueFixDialogVisible"
+      title="问题修改提示词"
+      width="1200px"
+      top="3vh"
+      destroy-on-close
+      class="task-workflow-issue-fix-dialog"
+    >
+      <div class="task-workflow-issue-fix__close-bar">
+        <el-button @click="issueFixDialogVisible = false" type="danger">关闭</el-button>
+      </div>
+      <!--
+        <div style="margin-bottom: 12px; display: flex; gap: 8px;">
+          <el-button type="primary" :loading="sendingToClaude" @click="sendToClaudeCode">
+            发送到 claude code 执行
+          </el-button>
+        </div>
+        -->
+        <div v-if="issueFixZcodeMappings.length > 0" style="margin-bottom: 12px;">
+          <div style="font-size: 13px; color: #909399; margin-bottom: 4px;">当前任务本地目录对应的 Settings 配置</div>
+          <el-table :data="issueFixZcodeMappings" border size="small" max-height="160">
+            <el-table-column prop="workspace_path" label="本地工作目录" show-overflow-tooltip />
+            <el-table-column prop="settings_path" label="Settings 配置文件" show-overflow-tooltip />
+          </el-table>
+        </div>
+      <div class="task-workflow-issue-fix">
+        <div class="task-workflow-issue-fix__input">
+          <div class="task-workflow-issue-fix__label">改动要求</div>
+          <el-input
+            v-model="issueFixInput"
+            type="textarea"
+            :rows="4"
+            placeholder="请描述需要修改的问题"
+          />
+        </div>
+        <div class="task-workflow-issue-fix__output">
+          <div class="task-workflow-issue-fix__label">完整提示词</div>
+          <MdEditor
+            v-model="issueFixCombinedText"
+            preview-theme="github"
+            :preview="true"
+            :toolbars="['preview', 'fullscreen']"
+            class="task-workflow-issue-fix__editor"
+          />
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="issueFixDialogVisible = false">关闭</el-button>
+        <el-button type="primary" @click="copyIssueFixText">复制到剪贴板</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 对话配置弹窗 -->
+    <el-dialog
+      v-model="chatConfigDialogVisible"
+      title="Claude Code 对话配置"
+      width="500px"
+      destroy-on-close
+    >
+      <el-form label-width="100px">
+        <el-form-item label="工作目录">
+          <el-select v-model="chatConfigLocalDir" style="width: 100%;" placeholder="请选择工作目录">
+            <el-option
+              v-for="(dir, idx) in chatConfigDirs"
+              :key="idx"
+              :label="dir"
+              :value="dir"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="模型">
+          <el-select v-model="chatConfigModelId" style="width: 100%;" placeholder="请选择模型">
+            <el-option
+              v-for="m in chatConfigModels"
+              :key="m.id"
+              :label="m.name + ' (' + m.model + ')'"
+              :value="m.id"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="chatConfigDialogVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="!chatConfigModelId || !chatConfigLocalDir" @click="startClaudeChat">
+          开始对话
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
+
+    <!-- 历史对话列表弹窗 -->
+    <el-dialog
+      v-model="chatHistoryDialogVisible"
+      title="历史对话"
+      width="700px"
+      :close-on-click-modal="false"
+      destroy-on-close
+    >
+      <el-table :data="chatHistoryList" style="width: 100%" v-loading="chatHistoryLoading" @row-click="openChatDetail" row-style="cursor: pointer;">
+        <el-table-column prop="id" label="ID" width="60" />
+        <el-table-column prop="created_at" label="时间" width="170" />
+        <el-table-column prop="prompt" label="提示词" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ (row.prompt || '').substring(0, 80) }}{{ (row.prompt || '').length > 80 ? '...' : '' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="status" label="状态" width="90">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 'running' ? 'warning' : 'success'" size="small">
+              {{ row.status === 'running' ? '执行中' : '已完成' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button @click="chatHistoryDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 对话详情弹窗 -->
+    <el-dialog
+      v-model="chatDetailDialogVisible"
+      :title="'对话 #' + chatDetailId"
+      width="1200px"
+      :close-on-click-modal="false"
+      destroy-on-close
+      @closed="closeChatDetail"
+    >
+      <div v-if="chatDetailModelName || chatDetailLocalDir" style="margin-bottom: 12px; color: #888; font-size: 12px;">
+        <span v-if="chatDetailModelName">模型: {{ chatDetailModelName }}</span>
+        <span v-if="chatDetailModelName && chatDetailLocalDir"> | </span>
+        <span v-if="chatDetailLocalDir">目录: {{ chatDetailLocalDir }}</span>
+      </div>
+      <div class="chat-detail-container" style="max-height: 70vh; overflow-y: auto; background: #1e1e1e; border-radius: 8px; padding: 16px; color: #d4d4d4; font-family: 'Consolas', monospace; font-size: 13px;">
+        <div v-if="chatDetailMessages.length === 0 && chatDetailStatus === 'running'" style="text-align: center; padding: 40px; color: #888;">
+          <div>等待 claude code 响应...</div>
+        </div>
+        <div v-for="(msg, idx) in chatDetailMessages" :key="idx" style="margin-bottom: 8px;">
+          <!-- system_init -->
+          <div v-if="msg.type === 'system_init'" style="color: #6a9955; font-size: 12px; padding: 4px 0;">
+            ✔ {{ msg.text }} | model: {{ msg.model }}
+          </div>
+          <!-- system_command -->
+          <div v-else-if="msg.type === 'system_command'" style="background: #1e1e3f; border-radius: 4px; padding: 8px 12px; margin: 4px 0; color: #ce9178; font-size: 12px; word-break: break-all;">
+            <span style="color: #569cd6;">$</span> {{ msg.text }}
+          </div>
+          <!-- system_hook -->
+          <div v-else-if="msg.type === 'system_hook'" style="color: #888; font-size: 12px;">
+            <span @click="msg.collapsed = !msg.collapsed" style="cursor: pointer;">{{ msg.collapsed ? '▶' : '▼' }} {{ msg.text }}</span>
+          </div>
+          <!-- system (generic) -->
+          <div v-else-if="msg.type === 'system'" style="color: #888; font-size: 11px;">{{ msg.text }}</div>
+          <!-- assistant message -->
+          <div v-else-if="msg.type === 'assistant'" style="background: #2d2d2d; border-radius: 8px; padding: 12px; margin: 8px 0;">
+            <!-- thinking -->
+            <div v-if="msg.thinking" style="color: #888; font-size: 12px; margin-bottom: 8px;">
+              <span @click="msg._thinkingCollapsed = !msg._thinkingCollapsed" style="cursor: pointer; font-weight: bold;">
+                {{ msg._thinkingCollapsed ? '▶ 思考过程' : '▼ 思考过程' }}
+              </span>
+              <pre v-if="!msg._thinkingCollapsed" style="white-space: pre-wrap; margin-top: 4px; color: #999;">{{ msg.thinking }}</pre>
+            </div>
+            <!-- content blocks -->
+            <div v-for="(block, bi) in msg.content" :key="bi">
+              <div v-if="block.type === 'text'" style="white-space: pre-wrap; line-height: 1.5;">{{ block.text }}</div>
+              <div v-else-if="block.type === 'tool_use'" style="background: #1a3a1a; border-radius: 4px; padding: 8px; margin: 4px 0;">
+                <span style="color: #4ec9b0;">🔧 {{ block.name }}</span>
+                <pre style="white-space: pre-wrap; font-size: 12px; color: #ce9178; margin-top: 4px;">{{ block.input }}</pre>
+              </div>
+            </div>
+            <!-- usage -->
+            <div v-if="msg.usage" style="color: #888; font-size: 11px; margin-top: 8px; border-top: 1px solid #444; padding-top: 4px;">
+              input: {{ msg.usage.input_tokens }} | output: {{ msg.usage.output_tokens }}
+            </div>
+          </div>
+          <!-- tool_result -->
+          <div v-else-if="msg.type === 'tool_result'" style="color: #888; font-size: 12px;">
+            <span @click="msg.collapsed = !msg.collapsed" style="cursor: pointer;">{{ msg.collapsed ? '▶' : '▼' }} 工具执行结果</span>
+            <pre v-if="!msg.collapsed" style="white-space: pre-wrap; font-size: 11px; margin-top: 4px; max-height: 200px; overflow-y: auto;">{{ msg.text }}</pre>
+          </div>
+          <!-- assistant_text -->
+          <div v-else-if="msg.type === 'assistant_text'" style="white-space: pre-wrap; line-height: 1.5;">{{ msg.text }}</div>
+          <!-- assistant_thinking -->
+          <div v-else-if="msg.type === 'assistant_thinking'" style="color: #888; font-size: 12px;">
+            <span @click="msg.collapsed = !msg.collapsed" style="cursor: pointer;">{{ msg.collapsed ? '▶ 思考' : '▼ 思考' }}</span>
+            <pre v-if="!msg.collapsed" style="white-space: pre-wrap; margin-top: 4px;">{{ msg.text }}</pre>
+          </div>
+          <!-- result -->
+          <div v-else-if="msg.type === 'result'" style="color: #6a9955; font-size: 12px; border-top: 1px solid #444; padding-top: 8px; margin-top: 8px;">
+            {{ msg.isError ? '✘ 错误' : '✔ 完成' }} | 耗时: {{ (msg.durationMs / 1000).toFixed(1) }}s | {{ msg.numTurns }} 轮
+            <span v-if="msg.usage"> | input: {{ msg.usage.input_tokens }} output: {{ msg.usage.output_tokens }}</span>
+          </div>
+          <!-- chat_completed -->
+          <div v-else-if="msg.type === 'chat_completed'" style="color: #6a9955; text-align: center; padding: 16px;">
+            ✔ {{ msg.text }}
+          </div>
+          <!-- raw_text: 非 JSON 文本行 -->
+          <div v-else-if="msg.type === 'raw_text'" style="white-space: pre-wrap; color: #ce9178; padding: 4px 0; word-break: break-all;">{{ msg.text }}</div>
+          <!-- parse_error: 后端解析错误 -->
+          <div v-else-if="msg.type === 'parse_error'" style="background: #5a1d1d; border-left: 3px solid #f44747; border-radius: 4px; padding: 8px 12px; margin: 4px 0;">
+            <div style="color: #f44747; font-weight: bold;">解析错误</div>
+            <div v-if="msg.error" style="color: #ce9178; font-size: 11px; margin-top: 4px;">{{ msg.error }}</div>
+            <pre style="white-space: pre-wrap; font-size: 12px; margin-top: 4px; color: #d4d4d4;">{{ msg.text }}</pre>
+          </div>
+          <!-- error: claude 进程错误 -->
+          <div v-else-if="msg.type === 'error'" style="background: #5a1d1d; border-left: 3px solid #f44747; border-radius: 4px; padding: 8px 12px; margin: 4px 0;">
+            <span style="color: #f44747;">错误: </span>
+            <span style="color: #d4d4d4;">{{ msg.text }}</span>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <el-input
+            v-if="chatDetailStatus !== 'running'"
+            v-model="chatContinueInput"
+            placeholder="输入新消息继续对话..."
+            @keyup.enter="continueChat"
+            style="flex: 1;"
+          />
+          <el-button v-if="chatDetailStatus !== 'running'" type="primary" :loading="chatContinueLoading" @click="continueChat">发送</el-button>
+          <el-button @click="chatDetailDialogVisible = false">关闭</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
+    <!-- zcode 配置弹窗 -->
+    <el-dialog
+      v-model="zcodeConfigDialogVisible"
+      title="zcode 配置"
+      width="800px"
+      destroy-on-close
+    >
+      <div style="margin-bottom: 16px;">
+        <div style="font-size: 14px; font-weight: 500; margin-bottom: 8px; color: #303133;">zcode 工作目录地址</div>
+        <div style="display: flex; gap: 8px;">
+          <el-input
+            v-model="zcodeDirInput"
+            placeholder="例如: C:\Users\test\.zcode\v2\acp-config\claude"
+            style="flex: 1;"
+          />
+          <el-button type="primary" :loading="zcodeSaving" @click="saveZcodeConfig">解析并保存</el-button>
+          <el-button type="danger" plain :disabled="!zcodeProjectList.length" @click="deleteZcodeConfig">删除配置</el-button>
+        </div>
+      </div>
+      <el-table v-if="zcodeProjectList.length > 0" :data="zcodeProjectList" border size="small" empty-text="暂无项目映射">
+        <el-table-column prop="project_key" label="项目Key" width="200" />
+        <el-table-column prop="workspace_path" label="工作目录" show-overflow-tooltip />
+        <el-table-column prop="settings_path" label="Settings 配置文件" show-overflow-tooltip />
+      </el-table>
+      <div v-else style="color: #909399; text-align: center; padding: 20px;">暂无 zcode 项目映射</div>
+      <template #footer>
+        <el-button @click="zcodeConfigDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
 </template>
 
 <script>
@@ -539,6 +804,8 @@ import taskWorkflowApi from '@/utils/base/task_workflow'
 import homeTaskApi from '@/utils/base/home_task'
 import baseUtils from '@/utils/base'
 import sseDistribute from '@/utils/base/sse_distribute'
+import chatParser from '@/utils/chat_parser'
+import aiSet from '@/utils/base/ai_set'
 import gitApi from '@/utils/base/git'
 import mysqlSetApi from '@/utils/base/mysql_set'
 import apiManagement from '@/utils/base/api'
@@ -569,6 +836,8 @@ const NODE_STATUS_LABELS = {
   [NODE_STATUS_COMPLETED]: '已完成',
   [NODE_STATUS_SKIPPED]: '已跳过',
 }
+
+const ACTIVE_NODE_CACHE_PREFIX = 'task_workflow_active_node_'
 
 const TASK_STATUS_TODO = '待开始'
 const TASK_STATUS_DEVELOPING = '开发中'
@@ -645,6 +914,37 @@ export default {
       fragmentDialogUrl: '',
       fragmentDialogTitle: '',
       fragmentDialogLoading: false,
+      issueFixDialogVisible: false,
+      issueFixInput: '',
+      issueFixResolvedTemplate: '',
+      // claude code 对话
+      chatHistoryDialogVisible: false,
+      chatHistoryList: [],
+      chatHistoryLoading: false,
+      chatDetailDialogVisible: false,
+      chatDetailId: 0,
+      chatDetailPrompt: '',
+      chatDetailSessionId: '',
+      chatDetailStatus: '',
+      chatDetailMessages: [],
+      chatDetailSSERegistered: false,
+      sendingToClaude: false,
+      chatContinueInput: '',
+      chatContinueLoading: false,
+      chatConfigDialogVisible: false,
+      chatConfigModelId: 0,
+      chatConfigLocalDir: '',
+      chatConfigDirs: [],
+      chatConfigModels: [],
+      _pendingChatPrompt: '',
+      chatDetailModelName: '',
+      chatDetailLocalDir: '',
+      // zcode 配置
+      zcodeConfigDialogVisible: false,
+      zcodeDirInput: '',
+      zcodeProjectList: [],
+      zcodeSaving: false,
+      issueFixZcodeMappings: [],
     }
   },
   computed: {
@@ -710,6 +1010,14 @@ export default {
         }
       }
       return 'task-config'
+    },
+    issueFixCombinedText() {
+      const input = (this.issueFixInput || '').trim()
+      const template = (this.issueFixResolvedTemplate || '').trim()
+      if (!input && !template) return ''
+      if (!input) return template
+      if (!template) return input
+      return input + '\n\n' + template
     },
   },
   mounted() {
@@ -787,7 +1095,7 @@ export default {
           return
         }
         this.applyWorkflowPayload(response.Data)
-        this.activeNode = this.firstRunningNodeKey
+        this.activeNode = this.restoreActiveNodeCache() || this.firstRunningNodeKey
         this.loadRequirementFragment(() => {
           this.loading = false
           this.ensureWorkflowSse()
@@ -801,6 +1109,7 @@ export default {
       this.workflowId = Number(this.workflow.id || 0)
       this.requirementFetchConfig = data.requirement_fetch_config || this.requirementFetchConfig || {}
       this.parseNodeStatuses()
+      document.title = this.homeTask.name || '任务工作流程'
     },
     // 解析后端返回的 node_statuses JSON 字符串
     parseNodeStatuses() {
@@ -1151,6 +1460,213 @@ export default {
       }
       document.body.removeChild(textArea)
     },
+    openIssueFixDialog() {
+      this.issueFixDialogVisible = true
+      this.issueFixInput = ''
+      this.issueFixResolvedTemplate = ''
+      this.issueFixZcodeMappings = []
+      // 获取当前任务所有本地目录
+      const taskDirs = this.parsedTaskDevConfigs
+        .map(cfg => (cfg.local_dir || '').trim())
+        .filter(Boolean)
+      if (this.workflowId <= 0) return
+      taskWorkflowApi.TaskWorkflowIssueFixResolve(this.workflowId, (response) => {
+        if (response && response.ErrCode === 0 && response.Data) {
+          this.issueFixResolvedTemplate = response.Data.prompt || ''
+        }
+      })
+      // 只显示与当前任务本地目录匹配的 zcode 配置
+      taskWorkflowApi.TaskWorkflowZcodeGet((res) => {
+        if (res && res.ErrCode === 0 && res.Data) {
+          const allProjects = res.Data.projects || []
+          const workspaceSet = new Set(taskDirs)
+          this.issueFixZcodeMappings = allProjects.filter(p => workspaceSet.has(p.workspace_path))
+        }
+      })
+    },
+    copyIssueFixText() {
+      this.copyText(this.issueFixCombinedText, '已复制到剪贴板')
+    },
+    // zcode 配置弹窗
+    openZcodeConfigDialog() {
+      this.zcodeConfigDialogVisible = true
+      this.zcodeDirInput = ''
+      this.zcodeProjectList = []
+      taskWorkflowApi.TaskWorkflowZcodeGet((res) => {
+        if (res && res.ErrCode === 0 && res.Data) {
+          this.zcodeDirInput = res.Data.zcode_dir || ''
+          this.zcodeProjectList = res.Data.projects || []
+        }
+      })
+    },
+    saveZcodeConfig() {
+      const dir = (this.zcodeDirInput || '').trim()
+      if (!dir) {
+        this.$helperNotify.warning('请输入 zcode 工作目录地址')
+        return
+      }
+      this.zcodeSaving = true
+      taskWorkflowApi.TaskWorkflowZcodeSave(dir, (res) => {
+        this.zcodeSaving = false
+        if (res && res.ErrCode === 0 && res.Data) {
+          this.$helperNotify.success('zcode 配置已保存')
+          this.zcodeDirInput = res.Data.zcode_dir || ''
+          this.zcodeProjectList = res.Data.projects || []
+        }
+      })
+    },
+    deleteZcodeConfig() {
+      this.$confirm('确定要删除 zcode 配置吗？关联的项目映射也会被清空。', '提示', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }).then(() => {
+        taskWorkflowApi.TaskWorkflowZcodeDelete((res) => {
+          if (res && res.ErrCode === 0) {
+            this.$helperNotify.success('zcode 配置已删除')
+            this.zcodeDirInput = ''
+            this.zcodeProjectList = []
+          }
+        })
+      }).catch(() => {})
+    },
+    // 打开历史对话列表
+    openChatHistoryDialog() {
+      this.chatHistoryDialogVisible = true
+      this.chatHistoryLoading = true
+      taskWorkflowApi.TaskWorkflowChatList(this.workflowId, (res) => {
+        this.chatHistoryLoading = false
+        if (res.ErrCode === 0 && res.Data) {
+          this.chatHistoryList = res.Data.list || []
+        }
+      })
+    },
+    // 打开对话详情
+    openChatDetail(row) {
+      this.chatDetailId = row.id
+      this.chatDetailDialogVisible = true
+      this.chatDetailStatus = row.status
+      this.loadChatDetail()
+      if (row.status === 'running') {
+        this.registerChatSSE(row.id)
+      }
+    },
+    // 加载对话详情
+    loadChatDetail() {
+      if (!this.chatDetailId) return
+      taskWorkflowApi.TaskWorkflowChatDetail(this.chatDetailId, (res) => {
+        if (res.ErrCode === 0 && res.Data) {
+          const data = res.Data
+          this.chatDetailPrompt = data.prompt || ''
+          this.chatDetailSessionId = data.session_id || ''
+          this.chatDetailStatus = data.status || ''
+          this.chatDetailModelName = data.model_id ? '#' + data.model_id : ''
+          this.chatDetailLocalDir = data.local_dir || ''
+          this.chatDetailMessages = chatParser.parseChatLines(data.lines || [])
+        }
+      })
+    },
+    // 注册 SSE 接收
+    registerChatSSE(chatId) {
+      if (this.chatDetailSSERegistered) return
+      this.chatDetailSSERegistered = true
+      const sseId = 'task_workflow_chat_' + chatId
+      sseDistribute.RegisterReceive(sseId, (data) => {
+        if (data && data.line) {
+          const line = data.line
+          try {
+            const obj = JSON.parse(line)
+            if (obj.type === 'chat' && obj.subtype === 'completed') {
+              this.chatDetailStatus = 'completed'
+              this.chatDetailSSERegistered = false
+              sseDistribute.UnRegisterReceive(sseId)
+              return
+            }
+          } catch (e) { /* ignore parse errors */ }
+          const newMsgs = chatParser.parseChatLines([line])
+          if (newMsgs.length > 0) {
+            this.chatDetailMessages = [...this.chatDetailMessages, ...newMsgs]
+          }
+        }
+      })
+    },
+    // 关闭对话详情
+    closeChatDetail() {
+      if (this.chatDetailSSERegistered) {
+        const sseId = 'task_workflow_chat_' + this.chatDetailId
+        sseDistribute.UnRegisterReceive(sseId)
+        this.chatDetailSSERegistered = false
+      }
+      this.chatDetailMessages = []
+      this.chatDetailId = 0
+      this.chatContinueInput = ''
+    },
+    // 打开对话配置弹窗
+    sendToClaudeCode() {
+      const prompt = this.issueFixCombinedText
+      if (!prompt || !prompt.trim()) {
+        this.$helperNotify.warning('提示词为空，无法发送')
+        return
+      }
+      this._pendingChatPrompt = prompt
+      // 加载模型列表
+      aiSet.AiModelList({}, (res) => {
+        if (res.ErrCode === 0) {
+          this.chatConfigModels = (res.Data || []).filter(m =>
+            (m.request_format || m.provider_type || '') === 'anthropic' && (m.model_type || 'llm') === 'llm'
+          )
+        }
+      })
+      // 加载可用目录
+      taskWorkflowApi.TaskWorkflowChatDirs(this.workflowId, (res) => {
+        if (res.ErrCode === 0) {
+          this.chatConfigDirs = res.Data.dirs || []
+          if (this.chatConfigDirs.length > 0) {
+            this.chatConfigLocalDir = this.chatConfigDirs[0]
+          }
+        }
+      })
+      this.chatConfigDialogVisible = true
+    },
+    // 执行对话配置，开始对话
+    startClaudeChat() {
+      const prompt = this._pendingChatPrompt
+      if (!prompt || !this.chatConfigModelId || !this.chatConfigLocalDir) return
+      this.sendingToClaude = true
+      taskWorkflowApi.TaskWorkflowChatSend(this.workflowId, prompt, this.chatConfigModelId, this.chatConfigLocalDir, (res) => {
+        this.sendingToClaude = false
+        if (res.ErrCode === 0 && res.Data) {
+          const chatId = res.Data.chat_id
+          this.$helperNotify.success('已发送到 claude code 执行')
+          this.chatConfigDialogVisible = false
+          this.issueFixDialogVisible = false
+          this.chatDetailId = chatId
+          this.chatDetailStatus = 'running'
+          this.chatDetailDialogVisible = true
+          this.registerChatSSE(chatId)
+          setTimeout(() => { this.loadChatDetail() }, 500)
+        } else {
+          this.$helperNotify.error(res.ErrMsg || '发送失败')
+        }
+      })
+    },
+    // 继续对话
+    continueChat() {
+      const input = this.chatContinueInput.trim()
+      if (!input) return
+      this.chatContinueLoading = true
+      taskWorkflowApi.TaskWorkflowChatContinue(this.chatDetailId, input, (res) => {
+        this.chatContinueLoading = false
+        if (res.ErrCode === 0) {
+          this.chatContinueInput = ''
+          this.chatDetailStatus = 'running'
+          this.registerChatSSE(this.chatDetailId)
+          setTimeout(() => { this.loadChatDetail() }, 500)
+        } else {
+          this.$helperNotify.error(res.ErrMsg || '发送失败')
+        }
+      })
+    },
     formatUnixTime(unixTime) {
       const value = Number(unixTime || 0)
       if (value <= 0) {
@@ -1271,6 +1787,22 @@ export default {
         return 'info'
       }
       return ''
+    },
+    selectNode(key) {
+      this.activeNode = key
+      this.saveActiveNodeCache()
+    },
+    getActiveNodeCacheKey() {
+      return ACTIVE_NODE_CACHE_PREFIX + this.taskId
+    },
+    saveActiveNodeCache() {
+      if (this.taskId > 0 && this.activeNode) {
+        localStorage.setItem(this.getActiveNodeCacheKey(), this.activeNode)
+      }
+    },
+    restoreActiveNodeCache() {
+      if (this.taskId <= 0) return null
+      return localStorage.getItem(this.getActiveNodeCacheKey())
     },
   },
 }
@@ -1914,5 +2446,36 @@ export default {
   justify-content: center;
   color: #909399;
   font-size: 14px;
+}
+
+.task-workflow-issue-fix__close-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+.task-workflow-issue-fix__input {
+  margin-bottom: 16px;
+}
+.task-workflow-issue-fix__label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #303133;
+  margin-bottom: 8px;
+}
+.task-workflow-issue-fix__output {
+  margin-top: 16px;
+}
+.task-workflow-issue-fix__editor {
+  height: 400px;
+}
+
+.task-workflow-issue-fix-dialog .el-dialog__body {
+  max-height: calc(90vh - 54px);
+  overflow-y: auto;
+}
+
+.task-workflow-issue-fix-dialog .el-dialog {
+  max-height: 90vh;
+  overflow: hidden;
 }
 </style>

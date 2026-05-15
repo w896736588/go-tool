@@ -71,3 +71,44 @@ type TaskWorkflowNodeStatusUpdateRequest struct {
 type TaskWorkflowBatchNodeStatusRequest struct {
 	HomeTaskIDs []int `json:"home_task_ids"`
 }
+
+// TaskWorkflowChatSendRequest 发送对话到 claude code 请求。
+type TaskWorkflowChatSendRequest struct {
+	WorkflowID int    `json:"workflow_id"`
+	Prompt     string `json:"prompt"`
+	ModelID    int    `json:"model_id"`
+	LocalDir   string `json:"local_dir"`
+}
+
+// TaskWorkflowChatDirsRequest 获取可选工作目录列表请求。
+type TaskWorkflowChatDirsRequest struct {
+	WorkflowID int `json:"workflow_id"`
+}
+
+// TaskWorkflowChatContinueRequest 继续已有对话请求。
+type TaskWorkflowChatContinueRequest struct {
+	ChatID int    `json:"chat_id"`
+	Prompt string `json:"prompt"`
+}
+
+// TaskWorkflowChatListRequest 列出对话列表请求。
+type TaskWorkflowChatListRequest struct {
+	WorkflowID int `json:"workflow_id"`
+}
+
+// TaskWorkflowChatDetailRequest 获取对话详情请求。
+type TaskWorkflowChatDetailRequest struct {
+	ChatID int `json:"chat_id"`
+}
+
+// TaskWorkflowZcodeSaveRequest 保存 zcode 配置请求。
+type TaskWorkflowZcodeSaveRequest struct {
+	ZcodeDir string `json:"zcode_dir"`
+}
+
+// TaskWorkflowZcodeProjectItem 项目映射条目（用于响应）。
+type TaskWorkflowZcodeProjectItem struct {
+	ProjectKey    string `json:"project_key"`
+	WorkspacePath string `json:"workspace_path"`
+	SettingsPath  string `json:"settings_path"`
+}

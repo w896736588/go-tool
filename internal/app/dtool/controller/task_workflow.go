@@ -1,15 +1,18 @@
 package controller
 
 import (
+	"context"
 	"dev_tool/internal/app/dtool/api"
 	"dev_tool/internal/app/dtool/common"
 	"dev_tool/internal/app/dtool/component"
 	"dev_tool/internal/app/dtool/define"
 	_struct "dev_tool/internal/app/dtool/struct"
+	"dev_tool/internal/pkg/p_claude"
 	"dev_tool/internal/pkg/p_define"
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -588,17 +591,8 @@ func buildTaskWorkflowResponse(c *gin.Context, workflowInfo map[string]any) (map
 	if err != nil {
 		return nil, err
 	}
-	// 新创建的工作流提示词为空时，从配置模板初始化。
 	workflowID := cast.ToInt(workflowInfo[`id`])
-	if workflowID > 0 && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_requirement`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_api_dev`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_api_test`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_design`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_plain_text_requirement`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_design_plan_requirement`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_browser_test`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_code_review`])) == `` {
-		prompts := resolveTaskWorkflowPrompts(c, homeTaskInfo, workflowInfo)
-		_ = common.DbMain.TaskWorkflowUpdatePrompts(workflowID, prompts[`requirement`], prompts[`api_dev`], prompts[`api_test`], prompts[`design`], prompts[`plain_text_requirement`], prompts[`design_plan_requirement`], prompts[`browser_test`], prompts[`code_review`])
-		updatedInfo, updateErr := common.DbMain.TaskWorkflowInfo(workflowID)
-		if updateErr == nil {
-			workflowInfo = updatedInfo
-		}
-	}
-	// 纯文本需求知识片段不存在时自动创建。
+	// 先创建关联的知识片段，确保后续提示词占位符解析时片段ID已存在。
 	if workflowID > 0 && strings.TrimSpace(cast.ToString(workflowInfo[`plain_text_requirement_fragment_id`])) == `` {
 		ensureTaskWorkflowPlainTextReqFragment(workflowInfo, homeTaskInfo)
 		updatedInfo, updateErr := common.DbMain.TaskWorkflowInfo(workflowID)
@@ -606,7 +600,6 @@ func buildTaskWorkflowResponse(c *gin.Context, workflowInfo map[string]any) (map
 			workflowInfo = updatedInfo
 		}
 	}
-	// 需求设计方案知识片段不存在时自动创建。
 	if workflowID > 0 && strings.TrimSpace(cast.ToString(workflowInfo[`design_plan_requirement_fragment_id`])) == `` {
 		ensureTaskWorkflowDesignPlanReqFragment(workflowInfo, homeTaskInfo)
 		updatedInfo, updateErr := common.DbMain.TaskWorkflowInfo(workflowID)
@@ -614,13 +607,17 @@ func buildTaskWorkflowResponse(c *gin.Context, workflowInfo map[string]any) (map
 			workflowInfo = updatedInfo
 		}
 	}
-	// 接口文档知识片段不存在时自动创建。
 	if workflowID > 0 && strings.TrimSpace(cast.ToString(workflowInfo[`api_doc_fragment_id`])) == `` {
 		ensureTaskWorkflowApiDocFragment(workflowInfo, homeTaskInfo)
 		updatedInfo, updateErr := common.DbMain.TaskWorkflowInfo(workflowID)
 		if updateErr == nil {
 			workflowInfo = updatedInfo
 		}
+	}
+	// 知识片段创建完成后，再从配置模板初始化提示词。
+	if workflowID > 0 && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_requirement`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_api_dev`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_api_test`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_design`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_plain_text_requirement`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_design_plan_requirement`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_browser_test`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_code_review`])) == `` {
+		prompts := resolveTaskWorkflowPrompts(c, homeTaskInfo, workflowInfo)
+		_ = common.DbMain.TaskWorkflowUpdatePrompts(workflowID, prompts[`requirement`], prompts[`api_dev`], prompts[`api_test`], prompts[`design`], prompts[`plain_text_requirement`], prompts[`design_plan_requirement`], prompts[`browser_test`], prompts[`code_review`])
 	}
 	return map[string]any{
 		`workflow`:                 workflowInfo,
@@ -1420,7 +1417,9 @@ func buildTaskWorkflowPlaceholderMap(c *gin.Context, homeTaskInfo map[string]any
 	for key, value := range result {
 		devEnvironment = strings.ReplaceAll(devEnvironment, key, value)
 	}
-	result[`{开发环境}`] = devEnvironment
+	taskID := cast.ToString(homeTaskInfo[`id`])
+	result[`{开发环境}`] = devEnvironment + "\n\n任务ID: " + taskID
+	result[`{zcode配置列表}`] = taskWorkflowBuildZcodeMarkdown()
 	return result
 }
 
@@ -1798,6 +1797,7 @@ func TaskWorkflowRequirementFetch(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
+	taskWorkflowAutoCompleteNode(workflowInfo, `requirement-fetch`)
 	updatedWorkflowInfo, err := common.DbMain.TaskWorkflowInfo(request.WorkflowID)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
@@ -2194,4 +2194,565 @@ func TaskWorkflowBatchNodeStatus(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`node_statuses_map`: nodeStatusesMap,
 	})
+}
+
+// TaskWorkflowIssueFixResolve 解析问题修改提示词模板。
+func TaskWorkflowIssueFixResolve(c *gin.Context) {
+	var req _struct.TaskWorkflowInfoRequest
+	if err := gsgin.GinPostBody(c, &req); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	if req.WorkflowID <= 0 {
+		gsgin.GinResponseError(c, `工作流id不能为空`, nil)
+		return
+	}
+	workflowInfo, err := common.DbMain.TaskWorkflowInfo(req.WorkflowID)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskInfo, err := common.DbMain.HomeTaskRow(cast.ToInt(workflowInfo[`home_task_id`]))
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	template, err := common.DbMain.HomeTaskConfigValue(define.HomeTaskConfigPromptIssueFix)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	placeholders := buildTaskWorkflowPlaceholderMap(c, homeTaskInfo, workflowInfo)
+	resolved := taskWorkflowResolvePlaceholders(template, placeholders)
+	gsgin.GinResponseSuccess(c, ``, map[string]string{
+		`prompt`: resolved,
+	})
+}
+
+// broadcastChatOutput 向所有 SSE 客户端广播对话输出行。
+func broadcastChatOutput(chatID int64, line string) {
+	distributeID := define.SseTaskWorkflowChatPrefix + cast.ToString(chatID)
+	msg := gstool.JsonEncode(p_define.SseData{
+		SseDistributeId: distributeID,
+		Data: map[string]any{
+			`chat_id`: chatID,
+			`line`:    line,
+			`time`:    time.Now().Unix(),
+		},
+		Type: p_define.SseContentTypeMsg,
+	})
+	for _, item := range gsgin.SseStatus() {
+		clientID := strings.TrimSpace(strings.TrimPrefix(item, apiDataChangeSseStatusPrefix))
+		if clientID == `` || clientID == item {
+			continue
+		}
+		sse := gsgin.SseGetByClientId(clientID)
+		if sse == nil {
+			continue
+		}
+		_ = sse.SendToChan(msg)
+	}
+}
+
+// extractSessionID 从首行 init JSON 中提取 session_id。
+func extractSessionID(line string) string {
+	var data map[string]any
+	if err := json.Unmarshal([]byte(line), &data); err != nil {
+		return ``
+	}
+	return cast.ToString(data[`session_id`])
+}
+
+// TaskWorkflowChatSend 启动新的 claude code 对话。
+func TaskWorkflowChatSend(c *gin.Context) {
+	var req _struct.TaskWorkflowChatSendRequest
+	if err := gsgin.GinPostBody(c, &req); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	if req.WorkflowID <= 0 {
+		gsgin.GinResponseError(c, `工作流id不能为空`, nil)
+		return
+	}
+	if strings.TrimSpace(req.Prompt) == `` {
+		gsgin.GinResponseError(c, `提示词不能为空`, nil)
+		return
+	}
+	if req.ModelID <= 0 {
+		gsgin.GinResponseError(c, `请选择模型`, nil)
+		return
+	}
+	if strings.TrimSpace(req.LocalDir) == `` {
+		gsgin.GinResponseError(c, `请选择工作目录`, nil)
+		return
+	}
+
+	// 校验模型信息
+	modelInfo, err := common.DbMain.AiModelInfo(req.ModelID)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	providerType := strings.ToLower(cast.ToString(modelInfo[`provider_type`]))
+	if providerType != `anthropic` {
+		gsgin.GinResponseError(c, `仅支持 anthropic (Claude Code) 服务商的模型`, nil)
+		return
+	}
+	baseURL := strings.TrimSpace(cast.ToString(modelInfo[`base_url`]))
+	apiKey := strings.TrimSpace(cast.ToString(modelInfo[`api_key`]))
+	modelName := strings.TrimSpace(cast.ToString(modelInfo[`model`]))
+
+	chatID, err := common.DbMain.TaskWorkflowChatCreate(req.WorkflowID, req.Prompt, req.ModelID, req.LocalDir)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+
+	go runClaudeCommand(chatID, req.LocalDir, req.Prompt, false, ``, req.ModelID, baseURL, apiKey, modelName)
+
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`chat_id`: chatID,
+	})
+}
+
+// TaskWorkflowChatContinue 继续已有对话。
+func TaskWorkflowChatContinue(c *gin.Context) {
+	var req _struct.TaskWorkflowChatContinueRequest
+	if err := gsgin.GinPostBody(c, &req); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	if req.ChatID <= 0 {
+		gsgin.GinResponseError(c, `对话id不能为空`, nil)
+		return
+	}
+	if strings.TrimSpace(req.Prompt) == `` {
+		gsgin.GinResponseError(c, `提示词不能为空`, nil)
+		return
+	}
+
+	chatInfo, err := common.DbMain.TaskWorkflowChatInfo(int64(req.ChatID))
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	sessionID := cast.ToString(chatInfo[`session_id`])
+	if sessionID == `` {
+		gsgin.GinResponseError(c, `对话未找到有效的 session_id`, nil)
+		return
+	}
+	localDir := cast.ToString(chatInfo[`local_dir`])
+	if localDir == `` {
+		gsgin.GinResponseError(c, `对话未找到工作目录`, nil)
+		return
+	}
+	modelID := cast.ToInt(chatInfo[`model_id`])
+	if modelID <= 0 {
+		gsgin.GinResponseError(c, `对话未找到模型配置`, nil)
+		return
+	}
+
+	modelInfo, err := common.DbMain.AiModelInfo(modelID)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	baseURL := strings.TrimSpace(cast.ToString(modelInfo[`base_url`]))
+	apiKey := strings.TrimSpace(cast.ToString(modelInfo[`api_key`]))
+	modelName := strings.TrimSpace(cast.ToString(modelInfo[`model`]))
+
+	_ = common.DbMain.TaskWorkflowChatMarkRunning(int64(req.ChatID))
+
+	go runClaudeCommand(int64(req.ChatID), localDir, req.Prompt, true, sessionID, modelID, baseURL, apiKey, modelName)
+
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`chat_id`: req.ChatID,
+	})
+}
+
+// TaskWorkflowChatList 列出工作流的所有对话。
+func TaskWorkflowChatList(c *gin.Context) {
+	var req _struct.TaskWorkflowChatListRequest
+	if err := gsgin.GinPostBody(c, &req); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	if req.WorkflowID <= 0 {
+		gsgin.GinResponseError(c, `工作流id不能为空`, nil)
+		return
+	}
+	rows, err := common.DbMain.TaskWorkflowChatList(req.WorkflowID)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	type chatItem struct {
+		ID        int64  `json:"id"`
+		SessionID string `json:"session_id"`
+		Prompt    string `json:"prompt"`
+		ModelID   int    `json:"model_id"`
+		LocalDir  string `json:"local_dir"`
+		Status    string `json:"status"`
+		CreatedAt string `json:"created_at"`
+	}
+	list := make([]chatItem, 0, len(rows))
+	for _, row := range rows {
+		list = append(list, chatItem{
+			ID:        cast.ToInt64(row[`id`]),
+			SessionID: cast.ToString(row[`session_id`]),
+			Prompt:    cast.ToString(row[`prompt`]),
+			ModelID:   cast.ToInt(row[`model_id`]),
+			LocalDir:  cast.ToString(row[`local_dir`]),
+			Status:    cast.ToString(row[`status`]),
+			CreatedAt: cast.ToString(row[`created_at`]),
+		})
+	}
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`list`: list,
+	})
+}
+
+// TaskWorkflowChatDetail 获取对话详情（含原始输出行）。
+func TaskWorkflowChatDetail(c *gin.Context) {
+	var req _struct.TaskWorkflowChatDetailRequest
+	if err := gsgin.GinPostBody(c, &req); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	if req.ChatID <= 0 {
+		gsgin.GinResponseError(c, `对话id不能为空`, nil)
+		return
+	}
+	info, err := common.DbMain.TaskWorkflowChatInfo(int64(req.ChatID))
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	if len(info) == 0 {
+		gsgin.GinResponseError(c, `对话不存在`, nil)
+		return
+	}
+
+	rawOutput := cast.ToString(info[`raw_output`])
+	lines := []string{}
+	if rawOutput != `` {
+		lines = strings.Split(rawOutput, "\n")
+	}
+
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`chat_id`:    info[`id`],
+		`session_id`: info[`session_id`],
+		`prompt`:     info[`prompt`],
+		`model_id`:   info[`model_id`],
+		`local_dir`:  info[`local_dir`],
+		`status`:     info[`status`],
+		`created_at`: info[`created_at`],
+		`lines`:      lines,
+	})
+}
+
+// TaskWorkflowChatDirs 获取当前任务可选的工作目录列表。
+func TaskWorkflowChatDirs(c *gin.Context) {
+	var req _struct.TaskWorkflowChatDirsRequest
+	if err := gsgin.GinPostBody(c, &req); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	if req.WorkflowID <= 0 {
+		gsgin.GinResponseError(c, `工作流id不能为空`, nil)
+		return
+	}
+
+	workflowInfo, err := common.DbMain.TaskWorkflowInfo(req.WorkflowID)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskInfo, err := common.DbMain.HomeTaskRow(cast.ToInt(workflowInfo[`home_task_id`]))
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	devConfigs := homeTaskDevConfigs(homeTaskInfo)
+	seen := map[string]bool{}
+	dirs := make([]string, 0)
+	for _, cfg := range devConfigs {
+		dir := strings.TrimSpace(cfg.LocalDir)
+		if dir == `` || seen[dir] {
+			continue
+		}
+		if info, statErr := os.Stat(dir); statErr != nil || !info.IsDir() {
+			continue
+		}
+		seen[dir] = true
+		dirs = append(dirs, dir)
+	}
+	if len(dirs) == 0 {
+		gsgin.GinResponseError(c, `开发配置中没有可用的本地目录`, nil)
+		return
+	}
+
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`dirs`: dirs,
+	})
+}
+
+// TaskWorkflowZcodeSave 保存 zcode 工作目录配置，自动扫描子文件夹解析项目映射。
+func TaskWorkflowZcodeSave(c *gin.Context) {
+	var req _struct.TaskWorkflowZcodeSaveRequest
+	if err := gsgin.GinPostBody(c, &req); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	zcodeDir := strings.TrimSpace(req.ZcodeDir)
+	if zcodeDir == `` {
+		gsgin.GinResponseError(c, `zcode 工作目录地址不能为空`, nil)
+		return
+	}
+	info, err := os.Stat(zcodeDir)
+	if err != nil || !info.IsDir() {
+		gsgin.GinResponseError(c, `zcode 工作目录不存在或不是目录: `+zcodeDir, nil)
+		return
+	}
+	configID, err := common.DbMain.ZcodeConfigSave(zcodeDir)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	// 扫描子文件夹，解析 workspace-path.txt
+	projects, scanErr := scanZcodeProjects(zcodeDir)
+	if scanErr != nil {
+		gsgin.GinResponseError(c, scanErr.Error(), nil)
+		return
+	}
+	// 批量替换映射
+	items := make([]common.ZcodeProjectMappingItem, 0, len(projects))
+	for _, p := range projects {
+		items = append(items, common.ZcodeProjectMappingItem{
+			ProjectKey:    p.ProjectKey,
+			WorkspacePath: p.WorkspacePath,
+			SettingsPath:  p.SettingsPath,
+		})
+	}
+	if err := common.DbMain.ZcodeProjectMappingReplace(configID, items); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`zcode_dir`: zcodeDir,
+		`projects`:  projects,
+	})
+}
+
+// TaskWorkflowZcodeGet 获取当前 zcode 配置及所有项目映射。
+func TaskWorkflowZcodeGet(c *gin.Context) {
+	config, err := common.DbMain.ZcodeConfigGet()
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	zcodeDir := ``
+	if config != nil {
+		zcodeDir = cast.ToString(config[`zcode_dir`])
+	}
+	rows, err := common.DbMain.ZcodeProjectMappingList()
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	projects := make([]_struct.TaskWorkflowZcodeProjectItem, 0, len(rows))
+	for _, row := range rows {
+		projects = append(projects, _struct.TaskWorkflowZcodeProjectItem{
+			ProjectKey:    cast.ToString(row[`project_key`]),
+			WorkspacePath: cast.ToString(row[`workspace_path`]),
+			SettingsPath:  cast.ToString(row[`settings_path`]),
+		})
+	}
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`zcode_dir`: zcodeDir,
+		`projects`:  projects,
+	})
+}
+
+// TaskWorkflowZcodeDelete 删除 zcode 配置及所有关联的项目映射。
+func TaskWorkflowZcodeDelete(c *gin.Context) {
+	config, err := common.DbMain.ZcodeConfigGet()
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	if config == nil {
+		gsgin.GinResponseSuccess(c, `已删除`, nil)
+		return
+	}
+	configID := cast.ToInt64(config[`id`])
+	_ = common.DbMain.ZcodeProjectMappingReplace(configID, nil)
+	if err := common.DbMain.ZcodeConfigDelete(); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	gsgin.GinResponseSuccess(c, `已删除`, nil)
+}
+
+// zcodeLookupSettingsPath 根据本地目录精确匹配 zcode 项目映射中的 settings 路径。
+func zcodeLookupSettingsPath(localDir string) string {
+	localDir = strings.TrimSpace(localDir)
+	if localDir == `` {
+		return ``
+	}
+	row, err := common.DbMain.ZcodeProjectMappingGetByWorkspacePath(localDir)
+	if err != nil || row == nil {
+		return ``
+	}
+	return cast.ToString(row[`settings_path`])
+}
+
+// scanZcodeProjects 遍历 zcode 目录下的子文件夹，读取 workspace-path.txt 并构建映射。
+func scanZcodeProjects(zcodeDir string) ([]_struct.TaskWorkflowZcodeProjectItem, error) {
+	entries, err := os.ReadDir(zcodeDir)
+	if err != nil {
+		return nil, err
+	}
+	var projects []_struct.TaskWorkflowZcodeProjectItem
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		subDir := filepath.Join(zcodeDir, entry.Name())
+		wsPathFile := filepath.Join(subDir, `workspace-path.txt`)
+		data, err := os.ReadFile(wsPathFile)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				return nil, err
+			}
+			continue
+		}
+		workspacePath := strings.TrimSpace(string(data))
+		if workspacePath == `` {
+			continue
+		}
+		settingsPath := filepath.Join(subDir, `settings.json`)
+		projects = append(projects, _struct.TaskWorkflowZcodeProjectItem{
+			ProjectKey:    entry.Name(),
+			WorkspacePath: workspacePath,
+			SettingsPath:  filepath.ToSlash(settingsPath),
+		})
+	}
+	return projects, nil
+}
+
+// taskWorkflowBuildZcodeMarkdown 构建 zcode 配置列表的 Markdown 文本用于占位符替换。
+func taskWorkflowBuildZcodeMarkdown() string {
+	rows, err := common.DbMain.ZcodeProjectMappingList()
+	if err != nil || len(rows) == 0 {
+		return ``
+	}
+	var sb strings.Builder
+	sb.WriteString("| 工作目录 | Settings 配置文件 |\n")
+	sb.WriteString("|----------|------------------|\n")
+	for _, row := range rows {
+		ws := cast.ToString(row[`workspace_path`])
+		sp := cast.ToString(row[`settings_path`])
+		sb.WriteString(fmt.Sprintf("| %s | %s |\n", ws, sp))
+	}
+	return sb.String()
+}
+
+// runClaudeCommand 后台执行 claude 命令并捕获输出。
+func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sessionID string, modelID int, baseURL, apiKey, modelName string) {
+	cfg := p_claude.RunConfig{
+		Prompt:      prompt,
+		SessionID:   sessionID,
+		Model:       modelName,
+		BaseURL:     baseURL,
+		APIKey:      apiKey,
+		WorkingDir:  localDir,
+		UserDataDir: p_claude.DefaultUserDataDir,
+	}
+
+	// 记录命令行
+	cmdDisplay := buildClaudeCmdDisplay(cfg, isResume)
+	cmdLineJSON, _ := json.Marshal(map[string]string{
+		`type`:    `system`,
+		`subtype`: `command`,
+		`text`:    cmdDisplay,
+	})
+	_ = common.DbMain.TaskWorkflowChatAppendOutput(chatID, string(cmdLineJSON))
+	broadcastChatOutput(chatID, string(cmdLineJSON))
+
+	ctx := context.Background()
+	sessionExtracted := false
+	callbackCount := 0
+
+	gstool.FmtPrintlnLogTime("[chat-run] chat_id=%d 开始RunClaudeStream dir=%s model=%s", chatID, localDir, modelName)
+
+	_, err := p_claude.RunClaudeStream(ctx, cfg, func(msg p_claude.StreamMessage) {
+		callbackCount++
+		if callbackCount <= 3 {
+			gstool.FmtPrintlnLogTime("[chat-run] callback:%d type=%s subtype=%s len=%d", callbackCount, msg.Type, msg.Subtype, len(msg.RawJSON))
+		}
+		_ = common.DbMain.TaskWorkflowChatAppendOutput(chatID, msg.RawJSON)
+		broadcastChatOutput(chatID, msg.RawJSON)
+
+		if !sessionExtracted && !isResume && msg.Type == `system` && msg.Subtype == `init` {
+			if sid, ok := msg.Data[`session_id`].(string); ok && sid != `` {
+				_ = common.DbMain.TaskWorkflowChatUpdateSessionID(chatID, sid)
+				sessionExtracted = true
+			}
+		}
+	})
+
+	gstool.FmtPrintlnLogTime("[chat-run] chat_id=%d RunClaudeStream结束 callbackCount=%d err=%v", chatID, callbackCount, err)
+
+	if err != nil {
+		errJSON, _ := json.Marshal(map[string]string{
+			`type`: `error`,
+			`text`: err.Error(),
+		})
+		_ = common.DbMain.TaskWorkflowChatAppendOutput(chatID, string(errJSON))
+		broadcastChatOutput(chatID, string(errJSON))
+	}
+
+	_ = common.DbMain.TaskWorkflowChatMarkCompleted(chatID)
+	broadcastChatOutput(chatID, fmt.Sprintf(`{"type":"chat","subtype":"completed","chat_id":%d}`, chatID))
+}
+
+// buildClaudeCmdDisplay 构建命令展示字符串。
+func buildClaudeCmdDisplay(cfg p_claude.RunConfig, isResume bool) string {
+	parts := []string{`claude`}
+	if isResume {
+		parts = append(parts, `--resume`, cfg.SessionID)
+	}
+	parts = append(parts,
+		`-p`, `"`+truncateForDisplay(cfg.Prompt, 80)+`"`,
+		`--add-dir`, cfg.WorkingDir,
+		`--model`, cfg.Model,
+		`--output-format`, `stream-json`,
+		`--verbose`,
+	)
+	return strings.Join(parts, ` `)
+}
+
+// truncateForDisplay 截断超长文本用于展示。
+func truncateForDisplay(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + `...`
+}
+
+// taskWorkflowAutoCompleteNode 自动将指定节点标记为已完成。
+func taskWorkflowAutoCompleteNode(workflowInfo map[string]any, nodeKey string) {
+	workflowID := cast.ToInt(workflowInfo[`id`])
+	if workflowID <= 0 {
+		return
+	}
+	nodeStatuses := make(map[string]string)
+	if raw := strings.TrimSpace(cast.ToString(workflowInfo[`node_statuses`])); raw != `` {
+		_ = json.Unmarshal([]byte(raw), &nodeStatuses)
+	}
+	nodeStatuses[nodeKey] = `completed`
+	if data, err := json.Marshal(nodeStatuses); err == nil {
+		_ = common.DbMain.TaskWorkflowUpdateNodeStatuses(workflowID, string(data))
+	}
 }

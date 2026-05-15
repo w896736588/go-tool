@@ -499,6 +499,91 @@ func (h *CSqlite) PromptChangeLogSave(configKey, configName, oldValue, newValue 
 	return err
 }
 
+// ZcodeConfigGet 获取 zcode 配置（全局只有一条）。
+func (h *CSqlite) ZcodeConfigGet() (map[string]any, error) {
+	one, err := h.Client.QuickQuery(`tbl_zcode_config`, `*`, nil).Order(`id desc`).One()
+	if err != nil {
+		if DbRowMissing(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return one, nil
+}
+
+// ZcodeConfigSave 保存 zcode 配置（upsert，始终只有一条记录）。
+func (h *CSqlite) ZcodeConfigSave(zcodeDir string) (int64, error) {
+	now := time.Now().Unix()
+	one, _ := h.Client.QuickQuery(`tbl_zcode_config`, `*`, nil).Order(`id desc`).One()
+	updateData := map[string]any{
+		`zcode_dir`:  zcodeDir,
+		`updated_at`: cast.ToString(now),
+	}
+	if one != nil && cast.ToInt(one[`id`]) > 0 {
+		id := cast.ToInt64(one[`id`])
+		_, err := h.Client.QuickUpdate(`tbl_zcode_config`, map[string]any{`id`: id}, updateData).Exec()
+		return id, err
+	}
+	updateData[`created_at`] = cast.ToString(now)
+	newID, err := h.Client.QuickCreate(`tbl_zcode_config`, updateData).Exec()
+	return newID, err
+}
+
+// ZcodeConfigDelete 删除 zcode 配置。
+func (h *CSqlite) ZcodeConfigDelete() error {
+	_, err := h.Client.QuickDelete(`tbl_zcode_config`, nil).Exec()
+	return err
+}
+
+// ZcodeProjectMappingReplace 替换 zcode 项目映射：先删除旧数据再批量插入。
+func (h *CSqlite) ZcodeProjectMappingReplace(configID int64, items []ZcodeProjectMappingItem) error {
+	if configID <= 0 {
+		return nil
+	}
+	// 删除该 config 下的所有旧映射
+	_, _ = h.Client.QuickDelete(`tbl_zcode_project_mapping`, map[string]any{
+		`zcode_config_id`: configID,
+	}).Exec()
+	for _, item := range items {
+		_, err := h.Client.QuickCreate(`tbl_zcode_project_mapping`, map[string]any{
+			`zcode_config_id`: configID,
+			`project_key`:     item.ProjectKey,
+			`workspace_path`:  item.WorkspacePath,
+			`settings_path`:   item.SettingsPath,
+		}).Exec()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ZcodeProjectMappingItem 项目映射条目。
+type ZcodeProjectMappingItem struct {
+	ProjectKey    string
+	WorkspacePath string
+	SettingsPath  string
+}
+
+// ZcodeProjectMappingList 获取所有项目映射。
+func (h *CSqlite) ZcodeProjectMappingList() ([]map[string]any, error) {
+	return h.Client.QuickQuery(`tbl_zcode_project_mapping`, `*`, nil).All()
+}
+
+// ZcodeProjectMappingGetByWorkspacePath 按工作目录精确匹配 settings 路径。
+func (h *CSqlite) ZcodeProjectMappingGetByWorkspacePath(workspacePath string) (map[string]any, error) {
+	one, err := h.Client.QuickQuery(`tbl_zcode_project_mapping`, `*`, map[string]any{
+		`workspace_path`: workspacePath,
+	}).One()
+	if err != nil {
+		if DbRowMissing(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return one, nil
+}
+
 // PromptChangeLogList 查询提示词变更日志，返回最近 limit 条记录。
 func (h *CSqlite) PromptChangeLogList(limit int) ([]map[string]any, error) {
 	if limit <= 0 {

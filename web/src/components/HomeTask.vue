@@ -21,10 +21,9 @@
       </div>
     </div>
 
-    <div class="home-task-content-card">
-
+    <div class="home-task-tabs-bar">
       <el-tabs v-model="homeTaskActiveTab" class="home-task-tabs" @tab-change="handleHomeTaskTabChange">
-        <el-tab-pane label="活跃中" :name="HOME_TASK_TAB_ACTIVE">
+        <el-tab-pane :label="'活跃中 (' + homeTaskActiveList.length + ')'" :name="HOME_TASK_TAB_ACTIVE">
           <div v-loading="homeTaskLoadingActive" class="home-task-list">
             <div v-if="homeTaskActiveList.length === 0" class="home-task-empty">
               当前没有未归档任务
@@ -42,12 +41,6 @@
                     <span>开始时间：{{ task.start_time_desc || '-' }}</span>
                     <span>最后操作：{{ task.last_operated_at_desc || '-' }}</span>
                     <a v-if="task.tapd_url" :href="task.tapd_url" target="_blank" class="home-task-card__tapd-link">TAPD需求</a>
-                    <span class="home-task-card__status-group">
-                      <el-tag size="small" effect="light" :type="getHomeTaskStatusTagType(task.task_status)">
-                        {{ task.task_status }}
-                      </el-tag>
-
-                    </span>
                   </div>
                   <table v-if="Number(task.use_workflow) !== HOME_TASK_USE_WORKFLOW_NO && getHomeTaskDevConfigTags(task).length > 0" class="home-task-config-table">
                     <thead>
@@ -113,7 +106,7 @@
                       :loading="isHomeTaskBusy(task.id, HOME_TASK_OPERATE_STATUS) || isHomeTaskBusy(task.id, HOME_TASK_OPERATE_ARCHIVE)"
                       :variant="getHomeTaskActionButtonVariant(task.task_status)"
                     >
-                      状态变更
+                      状态变更（{{ task.task_status }}）
                     </GitActionButton>
                     <template #dropdown>
                       <el-dropdown-menu>
@@ -153,7 +146,7 @@
             </div>
           </div>
         </el-tab-pane>
-        <el-tab-pane label="归档" :name="HOME_TASK_TAB_ARCHIVED">
+        <el-tab-pane :label="'归档 (' + homeTaskArchivedList.length + ')'" :name="HOME_TASK_TAB_ARCHIVED">
           <div v-loading="homeTaskLoadingArchived" class="home-task-list">
             <div v-if="homeTaskArchivedList.length === 0" class="home-task-empty">
               当前没有归档任务
@@ -171,12 +164,8 @@
                     <span>开始时间：{{ task.start_time_desc || '-' }}</span>
                     <span>最后操作：{{ task.last_operated_at_desc || '-' }}</span>
                     <a v-if="task.tapd_url" :href="task.tapd_url" target="_blank" class="home-task-card__tapd-link">TAPD需求</a>
-                    <span class="home-task-card__status-group">
-                      <el-tag size="small" effect="light" :type="getHomeTaskStatusTagType(task.task_status)">
-                        {{ task.task_status }}
-                      </el-tag>
+                    <span v-if="hasHomeTaskMemoryFragment(task)" class="home-task-card__status-group">
                       <el-tag
-                        v-if="hasHomeTaskMemoryFragment(task)"
                         size="small"
                         effect="plain"
                         class="home-task-memory-link-tag"
@@ -250,7 +239,7 @@
                       :loading="isHomeTaskBusy(task.id, HOME_TASK_OPERATE_STATUS) || isHomeTaskBusy(task.id, HOME_TASK_OPERATE_ARCHIVE)"
                       :variant="getHomeTaskActionButtonVariant(task.task_status)"
                     >
-                      状态变更
+                      状态变更（{{ task.task_status }}）
                     </GitActionButton>
                     <template #dropdown>
                       <el-dropdown-menu>
@@ -1147,7 +1136,7 @@ export default {
         task_status: task.task_status || HOME_TASK_STATUS_TODO,
         start_date: task.start_time_desc || getTodayDateText(),
         tapd_url: task.tapd_url || '',
-        use_workflow: Number(task.use_workflow || HOME_TASK_USE_WORKFLOW_YES) === HOME_TASK_USE_WORKFLOW_YES ? HOME_TASK_USE_WORKFLOW_YES : HOME_TASK_USE_WORKFLOW_NO,
+        use_workflow: Number(task.use_workflow ?? HOME_TASK_USE_WORKFLOW_YES) === HOME_TASK_USE_WORKFLOW_YES ? HOME_TASK_USE_WORKFLOW_YES : HOME_TASK_USE_WORKFLOW_NO,
         dev_configs: devConfigs,
       }
       this.loadHomeTaskGitRepoList()
@@ -1353,6 +1342,8 @@ export default {
           smart_link_label: String(cfg.smart_link_label || '').trim(),
           smart_link_account: String(cfg.smart_link_account || '').trim(),
         }))
+      const isEdit = this.homeTaskForm.id > 0
+      const useWorkflow = this.homeTaskForm.use_workflow
       this.homeTaskSaving = true
       this.homeTaskOperatingType = HOME_TASK_OPERATE_SAVE
       homeTaskApi.HomeTaskSave({
@@ -1362,7 +1353,7 @@ export default {
         start_time: this.convertHomeTaskDateToUnix(this.homeTaskForm.start_date),
         tapd_url: String(this.homeTaskForm.tapd_url || '').trim(),
         dev_configs: JSON.stringify(validConfigs),
-        use_workflow: this.homeTaskForm.use_workflow,
+        use_workflow: useWorkflow,
         api_host: base.GetApiHost() || window.location.origin,
         api_token: base.GetSafeToken(),
       }, (response) => {
@@ -1372,7 +1363,6 @@ export default {
           this.$helperNotify.error(response?.ErrMsg || '任务保存失败')
           return
         }
-        const isEdit = this.homeTaskForm.id > 0
         const createdTaskId = Number(response?.Data?.id || 0)
         this.$helperNotify.success(isEdit ? '任务已更新' : '任务已创建')
         this.closeHomeTaskDialog()
@@ -1381,7 +1371,7 @@ export default {
           this.triggerHomeTaskEditFeedback(taskId)
         }
         this.refreshAllHomeTaskList()
-        if (!isEdit && createdTaskId > 0 && this.homeTaskForm.use_workflow === HOME_TASK_USE_WORKFLOW_YES) {
+        if (!isEdit && createdTaskId > 0 && useWorkflow === HOME_TASK_USE_WORKFLOW_YES) {
           this.openTaskWorkflow({ id: createdTaskId })
         }
       })

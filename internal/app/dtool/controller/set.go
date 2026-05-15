@@ -48,7 +48,7 @@ func SetSshList(c *gin.Context) {
 				Func: func() *gstask.Result {
 					return testSshConn(sshValue)
 				},
-				Timeout: 3 * time.Second,
+				Timeout: getSshTimeout(sshValue),
 				Id:      cast.ToString(sshValue[`id`]),
 			}
 			task.Add(callBack)
@@ -83,7 +83,7 @@ func SetSshList(c *gin.Context) {
 func SetSshAdd(c *gin.Context) {
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
-	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `host`, `port`, `username`, `password`, `home`})
+	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `host`, `port`, `username`, `password`, `home`, `connect_timeout`, `post_connect_cmds`, `cmd_timeout`})
 	var err error
 	if cast.ToInt(dataMap[`id`]) == 0 {
 		updateData[`create_time`] = time.Now().Unix()
@@ -429,6 +429,14 @@ func testRedisConn(redisConfig map[string]any) *gstask.Result {
 		Err:    nil,
 		Result: redisConfig[`id`],
 	}
+}
+
+func getSshTimeout(sshConfig map[string]any) time.Duration {
+	timeout := cast.ToInt(sshConfig["connect_timeout"])
+	if timeout <= 0 {
+		return 3 * time.Second
+	}
+	return time.Duration(timeout) * time.Second
 }
 
 func testSshConn(sshConfig map[string]any) *gstask.Result {
@@ -1557,6 +1565,11 @@ func SetHomeTaskConfigGet(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
+	promptIssueFix, err := homeTaskConfigValue(define.HomeTaskConfigPromptIssueFix)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
 	devEnvironment, err := homeTaskConfigValue(define.HomeTaskConfigDevEnvironment)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
@@ -1587,6 +1600,7 @@ func SetHomeTaskConfigGet(c *gin.Context) {
 		`home_task_prompt_plain_text_requirement`: promptPlainTextRequirement,
 		`home_task_prompt_browser_test`:           promptBrowserTest,
 		`home_task_prompt_code_review`:            promptCodeReview,
+		`home_task_prompt_issue_fix`:              promptIssueFix,
 		`home_task_dev_environment`:               devEnvironment,
 		`home_task_branch_name_prompt`:            branchNamePrompt,
 		`home_task_branch_name_model_id`:          cast.ToInt(branchNameModelID),
@@ -1604,6 +1618,7 @@ var promptConfigKeys = map[string]string{
 	define.HomeTaskConfigPromptPlainTextReq: `纯文本TAPD需求提示词`,
 	define.HomeTaskConfigPromptBrowserTest:  `需求核对浏览器测试提示词`,
 	define.HomeTaskConfigPromptCodeReview:   `代码检查提示词`,
+	define.HomeTaskConfigPromptIssueFix:    `问题修改提示词`,
 	define.HomeTaskConfigDevEnvironment:     `开发环境`,
 	define.HomeTaskConfigBranchNamePrompt:   `分支名生成提示词`,
 }
@@ -1712,6 +1727,12 @@ func SetHomeTaskConfigSave(c *gin.Context) {
 	homeTaskPromptCodeReview := strings.TrimSpace(cast.ToString(dataMap[`home_task_prompt_code_review`]))
 	saveHomeTaskPromptWithLog(define.HomeTaskConfigPromptCodeReview, `代码检查提示词`, homeTaskPromptCodeReview, `工作流-代码检查提示词模板`)
 	if err := common.DbMain.HomeTaskConfigSave(`代码检查提示词`, define.HomeTaskConfigPromptCodeReview, homeTaskPromptCodeReview, `工作流-代码检查提示词模板`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskPromptIssueFix := strings.TrimSpace(cast.ToString(dataMap[`home_task_prompt_issue_fix`]))
+	saveHomeTaskPromptWithLog(define.HomeTaskConfigPromptIssueFix, `问题修改提示词`, homeTaskPromptIssueFix, `工作流-问题修改提示词模板`)
+	if err := common.DbMain.HomeTaskConfigSave(`问题修改提示词`, define.HomeTaskConfigPromptIssueFix, homeTaskPromptIssueFix, `工作流-问题修改提示词模板`); err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
@@ -1865,6 +1886,63 @@ func SetLocalDirBatchCheck(c *gin.Context) {
 		result[dirPath] = statErr == nil && info.IsDir()
 	}
 	gsgin.GinResponseSuccess(c, ``, result)
+}
+
+// SetSshStatus 根据传入的 ssh_id 列表批量检测连接状态，返回 id→状态 的 map。
+func SetSshStatus(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	sshIdsRaw, _ := dataMap[`ssh_ids`].([]any)
+	if len(sshIdsRaw) == 0 {
+		gsgin.GinResponseSuccess(c, ``, map[string]string{})
+		return
+	}
+	// 收集 ID 列表并去重
+	idSet := make(map[int]bool)
+	for _, idRaw := range sshIdsRaw {
+		idSet[cast.ToInt(idRaw)] = true
+	}
+	ids := make([]int, 0, len(idSet))
+	for id := range idSet {
+		ids = append(ids, id)
+	}
+	// 按 ID 查 tbl_ssh
+	all, allErr := common.DbMain.Client.QuickQuery(`tbl_ssh`, `*`, nil).All()
+	if allErr != nil {
+		gsgin.GinResponseError(c, allErr.Error(), nil)
+		return
+	}
+	sshConfigs := make(map[int]map[string]any)
+	for _, row := range all {
+		rowID := cast.ToInt(row[`id`])
+		if idSet[rowID] {
+			sshConfigs[rowID] = row
+		}
+	}
+	// 并发检测连接状态
+	task := gstask.NewTask()
+	for id, cfg := range sshConfigs {
+		callBack := gstask.CallbackFunc{
+			Func: func() *gstask.Result {
+				return testSshConn(cfg)
+			},
+			Timeout: getSshTimeout(cfg),
+			Id:      cast.ToString(id),
+		}
+		task.Add(callBack)
+	}
+	resultList := task.RunAll()
+	// 组装结果
+	statusMap := make(map[string]string)
+	for _, result := range resultList {
+		sshID := result.Id
+		if result.Err != nil {
+			statusMap[sshID] = result.Err.Error()
+		} else {
+			statusMap[sshID] = `success`
+		}
+	}
+	gsgin.GinResponseSuccess(c, ``, statusMap)
 }
 
 // SetPromptChangeLogList 返回提示词变更日志（最近 20 条）。

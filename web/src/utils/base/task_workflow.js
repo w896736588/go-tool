@@ -55,6 +55,69 @@ function TaskWorkflowNodeStatusUpdate(workflowId, nodeStatuses, callBack) {
   }, callBack)
 }
 
+// TaskWorkflowIssueFixResolve 解析问题修改提示词模板。
+function TaskWorkflowIssueFixResolve(workflowId, callBack) {
+  base.BasePost('/api/task/workflow/issue-fix/resolve', {
+    workflow_id: workflowId,
+  }, callBack)
+}
+
+// TaskWorkflowChatSend 发送对话到 claude code。
+function TaskWorkflowChatSend(workflowId, prompt, modelId, localDir, callBack) {
+  base.BasePost('/api/task/workflow/chat/send', {
+    workflow_id: workflowId,
+    prompt: prompt,
+    model_id: modelId,
+    local_dir: localDir,
+  }, callBack)
+}
+
+// TaskWorkflowChatContinue 继续已有对话。
+function TaskWorkflowChatContinue(chatId, prompt, callBack) {
+  base.BasePost('/api/task/workflow/chat/continue', {
+    chat_id: chatId,
+    prompt: prompt,
+  }, callBack)
+}
+
+// TaskWorkflowChatList 列出对话列表。
+function TaskWorkflowChatList(workflowId, callBack) {
+  base.BasePost('/api/task/workflow/chat/list', {
+    workflow_id: workflowId,
+  }, callBack)
+}
+
+// TaskWorkflowChatDetail 获取对话详情。
+function TaskWorkflowChatDetail(chatId, callBack) {
+  base.BasePost('/api/task/workflow/chat/detail', {
+    chat_id: chatId,
+  }, callBack)
+}
+
+// TaskWorkflowChatDirs 获取可用的工作目录列表。
+function TaskWorkflowChatDirs(workflowId, callBack) {
+  base.BasePost('/api/task/workflow/chat/dirs', {
+    workflow_id: workflowId,
+  }, callBack)
+}
+
+// TaskWorkflowZcodeSave 保存 zcode 工作目录配置。
+function TaskWorkflowZcodeSave(zcodeDir, callBack) {
+  base.BasePost('/api/task/workflow/zcode/save', {
+    zcode_dir: zcodeDir,
+  }, callBack)
+}
+
+// TaskWorkflowZcodeGet 获取当前 zcode 配置及项目映射。
+function TaskWorkflowZcodeGet(callBack) {
+  base.BasePost('/api/task/workflow/zcode/get', {}, callBack)
+}
+
+// TaskWorkflowZcodeDelete 删除 zcode 配置。
+function TaskWorkflowZcodeDelete(callBack) {
+  base.BasePost('/api/task/workflow/zcode/delete', {}, callBack)
+}
+
 export default {
   TaskWorkflowBatchNodeStatus,
   TaskWorkflowCreateOrGet,
@@ -64,4 +127,13 @@ export default {
   TaskWorkflowRequirementFetch,
   TaskWorkflowApiDocReset,
   TaskWorkflowNodeStatusUpdate,
+  TaskWorkflowIssueFixResolve,
+  TaskWorkflowChatSend,
+  TaskWorkflowChatContinue,
+  TaskWorkflowChatList,
+  TaskWorkflowChatDetail,
+  TaskWorkflowChatDirs,
+  TaskWorkflowZcodeSave,
+  TaskWorkflowZcodeGet,
+  TaskWorkflowZcodeDelete,
 }

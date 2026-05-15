@@ -127,8 +127,8 @@ func (h *TShellOut) GetClient(sshConfig map[string]any, shellClientId string, ss
 		Echo:  1,
 	})
 
-	if err := gsShell.RunCommand(`pwd`); err != nil {
-		gstool.FmtPrintlnLogTime(`shell out 执行失败 %s`, err.Error())
+	if err := runShellOutPostConnectCmds(gsShell, sshConfig); err != nil {
+		gstool.FmtPrintlnLogTime(`shell out 连接后命令执行失败 %s`, err.Error())
 		if sse != nil {
 			sse.Send(" [shell_out] 连接建立失败: " + err.Error() + "\n")
 		}
@@ -596,4 +596,30 @@ func (h *TShellOut) ShellOutSearchContent(shellClientId string, searchContent st
 		return true
 	})
 	return searchs, len(searchs)
+}
+
+// runShellOutPostConnectCmds 从 SSH 配置中读取连接后命令列表，每行一条，空则回退 pwd，遇错停止。
+func runShellOutPostConnectCmds(gsShell *gsssh.SshTerminal, sshConfig map[string]any) error {
+	cmdsRaw := strings.TrimSpace(cast.ToString(sshConfig["post_connect_cmds"]))
+	var cmds []string
+	if cmdsRaw == "" {
+		cmds = []string{"pwd"}
+	} else {
+		for _, line := range strings.Split(cmdsRaw, "\n") {
+			line = strings.TrimSpace(line)
+			if line != "" {
+				cmds = append(cmds, line)
+			}
+		}
+	}
+	if len(cmds) == 0 {
+		cmds = []string{"pwd"}
+	}
+
+	for _, cmd := range cmds {
+		if err := gsShell.RunCommand(cmd); err != nil {
+			return err
+		}
+	}
+	return nil
 }

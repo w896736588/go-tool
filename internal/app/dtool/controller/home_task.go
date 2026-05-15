@@ -497,7 +497,7 @@ func HomeTaskBranchNameGenerate(c *gin.Context) {
 	}
 	prompt = strings.TrimSpace(prompt)
 	if prompt == "" {
-		prompt = "请根据以下信息生成分支名：\n需求名：{需求名}\n基于分支：{父分支}\n\n要求：只输出分支名，不要附加解释。分支名使用英文小写，单词间用下划线连接，格式如 feature_xxx 或 fix_xxx。"
+		prompt = "请根据以下信息生成分支名：\n需求名：{需求名}\n基于分支：{父分支}\n\n要求：只输出分支名，不要附加解释。分支名使用英文小写，单词间用下划线连接，格式如 feature_xxx 或 fix_xxx，分支名中最多包含1-3个业务单词。"
 	}
 	prompt = strings.ReplaceAll(prompt, "{需求名}", taskName)
 	prompt = strings.ReplaceAll(prompt, "{父分支}", parentBranch)
@@ -514,4 +514,26 @@ func HomeTaskBranchNameGenerate(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, "", map[string]any{
 		"branch_name": result,
 	})
+}
+
+// HomeTaskZcodeSessionIdAppend 向任务追加一个 zcode 对话 sessionId。
+func HomeTaskZcodeSessionIdAppend(c *gin.Context) {
+	var req _struct.HomeTaskZcodeSessionIdAppendRequest
+	if err := gsgin.GinPostBody(c, &req); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	if req.ID <= 0 {
+		gsgin.GinResponseError(c, `任务id不能为空`, nil)
+		return
+	}
+	if strings.TrimSpace(req.SessionID) == `` {
+		gsgin.GinResponseError(c, `session_id不能为空`, nil)
+		return
+	}
+	if err := common.DbMain.HomeTaskZcodeSessionIdAppend(req.ID, strings.TrimSpace(req.SessionID)); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	gsgin.GinResponseSuccess(c, `已追加`, nil)
 }

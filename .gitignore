@@ -32,3 +32,7 @@ tmp/build-errors.log
 /skills/dtool-api.zip
 /web/download/*
 /test-results/.last-run.json
+*.log
+*verify.png
+node
+/skills/superpowers/
