@@ -63,12 +63,15 @@ function TaskWorkflowIssueFixResolve(workflowId, callBack) {
 }
 
 // TaskWorkflowChatSend 发送对话到 claude code。
-function TaskWorkflowChatSend(workflowId, prompt, modelId, localDir, callBack) {
+function TaskWorkflowChatSend(workflowId, prompt, modelName, promptType, localDir, cliType, modelId, callBack) {
   base.BasePost('/api/task/workflow/chat/send', {
     workflow_id: workflowId,
     prompt: prompt,
-    model_id: modelId,
+    model_name: modelName || '',
+    model_id: modelId || 0,
+    prompt_type: promptType || '',
     local_dir: localDir,
+    cli_type: cliType || 'claude',
   }, callBack)
 }
 
@@ -118,6 +121,14 @@ function TaskWorkflowZcodeDelete(callBack) {
   base.BasePost('/api/task/workflow/zcode/delete', {}, callBack)
 }
 
+// TaskWorkflowChatListByPromptType 按提示词类型查询对话列表。
+function TaskWorkflowChatListByPromptType(workflowId, promptType, callBack) {
+  base.BasePost('/api/task/workflow/chat/list-by-prompt-type', {
+    workflow_id: workflowId,
+    prompt_type: promptType,
+  }, callBack)
+}
+
 export default {
   TaskWorkflowBatchNodeStatus,
   TaskWorkflowCreateOrGet,
@@ -136,4 +147,5 @@ export default {
   TaskWorkflowZcodeSave,
   TaskWorkflowZcodeGet,
   TaskWorkflowZcodeDelete,
+  TaskWorkflowChatListByPromptType,
 }

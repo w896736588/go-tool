@@ -237,6 +237,13 @@
                   <template #icon><el-icon><CopyDocument /></el-icon></template>
                   复制提示词
                 </GitActionButton>
+                <GitActionButton compact variant="success" @click="openPromptExecDialog('plain_text_requirement', workflow.prompt_plain_text_requirement || '')">
+                  <template #icon><el-icon><VideoPlay /></el-icon></template>
+                  执行
+                </GitActionButton>
+                <GitActionButton compact variant="info" @click="openPromptChatHistory('plain_text_requirement')">
+                  执行历史
+                </GitActionButton>
                 <GitActionButton compact variant="warning" :loading="promptRestoring === 'plain_text_requirement'" @click="restorePrompts('plain_text_requirement')">
                   还原为默认提示词
                 </GitActionButton>
@@ -291,6 +298,13 @@
                   <template #icon><el-icon><CopyDocument /></el-icon></template>
                   复制提示词
                 </GitActionButton>
+                <GitActionButton compact variant="success" @click="openPromptExecDialog('requirement', workflow.prompt_requirement || '')">
+                  <template #icon><el-icon><VideoPlay /></el-icon></template>
+                  执行
+                </GitActionButton>
+                <GitActionButton compact variant="info" @click="openPromptChatHistory('requirement')">
+                  执行历史
+                </GitActionButton>
                 <GitActionButton compact variant="warning" :loading="promptRestoring === 'requirement'" @click="restorePrompts('requirement')">
                   还原为默认提示词
                 </GitActionButton>
@@ -325,6 +339,13 @@
                 <GitActionButton compact @click="copyText(workflow.prompt_design_plan_requirement || '', '提示词已复制')">
                   <template #icon><el-icon><CopyDocument /></el-icon></template>
                   复制提示词
+                </GitActionButton>
+                <GitActionButton compact variant="success" @click="openPromptExecDialog('design_plan_requirement', workflow.prompt_design_plan_requirement || '')">
+                  <template #icon><el-icon><VideoPlay /></el-icon></template>
+                  执行
+                </GitActionButton>
+                <GitActionButton compact variant="info" @click="openPromptChatHistory('design_plan_requirement')">
+                  执行历史
                 </GitActionButton>
                 <GitActionButton compact variant="warning" :loading="promptRestoring === 'design_plan_requirement'" @click="restorePrompts('design_plan_requirement')">
                   还原为默认提示词
@@ -366,6 +387,13 @@
                 <GitActionButton compact @click="copyText(workflow.prompt_design || '', '提示词已复制')">
                   <template #icon><el-icon><CopyDocument /></el-icon></template>
                   复制提示词
+                </GitActionButton>
+                <GitActionButton compact variant="success" @click="openPromptExecDialog('design', workflow.prompt_design || '')">
+                  <template #icon><el-icon><VideoPlay /></el-icon></template>
+                  执行
+                </GitActionButton>
+                <GitActionButton compact variant="info" @click="openPromptChatHistory('design')">
+                  执行历史
                 </GitActionButton>
                 <GitActionButton compact variant="warning" :loading="promptRestoring === 'design'" @click="restorePrompts('design')">
                   还原为默认提示词
@@ -411,6 +439,13 @@
                   <template #icon><el-icon><CopyDocument /></el-icon></template>
                   复制提示词
                 </GitActionButton>
+                <GitActionButton compact variant="success" @click="openPromptExecDialog('api_dev', workflow.prompt_api_dev || '')">
+                  <template #icon><el-icon><VideoPlay /></el-icon></template>
+                  执行
+                </GitActionButton>
+                <GitActionButton compact variant="info" @click="openPromptChatHistory('api_dev')">
+                  执行历史
+                </GitActionButton>
                 <GitActionButton compact variant="warning" :loading="promptRestoring === 'api_dev'" @click="restorePrompts('api_dev')">
                   还原为默认提示词
                 </GitActionButton>
@@ -447,6 +482,13 @@
                 <GitActionButton compact @click="copyText(workflow.prompt_code_review || '', '提示词已复制')">
                   <template #icon><el-icon><CopyDocument /></el-icon></template>
                   复制提示词
+                </GitActionButton>
+                <GitActionButton compact variant="success" @click="openPromptExecDialog('code_review', workflow.prompt_code_review || '')">
+                  <template #icon><el-icon><VideoPlay /></el-icon></template>
+                  执行
+                </GitActionButton>
+                <GitActionButton compact variant="info" @click="openPromptChatHistory('code_review')">
+                  执行历史
                 </GitActionButton>
                 <GitActionButton compact variant="warning" :loading="promptRestoring === 'code_review'" @click="restorePrompts('code_review')">
                   还原为默认提示词
@@ -485,6 +527,13 @@
                   <template #icon><el-icon><CopyDocument /></el-icon></template>
                   复制提示词
                 </GitActionButton>
+                <GitActionButton compact variant="success" @click="openPromptExecDialog('browser_test', workflow.prompt_browser_test || '')">
+                  <template #icon><el-icon><VideoPlay /></el-icon></template>
+                  执行
+                </GitActionButton>
+                <GitActionButton compact variant="info" @click="openPromptChatHistory('browser_test')">
+                  执行历史
+                </GitActionButton>
                 <GitActionButton compact variant="warning" :loading="promptRestoring === 'browser_test'" @click="restorePrompts('browser_test')">
                   还原为默认提示词
                 </GitActionButton>
@@ -521,6 +570,13 @@
                 <GitActionButton compact @click="copyText(workflow.prompt_api_test || '', '提示词已复制')">
                   <template #icon><el-icon><CopyDocument /></el-icon></template>
                   复制提示词
+                </GitActionButton>
+                <GitActionButton compact variant="success" @click="openPromptExecDialog('api_test', workflow.prompt_api_test || '')">
+                  <template #icon><el-icon><VideoPlay /></el-icon></template>
+                  执行
+                </GitActionButton>
+                <GitActionButton compact variant="info" @click="openPromptChatHistory('api_test')">
+                  执行历史
                 </GitActionButton>
                 <GitActionButton compact variant="warning" :loading="promptRestoring === 'api_test'" @click="restorePrompts('api_test')">
                   还原为默认提示词
@@ -814,6 +870,128 @@
       </template>
     </el-dialog>
 
+    <!-- 执行提示词弹窗 -->
+    <el-dialog
+      v-model="promptExecDialogVisible"
+      title="发送到 Claude Code 执行"
+      width="450px"
+      destroy-on-close
+    >
+      <el-form label-width="80px">
+        <el-form-item label="模型">
+          <el-input v-model="promptExecModelName" placeholder="例如: deepseek-v4-pro[1m]" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="promptExecDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="promptExecLoading" @click="execPromptToClaude">
+          开始执行
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 执行历史弹窗（按 prompt_type） -->
+    <el-dialog
+      v-model="promptChatHistoryVisible"
+      :title="'执行历史 - ' + promptChatHistoryTitle"
+      width="80vw"
+      top="3vh"
+      destroy-on-close
+      @closed="closePromptChatDetail"
+    >
+      <div class="chat-combined-body" v-loading="promptChatHistoryLoading">
+        <div class="chat-combined-list">
+          <div
+            v-for="item in promptChatHistoryList"
+            :key="item.id"
+            :class="['chat-list-item', { 'chat-list-item--active': promptChatDetailId === item.id }]"
+            @click="onPromptChatRowClick(item)"
+          >
+            <div class="chat-list-item__name">{{ (item.prompt || '').substring(0, 20) || '未命名' }}</div>
+            <div class="chat-list-item__time">{{ item.created_at || '-' }}</div>
+            <span :class="['chat-list-item__dot', item.status === 'running' ? 'chat-list-item__dot--running' : 'chat-list-item__dot--done']"></span>
+          </div>
+          <div v-if="promptChatHistoryList.length === 0 &amp;&amp; !promptChatHistoryLoading" class="chat-combined-list__empty">暂无执行记录</div>
+        </div>
+        <div class="chat-combined-detail">
+          <div v-if="!promptChatDetailId" class="chat-combined-detail__placeholder">请选择一条执行记录</div>
+          <template v-else>
+            <div v-if="chatDetailModelName || chatDetailLocalDir" style="margin-bottom: 12px; color: #888; font-size: 12px;">
+              <span v-if="chatDetailModelName">模型: {{ chatDetailModelName }}</span>
+              <span v-if="chatDetailModelName &amp;&amp; chatDetailLocalDir"> | </span>
+              <span v-if="chatDetailLocalDir">目录: {{ chatDetailLocalDir }}</span>
+            </div>
+            <div ref="promptChatDetailContainer" class="chat-detail-container" @scroll="onPromptChatDetailScroll">
+              <div v-if="chatDetailMessages.length === 0 &amp;&amp; chatDetailStatus === 'running'" style="text-align: center; padding: 40px; color: #888;">
+                <div>等待 claude code 响应...</div>
+              </div>
+              <div v-for="(msg, idx) in chatDetailMessages" :key="idx" style="margin-bottom: 8px;">
+                <div v-if="msg.type === 'system_init'" style="color: #6a9955; font-size: 12px; padding: 4px 0;">
+                  ✔ {{ msg.text }} | model: {{ msg.model }}
+                </div>
+                <div v-else-if="msg.type === 'system_command'" style="background: #1e1e3f; border-radius: 4px; padding: 8px 12px; margin: 4px 0; color: #ce9178; font-size: 12px; word-break: break-all;">
+                  <span style="color: #569cd6;">$</span> {{ msg.text }}
+                </div>
+                <div v-else-if="msg.type === 'system_hook'" style="color: #888; font-size: 12px;">
+                  <span @click="msg.collapsed = !msg.collapsed" style="cursor: pointer;">{{ msg.collapsed ? '▶' : '▼' }} {{ msg.text }}</span>
+                </div>
+                <div v-else-if="msg.type === 'system'" style="color: #888; font-size: 11px;">{{ msg.text }}</div>
+                <div v-else-if="msg.type === 'assistant'" style="background: #2d2d2d; border-radius: 8px; padding: 12px; margin: 8px 0;">
+                  <div v-if="msg.thinking" style="color: #888; font-size: 12px; margin-bottom: 8px;">
+                    <span @click="msg._thinkingCollapsed = !msg._thinkingCollapsed" style="cursor: pointer; font-weight: bold;">
+                      {{ msg._thinkingCollapsed ? '▶ 思考过程' : '▼ 思考过程' }}
+                    </span>
+                    <pre v-if="!msg._thinkingCollapsed" style="white-space: pre-wrap; margin-top: 4px; color: #999;">{{ msg.thinking }}</pre>
+                  </div>
+                  <div v-for="(block, bi) in msg.content" :key="bi">
+                    <div v-if="block.type === 'text'" style="white-space: pre-wrap; line-height: 1.5;">{{ block.text }}</div>
+                    <div v-else-if="block.type === 'tool_use'" style="background: #1a3a1a; border-radius: 4px; padding: 8px; margin: 4px 0;">
+                      <span style="color: #4ec9b0;">🔧 {{ block.name }}</span>
+                      <pre style="white-space: pre-wrap; font-size: 12px; color: #ce9178; margin-top: 4px;">{{ block.input }}</pre>
+                    </div>
+                  </div>
+                  <div v-if="msg.usage" style="color: #888; font-size: 11px; margin-top: 8px; border-top: 1px solid #444; padding-top: 4px;">
+                    input: {{ msg.usage.input_tokens }} | output: {{ msg.usage.output_tokens }}
+                  </div>
+                </div>
+                <div v-else-if="msg.type === 'tool_result'" style="color: #888; font-size: 12px;">
+                  <span @click="msg.collapsed = !msg.collapsed" style="cursor: pointer;">{{ msg.collapsed ? '▶' : '▼' }} 工具执行结果</span>
+                  <pre v-if="!msg.collapsed" style="white-space: pre-wrap; font-size: 11px; margin-top: 4px; max-height: 200px; overflow-y: auto;">{{ msg.text }}</pre>
+                </div>
+                <div v-else-if="msg.type === 'assistant_text'" style="white-space: pre-wrap; line-height: 1.5;">{{ msg.text }}</div>
+                <div v-else-if="msg.type === 'assistant_thinking'" style="color: #888; font-size: 12px;">
+                  <span @click="msg.collapsed = !msg.collapsed" style="cursor: pointer;">{{ msg.collapsed ? '▶ 思考' : '▼ 思考' }}</span>
+                  <pre v-if="!msg.collapsed" style="white-space: pre-wrap; margin-top: 4px;">{{ msg.text }}</pre>
+                </div>
+                <div v-else-if="msg.type === 'result'" style="color: #6a9955; font-size: 12px; border-top: 1px solid #444; padding-top: 8px; margin-top: 8px;">
+                  {{ msg.isError ? '✘ 错误' : '✔ 完成' }} | 耗时: {{ (msg.durationMs / 1000).toFixed(1) }}s | {{ msg.numTurns }} 轮
+                  <span v-if="msg.usage"> | input: {{ msg.usage.input_tokens }} output: {{ msg.usage.output_tokens }}</span>
+                </div>
+                <div v-else-if="msg.type === 'chat_completed'" style="color: #6a9955; text-align: center; padding: 16px;">
+                  ✔ {{ msg.text }}
+                </div>
+                <div v-else-if="msg.type === 'raw_text'" style="white-space: pre-wrap; color: #ce9178; padding: 4px 0; word-break: break-all;">{{ msg.text }}</div>
+                <div v-else-if="msg.type === 'parse_error'" style="background: #5a1d1d; border-left: 3px solid #f44747; border-radius: 4px; padding: 8px 12px; margin: 4px 0;">
+                  <div style="color: #f44747; font-weight: bold;">解析错误</div>
+                  <div v-if="msg.error" style="color: #ce9178; font-size: 11px; margin-top: 4px;">{{ msg.error }}</div>
+                  <pre style="white-space: pre-wrap; font-size: 12px; margin-top: 4px; color: #d4d4d4;">{{ msg.text }}</pre>
+                </div>
+                <div v-else-if="msg.type === 'error'" style="background: #5a1d1d; border-left: 3px solid #f44747; border-radius: 4px; padding: 8px 12px; margin: 4px 0;">
+                  <span style="color: #f44747;">错误: </span>
+                  <span style="color: #d4d4d4;">{{ msg.text }}</span>
+                </div>
+              </div>
+            </div>
+            <div :class="['chat-detail-scroll-btn', { 'chat-detail-scroll-btn--visible': promptChatDetailShowScrollBtn }]" @click="scrollPromptChatToBottom(true)">↓</div>
+            <div v-if="chatDetailStatus !== 'running'" class="chat-detail-input-row">
+              <el-input v-model="chatContinueInput" placeholder="输入新消息继续对话..." @keyup.enter="continueChat" style="flex: 1;" />
+              <el-button type="primary" :loading="chatContinueLoading" @click="continueChat">发送</el-button>
+            </div>
+          </template>
+        </div>
+      </div>
+    </el-dialog>
+
     <!-- 接口开发弹窗 -->
     <el-dialog
       v-model="apiDevDialogVisible"
@@ -984,6 +1162,20 @@ export default {
       chatConfigLocalDir: '',
       chatConfigDirs: [],
       chatConfigModels: [],
+      // 执行提示词
+      promptExecDialogVisible: false,
+      promptExecModelName: 'deepseek-v4-pro[1m]',
+      promptExecLoading: false,
+      promptExecPromptType: '',
+      promptExecPromptValue: '',
+      // 执行历史（按 prompt_type）
+      promptChatHistoryVisible: false,
+      promptChatHistoryTitle: '',
+      promptChatHistoryList: [],
+      promptChatHistoryLoading: false,
+      promptChatHistoryPromptType: '',
+      promptChatDetailId: 0,
+      promptChatDetailShowScrollBtn: false,
       _pendingChatPrompt: '',
       chatDetailModelName: '',
       chatDetailLocalDir: '',
@@ -1655,10 +1847,14 @@ export default {
     scrollChatToBottom(force) {
       if (force) {
         this.chatDetailAutoScroll = true
+        this.promptChatDetailShowScrollBtn = false
         this.chatDetailShowScrollBtn = false
       }
+      if (!this.chatDetailAutoScroll) return
       this.$nextTick(() => {
-        const el = this.$refs.chatDetailContainer
+        const el = this.promptChatHistoryVisible
+          ? this.$refs.promptChatDetailContainer
+          : this.$refs.chatDetailContainer
         if (el) {
           el.scrollTop = el.scrollHeight
         }
@@ -1721,7 +1917,7 @@ export default {
       const prompt = this._pendingChatPrompt
       if (!prompt || !this.chatConfigModelId || !this.chatConfigLocalDir) return
       this.sendingToClaude = true
-      taskWorkflowApi.TaskWorkflowChatSend(this.workflowId, prompt, this.chatConfigModelId, this.chatConfigLocalDir, (res) => {
+      taskWorkflowApi.TaskWorkflowChatSend(this.workflowId, prompt, null, 'issue_fix', this.chatConfigLocalDir, 'claude', this.chatConfigModelId, (res) => {
         this.sendingToClaude = false
         if (res.ErrCode === 0 && res.Data) {
           const chatId = res.Data.chat_id
@@ -1754,6 +1950,144 @@ export default {
           this.$helperNotify.error(res.ErrMsg || '发送失败')
         }
       })
+    },
+    // 打开执行提示词弹窗
+    openPromptExecDialog(promptType, promptValue) {
+      if (!promptValue || !promptValue.trim()) {
+        this.$helperNotify.warning('提示词为空，无法执行')
+        return
+      }
+      this.promptExecPromptType = promptType
+      this.promptExecPromptValue = promptValue
+      this.promptExecModelName = 'deepseek-v4-pro[1m]'
+      this.promptExecDialogVisible = true
+    },
+    // 执行提示词到 claude code
+    execPromptToClaude() {
+      const modelName = (this.promptExecModelName || '').trim()
+      if (!modelName) {
+        this.$helperNotify.warning('请输入模型名称')
+        return
+      }
+      // 获取第一个可用目录
+      taskWorkflowApi.TaskWorkflowChatDirs(this.workflowId, (res) => {
+        if (res.ErrCode !== 0) {
+          this.$helperNotify.error(res.ErrMsg || '获取工作目录失败')
+          return
+        }
+        const dirs = res.Data.dirs || []
+        if (dirs.length === 0) {
+          this.$helperNotify.error('没有可用的工作目录')
+          return
+        }
+        const localDir = dirs[0]
+        this.promptExecLoading = true
+        taskWorkflowApi.TaskWorkflowChatSend(
+          this.workflowId,
+          this.promptExecPromptValue,
+          modelName,
+          this.promptExecPromptType,
+          localDir,
+          'claude',
+          0,
+          (chatRes) => {
+            this.promptExecLoading = false
+            if (chatRes.ErrCode === 0 && chatRes.Data) {
+              const chatId = chatRes.Data.chat_id
+              this.$helperNotify.success('已发送到 claude code 执行')
+              this.promptExecDialogVisible = false
+              // 打开执行历史，定位到新对话
+              this.openPromptChatHistory(this.promptExecPromptType, chatId)
+            } else {
+              this.$helperNotify.error(chatRes.ErrMsg || '发送失败')
+            }
+          }
+        )
+      })
+    },
+    // 打开按类型的执行历史弹窗
+    openPromptChatHistory(promptType, focusChatId) {
+      const titleMap = {
+        plain_text_requirement: '纯文本需求',
+        requirement: '需求分析',
+        design_plan_requirement: '需求设计方案',
+        design: '开发提示词',
+        api_dev: '接口开发生成',
+        code_review: '代码检查',
+        browser_test: '浏览器测试',
+        api_test: '接口测试修复',
+      }
+      this.promptChatHistoryTitle = titleMap[promptType] || promptType
+      this.promptChatHistoryPromptType = promptType
+      this.promptChatHistoryVisible = true
+      this.promptChatHistoryLoading = true
+      this.promptChatDetailId = 0
+      taskWorkflowApi.TaskWorkflowChatListByPromptType(this.workflowId, promptType, (res) => {
+        this.promptChatHistoryLoading = false
+        if (res.ErrCode === 0 && res.Data) {
+          this.promptChatHistoryList = res.Data.list || []
+          if (focusChatId) {
+            const found = this.promptChatHistoryList.find(item => item.id === focusChatId)
+            if (found) {
+              this.onPromptChatRowClick(found)
+              return
+            }
+          }
+          if (this.promptChatHistoryList.length > 0) {
+            this.onPromptChatRowClick(this.promptChatHistoryList[0])
+          }
+        }
+      })
+    },
+    // 点击执行历史列表项
+    onPromptChatRowClick(row) {
+      this.promptChatDetailId = row.id
+      this.chatDetailId = row.id
+      this.chatDetailStatus = row.status
+      this.chatDetailAutoScroll = true
+      this.promptChatDetailShowScrollBtn = false
+      this.loadChatDetail()
+      if (row.status === 'running') {
+        this.registerChatSSE(row.id)
+      }
+    },
+    // 执行历史对话框滚动
+    onPromptChatDetailScroll() {
+      const el = this.$refs.promptChatDetailContainer
+      if (!el) return
+      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30
+      if (atBottom) {
+        this.chatDetailAutoScroll = true
+        this.promptChatDetailShowScrollBtn = false
+      } else {
+        this.chatDetailAutoScroll = false
+        this.promptChatDetailShowScrollBtn = true
+      }
+    },
+    // 执行历史滚动到底部
+    scrollPromptChatToBottom(force) {
+      if (force) {
+        this.chatDetailAutoScroll = true
+        this.promptChatDetailShowScrollBtn = false
+      }
+      this.$nextTick(() => {
+        const el = this.$refs.promptChatDetailContainer
+        if (el) {
+          el.scrollTop = el.scrollHeight
+        }
+      })
+    },
+    // 关闭执行历史弹窗
+    closePromptChatDetail() {
+      if (this.chatDetailSSERegistered) {
+        const sseId = 'task_workflow_chat_' + this.promptChatDetailId
+        sseDistribute.UnRegisterReceive(sseId)
+        this.chatDetailSSERegistered = false
+      }
+      this.chatDetailMessages = []
+      this.chatDetailSSELines = []
+      this.promptChatDetailId = 0
+      this.chatContinueInput = ''
     },
     formatUnixTime(unixTime) {
       const value = Number(unixTime || 0)

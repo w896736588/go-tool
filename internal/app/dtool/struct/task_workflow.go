@@ -77,6 +77,9 @@ type TaskWorkflowChatSendRequest struct {
 	WorkflowID int    `json:"workflow_id"`
 	Prompt     string `json:"prompt"`
 	ModelID    int    `json:"model_id"`
+	PromptType string `json:"prompt_type"`
+	CliType    string `json:"cli_type"`
+	ModelName  string `json:"model_name"`
 	LocalDir   string `json:"local_dir"`
 }
 
@@ -111,4 +114,10 @@ type TaskWorkflowZcodeProjectItem struct {
 	ProjectKey    string `json:"project_key"`
 	WorkspacePath string `json:"workspace_path"`
 	SettingsPath  string `json:"settings_path"`
+}
+
+// TaskWorkflowChatListByPromptTypeRequest 按提示词类型查询对话列表请求。
+type TaskWorkflowChatListByPromptTypeRequest struct {
+	WorkflowID int    `json:"workflow_id"`
+	PromptType string `json:"prompt_type"`
 }

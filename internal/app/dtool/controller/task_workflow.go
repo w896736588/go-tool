@@ -10,6 +10,7 @@ import (
 	"dev_tool/internal/pkg/p_claude"
 	"dev_tool/internal/pkg/p_define"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -1359,6 +1360,11 @@ func TaskWorkflowPromptsRestore(c *gin.Context) {
 		gsgin.GinResponseError(c, updateErr.Error(), nil)
 		return
 	}
+	// 清空所有提示词类型对应的执行历史
+	allPromptTypes := []string{`plain_text_requirement`, `requirement`, `design_plan_requirement`, `design`, `api_dev`, `code_review`, `browser_test`, `api_test`}
+	for _, promptType := range allPromptTypes {
+		_ = common.DbMain.TaskWorkflowClearChatSessionIDs(request.WorkflowID, promptType)
+	}
 	updatedInfo, err := common.DbMain.TaskWorkflowInfo(request.WorkflowID)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
@@ -2278,17 +2284,33 @@ func TaskWorkflowChatSend(c *gin.Context) {
 		gsgin.GinResponseError(c, `提示词不能为空`, nil)
 		return
 	}
-	if req.ModelID <= 0 {
-		gsgin.GinResponseError(c, `请选择模型`, nil)
-		return
-	}
 	if strings.TrimSpace(req.LocalDir) == `` {
 		gsgin.GinResponseError(c, `请选择工作目录`, nil)
 		return
 	}
+	if strings.TrimSpace(req.CliType) == `` {
+		req.CliType = `claude`
+	}
+
+	// 根据 model_name 或 model_id 获取模型记录
+	modelID := req.ModelID
+	if modelID <= 0 {
+		if strings.TrimSpace(req.ModelName) == `` {
+			gsgin.GinResponseError(c, `模型名称不能为空`, nil)
+			return
+		}
+		var err error
+		modelID, err = getOrCreateClaudeModelByName(req.ModelName)
+		if err != nil {
+			gsgin.GinResponseError(c, err.Error(), nil)
+			return
+		}
+	}
+	// prompt_type 为可选，仅在非空时追踪 chat_session_ids
+	promptType := strings.TrimSpace(req.PromptType)
 
 	// 校验模型信息
-	modelInfo, err := common.DbMain.AiModelInfo(req.ModelID)
+	modelInfo, err := common.DbMain.AiModelInfo(modelID)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
@@ -2302,13 +2324,13 @@ func TaskWorkflowChatSend(c *gin.Context) {
 	apiKey := strings.TrimSpace(cast.ToString(modelInfo[`api_key`]))
 	modelName := strings.TrimSpace(cast.ToString(modelInfo[`model`]))
 
-	chatID, err := common.DbMain.TaskWorkflowChatCreate(req.WorkflowID, req.Prompt, req.ModelID, req.LocalDir)
+	chatID, err := common.DbMain.TaskWorkflowChatCreate(req.WorkflowID, req.Prompt, promptType, req.CliType, modelID, req.LocalDir)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
 
-	go runClaudeCommand(chatID, req.LocalDir, req.Prompt, false, ``, req.ModelID, baseURL, apiKey, modelName)
+	go runClaudeCommand(chatID, req.LocalDir, req.Prompt, false, ``, modelID, baseURL, apiKey, modelName)
 
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`chat_id`: chatID,
@@ -2495,6 +2517,96 @@ func TaskWorkflowChatDirs(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`dirs`: dirs,
 	})
+}
+
+// TaskWorkflowChatListByPromptType 按提示词类型列出对话。
+func TaskWorkflowChatListByPromptType(c *gin.Context) {
+	var req _struct.TaskWorkflowChatListByPromptTypeRequest
+	if err := gsgin.GinPostBody(c, &req); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	if req.WorkflowID <= 0 {
+		gsgin.GinResponseError(c, `工作流id不能为空`, nil)
+		return
+	}
+	if strings.TrimSpace(req.PromptType) == `` {
+		gsgin.GinResponseError(c, `提示词类型不能为空`, nil)
+		return
+	}
+	rows, err := common.DbMain.TaskWorkflowChatListByPromptType(req.WorkflowID, req.PromptType)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	type chatItem struct {
+		ID        int64  `json:"id"`
+		SessionID string `json:"session_id"`
+		Prompt    string `json:"prompt"`
+		ModelID   int    `json:"model_id"`
+		LocalDir  string `json:"local_dir"`
+		Status    string `json:"status"`
+		CliType   string `json:"cli_type"`
+		CreatedAt string `json:"created_at"`
+	}
+	list := make([]chatItem, 0, len(rows))
+	for _, row := range rows {
+		list = append(list, chatItem{
+			ID:        cast.ToInt64(row[`id`]),
+			SessionID: cast.ToString(row[`session_id`]),
+			Prompt:    cast.ToString(row[`prompt`]),
+			ModelID:   cast.ToInt(row[`model_id`]),
+			LocalDir:  cast.ToString(row[`local_dir`]),
+			Status:    cast.ToString(row[`status`]),
+			CliType:   cast.ToString(row[`cli_type`]),
+			CreatedAt: cast.ToString(row[`created_at`]),
+		})
+	}
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`list`: list,
+	})
+}
+
+// getOrCreateClaudeModelByName 根据模型名称查找或自动创建一条 anthropic 模型记录。
+func getOrCreateClaudeModelByName(modelName string) (int, error) {
+	modelName = strings.TrimSpace(modelName)
+	if modelName == `` {
+		return 0, errors.New(`模型名称不能为空`)
+	}
+	// 先查找现有 anthropic 模型
+	rows, err := common.DbMain.Client.QueryBySql(
+		`select id from tbl_ai_model where model = ? and status = 1 limit 1`, modelName,
+	).All()
+	if err != nil {
+		return 0, err
+	}
+	if len(rows) > 0 {
+		return cast.ToInt(rows[0][`id`]), nil
+	}
+	// 查找一个 anthropic provider
+	providerRows, err := common.DbMain.Client.QueryBySql(
+		`select id from tbl_ai_provider where provider_type = 'anthropic' and status = 1 limit 1`,
+	).All()
+	if err != nil {
+		return 0, err
+	}
+	if len(providerRows) == 0 {
+		return 0, errors.New(`未找到可用的 anthropic 服务商，请先在AI模型管理中配置`)
+	}
+	providerID := cast.ToInt(providerRows[0][`id`])
+	newID, err := common.DbMain.Client.QuickCreate(`tbl_ai_model`, map[string]any{
+		`provider_id`: providerID,
+		`name`:        modelName,
+		`model`:       modelName,
+		`model_type`:  `llm`,
+		`status`:      1,
+		`create_time`: time.Now().Unix(),
+		`update_time`: time.Now().Unix(),
+	}).Exec()
+	if err != nil {
+		return 0, err
+	}
+	return cast.ToInt(newID), nil
 }
 
 // TaskWorkflowZcodeSave 保存 zcode 工作目录配置，自动扫描子文件夹解析项目映射。
