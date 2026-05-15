@@ -23,6 +23,7 @@ const (
 const (
 	taskWorkflowChatStatusRunning   = `running`
 	taskWorkflowChatStatusCompleted = `completed`
+	taskWorkflowChatStatusError     = `error`
 )
 
 // taskWorkflowChatSessionIDFieldMap 将 prompt_type 映射到 tbl_task_workflow 中对应的 chat_session_ids 字段名。
@@ -505,6 +506,18 @@ func (h *CSqlite) TaskWorkflowChatMarkCompleted(chatID int64) error {
 		`id`: chatID,
 	}, map[string]any{
 		`status`:     taskWorkflowChatStatusCompleted,
+		`updated_at`: now,
+	}).Exec()
+	return err
+}
+
+// TaskWorkflowChatMarkError 标记对话异常终止。
+func (h *CSqlite) TaskWorkflowChatMarkError(chatID int64) error {
+	now := time.Now().Format(`2006-01-02 15:04:05`)
+	_, err := h.Client.QuickUpdate(`tbl_task_workflow_chat`, map[string]any{
+		`id`: chatID,
+	}, map[string]any{
+		`status`:     taskWorkflowChatStatusError,
 		`updated_at`: now,
 	}).Exec()
 	return err

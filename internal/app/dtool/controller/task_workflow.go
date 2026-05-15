@@ -2823,9 +2823,10 @@ func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sess
 		})
 		_ = common.DbMain.TaskWorkflowChatAppendOutput(chatID, string(errJSON))
 		broadcastChatOutput(chatID, string(errJSON))
+		_ = common.DbMain.TaskWorkflowChatMarkError(chatID)
+	} else {
+		_ = common.DbMain.TaskWorkflowChatMarkCompleted(chatID)
 	}
-
-	_ = common.DbMain.TaskWorkflowChatMarkCompleted(chatID)
 	broadcastChatOutput(chatID, fmt.Sprintf(`{"type":"chat","subtype":"completed","chat_id":%d}`, chatID))
 }
 

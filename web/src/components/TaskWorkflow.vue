@@ -732,7 +732,7 @@
           >
             <div class="chat-list-item__name">{{ (item.prompt || '').substring(0, 10) || '未命名' }}</div>
             <div class="chat-list-item__time">{{ item.created_at || '-' }}</div>
-            <span :class="['chat-list-item__dot', item.status === 'running' ? 'chat-list-item__dot--running' : 'chat-list-item__dot--done']"></span>
+            <span :class="['chat-list-item__status', 'chat-list-item__status--' + (item.status || '')]">{{ statusText(item.status) }}</span>
           </div>
           <div v-if="chatHistoryList.length === 0 && !chatHistoryLoading" class="chat-combined-list__empty">暂无对话</div>
         </div>
@@ -909,7 +909,7 @@
           >
             <div class="chat-list-item__name">{{ (item.prompt || '').substring(0, 20) || '未命名' }}</div>
             <div class="chat-list-item__time">{{ item.created_at || '-' }}</div>
-            <span :class="['chat-list-item__dot', item.status === 'running' ? 'chat-list-item__dot--running' : 'chat-list-item__dot--done']"></span>
+            <span :class="['chat-list-item__status', 'chat-list-item__status--' + (item.status || '')]">{{ statusText(item.status) }}</span>
           </div>
           <div v-if="promptChatHistoryList.length === 0 &amp;&amp; !promptChatHistoryLoading" class="chat-combined-list__empty">暂无执行记录</div>
         </div>
@@ -1813,6 +1813,8 @@ export default {
           this.chatDetailStatus = data.status || ''
           this.chatDetailModelName = data.model_id ? '#' + data.model_id : ''
           this.chatDetailLocalDir = data.local_dir || ''
+          // 同步更新左侧列表中的状态
+          this.updateChatListStatus(this.chatDetailId, this.chatDetailStatus)
           // 合并历史行 + SSE 加载期间收到的新行（有则去重）
           const historicalLines = data.lines || []
           const sseLines = this.chatDetailSSELines
@@ -1839,12 +1841,12 @@ export default {
           try {
             const obj = JSON.parse(line)
             if (obj.type === 'chat' && obj.subtype === 'completed') {
-              this.chatDetailStatus = 'completed'
               this._sseChatId = 0
               this.chatDetailSSERegistered = false
               sseDistribute.UnRegisterReceive(sseId)
               this.chatDetailSSELines.push(line)
-              this.chatDetailMessages = chatParser.parseChatLines(this.chatDetailSSELines)
+              // 重载详情以获取 DB 最终状态（completed/error）
+              this.loadChatDetail()
               this.$nextTick(() => { this.scrollChatToBottom() })
               return
             }
@@ -2104,6 +2106,18 @@ export default {
       this.chatDetailSSELines = []
       this.promptChatDetailId = 0
       this.chatContinueInput = ''
+    },
+    updateChatListStatus(chatId, status) {
+      const updateItem = (list) => {
+        const item = list.find(i => i.id === chatId)
+        if (item) item.status = status
+      }
+      updateItem(this.chatHistoryList)
+      updateItem(this.promptChatHistoryList)
+    },
+    statusText(status) {
+      const map = { running: '执行中', completed: '已完成', error: '异常' }
+      return map[status] || status || '-'
     },
     formatUnixTime(unixTime) {
       const value = Number(unixTime || 0)
@@ -3042,22 +3056,28 @@ export default {
   margin-top: 2px;
 }
 
-.chat-list-item__dot {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+.chat-list-item__status {
+  display: inline-block;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+  margin-top: 4px;
 }
 
-.chat-list-item__dot--running {
-  background: #e6a23c;
+.chat-list-item__status--running {
+  color: #e6a23c;
+  border: 1px solid #e6a23c;
 }
 
-.chat-list-item__dot--done {
-  background: #67c23a;
+.chat-list-item__status--completed {
+  color: #67c23a;
+  border: 1px solid #67c23a;
+}
+
+.chat-list-item__status--error {
+  color: #f56c6c;
+  border: 1px solid #f56c6c;
 }
 
 .chat-combined-detail {
