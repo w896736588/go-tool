@@ -2772,6 +2772,13 @@ func taskWorkflowBuildZcodeMarkdown() string {
 
 // runClaudeCommand 后台执行 claude 命令并捕获输出。
 func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sessionID string, modelID int, baseURL, apiKey, modelName string) {
+	defer func() {
+		if r := recover(); r != nil {
+			gstool.FmtPrintlnLogTime("[chat-run] chat_id=%d panic: %v", chatID, r)
+			_ = common.DbMain.TaskWorkflowChatMarkError(chatID)
+			broadcastChatOutput(chatID, fmt.Sprintf(`{"type":"chat","subtype":"completed","chat_id":%d}`, chatID))
+		}
+	}()
 	cfg := p_claude.RunConfig{
 		Prompt:      prompt,
 		SessionID:   sessionID,

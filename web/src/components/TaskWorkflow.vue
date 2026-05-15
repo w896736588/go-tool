@@ -2116,7 +2116,7 @@ export default {
       updateItem(this.promptChatHistoryList)
     },
     statusText(status) {
-      const map = { running: '执行中', completed: '已完成', error: '异常' }
+      const map = { running: '执行中', completed: '已完成', error: '异常', interrupted: '中断' }
       return map[status] || status || '-'
     },
     formatUnixTime(unixTime) {
@@ -3078,6 +3078,11 @@ export default {
 .chat-list-item__status--error {
   color: #f56c6c;
   border: 1px solid #f56c6c;
+}
+
+.chat-list-item__status--interrupted {
+  color: #909399;
+  border: 1px solid #909399;
 }
 
 .chat-combined-detail {

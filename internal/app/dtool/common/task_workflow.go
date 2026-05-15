@@ -21,9 +21,10 @@ const (
 )
 
 const (
-	taskWorkflowChatStatusRunning   = `running`
-	taskWorkflowChatStatusCompleted = `completed`
-	taskWorkflowChatStatusError     = `error`
+	taskWorkflowChatStatusRunning     = `running`
+	taskWorkflowChatStatusCompleted   = `completed`
+	taskWorkflowChatStatusError       = `error`
+	taskWorkflowChatStatusInterrupted = `interrupted`
 )
 
 // taskWorkflowChatSessionIDFieldMap 将 prompt_type 映射到 tbl_task_workflow 中对应的 chat_session_ids 字段名。
@@ -521,6 +522,15 @@ func (h *CSqlite) TaskWorkflowChatMarkError(chatID int64) error {
 		`updated_at`: now,
 	}).Exec()
 	return err
+}
+
+// TaskWorkflowChatRecoverInterrupted 启动时将所有 running 状态的记录标记为 interrupted（进程已随上次进程退出而终止）。
+func (h *CSqlite) TaskWorkflowChatRecoverInterrupted() {
+	now := time.Now().Format(`2006-01-02 15:04:05`)
+	_, _ = h.Client.QueryBySql(
+		`update tbl_task_workflow_chat set status = ?, updated_at = ? where status = ?`,
+		taskWorkflowChatStatusInterrupted, now, taskWorkflowChatStatusRunning,
+	).Exec()
 }
 
 // TaskWorkflowChatInfo 获取单条对话记录。

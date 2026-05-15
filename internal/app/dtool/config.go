@@ -502,6 +502,10 @@ func initOther() {
 
 func InitComponent() {
 	p_common.AesGcmClient = gsencrypt.NewAesGcm(AppName)
+	// 恢复上次进程残留的 running 状态
+	if common.DbMain != nil {
+		common.DbMain.TaskWorkflowChatRecoverInterrupted()
+	}
 	for _, tGin := range component.TGins {
 		if tGin.IsRun == true {
 			InitRouter(tGin)
