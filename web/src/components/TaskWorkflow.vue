@@ -3,22 +3,9 @@
     <div class="task-workflow-shell">
       <header class="task-workflow-header">
         <div class="task-workflow-header__main">
-          <h1 class="task-workflow-header__title">{{ homeTask.name || `任务 #${taskId}` }}</h1>
-          <div v-if="parsedTaskDevConfigs.length > 0" class="task-workflow-header__meta">
-            <div v-for="(cfg, idx) in parsedTaskDevConfigs" :key="idx" class="task-workflow-header__dev-row">
-              <span class="task-workflow-header__dev-item">Git仓库: {{ getTaskConfigName('git', cfg.git_id) }}</span>
-              <span class="task-workflow-header__dev-sep">|</span>
-              <span class="task-workflow-header__dev-item task-workflow-header__dev-item--link" @click="openApiDevDialog(cfg)">接口集合: {{ truncateWorkflowLabel(getTaskConfigApiLabel(cfg)) }}</span>
-              <span class="task-workflow-header__dev-sep">|</span>
-              <span class="task-workflow-header__dev-item">父分支: {{ cfg.parent_branch || '-' }}</span>
-              <span class="task-workflow-header__dev-sep">|</span>
-              <span class="task-workflow-header__dev-item">分支名: <span class="task-workflow-header__branch" @click="copyText(cfg.branch_name, '分支名已复制')" :title="cfg.branch_name">{{ truncateWorkflowLabel(cfg.branch_name || '-') }}</span></span>
-              <span class="task-workflow-header__dev-sep">|</span>
-              <span class="task-workflow-header__dev-item">本地目录: {{ cfg.local_dir || '-' }}</span>
-            </div>
-          </div>
-        </div>
-        <div class="task-workflow-header__actions">
+          <div class="task-workflow-header__title-row">
+            <h1 class="task-workflow-header__title">{{ homeTask.name || `任务 #${taskId}` }}</h1>
+            <div class="task-workflow-header__actions">
           <el-tooltip content="返回首页" placement="bottom">
             <el-button class="task-workflow-home-btn" @click="goHome">
               <el-icon :size="18"><HomeFilled /></el-icon>
@@ -58,6 +45,21 @@
             zcode配置
           </GitActionButton>
           -->
+            </div>
+          </div>
+          <div v-if="parsedTaskDevConfigs.length > 0" class="task-workflow-header__meta">
+            <div v-for="(cfg, idx) in parsedTaskDevConfigs" :key="idx" class="task-workflow-header__dev-row">
+              <span class="task-workflow-header__dev-item">Git仓库: {{ getTaskConfigName('git', cfg.git_id) }}</span>
+              <span class="task-workflow-header__dev-sep">|</span>
+              <span class="task-workflow-header__dev-item task-workflow-header__dev-item--link" @click="openApiDevDialog(cfg)">接口集合: {{ truncateWorkflowLabel(getTaskConfigApiLabel(cfg)) }}</span>
+              <span class="task-workflow-header__dev-sep">|</span>
+              <span class="task-workflow-header__dev-item">父分支: {{ cfg.parent_branch || '-' }}</span>
+              <span class="task-workflow-header__dev-sep">|</span>
+              <span class="task-workflow-header__dev-item">分支名: <span class="task-workflow-header__branch" @click="copyText(cfg.branch_name, '分支名已复制')" :title="cfg.branch_name">{{ truncateWorkflowLabel(cfg.branch_name || '-') }}</span></span>
+              <span class="task-workflow-header__dev-sep">|</span>
+              <span class="task-workflow-header__dev-item">本地目录: {{ cfg.local_dir || '-' }}</span>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -2324,10 +2326,22 @@ export default {
   flex-shrink: 0;
 }
 
+.task-workflow-header__main {
+  flex: 1;
+  min-width: 0;
+}
+
 .task-workflow-header__eyebrow {
   font-size: 12px;
   color: #909399;
   margin-bottom: 4px;
+}
+
+.task-workflow-header__title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
 }
 
 .task-workflow-header__title {
@@ -2335,6 +2349,7 @@ export default {
   font-size: 22px;
   line-height: 1.3;
   color: #303133;
+  flex-shrink: 0;
 }
 
 .task-workflow-header__meta {
@@ -2794,6 +2809,11 @@ export default {
   .task-workflow-header {
     flex-direction: column;
     padding: 16px;
+  }
+
+  .task-workflow-header__title-row {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .task-workflow-card__header {
