@@ -767,6 +767,15 @@
                 </div>
                 <!-- system (generic) -->
                 <div v-else-if="msg.type === 'system'" style="color: #909399; font-size: 11px;">{{ msg.text }}</div>
+                <!-- system_status: claude code 状态 -->
+                <div v-else-if="msg.type === 'system_status'" style="color: #909399; font-size: 12px; padding: 2px 0;">
+                  <span :style="msg.status === 'requesting' ? 'color: #409eff;' : ''">{{ msg.text }}</span>
+                </div>
+                <!-- system_task: 后台任务 (task_started / task_notification) -->
+                <div v-else-if="msg.type === 'system_task'" style="color: #909399; font-size: 12px; padding: 2px 0;">
+                  <span :style="msg.status === 'completed' ? 'color: #67c23a;' : msg.status === 'started' ? 'color: #409eff;' : ''">🔧 {{ msg.description }}</span>
+                  <span style="margin-left: 8px; font-size: 11px;">{{ msg.status === 'started' ? '启动' : msg.status }}</span>
+                </div>
                 <!-- assistant message -->
                 <div v-else-if="msg.type === 'assistant'" style="background: #fff; border: 1px solid #ebeef5; border-radius: 8px; padding: 12px; margin: 8px 0;">
                   <!-- thinking -->
@@ -781,7 +790,11 @@
                     <div v-if="block.type === 'text'" style="white-space: pre-wrap; line-height: 1.6;">{{ block.text }}</div>
                     <div v-else-if="block.type === 'tool_use'" style="background: #f0f9eb; border-radius: 4px; padding: 8px; margin: 4px 0;">
                       <span style="color: #67c23a; font-weight: 500;">🔧 {{ block.name }}</span>
-                      <pre style="white-space: pre-wrap; font-size: 12px; color: #606266; margin-top: 4px; font-family: Consolas, monospace;">{{ block.input }}</pre>
+                      <div v-if="block.displayInput" style="white-space: pre-wrap; font-size: 12px; color: #303133; margin-top: 4px; font-family: Consolas, monospace; background: #f5f7fa; padding: 4px 8px; border-radius: 3px;">{{ block.displayInput }}</div>
+                      <div v-else style="font-size: 12px; color: #909399; margin-top: 4px; cursor: pointer;" @click="block._inputExpanded = !block._inputExpanded">
+                        {{ block._inputExpanded ? '▼' : '▶' }} 参数
+                      </div>
+                      <pre v-if="!block.displayInput && block._inputExpanded" style="white-space: pre-wrap; font-size: 12px; color: #606266; margin-top: 4px; font-family: Consolas, monospace;">{{ block.input }}</pre>
                     </div>
                   </div>
                   <!-- usage -->
@@ -945,6 +958,15 @@
                   <span @click="msg.collapsed = !msg.collapsed" style="cursor: pointer;">{{ msg.collapsed ? '▶' : '▼' }} {{ msg.text }}</span>
                 </div>
                 <div v-else-if="msg.type === 'system'" style="color: #909399; font-size: 11px;">{{ msg.text }}</div>
+                <!-- system_status: claude code 状态 -->
+                <div v-else-if="msg.type === 'system_status'" style="color: #909399; font-size: 12px; padding: 2px 0;">
+                  <span :style="msg.status === 'requesting' ? 'color: #409eff;' : ''">{{ msg.text }}</span>
+                </div>
+                <!-- system_task: 后台任务 (task_started / task_notification) -->
+                <div v-else-if="msg.type === 'system_task'" style="color: #909399; font-size: 12px; padding: 2px 0;">
+                  <span :style="msg.status === 'completed' ? 'color: #67c23a;' : msg.status === 'started' ? 'color: #409eff;' : ''">🔧 {{ msg.description }}</span>
+                  <span style="margin-left: 8px; font-size: 11px;">{{ msg.status === 'started' ? '启动' : msg.status }}</span>
+                </div>
                 <div v-else-if="msg.type === 'assistant'" style="background: #fff; border: 1px solid #ebeef5; border-radius: 8px; padding: 12px; margin: 8px 0;">
                   <div v-if="msg.thinking" style="color: #909399; font-size: 12px; margin-bottom: 8px;">
                     <span @click="msg._thinkingCollapsed = !msg._thinkingCollapsed" style="cursor: pointer; font-weight: bold;">
@@ -956,7 +978,11 @@
                     <div v-if="block.type === 'text'" class="markdown-body chat-markdown-body" v-html="renderMarkdown(block.text)"></div>
                     <div v-else-if="block.type === 'tool_use'" style="background: #f0f9eb; border-radius: 4px; padding: 8px; margin: 4px 0;">
                       <span style="color: #67c23a; font-weight: 500;">🔧 {{ block.name }}</span>
-                      <pre style="white-space: pre-wrap; font-size: 12px; color: #606266; margin-top: 4px; font-family: Consolas, monospace;">{{ block.input }}</pre>
+                      <div v-if="block.displayInput" style="white-space: pre-wrap; font-size: 12px; color: #303133; margin-top: 4px; font-family: Consolas, monospace; background: #f5f7fa; padding: 4px 8px; border-radius: 3px;">{{ block.displayInput }}</div>
+                      <div v-else style="font-size: 12px; color: #909399; margin-top: 4px; cursor: pointer;" @click="block._inputExpanded = !block._inputExpanded">
+                        {{ block._inputExpanded ? '▼' : '▶' }} 参数
+                      </div>
+                      <pre v-if="!block.displayInput && block._inputExpanded" style="white-space: pre-wrap; font-size: 12px; color: #606266; margin-top: 4px; font-family: Consolas, monospace;">{{ block.input }}</pre>
                     </div>
                   </div>
                   <div v-if="msg.usage" style="color: #909399; font-size: 11px; margin-top: 8px; border-top: 1px solid #ebeef5; padding-top: 4px;">

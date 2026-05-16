@@ -26,6 +26,13 @@ function parseChatLines(lines) {
         messages.push({ type: 'system_command', text: obj.text || '' })
       } else if (subtype === 'hook_started' || subtype === 'hook_response') {
         messages.push({ type: 'system_hook', text: subtype === 'hook_started' ? 'Hook started: ' + (obj.hook_name || '') : 'Hook response: ' + (obj.hook_name || ''), collapsed: true })
+      } else if (subtype === 'status') {
+        const statusMap = { requesting: '请求中', compressing: '压缩中' }
+        messages.push({ type: 'system_status', status: obj.status || '', text: statusMap[obj.status] || obj.status })
+      } else if (subtype === 'task_started') {
+        messages.push({ type: 'system_task', description: obj.description || '', taskId: obj.task_id || '', status: 'started' })
+      } else if (subtype === 'task_notification') {
+        messages.push({ type: 'system_task', description: obj.summary || '', taskId: obj.task_id || '', status: obj.status || '' })
       } else {
         messages.push({ type: 'system', text: JSON.stringify(obj) })
       }
@@ -84,6 +91,26 @@ function parseChatLines(lines) {
         }
       } else if (eventType === 'content_block_stop') {
         if (currentMessage) {
+          // 格式化 tool_use 的 input
+          if (currentMessage._blockType === 'tool_use' && currentMessage.content.length > 0) {
+            const last = currentMessage.content[currentMessage.content.length - 1]
+            if (last.type === 'tool_use' && last.input) {
+              try {
+                const parsed = JSON.parse(last.input)
+                last.inputObj = parsed
+                last.input = JSON.stringify(parsed, null, 2)
+                // 为 Bash/Write 等常见工具生成可读摘要
+                const name = (last.name || '').toLowerCase()
+                if ((name === 'bash' || name === 'write' || name === 'edit' || name === 'read') && parsed.command) {
+                  last.displayInput = parsed.command
+                } else if (parsed.description) {
+                  last.displayInput = parsed.description
+                }
+              } catch (e) {
+                // 解析失败，保留原始字符串
+              }
+            }
+          }
           currentMessage._blockType = ''
         }
       } else if (eventType === 'message_delta') {
