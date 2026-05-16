@@ -1,3 +1,19 @@
+// buildToolDisplayInput 根据工具名和解析后的参数生成可读摘要。
+function buildToolDisplayInput(name, parsed) {
+  if (!name || !parsed) return null
+  const n = name.toLowerCase()
+  if (n === 'bash' && parsed.command) return parsed.command
+  if ((n === 'write' || n === 'edit') && parsed.command) return parsed.command
+  if (n === 'read' && parsed.file_path) return parsed.file_path
+  if (parsed.pattern) return parsed.pattern
+  if (parsed.description) return parsed.description
+  if (parsed.command) return parsed.command
+  if (parsed.file_path) return parsed.file_path
+  const keys = Object.keys(parsed)
+  if (keys.length === 1) return parsed[keys[0]]
+  return null
+}
+
 // parseChatLines 将 claude stream-json 输出解析为可渲染的消息数组。
 function parseChatLines(lines) {
   if (!lines || lines.length === 0) return []
@@ -99,13 +115,8 @@ function parseChatLines(lines) {
                 const parsed = JSON.parse(last.input)
                 last.inputObj = parsed
                 last.input = JSON.stringify(parsed, null, 2)
-                // 为 Bash/Write 等常见工具生成可读摘要
-                const name = (last.name || '').toLowerCase()
-                if ((name === 'bash' || name === 'write' || name === 'edit' || name === 'read') && parsed.command) {
-                  last.displayInput = parsed.command
-                } else if (parsed.description) {
-                  last.displayInput = parsed.description
-                }
+                const di = buildToolDisplayInput(last.name, parsed)
+                if (di) last.displayInput = di
               } catch (e) {
                 // 解析失败，保留原始字符串
               }
@@ -148,7 +159,9 @@ function parseChatLines(lines) {
         } else if (part.type === 'thinking') {
           messages.push({ type: 'assistant_thinking', text: part.thinking || '', collapsed: true })
         } else if (part.type === 'tool_use') {
-          messages.push({ type: 'tool_use', name: part.name || '', input: JSON.stringify(part.input || {}, null, 2) })
+          const inputObj = part.input || {}
+          const di = buildToolDisplayInput(part.name, inputObj)
+          messages.push({ type: 'tool_use', name: part.name || '', input: JSON.stringify(inputObj, null, 2), displayInput: di })
         }
       }
     } else if (lineType === 'chat') {

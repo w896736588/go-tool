@@ -779,11 +779,13 @@
                 <!-- assistant message -->
                 <div v-else-if="msg.type === 'assistant'" style="background: #fff; border: 1px solid #ebeef5; border-radius: 8px; padding: 12px; margin: 8px 0;">
                   <!-- thinking -->
-                  <div v-if="msg.thinking" style="color: #909399; font-size: 12px; margin-bottom: 8px;">
-                    <span @click="msg._thinkingCollapsed = !msg._thinkingCollapsed" style="cursor: pointer; font-weight: bold;">
-                      {{ msg._thinkingCollapsed ? '▶ 思考过程' + (msg._thinkingTiming && msg._thinkingTiming.durationMs ? ' (' + (msg._thinkingTiming.durationMs / 1000).toFixed(1) + 's)' : '') : '▼ 思考过程' }}
-                    </span>
-                    <pre v-if="!msg._thinkingCollapsed" style="white-space: pre-wrap; margin-top: 4px; color: #606266;">{{ msg.thinking }}</pre>
+                  <div v-if="msg.thinking" style="margin-bottom: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                      <span v-if="msg._thinkingTiming && msg._thinkingTiming.durationMs" style="color: #909399; font-size: 12px;">思考耗时: {{ (msg._thinkingTiming.durationMs / 1000).toFixed(1) }}s</span>
+                      <span v-else-if="isCurrentThinking(msg)" style="color: #409eff; font-size: 12px;">思考中...</span>
+                      <span @click="toggleThinkingCollapse(msg)" style="cursor: pointer; font-weight: bold; font-size: 12px; color: #909399;">{{ msg._thinkingCollapsed ? '▶ 思考过程' : '▼ 思考过程' }}</span>
+                    </div>
+                    <pre v-if="!msg._thinkingCollapsed" class="thinking-scroll-box">{{ msg.thinking }}</pre>
                   </div>
                   <!-- content blocks -->
                   <div v-for="(block, bi) in msg.content" :key="bi">
@@ -968,11 +970,13 @@
                   <span style="margin-left: 8px; font-size: 11px;">{{ msg.status === 'started' ? '启动' : msg.status }}</span>
                 </div>
                 <div v-else-if="msg.type === 'assistant'" style="background: #fff; border: 1px solid #ebeef5; border-radius: 8px; padding: 12px; margin: 8px 0;">
-                  <div v-if="msg.thinking" style="color: #909399; font-size: 12px; margin-bottom: 8px;">
-                    <span @click="msg._thinkingCollapsed = !msg._thinkingCollapsed" style="cursor: pointer; font-weight: bold;">
-                      {{ msg._thinkingCollapsed ? '▶ 思考过程' + (msg._thinkingTiming && msg._thinkingTiming.durationMs ? ' (' + (msg._thinkingTiming.durationMs / 1000).toFixed(1) + 's)' : '') : '▼ 思考过程' }}
-                    </span>
-                    <pre v-if="!msg._thinkingCollapsed" style="white-space: pre-wrap; margin-top: 4px; color: #606266;">{{ msg.thinking }}</pre>
+                  <div v-if="msg.thinking" style="margin-bottom: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                      <span v-if="msg._thinkingTiming && msg._thinkingTiming.durationMs" style="color: #909399; font-size: 12px;">思考耗时: {{ (msg._thinkingTiming.durationMs / 1000).toFixed(1) }}s</span>
+                      <span v-else-if="isCurrentThinking(msg)" style="color: #409eff; font-size: 12px;">思考中...</span>
+                      <span @click="toggleThinkingCollapse(msg)" style="cursor: pointer; font-weight: bold; font-size: 12px; color: #909399;">{{ msg._thinkingCollapsed ? '▶ 思考过程' : '▼ 思考过程' }}</span>
+                    </div>
+                    <pre v-if="!msg._thinkingCollapsed" class="thinking-scroll-box">{{ msg.thinking }}</pre>
                   </div>
                   <div v-for="(block, bi) in msg.content" :key="bi">
                     <div v-if="block.type === 'text'" class="markdown-body chat-markdown-body" v-html="renderMarkdown(block.text)"></div>
@@ -1220,7 +1224,6 @@ export default {
       _pendingChatPrompt: '',
       chatDetailModelName: '',
       chatDetailLocalDir: '',
-      chatDetailThinkingCollapsed: 0,
       // zcode 配置
       zcodeConfigDialogVisible: false,
       zcodeDirInput: '',
@@ -1860,7 +1863,6 @@ export default {
           this.chatDetailStatus = data.status || ''
           this.chatDetailModelName = data.model_id ? '#' + data.model_id : ''
           this.chatDetailLocalDir = data.local_dir || ''
-          this.chatDetailThinkingCollapsed = data.thinking_collapsed || 0
           // 同步更新左侧列表中的状态
           this.updateChatListStatus(this.chatDetailId, this.chatDetailStatus)
           // 合并历史行 + SSE 加载期间收到的新行（有则去重）
@@ -1869,14 +1871,12 @@ export default {
           const newSseLines = sseLines.filter(l => !historicalLines.includes(l))
           this.chatDetailSSELines = [...historicalLines, ...newSseLines]
           this.chatDetailMessages = chatParser.parseChatLines(this.chatDetailSSELines)
-          // 联动 thinking_collapsed 开关：开启时折叠所有思考
-          if (this.chatDetailThinkingCollapsed === 1) {
-            this.chatDetailMessages.forEach(msg => {
-              if (msg.type === 'assistant' && msg.thinking) {
-                msg._thinkingCollapsed = true
-              }
-            })
-          }
+          // 历史对话：自动折叠所有思考（对话已完成或已结束）
+          this.chatDetailMessages.forEach(msg => {
+            if (msg.type === 'assistant' && msg.thinking) {
+              msg._thinkingCollapsed = true
+            }
+          })
           this.$nextTick(() => { this.scrollChatToBottom(true) })
         }
       })
@@ -1931,24 +1931,56 @@ export default {
             }
           }
         } catch (e) { /* ignore parse errors */ }
+        // 记录之前所有消息的折叠/手动切换状态（按索引），避免每次 re-parse 丢失
+        const prevCollapseByIdx = {}
+        this.chatDetailMessages.forEach((msg, i) => {
+          const state = {}
+          if (msg.type === 'assistant' && msg.thinking) {
+            state._thinkingCollapsed = msg._thinkingCollapsed
+            state._thinkingManuallyToggled = !!msg._thinkingManuallyToggled
+          }
+          if (msg.collapsed !== undefined) {
+            state.collapsed = msg.collapsed
+          }
+          if (Object.keys(state).length > 0) {
+            prevCollapseByIdx[i] = state
+          }
+        })
         this.chatDetailSSELines.push(line)
         this.chatDetailMessages = chatParser.parseChatLines(this.chatDetailSSELines)
-        // 联动 thinking_collapsed 开关 + 思考耗时
-        if (this.chatDetailThinkingCollapsed === 1 || this._pendingThinkingDurationMs > 0) {
-          this.chatDetailMessages.forEach(msg => {
+        // 恢复已存在消息的折叠状态
+        this.chatDetailMessages.forEach((msg, i) => {
+          const saved = prevCollapseByIdx[i]
+          if (!saved) return
+          if (saved._thinkingCollapsed !== undefined && msg.type === 'assistant' && msg.thinking) {
+            msg._thinkingCollapsed = saved._thinkingCollapsed
+            msg._thinkingManuallyToggled = saved._thinkingManuallyToggled
+          }
+          if (saved.collapsed !== undefined) {
+            msg.collapsed = saved.collapsed
+          }
+        })
+        // 思考完成时：注入耗时并自动折叠（用户手动切换过则保留其选择）
+        if (this._pendingThinkingDurationMs > 0) {
+          for (let i = this.chatDetailMessages.length - 1; i >= 0; i--) {
+            const msg = this.chatDetailMessages[i]
             if (msg.type === 'assistant' && msg.thinking) {
-              if (this.chatDetailThinkingCollapsed === 1) {
+              msg._thinkingTiming = msg._thinkingTiming || { startMs: 0, durationMs: 0 }
+              msg._thinkingTiming.durationMs = this._pendingThinkingDurationMs
+              if (!msg._thinkingManuallyToggled) {
                 msg._thinkingCollapsed = true
               }
-              if (this._pendingThinkingDurationMs > 0) {
-                msg._thinkingTiming = msg._thinkingTiming || { startMs: 0, durationMs: 0 }
-                msg._thinkingTiming.durationMs = this._pendingThinkingDurationMs
-              }
+              break
             }
-          })
+          }
           this._pendingThinkingDurationMs = 0
         }
-        this.$nextTick(() => { this.scrollChatToBottom() })
+        this.$nextTick(() => {
+          this.scrollChatToBottom()
+          // 自动滚动可见的思考框到底部
+          const boxes = document.querySelectorAll('.thinking-scroll-box')
+          boxes.forEach(box => { box.scrollTop = box.scrollHeight })
+        })
       }
       es.onerror = () => {
         this.chatDetailSSERegistered = false
@@ -1956,6 +1988,22 @@ export default {
         this._chatEventSource = null
         this.loadChatDetail()
       }
+    },
+    // 切换思考过程的折叠/展开
+    toggleThinkingCollapse(msg) {
+      msg._thinkingCollapsed = !msg._thinkingCollapsed
+      msg._thinkingManuallyToggled = true
+    },
+    // 判断当前消息是否正在思考中（实时流式阶段）
+    isCurrentThinking(msg) {
+      if (this._thinkingStreamStartTime === 0) return false
+      for (let i = this.chatDetailMessages.length - 1; i >= 0; i--) {
+        const m = this.chatDetailMessages[i]
+        if (m.type === 'assistant' && m.thinking) {
+          return m === msg
+        }
+      }
+      return false
     },
     // 滚动对话详情到底部
     scrollChatToBottom(force) {
@@ -3095,6 +3143,19 @@ export default {
 
 .task-workflow-node-status-inline__btn--pending:hover:not(:disabled) {
   background: #e9e9eb;
+}
+
+/* 思考过程滚动框 */
+.thinking-scroll-box {
+  white-space: pre-wrap;
+  font-size: 12px;
+  color: #606266;
+  max-height: 50px;
+  overflow-y: auto;
+  background: #f5f7fa;
+  padding: 6px 8px;
+  border-radius: 4px;
+  margin: 0;
 }
 </style>
 
