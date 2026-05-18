@@ -37,8 +37,11 @@
           <GitActionButton compact variant="warning" @click="openIssueFixDialog">
             问题修改提示词
           </GitActionButton>
-          <GitActionButton compact @click="openChatHistoryDialog">
+          <GitActionButton compact :class="{ 'chat-history-btn--running': chatCounts.running > 0 }" @click="openChatHistoryDialog">
             历史对话
+            <span v-if="chatCounts.total > 0" class="chat-history-btn__counts">
+              {{ chatCounts.running }}/{{ chatCounts.interrupted }}/{{ chatCounts.total }}
+            </span>
           </GitActionButton>
           <!--
           <GitActionButton compact variant="success" @click="openZcodeConfigDialog">
@@ -243,8 +246,11 @@
                   <template #icon><el-icon><VideoPlay /></el-icon></template>
                   执行
                 </GitActionButton>
-                <GitActionButton compact variant="info" @click="openPromptChatHistory('plain_text_requirement')">
+                <GitActionButton compact variant="info" :class="{ 'chat-history-btn--running': getPromptChatCounts('plain_text_requirement').running > 0 }" @click="openPromptChatHistory('plain_text_requirement')">
                   执行历史
+                  <span v-if="getPromptChatCounts('plain_text_requirement').total > 0" class="chat-history-btn__counts">
+                    {{ getPromptChatCounts('plain_text_requirement').running }}/{{ getPromptChatCounts('plain_text_requirement').interrupted }}/{{ getPromptChatCounts('plain_text_requirement').total }}
+                  </span>
                 </GitActionButton>
                 <GitActionButton compact variant="warning" :loading="promptRestoring === 'plain_text_requirement'" @click="restorePrompts('plain_text_requirement')">
                   还原为默认提示词
@@ -304,8 +310,11 @@
                   <template #icon><el-icon><VideoPlay /></el-icon></template>
                   执行
                 </GitActionButton>
-                <GitActionButton compact variant="info" @click="openPromptChatHistory('requirement')">
+                <GitActionButton compact variant="info" :class="{ 'chat-history-btn--running': getPromptChatCounts('requirement').running > 0 }" @click="openPromptChatHistory('requirement')">
                   执行历史
+                  <span v-if="getPromptChatCounts('requirement').total > 0" class="chat-history-btn__counts">
+                    {{ getPromptChatCounts('requirement').running }}/{{ getPromptChatCounts('requirement').interrupted }}/{{ getPromptChatCounts('requirement').total }}
+                  </span>
                 </GitActionButton>
                 <GitActionButton compact variant="warning" :loading="promptRestoring === 'requirement'" @click="restorePrompts('requirement')">
                   还原为默认提示词
@@ -346,8 +355,11 @@
                   <template #icon><el-icon><VideoPlay /></el-icon></template>
                   执行
                 </GitActionButton>
-                <GitActionButton compact variant="info" @click="openPromptChatHistory('design_plan_requirement')">
+                <GitActionButton compact variant="info" :class="{ 'chat-history-btn--running': getPromptChatCounts('design_plan_requirement').running > 0 }" @click="openPromptChatHistory('design_plan_requirement')">
                   执行历史
+                  <span v-if="getPromptChatCounts('design_plan_requirement').total > 0" class="chat-history-btn__counts">
+                    {{ getPromptChatCounts('design_plan_requirement').running }}/{{ getPromptChatCounts('design_plan_requirement').interrupted }}/{{ getPromptChatCounts('design_plan_requirement').total }}
+                  </span>
                 </GitActionButton>
                 <GitActionButton compact variant="warning" :loading="promptRestoring === 'design_plan_requirement'" @click="restorePrompts('design_plan_requirement')">
                   还原为默认提示词
@@ -394,8 +406,11 @@
                   <template #icon><el-icon><VideoPlay /></el-icon></template>
                   执行
                 </GitActionButton>
-                <GitActionButton compact variant="info" @click="openPromptChatHistory('design')">
+                <GitActionButton compact variant="info" :class="{ 'chat-history-btn--running': getPromptChatCounts('design').running > 0 }" @click="openPromptChatHistory('design')">
                   执行历史
+                  <span v-if="getPromptChatCounts('design').total > 0" class="chat-history-btn__counts">
+                    {{ getPromptChatCounts('design').running }}/{{ getPromptChatCounts('design').interrupted }}/{{ getPromptChatCounts('design').total }}
+                  </span>
                 </GitActionButton>
                 <GitActionButton compact variant="warning" :loading="promptRestoring === 'design'" @click="restorePrompts('design')">
                   还原为默认提示词
@@ -445,8 +460,11 @@
                   <template #icon><el-icon><VideoPlay /></el-icon></template>
                   执行
                 </GitActionButton>
-                <GitActionButton compact variant="info" @click="openPromptChatHistory('api_dev')">
+                <GitActionButton compact variant="info" :class="{ 'chat-history-btn--running': getPromptChatCounts('api_dev').running > 0 }" @click="openPromptChatHistory('api_dev')">
                   执行历史
+                  <span v-if="getPromptChatCounts('api_dev').total > 0" class="chat-history-btn__counts">
+                    {{ getPromptChatCounts('api_dev').running }}/{{ getPromptChatCounts('api_dev').interrupted }}/{{ getPromptChatCounts('api_dev').total }}
+                  </span>
                 </GitActionButton>
                 <GitActionButton compact variant="warning" :loading="promptRestoring === 'api_dev'" @click="restorePrompts('api_dev')">
                   还原为默认提示词
@@ -489,8 +507,11 @@
                   <template #icon><el-icon><VideoPlay /></el-icon></template>
                   执行
                 </GitActionButton>
-                <GitActionButton compact variant="info" @click="openPromptChatHistory('code_review')">
+                <GitActionButton compact variant="info" :class="{ 'chat-history-btn--running': getPromptChatCounts('code_review').running > 0 }" @click="openPromptChatHistory('code_review')">
                   执行历史
+                  <span v-if="getPromptChatCounts('code_review').total > 0" class="chat-history-btn__counts">
+                    {{ getPromptChatCounts('code_review').running }}/{{ getPromptChatCounts('code_review').interrupted }}/{{ getPromptChatCounts('code_review').total }}
+                  </span>
                 </GitActionButton>
                 <GitActionButton compact variant="warning" :loading="promptRestoring === 'code_review'" @click="restorePrompts('code_review')">
                   还原为默认提示词
@@ -533,8 +554,11 @@
                   <template #icon><el-icon><VideoPlay /></el-icon></template>
                   执行
                 </GitActionButton>
-                <GitActionButton compact variant="info" @click="openPromptChatHistory('browser_test')">
+                <GitActionButton compact variant="info" :class="{ 'chat-history-btn--running': getPromptChatCounts('browser_test').running > 0 }" @click="openPromptChatHistory('browser_test')">
                   执行历史
+                  <span v-if="getPromptChatCounts('browser_test').total > 0" class="chat-history-btn__counts">
+                    {{ getPromptChatCounts('browser_test').running }}/{{ getPromptChatCounts('browser_test').interrupted }}/{{ getPromptChatCounts('browser_test').total }}
+                  </span>
                 </GitActionButton>
                 <GitActionButton compact variant="warning" :loading="promptRestoring === 'browser_test'" @click="restorePrompts('browser_test')">
                   还原为默认提示词
@@ -577,8 +601,11 @@
                   <template #icon><el-icon><VideoPlay /></el-icon></template>
                   执行
                 </GitActionButton>
-                <GitActionButton compact variant="info" @click="openPromptChatHistory('api_test')">
+                <GitActionButton compact variant="info" :class="{ 'chat-history-btn--running': getPromptChatCounts('api_test').running > 0 }" @click="openPromptChatHistory('api_test')">
                   执行历史
+                  <span v-if="getPromptChatCounts('api_test').total > 0" class="chat-history-btn__counts">
+                    {{ getPromptChatCounts('api_test').running }}/{{ getPromptChatCounts('api_test').interrupted }}/{{ getPromptChatCounts('api_test').total }}
+                  </span>
                 </GitActionButton>
                 <GitActionButton compact variant="warning" :loading="promptRestoring === 'api_test'" @click="restorePrompts('api_test')">
                   还原为默认提示词
@@ -1204,6 +1231,8 @@ export default {
       chatCombinedDialogVisible: false,
       chatHistoryList: [],
       chatHistoryLoading: false,
+      chatCounts: { running: 0, interrupted: 0, total: 0 },
+      promptChatCounts: {},
       chatDetailId: 0,
       chatDetailPrompt: '',
       chatDetailSessionId: '',
@@ -1342,9 +1371,11 @@ export default {
   watch: {
     parsedTaskDevConfigs: {
       handler(configs) {
+        const seen = new Set()
         for (const cfg of configs) {
           const colId = Number(cfg.collection_id || 0)
-          if (colId > 0) {
+          if (colId > 0 && !seen.has(colId)) {
+            seen.add(colId)
             this.loadTaskConfigApiFoldersForCollection(colId)
           }
         }
@@ -1411,6 +1442,7 @@ export default {
           this.ensureWorkflowSse()
           this.maybeAutoFetchRequirement()
         })
+        this.loadChatCounts()
       })
     },
     applyWorkflowPayload(data) {
@@ -1840,6 +1872,15 @@ export default {
         })
       }).catch(() => {})
     },
+    // 加载对话计数（按钮上显示）
+    loadChatCounts() {
+      if (this.workflowId <= 0) return
+      taskWorkflowApi.TaskWorkflowChatList(this.workflowId, (res) => {
+        if (res.ErrCode === 0 && res.Data) {
+          this.updateChatCountsFromList(res.Data.list || [])
+        }
+      })
+    },
     // 打开历史对话合并弹窗
     openChatHistoryDialog() {
       this.chatCombinedDialogVisible = true
@@ -1847,12 +1888,32 @@ export default {
       taskWorkflowApi.TaskWorkflowChatList(this.workflowId, (res) => {
         this.chatHistoryLoading = false
         if (res.ErrCode === 0 && res.Data) {
-          this.chatHistoryList = res.Data.list || []
+          const list = res.Data.list || []
+          this.chatHistoryList = list
+          this.updateChatCountsFromList(list)
           if (this.chatHistoryList.length > 0) {
             this.onChatRowClick(this.chatHistoryList[0])
           }
         }
       })
+    },
+    updateChatCountsFromList(list) {
+      let running = 0, interrupted = 0
+      const byType = {}
+      for (const item of list) {
+        if (item.status === 'running') running++
+        else if (item.status === 'interrupted') interrupted++
+        const pt = item.prompt_type || ''
+        if (pt) {
+          const c = byType[pt] || { running: 0, interrupted: 0, total: 0 }
+          c.total++
+          if (item.status === 'running') c.running++
+          else if (item.status === 'interrupted') c.interrupted++
+          byType[pt] = c
+        }
+      }
+      this.chatCounts = { running, interrupted, total: list.length }
+      this.promptChatCounts = byType
     },
     // 点击左侧列表行，加载右侧详情
     onChatRowClick(row) {
@@ -1902,6 +1963,10 @@ export default {
             }
           })
           this.$nextTick(() => { this.scrollChatToBottom(true) })
+          // 正在执行的对话未连接 SSE 时自动重连，保证刷新后仍能实时更新
+          if (this.chatDetailStatus === 'running' && this._sseChatId !== this.chatDetailId) {
+            this.connectChatStream(this.chatDetailId)
+          }
         }
       })
     },
@@ -1936,6 +2001,7 @@ export default {
             es.close()
             this._chatEventSource = null
             this.loadChatDetail()
+            this.loadChatCounts()
             this.$nextTick(() => { this.scrollChatToBottom() })
             return
           }
@@ -2011,6 +2077,7 @@ export default {
         es.close()
         this._chatEventSource = null
         this.loadChatDetail()
+        this.loadChatCounts()
       }
     },
     // 切换思考过程的折叠/展开
@@ -2123,6 +2190,7 @@ export default {
           this.chatDetailSSELines = []
           this.chatDetailMessages = []
           this.connectChatStream(chatId)
+          this.loadChatCounts()
           setTimeout(() => { this.loadChatDetail() }, 500)
         } else {
           this.$helperNotify.error(res.ErrMsg || '发送失败')
@@ -2225,6 +2293,13 @@ export default {
               const chatId = chatRes.Data.chat_id
               this.$helperNotify.success('已发送到 claude code 执行')
               this.promptExecDialogVisible = false
+              // 初始化对话显示状态并连接 SSE 流以启动 claude code 执行
+              this.chatDetailId = chatId
+              this.chatDetailStatus = 'running'
+              this.chatDetailSSELines = []
+              this.chatDetailMessages = []
+              this.connectChatStream(chatId)
+              this.loadChatCounts()
               // 打开执行历史，定位到新对话
               this.openPromptChatHistory(this.promptExecPromptType, chatId)
             } else {
@@ -2233,6 +2308,9 @@ export default {
           }
         )
       })
+    },
+    getPromptChatCounts(promptType) {
+      return this.promptChatCounts[promptType] || { running: 0, interrupted: 0, total: 0 }
     },
     // 打开按类型的执行历史弹窗
     openPromptChatHistory(promptType, focusChatId) {
@@ -2378,7 +2456,11 @@ export default {
     loadTaskConfigApiFoldersForCollection(collectionId) {
       if (!collectionId) return
       if (this.taskConfigApiFolderMap[collectionId]) return
+      if (this._apiFolderLoading && this._apiFolderLoading[collectionId]) return
+      if (!this._apiFolderLoading) this._apiFolderLoading = {}
+      this._apiFolderLoading[collectionId] = true
       apiManagement.CollectionFoldersBasic({ collection_id: collectionId }, (response) => {
+        this._apiFolderLoading[collectionId] = false
         if (response && response.ErrCode === 0) {
           const list = Array.isArray(response.Data?.list) ? response.Data.list : []
           this.taskConfigApiFolderMap = { ...this.taskConfigApiFolderMap, [collectionId]: list }
@@ -3183,12 +3265,51 @@ export default {
   white-space: pre-wrap;
   font-size: 12px;
   color: #606266;
-  max-height: 50px;
+  min-height: 300px;
+  max-height: 500px;
   overflow-y: auto;
   background: #f5f7fa;
   padding: 6px 8px;
   border-radius: 4px;
   margin: 0;
+  scrollbar-width: thin;
+  scrollbar-color: #c0c4cc #f0f0f0;
+}
+
+.thinking-scroll-box::-webkit-scrollbar {
+  width: 6px;
+}
+
+.thinking-scroll-box::-webkit-scrollbar-track {
+  background: #f0f0f0;
+  border-radius: 3px;
+}
+
+.thinking-scroll-box::-webkit-scrollbar-thumb {
+  background: #c0c4cc;
+  border-radius: 3px;
+}
+
+.thinking-scroll-box::-webkit-scrollbar-thumb:hover {
+  background: #909399;
+}
+
+/* 历史对话按钮 — 执行中动画 */
+.chat-history-btn--running {
+  animation: chat-history-pulse 1.8s ease-in-out infinite;
+}
+
+.chat-history-btn__counts {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 11px;
+  opacity: 0.85;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes chat-history-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(64, 158, 255, 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(64, 158, 255, 0); }
 }
 </style>
 
@@ -3368,6 +3489,8 @@ export default {
   line-height: 1.6;
   min-height: 0;
   scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: #c0c4cc #f0f0f0;
 }
 
 .chat-detail-container::-webkit-scrollbar {

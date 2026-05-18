@@ -510,7 +510,7 @@
                         clearable
                         style="width: 100%"
                         placeholder="留空则自动创建"
-                        :loading="homeTaskApiFolderLoading"
+                        :loading="homeTaskApiFolderLoadingMap && homeTaskApiFolderLoadingMap[cfg.collection_id]"
                         :disabled="!cfg.collection_id"
                       >
                         <el-option
@@ -748,7 +748,7 @@ export default {
       homeTaskApiCollectionList: [],
       homeTaskApiFolderMap: {},
       homeTaskApiCollectionLoading: false,
-      homeTaskApiFolderLoading: false,
+      homeTaskApiFolderLoadingMap: {},
       homeTaskMysqlList: [],
       homeTaskMysqlLoading: false,
       homeTaskDockerList: [],
@@ -836,15 +836,18 @@ export default {
           this.homeTaskActiveList = taskList
           this.loadHomeTaskWorkflowCounts(taskList)
         }
-        // 预加载 dev_configs 中引用的 API 文件夹
+        // 预加载 dev_configs 中引用的 API 文件夹（去重）
+        const devColIds = new Set()
         for (const t of taskList) {
           if (Array.isArray(t.dev_configs)) {
             for (const cfg of t.dev_configs) {
-              if (Number(cfg.collection_id || 0) > 0) {
-                this.loadHomeTaskApiFoldersForCollection(cfg.collection_id)
-              }
+              const colId = Number(cfg.collection_id || 0)
+              if (colId > 0) devColIds.add(colId)
             }
           }
+        }
+        for (const colId of devColIds) {
+          this.loadHomeTaskApiFoldersForCollection(colId)
         }
         // 批量检查本地目录是否存在
         this.checkLocalDirExists(taskList)
@@ -909,9 +912,11 @@ export default {
     loadHomeTaskApiFoldersForCollection(collectionId) {
       if (!collectionId) return
       if (this.homeTaskApiFolderMap[collectionId]) return
-      this.homeTaskApiFolderLoading = true
+      if (this.homeTaskApiFolderLoadingMap && this.homeTaskApiFolderLoadingMap[collectionId]) return
+      if (!this.homeTaskApiFolderLoadingMap) this.homeTaskApiFolderLoadingMap = {}
+      this.homeTaskApiFolderLoadingMap[collectionId] = true
       apiManagement.CollectionFoldersBasic({ collection_id: collectionId }, (response) => {
-        this.homeTaskApiFolderLoading = false
+        this.homeTaskApiFolderLoadingMap[collectionId] = false
         if (!(response && response.ErrCode === 0)) return
         const list = Array.isArray(response.Data?.list) ? response.Data.list : []
         this.homeTaskApiFolderMap = { ...this.homeTaskApiFolderMap, [collectionId]: list }
@@ -1148,10 +1153,12 @@ export default {
       this.loadHomeTaskMysqlList()
       this.loadHomeTaskDockerList()
       this.loadHomeTaskSmartLinkList()
+      const devColIds = new Set()
       for (const cfg of devConfigs) {
-        if (cfg.collection_id > 0) {
-          this.loadHomeTaskApiFoldersForCollection(cfg.collection_id)
-        }
+        if (cfg.collection_id > 0) devColIds.add(cfg.collection_id)
+      }
+      for (const colId of devColIds) {
+        this.loadHomeTaskApiFoldersForCollection(colId)
       }
       this.homeTaskDialogVisible = true
     },
