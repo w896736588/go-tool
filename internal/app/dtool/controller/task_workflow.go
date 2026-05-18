@@ -2316,6 +2316,10 @@ func TaskWorkflowChatStreamOpen(urlValues url.Values, stopC chan int, c *gin.Con
 
 	distributeID := define.SseTaskWorkflowChatPrefix + chatIDStr
 	sse := gsgin.SseRegister(distributeID, stopC, c)
+	// 如果该 chatID 已有 goroutine 在运行，只注册 SSE 连接（复用已有 goroutine 的输出），不启动新命令
+	if _, running := chatCancelFuncs.Load(chatID); running {
+		return sse, nil
+	}
 	go runClaudeCommand(chatID, localDir, prompt, isContinue, sessionID, modelID, baseURL, apiKey, modelName, settingsPath, thinkingEffort, thinkingBudget, sse, stopC)
 	return sse, nil
 }
@@ -2915,13 +2919,17 @@ func taskWorkflowBuildZcodeMarkdown() string {
 
 // runClaudeCommand 后台执行 claude 命令并将输出推送到专用 SSE。
 func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sessionID string, modelID int, baseURL, apiKey, modelName, settingsPath, thinkingEffort string, thinkingBudget int, sse *gsgin.Sse, stopC chan int) {
+	distributeID := define.SseTaskWorkflowChatPrefix + cast.ToString(chatID)
+
 	defer func() {
 		if r := recover(); r != nil {
 			gstool.FmtPrintlnLogTime("[chat-run] chat_id=%d panic: %v", chatID, r)
 			_ = common.DbMain.TaskWorkflowChatMarkError(chatID)
-			if sse != nil {
-				_ = sse.SendToChan(fmt.Sprintf(`{"type":"chat","subtype":"completed","chat_id":%d}`, chatID))
+			// 动态获取当前注册的 SSE，而非使用创建 goroutine 时的旧引用
+			if curSse := gsgin.SseGetByClientId(distributeID); curSse != nil {
+				_ = curSse.SendToChan(fmt.Sprintf(`{"type":"chat","subtype":"completed","chat_id":%d}`, chatID))
 			}
+			taskWorkflowBroadcastChatStatus(chatID)
 		}
 		// stopC 可能已被 SSE 框架关闭，使用 recover 防止二次 close panic
 		func() {
@@ -2930,11 +2938,11 @@ func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sess
 		}()
 	}()
 
-	// sendLine 发送一行输出到专用 SSE。
+	// sendLine 每次发送时从 SSE 注册表动态获取当前连接，避免刷新页面后数据发送到已关闭的旧连接
 	sendLine := func(line string) {
 		_ = common.DbMain.TaskWorkflowChatAppendOutput(chatID, line)
-		if sse != nil {
-			_ = sse.SendToChan(line)
+		if curSse := gsgin.SseGetByClientId(distributeID); curSse != nil {
+			_ = curSse.SendToChan(line)
 		}
 	}
 	cfg := p_claude.RunConfig{
@@ -3009,6 +3017,8 @@ func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sess
 		_ = common.DbMain.TaskWorkflowChatMarkCompleted(chatID)
 	}
 	sendLine(fmt.Sprintf(`{"type":"chat","subtype":"completed","chat_id":%d}`, chatID))
+	// 通知工作流页面刷新 chat 状态计数（执行历史按钮动画和状态数量）
+	taskWorkflowBroadcastChatStatus(chatID)
 }
 
 // buildClaudeCmdDisplay 构建命令展示字符串。
@@ -3063,5 +3073,38 @@ func taskWorkflowAutoCompleteNode(workflowInfo map[string]any, nodeKey string) {
 	nodeStatuses[nodeKey] = `completed`
 	if data, err := json.Marshal(nodeStatuses); err == nil {
 		_ = common.DbMain.TaskWorkflowUpdateNodeStatuses(workflowID, string(data))
+	}
+}
+
+// taskWorkflowBroadcastChatStatus 在 chat 状态变更后通知对应工作流页面刷新计数。
+func taskWorkflowBroadcastChatStatus(chatID int64) {
+	chatInfo, err := common.DbMain.TaskWorkflowChatInfo(chatID)
+	if err != nil || len(chatInfo) == 0 {
+		return
+	}
+	workflowID := cast.ToInt(chatInfo[`workflow_id`])
+	if workflowID <= 0 {
+		return
+	}
+	distributeID := define.SseTaskWorkflowPrefix + cast.ToString(workflowID)
+	msg := gstool.JsonEncode(p_define.SseData{
+		SseDistributeId: distributeID,
+		Data: map[string]any{
+			`type`:        `chat_status_change`,
+			`chat_id`:     chatID,
+			`workflow_id`: workflowID,
+		},
+		Type: p_define.SseContentTypeMsg,
+	})
+	for _, item := range gsgin.SseStatus() {
+		clientID := strings.TrimSpace(strings.TrimPrefix(item, apiDataChangeSseStatusPrefix))
+		if clientID == `` || clientID == item {
+			continue
+		}
+		sse := gsgin.SseGetByClientId(clientID)
+		if sse == nil {
+			continue
+		}
+		_ = sse.SendToChan(msg)
 	}
 }

@@ -943,7 +943,7 @@
               <span v-if="item.status === 'running' && runtimeDurationText(item)" style="color: #409eff;">{{ runtimeDurationText(item) }}</span>
               <span v-else-if="item.duration_ms > 0">{{ formatDurationDisplay(item.duration_ms) }}</span>
               <span v-else>{{ item.created_at || '-' }}</span>
-              <span v-if="item.line_count > 0" class="chat-list-item__msg-count">{{ item.line_count }}条</span>
+              <span v-if="getItemMsgCount(item) > 0" class="chat-list-item__msg-count">{{ getItemMsgCount(item) }}条</span>
             </div>
             <span :class="['chat-list-item__status', 'chat-list-item__status--' + (item.status || '')]">{{ statusText(item.status) }}</span>
           </div>
@@ -1548,6 +1548,11 @@ export default {
     },
     handleWorkflowSseMessage(data) {
       if (!data || Number(data.workflow_id || 0) !== this.workflowId) {
+        return
+      }
+      // chat 状态变更时刷新执行历史按钮的计数和动画
+      if (data.type === 'chat_status_change') {
+        this.loadChatCounts()
         return
       }
       this.requirementFetchLogs.push({
@@ -2631,6 +2636,13 @@ export default {
       if (msgIndex >= 0 && msgIndex < children.length) {
         children[msgIndex].scrollIntoView({ behavior: 'smooth', block: 'center' })
       }
+    },
+    // 获取列表项的消息数：运行中的对话使用实时SSE消息计数，否则使用数据库持久化的line_count
+    getItemMsgCount(item) {
+      if (item.status === 'running' && this._sseChatId > 0 && item.id === this._sseChatId) {
+        return this.chatDetailSSELines.length
+      }
+      return item.line_count || 0
     },
   },
 }

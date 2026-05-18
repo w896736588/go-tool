@@ -12,6 +12,12 @@ import (
 	"github.com/spf13/cast"
 )
 
+// CleanupOrphanedMcpProcesses 清理残留的 chrome-devtools-mcp 子进程。
+// 用于 Go 进程崩溃后重启时的兜底清扫（Windows Job Object / Unix 进程组已覆盖正常退出场景）。
+func CleanupOrphanedMcpProcesses() {
+	cleanupOrphanedMcpProcesses()
+}
+
 // maxScanTokenSize bufio.Scanner 最大缓冲区大小（10MB）。
 // stream-json 输出中单行可能远超默认 64KB（尤其是工具调用结果）。
 const maxScanTokenSize = 10 * 1024 * 1024
@@ -22,7 +28,7 @@ type ptyResult struct {
 	stderrCh <-chan string       // stderr 行数据通道
 	pid      int                 // 进程 ID
 	waitFn   func() (int, error) // 等待进程退出并返回退出码
-	closeFn  func()              // 强制终止进程
+	closeFn  func()              // 强制终止进程（含子进程清理：Windows Job Object / Unix 进程组）
 }
 
 // RunClaudeStream 执行 claude 命令并逐行推送解析后的消息。

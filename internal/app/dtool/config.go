@@ -8,6 +8,7 @@ import (
 	"dev_tool/internal/app/dtool/define"
 	"dev_tool/internal/app/dtool/plw"
 	"dev_tool/internal/app/dtool/variable"
+	"dev_tool/internal/pkg/p_claude"
 	"dev_tool/internal/pkg/p_common"
 	"dev_tool/internal/pkg/p_db"
 	"dev_tool/internal/pkg/p_gin"
@@ -502,6 +503,8 @@ func initOther() {
 
 func InitComponent() {
 	p_common.AesGcmClient = gsencrypt.NewAesGcm(AppName)
+	// 清理上次崩溃可能残留的 chrome-devtools-mcp 孤儿进程（windows job object / unix 进程组已覆盖正常退出场景）
+	p_claude.CleanupOrphanedMcpProcesses()
 	// 恢复上次进程残留的 running 状态
 	if common.DbMain != nil {
 		common.DbMain.TaskWorkflowChatRecoverInterrupted()

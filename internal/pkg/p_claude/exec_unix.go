@@ -11,12 +11,18 @@ import (
 )
 
 // startClaude Unix 实现。
-// 与 chat_test.go 一致：stdout/stderr 均通过 goroutine 实时消费，
-// cmd.Wait() 在后台 goroutine 执行，确保管道数据被实时读取。
+// 使用 Setsid + Setpgid 创建独立进程组，关闭时通过信号杀死整个进程组，
+// 确保 npx chrome-devtools-mcp 等子进程一并终止。
 func startClaude(ctx context.Context, args []string, workDir string, env []string) (ptyResult, error) {
 	cmd := exec.Command(`claude`, args...)
 	cmd.Dir = workDir
 	cmd.Env = env
+	// Setsid：脱离父进程的会话，防止 Ctrl+C 等信号传播到子进程
+	// Setpgid：以子进程 PID 创建新进程组，后续可通过 -pgid 杀死整组进程
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setsid:  true,
+		Setpgid: true,
+	}
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -31,6 +37,8 @@ func startClaude(ctx context.Context, args []string, workDir string, env []strin
 	if err := cmd.Start(); err != nil {
 		return ptyResult{}, err
 	}
+
+	pgid := -cmd.Process.Pid // 进程组 ID = 进程自己的 PID（Setpgid=true）
 
 	lineCh := make(chan string, 256)
 	stderrCh := make(chan string, 64)
@@ -88,7 +96,10 @@ func startClaude(ctx context.Context, args []string, workDir string, env []strin
 			return exitCode, waitErr
 		},
 		closeFn: func() {
-			cmd.Process.Kill()
+			// 先向整个进程组发 SIGKILL，CLaude CLI 及其子进程（npx、MCP server）一并被内核终止
+			_ = syscall.Kill(pgid, syscall.SIGKILL)
+			// 再确保主进程被回收（正常情况下已被上面信号杀死，此调用不会产生额外副作用）
+			_ = cmd.Process.Kill()
 		},
 	}, nil
 }
