@@ -667,7 +667,7 @@
         <el-button @click="issueFixDialogVisible = false" type="danger">关闭</el-button>
       </div>
         <div style="margin-bottom: 12px; display: flex; gap: 8px;">
-          <el-button type="primary" :loading="sendingToClaude" @click="sendToClaudeCode">
+          <el-button type="primary" @click="sendToClaudeCode">
            执行
           </el-button>
         </div>
@@ -705,51 +705,6 @@
       </template>
     </el-dialog>
 
-    <!-- 对话配置弹窗 -->
-    <el-dialog
-      v-model="chatConfigDialogVisible"
-      title="Claude Code 对话配置"
-      width="500px"
-      destroy-on-close
-    >
-      <el-form label-width="100px">
-        <el-form-item label="工作目录">
-          <el-select v-model="chatConfigLocalDir" style="width: 100%;" placeholder="请选择工作目录">
-            <el-option
-              v-for="(dir, idx) in chatConfigDirs"
-              :key="idx"
-              :label="dir"
-              :value="dir"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="cli">
-          <el-select v-model="chatConfigCliId" style="width: 100%;" placeholder="请选择 Agent CLI 实例">
-            <el-option
-              v-for="cli in chatConfigCliList"
-              :key="cli.id"
-              :label="cli.name + ' (' + cli.current_model + ')'"
-              :value="cli.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="思考强度">
-          <el-select v-model="chatConfigThinkingIntensity" style="width: 100%;" placeholder="请选择思考强度">
-            <el-option label="低" value="低" />
-            <el-option label="中等" value="中等" />
-            <el-option label="高" value="高" />
-            <el-option label="很高" value="很高" />
-            <el-option label="最高" value="最高" />
-          </el-select>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="chatConfigDialogVisible = false">取消</el-button>
-        <el-button type="primary" :disabled="!chatConfigCliId || !chatConfigLocalDir" @click="startClaudeChat">
-          开始对话
-        </el-button>
-      </template>
-    </el-dialog>
   </div>
 
     <!-- 历史对话合并弹窗（左侧列表+右侧详情） -->
@@ -814,22 +769,22 @@
                   <span style="margin-left: 8px; font-size: 11px;">{{ msg.status === 'started' ? '启动' : msg.status }}</span>
                 </div>
                 <!-- assistant message -->
-                <div v-else-if="msg.type === 'assistant'" style="background: #fff; border: 1px solid #ebeef5; border-radius: 8px; padding: 12px; margin: 8px 0;">
+                <div v-else-if="msg.type === 'assistant'">
                   <!-- thinking -->
                   <div v-if="msg.thinking" style="margin-bottom: 8px;">
                     <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
-                      <span v-if="msg._thinkingTiming && msg._thinkingTiming.durationMs" style="color: #909399; font-size: 12px;">思考耗时: {{ (msg._thinkingTiming.durationMs / 1000).toFixed(1) }}s</span>
-                      <span v-else-if="isCurrentThinking(msg)" style="color: #409eff; font-size: 12px;">思考中...</span>
-                      <span @click="toggleThinkingCollapse(msg)" style="cursor: pointer; font-weight: bold; font-size: 12px; color: #909399;">{{ msg._thinkingCollapsed ? '▶ 思考过程' : '▼ 思考过程' }}</span>
+                      <span v-if="isCurrentThinking(msg)" style="color: #409eff; font-size: 12px;">思考中.... 持续{{ thinkingStreamElapsed }}s</span>
+                      <span v-else style="color: #909399; font-size: 12px;">思考过程{{ msg._thinkingTiming && msg._thinkingTiming.durationMs ? ' (' + (msg._thinkingTiming.durationMs / 1000).toFixed(1) + 's)' : '' }}</span>
+                      <span @click="toggleThinkingCollapse(msg)" style="cursor: pointer; font-weight: bold; font-size: 12px; color: #909399;">{{ msg._thinkingCollapsed ? '▶' : '▼' }}</span>
                     </div>
-                    <pre v-if="!msg._thinkingCollapsed" class="thinking-scroll-box">{{ msg.thinking }}</pre>
+                    <div v-if="!msg._thinkingCollapsed" class="thinking-blockquote">{{ msg.thinking }}</div>
                   </div>
                   <!-- content blocks -->
                   <div v-for="(block, bi) in msg.content" :key="bi">
                     <div v-if="block.type === 'text'" style="white-space: pre-wrap; line-height: 1.6;">{{ block.text }}</div>
                     <div v-else-if="block.type === 'tool_use'" style="background: #f0f9eb; border-radius: 4px; padding: 8px; margin: 4px 0;">
                       <span style="color: #67c23a; font-weight: 500;">🔧 {{ block.name }}</span>
-                      <div v-if="block.displayInput" style="white-space: pre-wrap; font-size: 12px; color: #303133; margin-top: 4px; font-family: Consolas, monospace; background: #f5f7fa; padding: 4px 8px; border-radius: 3px;">{{ block.displayInput }}</div>
+                      <span v-if="block.displayInput" style="margin-left: 8px; font-size: 12px; color: #303133; font-family: Consolas, monospace;">{{ block.displayInput }}</span>
                       <div v-else style="font-size: 12px; color: #909399; margin-top: 4px; cursor: pointer;" @click="block._inputExpanded = !block._inputExpanded">
                         {{ block._inputExpanded ? '▼' : '▶' }} 参数
                       </div>
@@ -850,8 +805,11 @@
                 <div v-else-if="msg.type === 'assistant_text'" style="white-space: pre-wrap; line-height: 1.6;">{{ msg.text }}</div>
                 <!-- assistant_thinking -->
                 <div v-else-if="msg.type === 'assistant_thinking'" style="color: #909399; font-size: 12px;">
-                  <span @click="msg.collapsed = !msg.collapsed" style="cursor: pointer;">{{ msg.collapsed ? '▶ 思考' : '▼ 思考' }}</span>
-                  <pre v-if="!msg.collapsed" style="white-space: pre-wrap; margin-top: 4px;">{{ msg.text }}</pre>
+                  <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                    <span>思考过程{{ msg._thinkingTiming && msg._thinkingTiming.durationMs ? ' (' + (msg._thinkingTiming.durationMs / 1000).toFixed(1) + 's)' : '' }}</span>
+                    <span @click="toggleThinkingCollapse(msg)" style="cursor: pointer; font-weight: bold;">{{ msg._thinkingCollapsed ? '▶' : '▼' }}</span>
+                  </div>
+                  <div v-if="!msg._thinkingCollapsed" class="thinking-blockquote">{{ msg.text }}</div>
                 </div>
                 <!-- result -->
                 <div v-else-if="msg.type === 'result'" style="color: #67c23a; font-size: 12px; border-top: 1px solid #ebeef5; padding-top: 8px; margin-top: 8px;">
@@ -1011,20 +969,20 @@
                   <span :style="msg.status === 'completed' ? 'color: #67c23a;' : msg.status === 'started' ? 'color: #409eff;' : ''">🔧 {{ msg.description }}</span>
                   <span style="margin-left: 8px; font-size: 11px;">{{ msg.status === 'started' ? '启动' : msg.status }}</span>
                 </div>
-                <div v-else-if="msg.type === 'assistant'" style="background: #fff; border: 1px solid #ebeef5; border-radius: 8px; padding: 12px; margin: 8px 0;">
+                <div v-else-if="msg.type === 'assistant'">
                   <div v-if="msg.thinking" style="margin-bottom: 8px;">
                     <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
-                      <span v-if="msg._thinkingTiming && msg._thinkingTiming.durationMs" style="color: #909399; font-size: 12px;">思考耗时: {{ (msg._thinkingTiming.durationMs / 1000).toFixed(1) }}s</span>
-                      <span v-else-if="isCurrentThinking(msg)" style="color: #409eff; font-size: 12px;">思考中...</span>
-                      <span @click="toggleThinkingCollapse(msg)" style="cursor: pointer; font-weight: bold; font-size: 12px; color: #909399;">{{ msg._thinkingCollapsed ? '▶ 思考过程' : '▼ 思考过程' }}</span>
+                      <span v-if="isCurrentThinking(msg)" style="color: #409eff; font-size: 12px;">思考中.... 持续{{ thinkingStreamElapsed }}s</span>
+                      <span v-else style="color: #909399; font-size: 12px;">思考过程{{ msg._thinkingTiming && msg._thinkingTiming.durationMs ? ' (' + (msg._thinkingTiming.durationMs / 1000).toFixed(1) + 's)' : '' }}</span>
+                      <span @click="toggleThinkingCollapse(msg)" style="cursor: pointer; font-weight: bold; font-size: 12px; color: #909399;">{{ msg._thinkingCollapsed ? '▶' : '▼' }}</span>
                     </div>
-                    <pre v-if="!msg._thinkingCollapsed" class="thinking-scroll-box">{{ msg.thinking }}</pre>
+                    <div v-if="!msg._thinkingCollapsed" class="thinking-blockquote">{{ msg.thinking }}</div>
                   </div>
                   <div v-for="(block, bi) in msg.content" :key="bi">
                     <div v-if="block.type === 'text'" class="markdown-body chat-markdown-body" v-html="renderMarkdown(block.text)"></div>
                     <div v-else-if="block.type === 'tool_use'" style="background: #f0f9eb; border-radius: 4px; padding: 8px; margin: 4px 0;">
                       <span style="color: #67c23a; font-weight: 500;">🔧 {{ block.name }}</span>
-                      <div v-if="block.displayInput" style="white-space: pre-wrap; font-size: 12px; color: #303133; margin-top: 4px; font-family: Consolas, monospace; background: #f5f7fa; padding: 4px 8px; border-radius: 3px;">{{ block.displayInput }}</div>
+                      <span v-if="block.displayInput" style="margin-left: 8px; font-size: 12px; color: #303133; font-family: Consolas, monospace;">{{ block.displayInput }}</span>
                       <div v-else style="font-size: 12px; color: #909399; margin-top: 4px; cursor: pointer;" @click="block._inputExpanded = !block._inputExpanded">
                         {{ block._inputExpanded ? '▼' : '▶' }} 参数
                       </div>
@@ -1041,8 +999,11 @@
                 </div>
                 <div v-else-if="msg.type === 'assistant_text'" class="markdown-body chat-markdown-body" v-html="renderMarkdown(msg.text)"></div>
                 <div v-else-if="msg.type === 'assistant_thinking'" style="color: #909399; font-size: 12px;">
-                  <span @click="msg.collapsed = !msg.collapsed" style="cursor: pointer;">{{ msg.collapsed ? '▶ 思考' : '▼ 思考' }}</span>
-                  <pre v-if="!msg.collapsed" style="white-space: pre-wrap; margin-top: 4px;">{{ msg.text }}</pre>
+                  <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                    <span>思考过程{{ msg._thinkingTiming && msg._thinkingTiming.durationMs ? ' (' + (msg._thinkingTiming.durationMs / 1000).toFixed(1) + 's)' : '' }}</span>
+                    <span @click="toggleThinkingCollapse(msg)" style="cursor: pointer; font-weight: bold;">{{ msg._thinkingCollapsed ? '▶' : '▼' }}</span>
+                  </div>
+                  <div v-if="!msg._thinkingCollapsed" class="thinking-blockquote">{{ msg.text }}</div>
                 </div>
                 <div v-else-if="msg.type === 'result'" style="color: #67c23a; font-size: 12px; border-top: 1px solid #ebeef5; padding-top: 8px; margin-top: 8px;">
                   {{ msg.isError ? '✘ 错误' : '✔ 完成' }} | 耗时: {{ (msg.durationMs / 1000).toFixed(1) }}s | {{ msg.numTurns }} 轮
@@ -1240,17 +1201,11 @@ export default {
       chatDetailMessages: [],
       chatDetailSSERegistered: false,
       chatDetailSSELines: [], // SSE 累积的原始行，用于全量重解析
-      sendingToClaude: false,
       chatDetailAutoScroll: true,
       chatDetailShowScrollBtn: false,
+      thinkingStreamElapsed: 0, // 思考流式阶段的实时已用秒数
       chatContinueInput: '',
       chatContinueLoading: false,
-      chatConfigDialogVisible: false,
-      chatConfigCliId: 0,
-      chatConfigLocalDir: '',
-      chatConfigDirs: [],
-      chatConfigCliList: [],
-      chatConfigThinkingIntensity: '高',
       // 执行任务
       promptExecDialogVisible: false,
       promptExecCliId: 0,
@@ -1267,7 +1222,6 @@ export default {
       promptChatHistoryPromptType: '',
       promptChatDetailId: 0,
       promptChatDetailShowScrollBtn: false,
-      _pendingChatPrompt: '',
       chatDetailModelName: '',
       chatDetailLocalDir: '',
       // zcode 配置
@@ -1961,6 +1915,9 @@ export default {
             if (msg.type === 'assistant' && msg.thinking) {
               msg._thinkingCollapsed = true
             }
+            if (msg.type === 'assistant_thinking') {
+              msg._thinkingCollapsed = true
+            }
           })
           this.$nextTick(() => { this.scrollChatToBottom(true) })
           // 正在执行的对话未连接 SSE 时自动重连，保证刷新后仍能实时更新
@@ -1982,6 +1939,16 @@ export default {
       this.chatDetailSSERegistered = true
       this._thinkingStreamStartTime = 0 // 当前对话思考计时的起始时间戳
       this._thinkingStreamMsgIdx = -1  // 当前思考所属的消息索引（在 chatDetailMessages 中的位置）
+      // 启动思考耗时动态更新定时器
+      if (this._thinkingTimer) { clearInterval(this._thinkingTimer); this._thinkingTimer = null }
+      this.thinkingStreamElapsed = 0
+      this._thinkingTimer = setInterval(() => {
+        if (this._thinkingStreamStartTime > 0) {
+          this.thinkingStreamElapsed = Math.floor((Date.now() - this._thinkingStreamStartTime) / 1000)
+        } else {
+          this.thinkingStreamElapsed = 0
+        }
+      }, 200)
       const sseHost = baseUtils.GetSseApiHost()
       let url = sseHost + '/api/task/workflow/chat/stream?chat_id=' + chatId + '&token=' + encodeURIComponent(baseUtils.GetSafeToken())
       if (continuePrompt) {
@@ -2068,11 +2035,13 @@ export default {
         this.$nextTick(() => {
           this.scrollChatToBottom()
           // 自动滚动可见的思考框到底部
-          const boxes = document.querySelectorAll('.thinking-scroll-box')
+          const boxes = document.querySelectorAll('.thinking-blockquote')
           boxes.forEach(box => { box.scrollTop = box.scrollHeight })
         })
       }
       es.onerror = () => {
+        if (this._thinkingTimer) { clearInterval(this._thinkingTimer); this._thinkingTimer = null }
+        this.thinkingStreamElapsed = 0
         this.chatDetailSSERegistered = false
         es.close()
         this._chatEventSource = null
@@ -2128,6 +2097,8 @@ export default {
     },
     // 关闭对话详情（彻底断开 SSE 并清空状态）
     closeChatDetail() {
+      if (this._thinkingTimer) { clearInterval(this._thinkingTimer); this._thinkingTimer = null }
+      this.thinkingStreamElapsed = 0
       if (this._chatEventSource) {
         this._chatEventSource.close()
         this._chatEventSource = null
@@ -2143,59 +2114,14 @@ export default {
     onChatCombinedDialogClosed() {
       // 不关闭 SSE，后台继续运行
     },
-    // 打开对话配置弹窗
     sendToClaudeCode() {
       const prompt = this.issueFixCombinedText
       if (!prompt || !prompt.trim()) {
         this.$helperNotify.warning('提示词为空，无法发送')
         return
       }
-      this._pendingChatPrompt = prompt
-      this.chatConfigThinkingIntensity = '高'
-      // 加载 Agent CLI 列表
-      agentCliApi.AgentCliList((res) => {
-        if (res.ErrCode === 0 && res.Data) {
-          this.chatConfigCliList = res.Data.list || []
-          if (this.chatConfigCliList.length === 1) {
-            this.chatConfigCliId = this.chatConfigCliList[0].id
-          }
-        }
-      })
-      // 加载可用目录
-      taskWorkflowApi.TaskWorkflowChatDirs(this.workflowId, (res) => {
-        if (res.ErrCode === 0) {
-          this.chatConfigDirs = res.Data.dirs || []
-          if (this.chatConfigDirs.length > 0) {
-            this.chatConfigLocalDir = this.chatConfigDirs[0]
-          }
-        }
-      })
-      this.chatConfigDialogVisible = true
-    },
-    // 执行对话配置，开始对话
-    startClaudeChat() {
-      const prompt = this._pendingChatPrompt
-      if (!prompt || !this.chatConfigCliId || !this.chatConfigLocalDir) return
-      this.sendingToClaude = true
-      taskWorkflowApi.TaskWorkflowChatSend(this.workflowId, prompt, null, 'issue_fix', this.chatConfigLocalDir, 'claude', 0, this.chatConfigCliId, this.chatConfigThinkingIntensity, (res) => {
-        this.sendingToClaude = false
-        if (res.ErrCode === 0 && res.Data) {
-          const chatId = res.Data.chat_id
-          this.$helperNotify.success('已发送到 claude code 执行')
-          this.chatConfigDialogVisible = false
-          this.issueFixDialogVisible = false
-          this.chatDetailId = chatId
-          this.chatDetailStatus = 'running'
-          this.chatCombinedDialogVisible = true
-          this.chatDetailSSELines = []
-          this.chatDetailMessages = []
-          this.connectChatStream(chatId)
-          this.loadChatCounts()
-          setTimeout(() => { this.loadChatDetail() }, 500)
-        } else {
-          this.$helperNotify.error(res.ErrMsg || '发送失败')
-        }
-      })
+      this.issueFixDialogVisible = false
+      this.openPromptExecDialog('issue_fix', prompt)
     },
     // 继续对话
     continueChat() {
@@ -2323,6 +2249,7 @@ export default {
         code_review: '代码检查',
         browser_test: '浏览器测试',
         api_test: '接口测试修复',
+        issue_fix: '问题修改',
       }
       this.promptChatHistoryTitle = titleMap[promptType] || promptType
       this.promptChatHistoryPromptType = promptType
@@ -3260,37 +3187,35 @@ export default {
   background: #e9e9eb;
 }
 
-/* 思考过程滚动框 */
-.thinking-scroll-box {
+/* 思考过程文本区 */
+.thinking-blockquote {
   white-space: pre-wrap;
   font-size: 12px;
   color: #606266;
-  min-height: 300px;
-  max-height: 500px;
-  overflow-y: auto;
+  border-left: 3px solid #dcdfe6;
   background: #f5f7fa;
-  padding: 6px 8px;
-  border-radius: 4px;
+  padding: 8px 12px;
   margin: 0;
-  scrollbar-width: thin;
-  scrollbar-color: #c0c4cc #f0f0f0;
+  border-radius: 0 4px 4px 0;
+  max-height: 400px;
+  overflow-y: auto;
 }
 
-.thinking-scroll-box::-webkit-scrollbar {
+.thinking-blockquote::-webkit-scrollbar {
   width: 6px;
 }
 
-.thinking-scroll-box::-webkit-scrollbar-track {
+.thinking-blockquote::-webkit-scrollbar-track {
   background: #f0f0f0;
   border-radius: 3px;
 }
 
-.thinking-scroll-box::-webkit-scrollbar-thumb {
+.thinking-blockquote::-webkit-scrollbar-thumb {
   background: #c0c4cc;
   border-radius: 3px;
 }
 
-.thinking-scroll-box::-webkit-scrollbar-thumb:hover {
+.thinking-blockquote::-webkit-scrollbar-thumb:hover {
   background: #909399;
 }
 

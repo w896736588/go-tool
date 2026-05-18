@@ -2487,24 +2487,26 @@ func TaskWorkflowChatList(c *gin.Context) {
 		return
 	}
 	type chatItem struct {
-		ID        int64  `json:"id"`
-		SessionID string `json:"session_id"`
-		Prompt    string `json:"prompt"`
-		ModelID   int    `json:"model_id"`
-		LocalDir  string `json:"local_dir"`
-		Status    string `json:"status"`
-		CreatedAt string `json:"created_at"`
+		ID         int64  `json:"id"`
+		SessionID  string `json:"session_id"`
+		Prompt     string `json:"prompt"`
+		PromptType string `json:"prompt_type"`
+		ModelID    int    `json:"model_id"`
+		LocalDir   string `json:"local_dir"`
+		Status     string `json:"status"`
+		CreatedAt  string `json:"created_at"`
 	}
 	list := make([]chatItem, 0, len(rows))
 	for _, row := range rows {
 		list = append(list, chatItem{
-			ID:        cast.ToInt64(row[`id`]),
-			SessionID: cast.ToString(row[`session_id`]),
-			Prompt:    cast.ToString(row[`prompt`]),
-			ModelID:   cast.ToInt(row[`model_id`]),
-			LocalDir:  cast.ToString(row[`local_dir`]),
-			Status:    cast.ToString(row[`status`]),
-			CreatedAt: cast.ToString(row[`created_at`]),
+			ID:         cast.ToInt64(row[`id`]),
+			SessionID:  cast.ToString(row[`session_id`]),
+			Prompt:     cast.ToString(row[`prompt`]),
+			PromptType: cast.ToString(row[`prompt_type`]),
+			ModelID:    cast.ToInt(row[`model_id`]),
+			LocalDir:   cast.ToString(row[`local_dir`]),
+			Status:     cast.ToString(row[`status`]),
+			CreatedAt:  cast.ToString(row[`created_at`]),
 		})
 	}
 	gsgin.GinResponseSuccess(c, ``, map[string]any{

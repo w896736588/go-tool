@@ -548,11 +548,28 @@ func (h *CSqlite) TaskWorkflowChatInfo(chatID int64) (map[string]any, error) {
 	}).One()
 }
 
-// TaskWorkflowChatList 获取 workflow 下所有对话记录。
+// TaskWorkflowChatList 获取 workflow 下所有对话记录，并附加 prompt_type。
 func (h *CSqlite) TaskWorkflowChatList(workflowID int) ([]map[string]any, error) {
-	return h.Client.QuickQuery(`tbl_task_workflow_chat`, `*`, map[string]any{
+	rows, err := h.Client.QuickQuery(`tbl_task_workflow_chat`, `*`, map[string]any{
 		`workflow_id`: workflowID,
 	}).Order(`id DESC`).All()
+	if err != nil {
+		return nil, err
+	}
+	// 构建 chat_id → prompt_type 反向映射
+	workflowInfo, err := h.TaskWorkflowInfo(workflowID)
+	if err == nil && len(workflowInfo) > 0 {
+		chatTypeMap := make(map[int64]string)
+		for promptType, sessionField := range taskWorkflowChatSessionIDFieldMap {
+			for _, s := range h.parseChatSessionIDs(cast.ToString(workflowInfo[sessionField])) {
+				chatTypeMap[cast.ToInt64(s[`chat_id`])] = promptType
+			}
+		}
+		for _, row := range rows {
+			row[`prompt_type`] = chatTypeMap[cast.ToInt64(row[`id`])]
+		}
+	}
+	return rows, nil
 }
 
 // TaskWorkflowChatMarkRunning 标记对话为运行中（用于继续对话）。
