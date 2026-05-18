@@ -725,7 +725,11 @@
             @click="onChatRowClick(item)"
           >
             <div class="chat-list-item__name">{{ (item.prompt || '').substring(0, 10) || '未命名' }}</div>
-            <div class="chat-list-item__time">{{ item.created_at || '-' }}</div>
+            <div class="chat-list-item__time">
+              <span v-if="item.status === 'running' && runtimeDurationText(item)" style="color: #409eff;">{{ runtimeDurationText(item) }}</span>
+              <span v-else-if="item.duration_ms > 0">{{ formatDurationDisplay(item.duration_ms) }}</span>
+              <span v-else>{{ item.created_at || '-' }}</span>
+            </div>
             <span :class="['chat-list-item__status', 'chat-list-item__status--' + (item.status || '')]">{{ statusText(item.status) }}</span>
           </div>
           <div v-if="chatHistoryList.length === 0 && !chatHistoryLoading" class="chat-combined-list__empty">暂无对话</div>
@@ -932,7 +936,11 @@
             @click="onPromptChatRowClick(item)"
           >
             <div class="chat-list-item__name">{{ (item.prompt || '').substring(0, 20) || '未命名' }}</div>
-            <div class="chat-list-item__time">{{ item.created_at || '-' }}</div>
+            <div class="chat-list-item__time">
+              <span v-if="item.status === 'running' && runtimeDurationText(item)" style="color: #409eff;">{{ runtimeDurationText(item) }}</span>
+              <span v-else-if="item.duration_ms > 0">{{ formatDurationDisplay(item.duration_ms) }}</span>
+              <span v-else>{{ item.created_at || '-' }}</span>
+            </div>
             <span :class="['chat-list-item__status', 'chat-list-item__status--' + (item.status || '')]">{{ statusText(item.status) }}</span>
           </div>
           <div v-if="promptChatHistoryList.length === 0 &amp;&amp; !promptChatHistoryLoading" class="chat-combined-list__empty">暂无执行记录</div>
@@ -1191,6 +1199,7 @@ export default {
       // claude code 对话
       chatCombinedDialogVisible: false,
       chatHistoryList: [],
+      _chatHistoryDurationTimer: null, // 历史对话列表运行中对话的实时耗时定时器
       chatHistoryLoading: false,
       chatCounts: { running: 0, interrupted: 0, total: 0 },
       promptChatCounts: {},
@@ -1316,6 +1325,7 @@ export default {
   },
   beforeUnmount() {
     window.removeEventListener('keydown', this.handleCtrlS)
+    this._stopChatHistoryDurationTimer()
     this.unregisterWorkflowSse()
     if (this._chatEventSource) {
       this._chatEventSource.close()
@@ -1844,6 +1854,7 @@ export default {
         if (res.ErrCode === 0 && res.Data) {
           const list = res.Data.list || []
           this.chatHistoryList = list
+          this._startChatHistoryDurationTimer()
           this.updateChatCountsFromList(list)
           if (this.chatHistoryList.length > 0) {
             this.onChatRowClick(this.chatHistoryList[0])
@@ -2112,7 +2123,7 @@ export default {
     },
     // 历史对话合并弹窗关闭（保留 SSE 连接与聊天状态）
     onChatCombinedDialogClosed() {
-      // 不关闭 SSE，后台继续运行
+      this._stopChatHistoryDurationTimer()
     },
     sendToClaudeCode() {
       const prompt = this.issueFixCombinedText
@@ -2259,6 +2270,7 @@ export default {
         this.promptChatHistoryLoading = false
         if (res.ErrCode === 0 && res.Data) {
           this.promptChatHistoryList = res.Data.list || []
+          this._startChatHistoryDurationTimer()
           if (focusChatId) {
             const found = this.promptChatHistoryList.find(item => item.id === focusChatId)
             if (found) {
@@ -2322,7 +2334,7 @@ export default {
     },
     // 关闭执行历史弹窗（保留 SSE 连接和聊天状态）
     onPromptChatHistoryClosed() {
-      // 不关闭 SSE，不清理聊天状态，后台继续运行
+      this._stopChatHistoryDurationTimer()
     },
     // 彻底关闭对话详情（仅在用户主动停止或切换时调用）
     closePromptChatDetail() {
@@ -2340,6 +2352,45 @@ export default {
     statusText(status) {
       const map = { running: '执行中', completed: '已完成', error: '异常终止', interrupted: '中断' }
       return map[status] || status || '-'
+    },
+    // 格式化 duration_ms 为可读形式（XmXs 或 Xs）
+    formatDurationDisplay(durationMs) {
+      const ms = Number(durationMs || 0)
+      if (ms <= 0) { return '' }
+      const totalSeconds = Math.floor(ms / 1000)
+      const minutes = Math.floor(totalSeconds / 60)
+      const seconds = totalSeconds % 60
+      if (minutes > 0) {
+        return minutes + 'm' + seconds + 's'
+      }
+      return seconds + 's'
+    },
+    // 计算运行中对话的实时耗时（从 created_at 到现在），返回格式化字符串
+    runtimeDurationText(item) {
+      if (!item || !item.created_at) { return '' }
+      const created = new Date(item.created_at.replace(/-/g, '/'))
+      if (isNaN(created.getTime())) { return '' }
+      const ms = Date.now() - created.getTime()
+      return this.formatDurationDisplay(ms)
+    },
+    // 启动历史对话列表运行中对话的实时耗时更新定时器
+    _startChatHistoryDurationTimer() {
+      this._stopChatHistoryDurationTimer()
+      this._chatHistoryDurationTimer = setInterval(() => {
+        if (this.chatHistoryList.some(item => item.status === 'running')) {
+          this.chatHistoryList = this.chatHistoryList.slice()
+        }
+        if (this.promptChatHistoryList.some(item => item.status === 'running')) {
+          this.promptChatHistoryList = this.promptChatHistoryList.slice()
+        }
+      }, 1000)
+    },
+    // 停止历史对话列表运行中对话的实时耗时更新定时器
+    _stopChatHistoryDurationTimer() {
+      if (this._chatHistoryDurationTimer) {
+        clearInterval(this._chatHistoryDurationTimer)
+        this._chatHistoryDurationTimer = null
+      }
     },
     // 将 markdown 文本渲染为 HTML，用于"执行历史"对话框中显示表格等格式
     renderMarkdown(text) {
