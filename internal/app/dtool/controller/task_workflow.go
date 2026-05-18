@@ -2495,9 +2495,23 @@ func TaskWorkflowChatList(c *gin.Context) {
 		LocalDir   string `json:"local_dir"`
 		Status     string `json:"status"`
 		CreatedAt  string `json:"created_at"`
+		DurationMs int64  `json:"duration_ms"`
 	}
+	const timeLayout = `2006-01-02 15:04:05`
 	list := make([]chatItem, 0, len(rows))
 	for _, row := range rows {
+		status := cast.ToString(row[`status`])
+		var durationMs int64
+		if status != `running` {
+			createdAt, _ := time.Parse(timeLayout, cast.ToString(row[`created_at`]))
+			updatedAt, _ := time.Parse(timeLayout, cast.ToString(row[`updated_at`]))
+			if !createdAt.IsZero() && !updatedAt.IsZero() {
+				durationMs = updatedAt.Sub(createdAt).Milliseconds()
+				if durationMs < 0 {
+					durationMs = 0
+				}
+			}
+		}
 		list = append(list, chatItem{
 			ID:         cast.ToInt64(row[`id`]),
 			SessionID:  cast.ToString(row[`session_id`]),
@@ -2505,8 +2519,9 @@ func TaskWorkflowChatList(c *gin.Context) {
 			PromptType: cast.ToString(row[`prompt_type`]),
 			ModelID:    cast.ToInt(row[`model_id`]),
 			LocalDir:   cast.ToString(row[`local_dir`]),
-			Status:     cast.ToString(row[`status`]),
+			Status:     status,
 			CreatedAt:  cast.ToString(row[`created_at`]),
+			DurationMs: durationMs,
 		})
 	}
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
@@ -2622,26 +2637,41 @@ func TaskWorkflowChatListByPromptType(c *gin.Context) {
 		return
 	}
 	type chatItem struct {
-		ID        int64  `json:"id"`
-		SessionID string `json:"session_id"`
-		Prompt    string `json:"prompt"`
-		ModelID   int    `json:"model_id"`
-		LocalDir  string `json:"local_dir"`
-		Status    string `json:"status"`
-		CliType   string `json:"cli_type"`
-		CreatedAt string `json:"created_at"`
+		ID         int64  `json:"id"`
+		SessionID  string `json:"session_id"`
+		Prompt     string `json:"prompt"`
+		ModelID    int    `json:"model_id"`
+		LocalDir   string `json:"local_dir"`
+		Status     string `json:"status"`
+		CliType    string `json:"cli_type"`
+		CreatedAt  string `json:"created_at"`
+		DurationMs int64  `json:"duration_ms"`
 	}
+	const timeLayout2 = `2006-01-02 15:04:05`
 	list := make([]chatItem, 0, len(rows))
 	for _, row := range rows {
+		status := cast.ToString(row[`status`])
+		var durationMs int64
+		if status != `running` {
+			createdAt, _ := time.Parse(timeLayout2, cast.ToString(row[`created_at`]))
+			updatedAt, _ := time.Parse(timeLayout2, cast.ToString(row[`updated_at`]))
+			if !createdAt.IsZero() && !updatedAt.IsZero() {
+				durationMs = updatedAt.Sub(createdAt).Milliseconds()
+				if durationMs < 0 {
+					durationMs = 0
+				}
+			}
+		}
 		list = append(list, chatItem{
-			ID:        cast.ToInt64(row[`id`]),
-			SessionID: cast.ToString(row[`session_id`]),
-			Prompt:    cast.ToString(row[`prompt`]),
-			ModelID:   cast.ToInt(row[`model_id`]),
-			LocalDir:  cast.ToString(row[`local_dir`]),
-			Status:    cast.ToString(row[`status`]),
-			CliType:   cast.ToString(row[`cli_type`]),
-			CreatedAt: cast.ToString(row[`created_at`]),
+			ID:         cast.ToInt64(row[`id`]),
+			SessionID:  cast.ToString(row[`session_id`]),
+			Prompt:     cast.ToString(row[`prompt`]),
+			ModelID:    cast.ToInt(row[`model_id`]),
+			LocalDir:   cast.ToString(row[`local_dir`]),
+			Status:     status,
+			CliType:    cast.ToString(row[`cli_type`]),
+			CreatedAt:  cast.ToString(row[`created_at`]),
+			DurationMs: durationMs,
 		})
 	}
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
