@@ -1,3 +1,5 @@
+import taskStore from '@/utils/task_progress_store'
+
 // buildToolDisplayInput 根据工具名和解析后的参数生成可读摘要。
 function buildToolDisplayInput(name, parsed) {
   if (!name || !parsed) return null
@@ -46,9 +48,27 @@ function parseChatLines(lines) {
         const statusMap = { requesting: '请求中', compressing: '压缩中' }
         messages.push({ type: 'system_status', status: obj.status || '', text: statusMap[obj.status] || obj.status })
       } else if (subtype === 'task_started') {
-        messages.push({ type: 'system_task', description: obj.description || '', taskId: obj.task_id || '', status: 'started' })
+        const taskMsg = { type: 'system_task', description: obj.description || '', taskId: obj.task_id || '', status: 'started', _msgIndex: messages.length }
+        messages.push(taskMsg)
+        taskStore.updateFromMessage(taskMsg)
+      } else if (subtype === 'task_progress') {
+        const taskMsg = {
+          type: 'system_task',
+          description: obj.description || '',
+          taskId: obj.task_id || '',
+          status: 'running',
+          usage: obj.usage || null,
+          lastToolName: obj.last_tool_name || '',
+          uuid: obj.uuid || '',
+          sessionId: obj.session_id || '',
+          _msgIndex: messages.length,
+        }
+        messages.push(taskMsg)
+        taskStore.updateFromMessage(taskMsg)
       } else if (subtype === 'task_notification') {
-        messages.push({ type: 'system_task', description: obj.summary || '', taskId: obj.task_id || '', status: obj.status || '' })
+        const taskMsg = { type: 'system_task', description: obj.summary || '', taskId: obj.task_id || '', status: obj.status || '', _msgIndex: messages.length }
+        messages.push(taskMsg)
+        taskStore.updateFromMessage(taskMsg)
       } else {
         messages.push({ type: 'system', text: JSON.stringify(obj) })
       }

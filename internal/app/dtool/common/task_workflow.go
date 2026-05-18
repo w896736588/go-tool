@@ -37,6 +37,7 @@ var taskWorkflowChatSessionIDFieldMap = map[string]string{
 	"code_review":             "prompt_code_review_chat_session_ids",
 	"browser_test":            "prompt_browser_test_chat_session_ids",
 	"api_test":                "prompt_api_test_chat_session_ids",
+	"issue_fix":               "prompt_issue_fix_chat_session_ids",
 }
 
 // TaskWorkflowCreateOrGetByHomeTaskID 查询或创建任务工作流主记录。

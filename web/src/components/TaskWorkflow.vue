@@ -729,6 +729,7 @@
               <span v-if="item.status === 'running' && runtimeDurationText(item)" style="color: #409eff;">{{ runtimeDurationText(item) }}</span>
               <span v-else-if="item.duration_ms > 0">{{ formatDurationDisplay(item.duration_ms) }}</span>
               <span v-else>{{ item.created_at || '-' }}</span>
+              <span v-if="item.line_count > 0" class="chat-list-item__msg-count">{{ item.line_count }}条</span>
             </div>
             <span :class="['chat-list-item__status', 'chat-list-item__status--' + (item.status || '')]">{{ statusText(item.status) }}</span>
           </div>
@@ -739,6 +740,7 @@
             请选择一条对话
           </div>
           <template v-else>
+            <div class="chat-detail-task-name">{{ homeTask.name || '-' }}</div>
             <div v-if="chatDetailModelName || chatDetailLocalDir" style="margin-bottom: 12px; color: #909399; font-size: 12px;">
               <span v-if="chatDetailModelName">模型: {{ chatDetailModelName }}</span>
               <span v-if="chatDetailModelName && chatDetailLocalDir"> | </span>
@@ -842,6 +844,7 @@
             <div :class="['chat-detail-scroll-btn', { 'chat-detail-scroll-btn--visible': chatDetailShowScrollBtn }]" @click="scrollChatToBottom(true)">
               ↓
             </div>
+            <TaskProgressPanel @scroll-to-msg="onTaskPanelScrollToMsg" />
             <div class="chat-detail-input-row">
               <el-input v-model="chatContinueInput" placeholder="输入新消息继续对话..." :disabled="chatDetailStatus === 'running'" @keyup.enter="chatDetailStatus !== 'running' ? continueChat : null" style="flex: 1;" />
               <el-button v-if="chatDetailStatus === 'running'" type="danger" @click="stopChat">停止</el-button>
@@ -940,6 +943,7 @@
               <span v-if="item.status === 'running' && runtimeDurationText(item)" style="color: #409eff;">{{ runtimeDurationText(item) }}</span>
               <span v-else-if="item.duration_ms > 0">{{ formatDurationDisplay(item.duration_ms) }}</span>
               <span v-else>{{ item.created_at || '-' }}</span>
+              <span v-if="item.line_count > 0" class="chat-list-item__msg-count">{{ item.line_count }}条</span>
             </div>
             <span :class="['chat-list-item__status', 'chat-list-item__status--' + (item.status || '')]">{{ statusText(item.status) }}</span>
           </div>
@@ -948,6 +952,7 @@
         <div class="chat-combined-detail">
           <div v-if="!promptChatDetailId" class="chat-combined-detail__placeholder">请选择一条执行记录</div>
           <template v-else>
+            <div class="chat-detail-task-name">{{ homeTask.name || '-' }}</div>
             <div v-if="chatDetailModelName || chatDetailLocalDir" style="margin-bottom: 12px; color: #909399; font-size: 12px;">
               <span v-if="chatDetailModelName">模型: {{ chatDetailModelName }}</span>
               <span v-if="chatDetailModelName &amp;&amp; chatDetailLocalDir"> | </span>
@@ -1033,6 +1038,7 @@
               </div>
             </div>
             <div :class="['chat-detail-scroll-btn', { 'chat-detail-scroll-btn--visible': promptChatDetailShowScrollBtn }]" @click="scrollPromptChatToBottom(true)">↓</div>
+            <TaskProgressPanel @scroll-to-msg="onPromptTaskPanelScrollToMsg" />
             <div class="chat-detail-input-row">
               <el-input v-model="chatContinueInput" placeholder="输入新消息继续对话..." :disabled="chatDetailStatus === 'running'" @keyup.enter="chatDetailStatus !== 'running' ? continueChat : null" style="flex: 1;" />
               <el-button v-if="chatDetailStatus === 'running'" type="danger" @click="stopChat">停止</el-button>
@@ -1074,6 +1080,8 @@ import homeTaskApi from '@/utils/base/home_task'
 import baseUtils from '@/utils/base'
 import sseDistribute from '@/utils/base/sse_distribute'
 import chatParser from '@/utils/chat_parser'
+import TaskProgressPanel from '@/components/TaskProgressPanel.vue'
+import taskProgressStore from '@/utils/task_progress_store'
 import gitApi from '@/utils/base/git'
 import mysqlSetApi from '@/utils/base/mysql_set'
 import apiManagement from '@/utils/base/api'
@@ -1156,6 +1164,7 @@ export default {
     HomeFilled,
     GitActionButton,
     MdEditor,
+    TaskProgressPanel,
   },
   data() {
     return {
@@ -1212,6 +1221,7 @@ export default {
       chatDetailSSELines: [], // SSE 累积的原始行，用于全量重解析
       chatDetailAutoScroll: true,
       chatDetailShowScrollBtn: false,
+      _autoScrollLocked: false, // 程序化滚动锁，防止内容更新引发的scroll事件误关自动滚动
       thinkingStreamElapsed: 0, // 思考流式阶段的实时已用秒数
       chatContinueInput: '',
       chatContinueLoading: false,
@@ -1897,6 +1907,7 @@ export default {
       if (this._sseChatId !== row.id) {
         this.chatDetailSSELines = []
         this.chatDetailMessages = []
+        taskProgressStore.reset()
         this.loadChatDetail()
       } else {
         this.$nextTick(() => { this.scrollChatToBottom() })
@@ -2014,6 +2025,7 @@ export default {
             prevCollapseByIdx[i] = state
           }
         })
+        this._autoScrollLocked = true
         this.chatDetailSSELines.push(line)
         this.chatDetailMessages = chatParser.parseChatLines(this.chatDetailSSELines)
         // 恢复已存在消息的折叠状态
@@ -2048,6 +2060,12 @@ export default {
           // 自动滚动可见的思考框到底部
           const boxes = document.querySelectorAll('.thinking-blockquote')
           boxes.forEach(box => { box.scrollTop = box.scrollHeight })
+          // 双重RAF后解锁，确保重渲染引发的scroll事件已全部触发完毕
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              this._autoScrollLocked = false
+            })
+          })
         })
       }
       es.onerror = () => {
@@ -2095,6 +2113,7 @@ export default {
     },
     // 监听对话详情区域滚动
     onChatDetailScroll() {
+      if (this._autoScrollLocked) return
       const el = this.$refs.chatDetailContainer
       if (!el) return
       const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30
@@ -2118,6 +2137,7 @@ export default {
       this.chatDetailSSERegistered = false
       this.chatDetailMessages = []
       this.chatDetailSSELines = []
+      taskProgressStore.reset()
       this.chatDetailId = 0
       this.chatContinueInput = ''
     },
@@ -2235,6 +2255,7 @@ export default {
               this.chatDetailStatus = 'running'
               this.chatDetailSSELines = []
               this.chatDetailMessages = []
+              taskProgressStore.reset()
               this.connectChatStream(chatId)
               this.loadChatCounts()
               // 打开执行历史，定位到新对话
@@ -2266,6 +2287,7 @@ export default {
       this.promptChatHistoryPromptType = promptType
       this.promptChatHistoryVisible = true
       this.promptChatHistoryLoading = true
+      this.promptChatDetailId = 0
       taskWorkflowApi.TaskWorkflowChatListByPromptType(this.workflowId, promptType, (res) => {
         this.promptChatHistoryLoading = false
         if (res.ErrCode === 0 && res.Data) {
@@ -2277,10 +2299,19 @@ export default {
               this.onPromptChatRowClick(found)
               return
             }
+            // 列表中没有找到 focusChatId（刚创建的对话可能尚未同步到 session_ids）
+            // 若 chatDetailId 已指向该对话，则直接关联
+            if (this.chatDetailId === focusChatId) {
+              this.promptChatDetailId = focusChatId
+            }
+            return
           }
           if (this.promptChatHistoryList.length > 0) {
             this.onPromptChatRowClick(this.promptChatHistoryList[0])
           }
+        } else if (focusChatId && this.chatDetailId === focusChatId) {
+          // API 失败但有 focusChatId，直接关联到正在执行的对话
+          this.promptChatDetailId = focusChatId
         }
       })
     },
@@ -2301,6 +2332,7 @@ export default {
       if (this._sseChatId !== row.id) {
         this.chatDetailSSELines = []
         this.chatDetailMessages = []
+        taskProgressStore.reset()
         this.loadChatDetail()
       } else {
         this.$nextTick(() => { this.scrollChatToBottom() })
@@ -2308,6 +2340,7 @@ export default {
     },
     // 执行历史对话框滚动
     onPromptChatDetailScroll() {
+      if (this._autoScrollLocked) return
       const el = this.$refs.promptChatDetailContainer
       if (!el) return
       const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30
@@ -2382,6 +2415,18 @@ export default {
         }
         if (this.promptChatHistoryList.some(item => item.status === 'running')) {
           this.promptChatHistoryList = this.promptChatHistoryList.slice()
+        }
+        // SSE 运行时同步 line_count
+        if (this._sseChatId > 0 && this.chatDetailSSELines.length > 0) {
+          const count = this.chatDetailSSELines.length
+          const updateLineCount = (list) => {
+            const item = list.find(i => i.id === this._sseChatId)
+            if (item && item.line_count !== count) {
+              item.line_count = count
+            }
+          }
+          updateLineCount(this.chatHistoryList)
+          updateLineCount(this.promptChatHistoryList)
         }
       }, 1000)
     },
@@ -2568,6 +2613,24 @@ export default {
         return str
       }
       return str.slice(0, TASK_WORKFLOW_CONFIG_MAX_CHARS) + '...'
+    },
+    // 历史对话弹窗：点击任务项滚动到对应消息
+    onTaskPanelScrollToMsg(msgIndex) {
+      const container = this.$refs.chatDetailContainer
+      if (!container) return
+      const children = container.children
+      if (msgIndex >= 0 && msgIndex < children.length) {
+        children[msgIndex].scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+    },
+    // 执行历史弹窗：点击任务项滚动到对应消息
+    onPromptTaskPanelScrollToMsg(msgIndex) {
+      const container = this.$refs.promptChatDetailContainer
+      if (!container) return
+      const children = container.children
+      if (msgIndex >= 0 && msgIndex < children.length) {
+        children[msgIndex].scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
     },
   },
 }
@@ -3147,6 +3210,8 @@ export default {
   background: #409eff;
   width: 14px;
   height: 14px;
+  animation: status-icon-pulse 1.2s ease-in-out infinite;
+  box-shadow: 0 0 0 0 rgba(64, 158, 255, 0.6);
 }
 
 /* 节点按钮状态边框色 */
@@ -3270,8 +3335,20 @@ export default {
   background: #909399;
 }
 
-/* 历史对话按钮 — 执行中动画 */
+/* 历史对话按钮 — 执行中动画（使用伪元素避免 git-action-button 的 box-shadow: none !important 覆盖） */
 .chat-history-btn--running {
+  position: relative;
+}
+.chat-history-btn--running::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  border-radius: 10px;
+  pointer-events: none;
+  z-index: 0;
   animation: chat-history-pulse 1.8s ease-in-out infinite;
 }
 
@@ -3281,11 +3358,23 @@ export default {
   font-size: 11px;
   opacity: 0.85;
   font-variant-numeric: tabular-nums;
+  position: relative;
+  z-index: 1;
 }
 
 @keyframes chat-history-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(64, 158, 255, 0.4); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(64, 158, 255, 0.7); }
   50% { box-shadow: 0 0 0 6px rgba(64, 158, 255, 0); }
+}
+
+@keyframes status-icon-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(64, 158, 255, 0.6); }
+  50% { box-shadow: 0 0 0 6px rgba(64, 158, 255, 0); }
+}
+
+@keyframes running-badge-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(230, 162, 60, 0.5); background: rgba(230, 162, 60, 0.08); }
+  50% { box-shadow: 0 0 0 4px rgba(230, 162, 60, 0); background: rgba(230, 162, 60, 0.2); }
 }
 </style>
 
@@ -3404,6 +3493,19 @@ export default {
   font-size: 12px;
   color: #909399;
   margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-list-item__msg-count {
+  font-size: 11px;
+  color: #606266;
+  background: #f0f2f5;
+  padding: 0 6px;
+  border-radius: 10px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .chat-list-item__status {
@@ -3418,6 +3520,7 @@ export default {
 .chat-list-item__status--running {
   color: #e6a23c;
   border: 1px solid #e6a23c;
+  animation: running-badge-pulse 1.4s ease-in-out infinite;
 }
 
 .chat-list-item__status--completed {
@@ -3451,6 +3554,14 @@ export default {
   height: 100%;
   color: #909399;
   font-size: 14px;
+}
+
+.chat-detail-task-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 12px;
+  line-height: 1.5;
 }
 
 .chat-detail-container {

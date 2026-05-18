@@ -2496,6 +2496,7 @@ func TaskWorkflowChatList(c *gin.Context) {
 		Status     string `json:"status"`
 		CreatedAt  string `json:"created_at"`
 		DurationMs int64  `json:"duration_ms"`
+		LineCount  int    `json:"line_count"`
 	}
 	const timeLayout = `2006-01-02 15:04:05`
 	list := make([]chatItem, 0, len(rows))
@@ -2512,6 +2513,11 @@ func TaskWorkflowChatList(c *gin.Context) {
 				}
 			}
 		}
+		rawOutput := cast.ToString(row[`raw_output`])
+		lineCount := 0
+		if rawOutput != `` {
+			lineCount = len(strings.Split(rawOutput, "\n"))
+		}
 		list = append(list, chatItem{
 			ID:         cast.ToInt64(row[`id`]),
 			SessionID:  cast.ToString(row[`session_id`]),
@@ -2522,6 +2528,7 @@ func TaskWorkflowChatList(c *gin.Context) {
 			Status:     status,
 			CreatedAt:  cast.ToString(row[`created_at`]),
 			DurationMs: durationMs,
+			LineCount:  lineCount,
 		})
 	}
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
@@ -2646,6 +2653,7 @@ func TaskWorkflowChatListByPromptType(c *gin.Context) {
 		CliType    string `json:"cli_type"`
 		CreatedAt  string `json:"created_at"`
 		DurationMs int64  `json:"duration_ms"`
+		LineCount  int    `json:"line_count"`
 	}
 	const timeLayout2 = `2006-01-02 15:04:05`
 	list := make([]chatItem, 0, len(rows))
@@ -2662,6 +2670,11 @@ func TaskWorkflowChatListByPromptType(c *gin.Context) {
 				}
 			}
 		}
+		rawOutput := cast.ToString(row[`raw_output`])
+		lineCount := 0
+		if rawOutput != `` {
+			lineCount = len(strings.Split(rawOutput, "\n"))
+		}
 		list = append(list, chatItem{
 			ID:         cast.ToInt64(row[`id`]),
 			SessionID:  cast.ToString(row[`session_id`]),
@@ -2672,6 +2685,7 @@ func TaskWorkflowChatListByPromptType(c *gin.Context) {
 			CliType:    cast.ToString(row[`cli_type`]),
 			CreatedAt:  cast.ToString(row[`created_at`]),
 			DurationMs: durationMs,
+			LineCount:  lineCount,
 		})
 	}
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
