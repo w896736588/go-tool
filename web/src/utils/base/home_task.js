@@ -60,6 +60,11 @@ function HomeTaskBranchNameGenerate(taskName, parentBranch, callBack) {
   base.BasePost('/api/HomeTaskBranchNameGenerate', { task_name: taskName, parent_branch: parentBranch }, callBack)
 }
 
+// HomeTaskUnusedLocalDirs 查询历史任务中未被活跃任务占用的本地目录。
+function HomeTaskUnusedLocalDirs(excludeTaskId, callBack) {
+  base.BasePost('/api/HomeTaskUnusedLocalDirs', { exclude_task_id: excludeTaskId }, callBack)
+}
+
 export default {
   HomeTaskList,
   HomeTaskSave,
@@ -73,4 +78,5 @@ export default {
   LocalDirBatchCheck,
   HomeTaskLastDevConfigByGitId,
   HomeTaskBranchNameGenerate,
+  HomeTaskUnusedLocalDirs,
 }

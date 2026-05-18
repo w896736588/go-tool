@@ -347,6 +347,23 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <el-row v-if="homeTaskUnusedLocalDirs.length > 0" :gutter="12">
+          <el-col :span="24">
+            <el-form-item label="可用目录">
+              <div class="home-task-unused-dirs">
+                <el-tag
+                  v-for="(dir, idx) in homeTaskUnusedLocalDirs"
+                  :key="idx"
+                  class="home-task-unused-dir-tag"
+                  type="info"
+                  @click="copyUnusedLocalDir(dir)"
+                >
+                  {{ dir }}
+                </el-tag>
+              </div>
+            </el-form-item>
+          </el-col>
+        </el-row>
         <el-row :gutter="12" v-if="homeTaskForm.use_workflow === HOME_TASK_USE_WORKFLOW_YES">
           <el-col :span="24">
             <el-form-item label="开发项目配置">
@@ -743,6 +760,7 @@ export default {
       homeTaskEditFeedbackDurationMs: 1000,
       homeTaskWorkflowCountMap: {},
       homeTaskLocalDirStatusMap: {},
+      homeTaskUnusedLocalDirs: [],
       homeTaskGitRepoList: [],
       homeTaskGitRepoLoading: false,
       homeTaskApiCollectionList: [],
@@ -1055,6 +1073,7 @@ export default {
       this.loadHomeTaskMysqlList()
       this.loadHomeTaskDockerList()
       this.loadHomeTaskSmartLinkList()
+      this.loadHomeTaskUnusedLocalDirs(0)
       this.homeTaskDialogVisible = true
     },
     openHomeTaskSettingsPage() {
@@ -1160,6 +1179,7 @@ export default {
       for (const colId of devColIds) {
         this.loadHomeTaskApiFoldersForCollection(colId)
       }
+      this.loadHomeTaskUnusedLocalDirs(Number(task.id || 0))
       this.homeTaskDialogVisible = true
     },
     openHomeTaskMemoryFragment(task) {
@@ -1552,6 +1572,15 @@ export default {
     getHomeTaskActionButtonVariant(taskStatus) {
       return 'primary'
     },
+    loadHomeTaskUnusedLocalDirs(excludeTaskId) {
+      homeTaskApi.HomeTaskUnusedLocalDirs(excludeTaskId || 0, (response) => {
+        if (response && response.ErrCode === 0 && response.Data) {
+          this.homeTaskUnusedLocalDirs = Array.isArray(response.Data.dirs) ? response.Data.dirs : []
+        } else {
+          this.homeTaskUnusedLocalDirs = []
+        }
+      })
+    },
     // 批量检查任务列表中的本地目录是否存在
     checkLocalDirExists(taskList) {
       const paths = []
@@ -1645,6 +1674,11 @@ export default {
       const taskId = Number(task?.id || 0)
       const display = this.homeTaskWorkflowCountMap[taskId]
       return display || ''
+    },
+    copyUnusedLocalDir(dir) {
+      navigator.clipboard.writeText(dir).then(() => {
+        this.$message.success('已复制')
+      })
     },
   },
   components: {

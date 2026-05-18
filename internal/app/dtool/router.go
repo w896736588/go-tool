@@ -333,6 +333,7 @@ func homeTask(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/HomeTaskLastDevConfigByGitId`, controller.HomeTaskLastDevConfigByGitId)
 	tGin.GinPost(`/api/HomeTaskBranchNameGenerate`, controller.HomeTaskBranchNameGenerate)
 	tGin.GinPost(`/api/HomeTaskZcodeSessionIdAppend`, controller.HomeTaskZcodeSessionIdAppend)
+	tGin.GinPost(`/api/HomeTaskUnusedLocalDirs`, controller.HomeTaskUnusedLocalDirs)
 }
 
 func taskWorkflow(tGin *p_gin.Gin) {

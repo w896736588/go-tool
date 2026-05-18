@@ -437,3 +437,71 @@ func (h *CSqlite) HomeTaskZcodeSessionIdAppend(id int, sessionID string) error {
 	}).Exec()
 	return err
 }
+
+const homeTaskUnusedDirLimit = 50
+
+// HomeTaskUnusedLocalDirs 查询最近50个历史任务中未被活跃任务占用的本地目录。
+func (h *CSqlite) HomeTaskUnusedLocalDirs(excludeTaskID int) ([]string, error) {
+	// 1. 取最近50条任务（按 id DESC），收集所有 dev_configs 中的 local_dir。
+	list, err := h.Client.QueryBySql(homeTaskListAllQuerySQL).All()
+	if err != nil {
+		return nil, err
+	}
+	dirSet := make(map[string]bool)
+	taskCount := 0
+	for _, task := range list {
+		if excludeTaskID > 0 && cast.ToInt(task[`id`]) == excludeTaskID {
+			continue
+		}
+		devConfigsStr := cast.ToString(task[`dev_configs`])
+		if devConfigsStr == `` || devConfigsStr == `[]` {
+			continue
+		}
+		var configs []map[string]any
+		if err := json.Unmarshal([]byte(devConfigsStr), &configs); err != nil {
+			continue
+		}
+		for _, cfg := range configs {
+			dir := strings.TrimSpace(cast.ToString(cfg[`local_dir`]))
+			if dir != `` {
+				dirSet[dir] = true
+			}
+		}
+		taskCount++
+		if taskCount >= homeTaskUnusedDirLimit {
+			break
+		}
+	}
+
+	// 2. 收集所有活跃任务已占用的 local_dir。
+	activeList, err := h.HomeTaskList(define.HomeTaskArchivedNo)
+	if err != nil {
+		return nil, err
+	}
+	used := make(map[string]bool)
+	for _, task := range activeList {
+		devConfigsStr := cast.ToString(task[`dev_configs`])
+		if devConfigsStr == `` || devConfigsStr == `[]` {
+			continue
+		}
+		var configs []map[string]any
+		if err := json.Unmarshal([]byte(devConfigsStr), &configs); err != nil {
+			continue
+		}
+		for _, cfg := range configs {
+			dir := strings.TrimSpace(cast.ToString(cfg[`local_dir`]))
+			if dir != `` {
+				used[dir] = true
+			}
+		}
+	}
+
+	// 3. 过滤掉已被活跃任务占用的目录。
+	result := make([]string, 0)
+	for dir := range dirSet {
+		if !used[dir] {
+			result = append(result, dir)
+		}
+	}
+	return result, nil
+}
