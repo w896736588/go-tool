@@ -98,7 +98,7 @@
             <span v-else-if="getNodeStatus(node.key) === 'pending'" class="status-icon status-icon--pending"></span>
             <span v-else class="status-icon status-icon--running"><span class="spinner-ring"></span></span>
           </span>
-          <span class="task-workflow-node__label">{{ node.label }}<span v-if="getNodeStatus(node.key) === 'running' || getNodeStatus(node.key) === 'completed'" :class="getNodeStatus(node.key) === 'running' ? 'running-arrow' : 'completed-arrow'">&#9654;</span></span>
+          <span class="task-workflow-node__label">{{ node.label }}</span>
           <span class="task-workflow-node__desc">{{ node.desc }}</span>
         </button>
       </section>
@@ -791,7 +791,7 @@
             :class="['chat-list-item', { 'chat-list-item--active': promptChatDetailId === item.id }]"
             @click="onPromptChatRowClick(item)"
           >
-            <div class="chat-list-item__name">{{ (item.prompt || '').substring(0, 20) || '未命名' }}</div>
+            <div class="chat-list-item__name" :title="item.prompt || '未命名'">{{ (item.prompt || '未命名').substring(0, 30) }}{{ (item.prompt || '').length > 30 ? '...' : '' }}</div>
             <div class="chat-list-item__time">
               <span v-if="item.status === 'running' && runtimeDurationText(item)" style="color: #409eff;">{{ runtimeDurationText(item) }}</span>
               <span v-else-if="item.duration_ms > 0">{{ formatDurationDisplay(item.duration_ms) }}</span>
@@ -803,7 +803,7 @@
               <span v-else-if="item.status === 'completed'" class="chat-list-item__check-icon">&#x2713;</span>
               <span v-else-if="item.status === 'interrupted'" class="chat-list-item__warn-icon">!</span>
               <span v-else-if="item.status === 'error'" class="chat-list-item__error-icon">!</span>
-              {{ statusText(item.status) }}
+              {{ statusText(item.status) }} {{ formatCreatedAt(item.created_at) }}
             </span>
           </div>
           <div v-if="promptChatHistoryList.length === 0 &amp;&amp; !promptChatHistoryLoading" class="chat-combined-list__empty">暂无执行记录</div>
@@ -844,13 +844,19 @@
                 </div>
                 <!-- system_task: 后台任务 (task_started / task_notification) -->
                 <div v-else-if="msg.type === 'system_task'" style="color: #909399; font-size: 12px; padding: 2px 0;">
+                  <span v-if="(msg.status === 'started' || msg.status === 'running') && chatDetailStatus === 'running'" class="chat-detail-status-spinner"></span>
+                  <span v-else-if="msg.status === 'completed'" class="chat-detail-status-check">✓</span>
+                  <span v-else-if="msg.status === 'started' || msg.status === 'running'" class="chat-detail-status-warn">!</span>
                   <span :style="msg.status === 'completed' ? 'color: #67c23a;' : msg.status === 'started' ? 'color: #409eff;' : ''">🔧 {{ msg.description }}</span>
                   <span style="margin-left: 8px; font-size: 11px;">{{ msg.status === 'started' ? '启动' : msg.status }}</span>
                 </div>
                 <div v-else-if="msg.type === 'assistant'">
                   <div v-if="msg.thinking" style="margin-bottom: 8px;">
                     <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
-                      <span v-if="isCurrentThinking(msg)" style="color: #409eff; font-size: 12px;">思考中.... 持续{{ thinkingStreamElapsed }}s</span>
+                      <span v-if="isCurrentThinking(msg)" class="chat-detail-status-spinner"></span>
+                      <span v-else-if="chatDetailStatus !== 'completed'" class="chat-detail-status-warn">!</span>
+                      <span v-else class="chat-detail-status-check">✓</span>
+                      <span v-if="isCurrentThinking(msg)" style="color: #409eff; font-size: 12px;">思考过程 持续{{ thinkingStreamElapsed }}s</span>
                       <span v-else style="color: #909399; font-size: 12px;">思考过程{{ msg._thinkingTiming && msg._thinkingTiming.durationMs ? ' (' + (msg._thinkingTiming.durationMs / 1000).toFixed(1) + 's)' : '' }}</span>
                       <span @click="toggleThinkingCollapse(msg)" style="cursor: pointer; font-weight: bold; font-size: 12px; color: #909399;">{{ msg._thinkingCollapsed ? '▶' : '▼' }}</span>
                     </div>
@@ -859,9 +865,14 @@
                   <div v-for="(block, bi) in msg.content" :key="bi">
                     <div v-if="block.type === 'text'" class="markdown-body chat-markdown-body" v-html="renderMarkdown(block.text)"></div>
                     <div v-else-if="block.type === 'tool_use'" style="background: #f0f9eb; border-radius: 4px; padding: 8px; margin: 4px 0;">
-                      <span style="color: #67c23a; font-weight: 500;">🔧 {{ block.name }}</span>
-                      <span v-if="block.displayInput" style="margin-left: 8px; font-size: 12px; color: #303133; font-family: Consolas, monospace;">{{ block.displayInput }}</span>
-                      <div v-else style="font-size: 12px; color: #909399; margin-top: 4px; cursor: pointer;" @click="block._inputExpanded = !block._inputExpanded">
+                      <div style="display: flex; align-items: center; gap: 4px;">
+                        <span v-if="!block._result && chatDetailStatus === 'running'" class="chat-detail-status-spinner"></span>
+                        <span v-else-if="!block._result" class="chat-detail-status-warn">!</span>
+                        <span v-else class="chat-detail-status-check">✓</span>
+                        <span style="color: #67c23a; font-weight: 500;">🔧 {{ block.name }}</span>
+                        <span v-if="block.displayInput" style="font-size: 12px; color: #303133; font-family: Consolas, monospace;">{{ block.displayInput }}</span>
+                      </div>
+                      <div v-if="!block.displayInput" style="font-size: 12px; color: #909399; margin-top: 4px; cursor: pointer;" @click="block._inputExpanded = !block._inputExpanded">
                         {{ block._inputExpanded ? '▼' : '▶' }} 参数
                       </div>
                       <pre v-if="!block.displayInput && block._inputExpanded" style="white-space: pre-wrap; font-size: 12px; color: #606266; margin-top: 4px; font-family: Consolas, monospace;">{{ block.input }}</pre>
@@ -877,9 +888,14 @@
                 </div>
                 <!-- standalone tool_use -->
                 <div v-else-if="msg.type === 'tool_use'" style="background: #f0f9eb; border-radius: 4px; padding: 8px; margin: 4px 0;">
-                  <span style="color: #67c23a; font-weight: 500;">🔧 {{ msg.name }}</span>
-                  <span v-if="msg.displayInput" style="margin-left: 8px; font-size: 12px; color: #303133; font-family: Consolas, monospace;">{{ msg.displayInput }}</span>
-                  <div v-else style="font-size: 12px; color: #909399; margin-top: 4px; cursor: pointer;" @click="msg._inputExpanded = !msg._inputExpanded">
+                  <div style="display: flex; align-items: center; gap: 4px;">
+                    <span v-if="!msg._result && chatDetailStatus === 'running'" class="chat-detail-status-spinner"></span>
+                    <span v-else-if="!msg._result" class="chat-detail-status-warn">!</span>
+                    <span v-else class="chat-detail-status-check">✓</span>
+                    <span style="color: #67c23a; font-weight: 500;">🔧 {{ msg.name }}</span>
+                    <span v-if="msg.displayInput" style="font-size: 12px; color: #303133; font-family: Consolas, monospace;">{{ msg.displayInput }}</span>
+                  </div>
+                  <div v-if="!msg.displayInput" style="font-size: 12px; color: #909399; margin-top: 4px; cursor: pointer;" @click="msg._inputExpanded = !msg._inputExpanded">
                     {{ msg._inputExpanded ? '▼' : '▶' }} 参数
                   </div>
                   <pre v-if="!msg.displayInput && msg._inputExpanded" style="white-space: pre-wrap; font-size: 12px; color: #606266; margin-top: 4px; font-family: Consolas, monospace;">{{ msg.input }}</pre>
@@ -896,6 +912,8 @@
                 <div v-else-if="msg.type === 'assistant_text'" class="markdown-body chat-markdown-body" v-html="renderMarkdown(msg.text)"></div>
                 <div v-else-if="msg.type === 'assistant_thinking'" style="color: #909399; font-size: 12px;">
                   <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                    <span v-if="chatDetailStatus !== 'completed'" class="chat-detail-status-warn">!</span>
+                    <span v-else class="chat-detail-status-check">✓</span>
                     <span>思考过程{{ msg._thinkingTiming && msg._thinkingTiming.durationMs ? ' (' + (msg._thinkingTiming.durationMs / 1000).toFixed(1) + 's)' : '' }}</span>
                     <span @click="toggleThinkingCollapse(msg)" style="cursor: pointer; font-weight: bold;">{{ msg._thinkingCollapsed ? '▶' : '▼' }}</span>
                   </div>
@@ -905,7 +923,7 @@
                   {{ msg.isError ? '✘ 错误' : '✔ 完成' }} | 耗时: {{ (msg.durationMs / 1000).toFixed(1) }}s | {{ msg.numTurns }} 轮
                   <span v-if="msg.usage"> | input: {{ msg.usage.input_tokens }} output: {{ msg.usage.output_tokens }}</span>
                 </div>
-                <div v-else-if="msg.type === 'chat_completed'" style="color: #67c23a; text-align: center; padding: 16px;">
+                <div v-else-if="msg.type === 'chat_completed' && chatDetailStatus === 'completed'" style="color: #67c23a; text-align: center; padding: 16px;">
                   ✔ {{ msg.text }}
                 </div>
                 <div v-else-if="msg.type === 'raw_text'" style="white-space: pre-wrap; color: #e6a23c; padding: 4px 0; word-break: break-all; font-family: Consolas, monospace;">{{ msg.text }}</div>
@@ -1821,7 +1839,8 @@ export default {
       })
     },
     // connectChatStream 创建专用 EventSource 连接以实时接收对话输出。
-    connectChatStream(chatId, continuePrompt) {
+    // isNewChat: true 表示新对话首次启动（需后端启动 claude 进程），false 表示重连已有对话。
+    connectChatStream(chatId, continuePrompt, isNewChat) {
       if (this._sseChatId === chatId && this._chatEventSource && this._chatEventSource.readyState !== EventSource.CLOSED) return
       // 关闭上一个 chat 的 SSE 连接
       if (this._chatEventSource) {
@@ -1847,6 +1866,9 @@ export default {
       }, 200)
       const sseHost = baseUtils.GetSseApiHost()
       let url = sseHost + '/api/task/workflow/chat/stream?chat_id=' + chatId + '&token=' + encodeURIComponent(baseUtils.GetSafeToken())
+      if (isNewChat) {
+        url += '&start=1'
+      }
       if (continuePrompt) {
         url += '&continue=1&prompt=' + encodeURIComponent(continuePrompt)
       }
@@ -1993,6 +2015,7 @@ export default {
       this._sseParseState = null
       if (this._thinkingTimer) { clearInterval(this._thinkingTimer); this._thinkingTimer = null }
       this.thinkingStreamElapsed = 0
+      this._thinkingStreamStartTime = 0
       if (this._chatEventSource) {
         this._chatEventSource.close()
         this._chatEventSource = null
@@ -2116,7 +2139,7 @@ export default {
               this.chatDetailSSELines = []
               this.chatDetailMessages = []
               taskProgressStore.reset()
-              this.connectChatStream(chatId)
+              this.connectChatStream(chatId, null, true)
               this.loadChatCounts()
               // 打开执行历史，定位到新对话
               this.openPromptChatHistory(this.promptExecPromptType, chatId)
@@ -2196,6 +2219,8 @@ export default {
       if (this._sseChatId !== row.id) {
         this.chatDetailSSELines = []
         this.chatDetailMessages = []
+        this._thinkingStreamStartTime = 0
+        this.thinkingStreamElapsed = 0
         taskProgressStore.reset()
         this.loadChatDetail()
       } else {
@@ -2218,6 +2243,7 @@ export default {
     },
     // 执行历史滚动到底部
     scrollPromptChatToBottom(force) {
+      if (!force && !this.chatDetailAutoScroll) return
       if (force) {
         this.chatDetailAutoScroll = true
         this.promptChatDetailShowScrollBtn = false
@@ -2488,6 +2514,16 @@ export default {
         return this.chatDetailSSELines.length
       }
       return item.line_count || 0
+    },
+    // 格式化创建时间为 2026/01/02 12:12:12 格式
+    formatCreatedAt(createdAt) {
+      if (!createdAt) { return '' }
+      // created_at 格式为 2026-01-02 12:12:12 或 ISO 格式，统一转为目标格式
+      const d = new Date(createdAt.replace(/-/g, '/'))
+      if (isNaN(d.getTime())) { return '' }
+      const pad = (n) => String(n).padStart(2, '0')
+      return d.getFullYear() + '/' + pad(d.getMonth() + 1) + '/' + pad(d.getDate()) + ' ' +
+        pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds())
     },
   },
 }
@@ -3082,25 +3118,6 @@ export default {
 @keyframes status-icon-spin {
   to { transform: rotate(360deg); }
 }
-
-.running-arrow {
-  color: #409eff;
-  margin-left: 4px;
-  font-size: 11px;
-  animation: arrow-blink 0.8s ease-in-out infinite;
-}
-
-.completed-arrow {
-  color: #67c23a;
-  margin-left: 4px;
-  font-size: 11px;
-}
-
-@keyframes arrow-blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
-}
-
 /* 节点按钮状态边框色 */
 .task-workflow-node--status-pending {
   border-left: 3px solid #909399;
@@ -3200,7 +3217,7 @@ export default {
   padding: 8px 12px;
   margin: 0;
   border-radius: 0 4px 4px 0;
-  max-height: 400px;
+  max-height: 150px;
   overflow-y: auto;
 }
 
@@ -3532,6 +3549,36 @@ export default {
 
 .chat-detail-container::-webkit-scrollbar-thumb:hover {
   background: #909399;
+}
+
+/* 对话详情执行状态指示器 */
+.chat-detail-status-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid #409eff;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: chat-status-dot-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+.chat-detail-status-check {
+  color: #67c23a;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+.chat-detail-status-warn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #e6a23c;
+  color: #fff;
+  font-size: 10px;
+  font-weight: bold;
+  flex-shrink: 0;
 }
 
 /* 滚动到底部按钮 */

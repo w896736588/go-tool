@@ -61,26 +61,36 @@ func RunClaudeStream(ctx context.Context, cfg RunConfig, callback func(msg Strea
 	sessionID := ``
 	sessionExtracted := false
 	lineCount := 0
-	for line := range result.lineCh {
-		line = strings.TrimSpace(line)
-		if line == `` {
-			continue
-		}
-		lineCount++
-		if lineCount <= 3 {
-			log.Printf("[claude-exec] 收到第%d行(len=%d): %.200s", lineCount, len(line), line)
-		}
-		msg := parseLine(line)
-		callback(msg)
+	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("[claude-exec] 上下文已取消，退出读取循环 (lineCount=%d)", lineCount)
+			return sessionID, ctx.Err()
+		case line, ok := <-result.lineCh:
+			if !ok {
+				goto doneReading
+			}
+			line = strings.TrimSpace(line)
+			if line == `` {
+				continue
+			}
+			lineCount++
+			if lineCount <= 3 {
+				log.Printf("[claude-exec] 收到第%d行(len=%d): %.200s", lineCount, len(line), line)
+			}
+			msg := parseLine(line)
+			callback(msg)
 
-		if !sessionExtracted && cfg.SessionID == `` {
-			if sid := extractSessionIDFromLine(line); sid != `` {
-				sessionID = sid
-				log.Printf("[claude-exec] 提取到 session_id=%s", sid)
-				sessionExtracted = true
+			if !sessionExtracted && cfg.SessionID == `` {
+				if sid := extractSessionIDFromLine(line); sid != `` {
+					sessionID = sid
+					log.Printf("[claude-exec] 提取到 session_id=%s", sid)
+					sessionExtracted = true
+				}
 			}
 		}
 	}
+doneReading:
 
 	log.Printf("[claude-exec] 行通道关闭, 总行数=%d", lineCount)
 	<-stderrDone

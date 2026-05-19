@@ -2344,6 +2344,7 @@ func TaskWorkflowChatStreamOpen(urlValues url.Values, stopC chan int, c *gin.Con
 
 	prompt := strings.TrimSpace(urlValues.Get(`prompt`))
 	isContinue := strings.TrimSpace(urlValues.Get(`continue`)) == `1`
+	isStart := strings.TrimSpace(urlValues.Get(`start`)) == `1`
 	sessionID := cast.ToString(chatInfo[`session_id`])
 
 	if !isContinue {
@@ -2364,6 +2365,23 @@ func TaskWorkflowChatStreamOpen(urlValues url.Values, stopC chan int, c *gin.Con
 		}
 	}
 
+	distributeID := define.SseTaskWorkflowChatPrefix + chatIDStr
+	sse := gsgin.SseRegister(distributeID, stopC, c)
+	// 如果该 chatID 已有 goroutine 在运行，只注册 SSE 连接（复用已有 goroutine 的输出），不启动新命令
+	if _, running := chatCancelFuncs.Load(chatID); running {
+		return sse, nil
+	}
+	// 非启动、非继续时，仅注册 SSE 监听（如页面刷新重连）。
+	// 若 DB 状态仍为 running 但 goroutine 不存在，说明之前异常退出，标记为中断。
+	if !isStart && !isContinue {
+		chatStatus := cast.ToString(chatInfo[`status`])
+		if chatStatus == "running" {
+			_ = common.DbMain.TaskWorkflowChatMarkInterrupted(chatID)
+			taskWorkflowBroadcastChatStatus(chatID)
+		}
+		return sse, nil
+	}
+
 	modelInfo, err := common.DbMain.AiModelInfo(modelID)
 	if err != nil {
 		return nil, err
@@ -2380,12 +2398,6 @@ func TaskWorkflowChatStreamOpen(urlValues url.Values, stopC chan int, c *gin.Con
 	thinkingBudget := define.ThinkingIntensityBudgetMap[thinkingIntensity]
 	thinkingEffort := define.ThinkingIntensityEffortMap[thinkingIntensity]
 
-	distributeID := define.SseTaskWorkflowChatPrefix + chatIDStr
-	sse := gsgin.SseRegister(distributeID, stopC, c)
-	// 如果该 chatID 已有 goroutine 在运行，只注册 SSE 连接（复用已有 goroutine 的输出），不启动新命令
-	if _, running := chatCancelFuncs.Load(chatID); running {
-		return sse, nil
-	}
 	go runClaudeCommand(chatID, localDir, prompt, isContinue, sessionID, modelID, baseURL, apiKey, modelName, settingsPath, thinkingEffort, thinkingBudget, sse, stopC)
 	return sse, nil
 }

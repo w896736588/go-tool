@@ -212,6 +212,11 @@ function parseOneLine(line, messages, currentMessageRef, toolUseMap, msgIndexOff
     }
   } else if (lineType === 'chat') {
     if (obj.subtype === 'completed') {
+      // 先将待完成的 assistant 消息推入，确保 chat_completed 在内容之后
+      if (currentMessageRef.value && (currentMessageRef.value.content.length > 0 || currentMessageRef.value.thinking)) {
+        messages.push(currentMessageRef.value)
+        currentMessageRef.value = null
+      }
       messages.push({ type: 'chat_completed', text: '对话已完成' })
     }
   } else if (lineType === 'parse_error') {
@@ -221,6 +226,11 @@ function parseOneLine(line, messages, currentMessageRef, toolUseMap, msgIndexOff
     const data = obj.data || {}
     messages.push({ type: 'raw_text', text: data.text || obj.text || '' })
   } else if (lineType === 'error') {
+    // 先将待完成的 assistant 消息推入，确保错误信息在内容之后
+    if (currentMessageRef.value && (currentMessageRef.value.content.length > 0 || currentMessageRef.value.thinking)) {
+      messages.push(currentMessageRef.value)
+      currentMessageRef.value = null
+    }
     messages.push({ type: 'error', text: obj.text || '' })
   }
 
