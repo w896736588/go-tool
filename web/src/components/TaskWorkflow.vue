@@ -731,7 +731,13 @@
               <span v-else>{{ item.created_at || '-' }}</span>
               <span v-if="item.line_count > 0" class="chat-list-item__msg-count">{{ item.line_count }}条</span>
             </div>
-            <span :class="['chat-list-item__status', 'chat-list-item__status--' + (item.status || '')]">{{ statusText(item.status) }}</span>
+            <span :class="['chat-list-item__status', 'chat-list-item__status--' + (item.status || '')]">
+              <span v-if="item.status === 'running'" class="chat-list-item__running-dot"></span>
+              <span v-else-if="item.status === 'completed'" class="chat-list-item__check-icon">&#x2713;</span>
+              <span v-else-if="item.status === 'interrupted'" class="chat-list-item__warn-icon">!</span>
+              <span v-else-if="item.status === 'error'" class="chat-list-item__error-icon">!</span>
+              {{ statusText(item.status) }}
+            </span>
           </div>
           <div v-if="chatHistoryList.length === 0 && !chatHistoryLoading" class="chat-combined-list__empty">暂无对话</div>
         </div>
@@ -968,7 +974,13 @@
               <span v-else>{{ item.created_at || '-' }}</span>
               <span v-if="getItemMsgCount(item) > 0" class="chat-list-item__msg-count">{{ getItemMsgCount(item) }}条</span>
             </div>
-            <span :class="['chat-list-item__status', 'chat-list-item__status--' + (item.status || '')]">{{ statusText(item.status) }}</span>
+            <span :class="['chat-list-item__status', 'chat-list-item__status--' + (item.status || '')]">
+              <span v-if="item.status === 'running'" class="chat-list-item__running-dot"></span>
+              <span v-else-if="item.status === 'completed'" class="chat-list-item__check-icon">&#x2713;</span>
+              <span v-else-if="item.status === 'interrupted'" class="chat-list-item__warn-icon">!</span>
+              <span v-else-if="item.status === 'error'" class="chat-list-item__error-icon">!</span>
+              {{ statusText(item.status) }}
+            </span>
           </div>
           <div v-if="promptChatHistoryList.length === 0 &amp;&amp; !promptChatHistoryLoading" class="chat-combined-list__empty">暂无执行记录</div>
         </div>
@@ -3491,10 +3503,6 @@ export default {
   50% { box-shadow: 0 0 0 6px rgba(64, 158, 255, 0); }
 }
 
-@keyframes running-badge-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(230, 162, 60, 0.5); background: rgba(230, 162, 60, 0.08); }
-  50% { box-shadow: 0 0 0 4px rgba(230, 162, 60, 0); background: rgba(230, 162, 60, 0.2); }
-}
 </style>
 
 <style>
@@ -3628,33 +3636,89 @@ export default {
 }
 
 .chat-list-item__status {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 3px;
+  padding: 1px 0;
   white-space: nowrap;
   margin-top: 4px;
 }
 
+.chat-list-item__running-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid #409eff;
+  border-top-color: transparent;
+  animation: chat-status-dot-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes chat-status-dot-spin {
+  to { transform: rotate(360deg); }
+}
+
+.chat-list-item__check-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #67c23a;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.chat-list-item__warn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #e6a23c;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.chat-list-item__error-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #f56c6c;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
 .chat-list-item__status--running {
-  color: #e6a23c;
-  border: 1px solid #e6a23c;
-  animation: running-badge-pulse 1.4s ease-in-out infinite;
+  color: #409eff;
 }
 
 .chat-list-item__status--completed {
   color: #67c23a;
-  border: 1px solid #67c23a;
 }
 
 .chat-list-item__status--error {
   color: #f56c6c;
-  border: 1px solid #f56c6c;
 }
 
 .chat-list-item__status--interrupted {
-  color: #909399;
-  border: 1px solid #909399;
+  color: #e6a23c;
 }
 
 .chat-combined-detail {
