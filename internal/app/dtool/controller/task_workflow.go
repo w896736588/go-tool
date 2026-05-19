@@ -1268,27 +1268,61 @@ func TaskWorkflowNodeStatusUpdate(c *gin.Context) {
 	}
 	request := _struct.TaskWorkflowNodeStatusUpdateRequest{}
 	_ = gsgin.GinPostBody(c, &request)
-	if request.WorkflowID <= 0 {
-		gsgin.GinResponseError(c, `workflow_id不能为空`, nil)
+	workflowID := request.WorkflowID
+	// 传了 home_task_id 则自动查找 workflow_id
+	if request.HomeTaskID > 0 {
+		info, err := common.DbMain.TaskWorkflowCreateOrGetByHomeTaskID(request.HomeTaskID)
+		if err != nil {
+			gsgin.GinResponseError(c, err.Error(), nil)
+			return
+		}
+		workflowID = cast.ToInt(info[`id`])
+	}
+	if workflowID <= 0 {
+		gsgin.GinResponseError(c, `workflow_id或home_task_id不能为空`, nil)
 		return
 	}
-	if strings.TrimSpace(request.NodeStatuses) == `` {
-		gsgin.GinResponseError(c, `node_statuses不能为空`, nil)
+	step := strings.TrimSpace(request.Step)
+	nodeStatuses := strings.TrimSpace(request.NodeStatuses)
+	// 传了 step 则自动合并，否则直接用 node_statuses（前端手动切换场景）
+	if step != `` {
+		merged, err := taskWorkflowMergeNodeStatus(workflowID, step, strings.TrimSpace(request.Status))
+		if err != nil {
+			gsgin.GinResponseError(c, err.Error(), nil)
+			return
+		}
+		nodeStatuses = merged
+	}
+	if nodeStatuses == `` {
+		gsgin.GinResponseError(c, `node_statuses或step不能同时为空`, nil)
 		return
 	}
-	err := common.DbMain.TaskWorkflowUpdateNodeStatuses(request.WorkflowID, request.NodeStatuses)
-	if err != nil {
+	if err := common.DbMain.TaskWorkflowUpdateNodeStatuses(workflowID, nodeStatuses); err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	updatedInfo, err := common.DbMain.TaskWorkflowInfo(request.WorkflowID)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
+	taskWorkflowBroadcastNodeStatus(workflowID, nodeStatuses)
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
-		`workflow`: updatedInfo,
+		`workflow_id`: workflowID,
 	})
+}
+
+// taskWorkflowMergeNodeStatus 加载现有 node_statuses 并合并指定 step + status，返回合并后的 JSON 字符串。
+func taskWorkflowMergeNodeStatus(workflowID int, step, status string) (string, error) {
+	info, err := common.DbMain.TaskWorkflowInfo(workflowID)
+	if err != nil {
+		return ``, err
+	}
+	nodeStatuses := map[string]string{}
+	if raw := strings.TrimSpace(cast.ToString(info[`node_statuses`])); raw != `` {
+		_ = json.Unmarshal([]byte(raw), &nodeStatuses)
+	}
+	nodeStatuses[step] = status
+	data, err := json.Marshal(nodeStatuses)
+	if err != nil {
+		return ``, err
+	}
+	return string(data), nil
 }
 
 // TaskWorkflowPromptsSave 保存工作流提示词。
@@ -1408,29 +1442,30 @@ func buildTaskWorkflowPlaceholderMap(c *gin.Context, homeTaskInfo map[string]any
 	apiHost := taskWorkflowBuildAPIHost(c)
 	devEnvironment, _ := common.DbMain.HomeTaskConfigValue(define.HomeTaskConfigDevEnvironment)
 	result := map[string]string{
-		`{需求文档地址}`:            taskWorkflowBuildShareURL(c, workflowInfo, apiHost),
-		`{需求文档纯文本地址}`:         taskWorkflowBuildPlainTextShareURL(c, workflowInfo, apiHost),
-		`{需求文档纯文本文件相对地址}`:     taskWorkflowBuildPlainTextFragmentRelativePath(workflowInfo),
-		`{需求设计方案文档地址}`:        taskWorkflowBuildDesignPlanShareURL(c, workflowInfo, apiHost),
-		`{需求设计方案文件相对地址}`:      taskWorkflowBuildDesignPlanFragmentRelativePath(workflowInfo),
-		`{接口开发API地址}`:         apiHost,
-		`{接口开发API的token}`:     taskWorkflowBuildAPIToken(c),
-		`{开发项目配置}`:            taskWorkflowBuildDevConfigsMarkdown(homeTaskInfo),
-		`{开发配置}`:              taskWorkflowBuildDevConfigsMarkdown(homeTaskInfo),
-		`{dtool-api地址}`:       filepath.Join(component.EnvClient.RootPath, `skills`, `dtool-api`),
-		`{dtool-common地址}`:    filepath.Join(component.EnvClient.RootPath, `skills`, `dtool-common`),
-		`{tool-playwright地址}`: filepath.Join(component.EnvClient.RootPath, `skills`, `dtool-playwright`),
-		`{自定义网页}`:             taskWorkflowBuildDevConfigsFieldMarkdown(homeTaskInfo, `smart_link`),
-		`{网页标签}`:              taskWorkflowBuildDevConfigsFieldMarkdown(homeTaskInfo, `smart_link_label`),
-		`{账号}`:                taskWorkflowBuildDevConfigsFieldMarkdown(homeTaskInfo, `smart_link_account`),
+		`{需求文档地址}`:             taskWorkflowBuildShareURL(c, workflowInfo, apiHost),
+		`{需求文档纯文本地址}`:          taskWorkflowBuildPlainTextShareURL(c, workflowInfo, apiHost),
+		`{需求文档纯文本文件相对地址}`:      taskWorkflowBuildPlainTextFragmentRelativePath(workflowInfo),
+		`{需求设计方案文档地址}`:         taskWorkflowBuildDesignPlanShareURL(c, workflowInfo, apiHost),
+		`{需求设计方案文件相对地址}`:       taskWorkflowBuildDesignPlanFragmentRelativePath(workflowInfo),
+		`{接口开发API地址}`:          apiHost,
+		`{接口开发API的token}`:      taskWorkflowBuildAPIToken(c),
+		`{开发项目配置}`:             taskWorkflowBuildDevConfigsMarkdown(homeTaskInfo),
+		`{开发配置}`:               taskWorkflowBuildDevConfigsMarkdown(homeTaskInfo),
+		`{dtool-api地址}`:        filepath.Join(component.EnvClient.RootPath, `skills`, `dtool-api`),
+		`{dtool-common地址}`:     filepath.Join(component.EnvClient.RootPath, `skills`, `dtool-common`),
+		`{dtool-workflow地址}`:   filepath.Join(component.EnvClient.RootPath, `skills`, `dtool-workflow`),
+		`{dtool-playwright地址}`: filepath.Join(component.EnvClient.RootPath, `skills`, `dtool-playwright`),
+		`{自定义网页}`:              taskWorkflowBuildDevConfigsFieldMarkdown(homeTaskInfo, `smart_link`),
+		`{网页标签}`:               taskWorkflowBuildDevConfigsFieldMarkdown(homeTaskInfo, `smart_link_label`),
+		`{账号}`:                 taskWorkflowBuildDevConfigsFieldMarkdown(homeTaskInfo, `smart_link_account`),
 	}
+	// 内置占位符 {工作流程ID}，替换为工作流程任务的 ID
+	result[`{工作流程ID}`] = cast.ToString(workflowInfo[`id`])
 	// 先解析开发环境内容中的其他占位符，再将其加入映射。
 	for key, value := range result {
 		devEnvironment = strings.ReplaceAll(devEnvironment, key, value)
 	}
-	taskID := cast.ToString(homeTaskInfo[`id`])
-	result[`{开发环境}`] = devEnvironment + "\n\n任务ID: " + taskID
-	result[`{zcode配置列表}`] = taskWorkflowBuildZcodeMarkdown()
+	result[`{开发环境}`] = devEnvironment
 	return result
 }
 
@@ -1463,6 +1498,9 @@ func taskWorkflowBuildAPIToken(c *gin.Context) string {
 		return token
 	}
 	token = strings.TrimSpace(c.GetHeader(`token`))
+	if token == `` {
+		token = define.DtoolAPIDefaultToken
+	}
 	return token
 }
 
@@ -1864,6 +1902,34 @@ func taskWorkflowBroadcastStep(workflowID int, step, status, message string) {
 			`status`:      strings.TrimSpace(status),
 			`message`:     strings.TrimSpace(message),
 			`time`:        time.Now().Unix(),
+		},
+		Type: p_define.SseContentTypeMsg,
+	})
+	for _, item := range gsgin.SseStatus() {
+		clientID := strings.TrimSpace(strings.TrimPrefix(item, apiDataChangeSseStatusPrefix))
+		if clientID == `` || clientID == item {
+			continue
+		}
+		sse := gsgin.SseGetByClientId(clientID)
+		if sse == nil {
+			continue
+		}
+		_ = sse.SendToChan(msg)
+	}
+}
+
+// taskWorkflowBroadcastNodeStatus 通过 SSE 向所有在线客户端广播工作流节点状态变更。
+func taskWorkflowBroadcastNodeStatus(workflowID int, nodeStatuses string) {
+	if workflowID <= 0 {
+		return
+	}
+	distributeID := define.SseTaskWorkflowPrefix + cast.ToString(workflowID)
+	msg := gstool.JsonEncode(p_define.SseData{
+		SseDistributeId: distributeID,
+		Data: map[string]any{
+			`type`:          `node_status_change`,
+			`workflow_id`:   workflowID,
+			`node_statuses`: nodeStatuses,
 		},
 		Type: p_define.SseContentTypeMsg,
 	})
@@ -2392,7 +2458,7 @@ func TaskWorkflowChatSend(c *gin.Context) {
 			return
 		}
 	}
-	// prompt_type 为可选，仅在非空时追踪 chat_session_ids
+	// prompt_type 为可选，非空时用于按类型查询对话历史
 	promptType := strings.TrimSpace(req.PromptType)
 
 	chatID, err := common.DbMain.TaskWorkflowChatCreate(req.WorkflowID, req.Prompt, promptType, req.CliType, modelID, req.LocalDir, settingsPath, thinkingCollapsed, req.ThinkingIntensity)
@@ -2900,23 +2966,6 @@ func scanZcodeProjects(zcodeDir string) ([]_struct.TaskWorkflowZcodeProjectItem,
 		})
 	}
 	return projects, nil
-}
-
-// taskWorkflowBuildZcodeMarkdown 构建 zcode 配置列表的 Markdown 文本用于占位符替换。
-func taskWorkflowBuildZcodeMarkdown() string {
-	rows, err := common.DbMain.ZcodeProjectMappingList()
-	if err != nil || len(rows) == 0 {
-		return ``
-	}
-	var sb strings.Builder
-	sb.WriteString("| 工作目录 | Settings 配置文件 |\n")
-	sb.WriteString("|----------|------------------|\n")
-	for _, row := range rows {
-		ws := cast.ToString(row[`workspace_path`])
-		sp := cast.ToString(row[`settings_path`])
-		sb.WriteString(fmt.Sprintf("| %s | %s |\n", ws, sp))
-	}
-	return sb.String()
 }
 
 // runClaudeCommand 后台执行 claude 命令并将输出推送到专用 SSE。

@@ -64,7 +64,10 @@ type TaskWorkflowRequirementFetchRequest struct {
 // TaskWorkflowNodeStatusUpdateRequest 更新工作流节点状态请求。
 type TaskWorkflowNodeStatusUpdateRequest struct {
 	WorkflowID   int    `json:"workflow_id"`
+	HomeTaskID   int    `json:"home_task_id"`
 	NodeStatuses string `json:"node_statuses"`
+	Step         string `json:"step"`
+	Status       string `json:"status"`
 }
 
 // TaskWorkflowBatchNodeStatusRequest 批量查询工作流节点状态请求。

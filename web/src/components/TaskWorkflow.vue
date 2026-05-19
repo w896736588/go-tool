@@ -37,10 +37,10 @@
           <GitActionButton compact variant="warning" @click="openIssueFixDialog">
             问题修改提示词
           </GitActionButton>
-          <GitActionButton compact :class="{ 'chat-history-btn--running': chatCounts.running > 0 }" @click="openChatHistoryDialog">
+          <GitActionButton compact :class="{ 'chat-history-btn--running': getPromptChatCounts('issue_fix').running > 0 }" @click="openChatHistoryDialog">
             历史对话
-            <span v-if="chatCounts.total > 0" class="chat-history-btn__counts">
-              {{ chatCounts.running }}/{{ chatCounts.interrupted }}/{{ chatCounts.total }}
+            <span v-if="getPromptChatCounts('issue_fix').total > 0" class="chat-history-btn__counts">
+              {{ getPromptChatCounts('issue_fix').running }}/{{ getPromptChatCounts('issue_fix').interrupted }}/{{ getPromptChatCounts('issue_fix').total }}
             </span>
           </GitActionButton>
           <!--
@@ -707,182 +707,6 @@
 
   </div>
 
-    <!-- 历史对话合并弹窗（左侧列表+右侧详情） -->
-    <el-dialog
-      v-model="chatCombinedDialogVisible"
-      title="历史对话"
-      width="80vw"
-      top="3vh"
-      destroy-on-close
-      @closed="onChatCombinedDialogClosed"
-    >
-      <div class="chat-combined-body" v-loading="chatHistoryLoading">
-        <div class="chat-combined-list">
-          <div
-            v-for="item in chatHistoryList"
-            :key="item.id"
-            :class="['chat-list-item', { 'chat-list-item--active': chatDetailId === item.id }]"
-            @click="onChatRowClick(item)"
-          >
-            <div class="chat-list-item__name">{{ (item.prompt || '').substring(0, 10) || '未命名' }}</div>
-            <div class="chat-list-item__time">
-              <span v-if="item.status === 'running' && runtimeDurationText(item)" style="color: #409eff;">{{ runtimeDurationText(item) }}</span>
-              <span v-else-if="item.duration_ms > 0">{{ formatDurationDisplay(item.duration_ms) }}</span>
-              <span v-else>{{ item.created_at || '-' }}</span>
-              <span v-if="item.line_count > 0" class="chat-list-item__msg-count">{{ item.line_count }}条</span>
-            </div>
-            <span :class="['chat-list-item__status', 'chat-list-item__status--' + (item.status || '')]">
-              <span v-if="item.status === 'running'" class="chat-list-item__running-dot"></span>
-              <span v-else-if="item.status === 'completed'" class="chat-list-item__check-icon">&#x2713;</span>
-              <span v-else-if="item.status === 'interrupted'" class="chat-list-item__warn-icon">!</span>
-              <span v-else-if="item.status === 'error'" class="chat-list-item__error-icon">!</span>
-              {{ statusText(item.status) }}
-            </span>
-          </div>
-          <div v-if="chatHistoryList.length === 0 && !chatHistoryLoading" class="chat-combined-list__empty">暂无对话</div>
-        </div>
-        <div class="chat-combined-detail">
-          <div v-if="!chatDetailId" class="chat-combined-detail__placeholder">
-            请选择一条对话
-          </div>
-          <template v-else>
-            <div class="chat-detail-task-name">{{ homeTask.name || '-' }}</div>
-            <div v-if="chatDetailModelName || chatDetailLocalDir" style="margin-bottom: 12px; color: #909399; font-size: 12px;">
-              <span v-if="chatDetailModelName">模型: {{ chatDetailModelName }}</span>
-              <span v-if="chatDetailModelName && chatDetailLocalDir"> | </span>
-              <span v-if="chatDetailLocalDir">目录: {{ chatDetailLocalDir }}</span>
-            </div>
-            <div ref="chatDetailContainer" class="chat-detail-container" @scroll="onChatDetailScroll">
-              <div v-if="chatDetailMessages.length === 0 && chatDetailStatus === 'running'" style="text-align: center; padding: 40px; color: #909399;">
-                <div>等待 claude code 响应...</div>
-              </div>
-              <div v-for="(msg, idx) in chatDetailMessages" :key="idx" style="margin-bottom: 8px;">
-                <!-- system_init -->
-                <div v-if="msg.type === 'system_init'" style="color: #67c23a; font-size: 12px; padding: 4px 0;">
-                  ✔ {{ msg.text }} | model: {{ msg.model }}
-                </div>
-                <!-- system_command 提示词气泡（右侧，默认折叠最多10行） -->
-                <div v-else-if="msg.type === 'system_command'" style="display: flex; justify-content: flex-end; margin: 4px 0;">
-                  <div style="background: #ecf5ff; border-radius: 8px 8px 0 8px; padding: 8px 12px; max-width: 75%; width: fit-content; border: 1px solid #d9ecff;">
-                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
-                      <span style="font-size: 11px; color: #909399;">提示词</span>
-                      <span @click="msg.collapsed = !msg.collapsed" style="cursor: pointer; font-size: 11px; color: #409eff; user-select: none;">{{ msg.collapsed ? '展开 ▼' : '收起 ▲' }}</span>
-                    </div>
-                    <div :style="{ maxHeight: msg.collapsed ? '16em' : 'none', overflow: 'hidden', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '12px', color: '#303133', lineHeight: '1.6' }">{{ msg.text }}</div>
-                  </div>
-                </div>
-                <!-- system_hook -->
-                <div v-else-if="msg.type === 'system_hook'" style="color: #909399; font-size: 12px;">
-                  <span @click="msg.collapsed = !msg.collapsed" style="cursor: pointer;">{{ msg.collapsed ? '▶' : '▼' }} {{ msg.text }}</span>
-                </div>
-                <!-- system (generic) -->
-                <div v-else-if="msg.type === 'system'" style="color: #909399; font-size: 11px;">{{ msg.text }}</div>
-                <!-- system_status: claude code 状态 -->
-                <div v-else-if="msg.type === 'system_status'" style="color: #909399; font-size: 12px; padding: 2px 0;">
-                  <span :style="msg.status === 'requesting' ? 'color: #409eff;' : ''">{{ msg.text }}</span>
-                </div>
-                <!-- system_task: 后台任务 (task_started / task_notification) -->
-                <div v-else-if="msg.type === 'system_task'" style="color: #909399; font-size: 12px; padding: 2px 0;">
-                  <span :style="msg.status === 'completed' ? 'color: #67c23a;' : msg.status === 'started' ? 'color: #409eff;' : ''">🔧 {{ msg.description }}</span>
-                  <span style="margin-left: 8px; font-size: 11px;">{{ msg.status === 'started' ? '启动' : msg.status }}</span>
-                </div>
-                <!-- assistant message -->
-                <div v-else-if="msg.type === 'assistant'">
-                  <!-- thinking -->
-                  <div v-if="msg.thinking" style="margin-bottom: 8px;">
-                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
-                      <span v-if="isCurrentThinking(msg)" style="color: #409eff; font-size: 12px;">思考中.... 持续{{ thinkingStreamElapsed }}s</span>
-                      <span v-else style="color: #909399; font-size: 12px;">思考过程{{ msg._thinkingTiming && msg._thinkingTiming.durationMs ? ' (' + (msg._thinkingTiming.durationMs / 1000).toFixed(1) + 's)' : '' }}</span>
-                      <span @click="toggleThinkingCollapse(msg)" style="cursor: pointer; font-weight: bold; font-size: 12px; color: #909399;">{{ msg._thinkingCollapsed ? '▶' : '▼' }}</span>
-                    </div>
-                    <div v-if="!msg._thinkingCollapsed" class="thinking-blockquote">{{ msg.thinking }}</div>
-                  </div>
-                  <!-- content blocks -->
-                  <div v-for="(block, bi) in msg.content" :key="bi">
-                    <div v-if="block.type === 'text'" style="white-space: pre-wrap; line-height: 1.6;">{{ block.text }}</div>
-                    <div v-else-if="block.type === 'tool_use'" style="background: #f0f9eb; border-radius: 4px; padding: 8px; margin: 4px 0;">
-                      <span style="color: #67c23a; font-weight: 500;">🔧 {{ block.name }}</span>
-                      <span v-if="block.displayInput" style="margin-left: 8px; font-size: 12px; color: #303133; font-family: Consolas, monospace;">{{ block.displayInput }}</span>
-                      <div v-else style="font-size: 12px; color: #909399; margin-top: 4px; cursor: pointer;" @click="block._inputExpanded = !block._inputExpanded">
-                        {{ block._inputExpanded ? '▼' : '▶' }} 参数
-                      </div>
-                      <pre v-if="!block.displayInput && block._inputExpanded" style="white-space: pre-wrap; font-size: 12px; color: #606266; margin-top: 4px; font-family: Consolas, monospace;">{{ block.input }}</pre>
-                      <div v-if="block._result" style="color: #909399; font-size: 12px; margin-top: 6px; border-top: 1px dashed #dcdfe6; padding-top: 4px;">
-                        <span @click="block._result.collapsed = !block._result.collapsed" style="cursor: pointer;">{{ block._result.collapsed ? '▶' : '▼' }} 工具执行结果</span>
-                        <pre v-if="!block._result.collapsed" style="white-space: pre-wrap; font-size: 11px; margin-top: 4px; max-height: 200px; overflow-y: auto; font-family: Consolas, monospace;">{{ block._result.text }}</pre>
-                      </div>
-                    </div>
-                  </div>
-                  <!-- usage -->
-                  <div v-if="msg.usage" style="color: #909399; font-size: 11px; margin-top: 8px; border-top: 1px solid #ebeef5; padding-top: 4px;">
-                    input: {{ msg.usage.input_tokens }} | output: {{ msg.usage.output_tokens }}
-                  </div>
-                </div>
-                <!-- standalone tool_use -->
-                <div v-else-if="msg.type === 'tool_use'" style="background: #f0f9eb; border-radius: 4px; padding: 8px; margin: 4px 0;">
-                  <span style="color: #67c23a; font-weight: 500;">🔧 {{ msg.name }}</span>
-                  <span v-if="msg.displayInput" style="margin-left: 8px; font-size: 12px; color: #303133; font-family: Consolas, monospace;">{{ msg.displayInput }}</span>
-                  <div v-else style="font-size: 12px; color: #909399; margin-top: 4px; cursor: pointer;" @click="msg._inputExpanded = !msg._inputExpanded">
-                    {{ msg._inputExpanded ? '▼' : '▶' }} 参数
-                  </div>
-                  <pre v-if="!msg.displayInput && msg._inputExpanded" style="white-space: pre-wrap; font-size: 12px; color: #606266; margin-top: 4px; font-family: Consolas, monospace;">{{ msg.input }}</pre>
-                  <div v-if="msg._result" style="color: #909399; font-size: 12px; margin-top: 6px; border-top: 1px dashed #dcdfe6; padding-top: 4px;">
-                    <span @click="msg._result.collapsed = !msg._result.collapsed" style="cursor: pointer;">{{ msg._result.collapsed ? '▶' : '▼' }} 工具执行结果</span>
-                    <pre v-if="!msg._result.collapsed" style="white-space: pre-wrap; font-size: 11px; margin-top: 4px; max-height: 200px; overflow-y: auto; font-family: Consolas, monospace;">{{ msg._result.text }}</pre>
-                  </div>
-                </div>
-                <!-- tool_result（未匹配的降级展示） -->
-                <div v-else-if="msg.type === 'tool_result'" style="color: #909399; font-size: 12px;">
-                  <span @click="msg.collapsed = !msg.collapsed" style="cursor: pointer;">{{ msg.collapsed ? '▶' : '▼' }} 工具执行结果</span>
-                  <pre v-if="!msg.collapsed" style="white-space: pre-wrap; font-size: 11px; margin-top: 4px; max-height: 200px; overflow-y: auto; font-family: Consolas, monospace;">{{ msg.text }}</pre>
-                </div>
-                <!-- assistant_text -->
-                <div v-else-if="msg.type === 'assistant_text'" style="white-space: pre-wrap; line-height: 1.6;">{{ msg.text }}</div>
-                <!-- assistant_thinking -->
-                <div v-else-if="msg.type === 'assistant_thinking'" style="color: #909399; font-size: 12px;">
-                  <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
-                    <span>思考过程{{ msg._thinkingTiming && msg._thinkingTiming.durationMs ? ' (' + (msg._thinkingTiming.durationMs / 1000).toFixed(1) + 's)' : '' }}</span>
-                    <span @click="toggleThinkingCollapse(msg)" style="cursor: pointer; font-weight: bold;">{{ msg._thinkingCollapsed ? '▶' : '▼' }}</span>
-                  </div>
-                  <div v-if="!msg._thinkingCollapsed" class="thinking-blockquote">{{ msg.text }}</div>
-                </div>
-                <!-- result -->
-                <div v-else-if="msg.type === 'result'" style="color: #67c23a; font-size: 12px; border-top: 1px solid #ebeef5; padding-top: 8px; margin-top: 8px;">
-                  {{ msg.isError ? '✘ 错误' : '✔ 完成' }} | 耗时: {{ (msg.durationMs / 1000).toFixed(1) }}s | {{ msg.numTurns }} 轮
-                  <span v-if="msg.usage"> | input: {{ msg.usage.input_tokens }} output: {{ msg.usage.output_tokens }}</span>
-                </div>
-                <!-- chat_completed -->
-                <div v-else-if="msg.type === 'chat_completed'" style="color: #67c23a; text-align: center; padding: 16px;">
-                  ✔ {{ msg.text }}
-                </div>
-                <!-- raw_text: 非 JSON 文本行 -->
-                <div v-else-if="msg.type === 'raw_text'" style="white-space: pre-wrap; color: #e6a23c; padding: 4px 0; word-break: break-all; font-family: Consolas, monospace;">{{ msg.text }}</div>
-                <!-- parse_error: 后端解析错误 -->
-                <div v-else-if="msg.type === 'parse_error'" style="background: #fef0f0; border-left: 3px solid #f56c6c; border-radius: 4px; padding: 8px 12px; margin: 4px 0;">
-                  <div style="color: #f56c6c; font-weight: bold;">解析错误</div>
-                  <div v-if="msg.error" style="color: #e6a23c; font-size: 11px; margin-top: 4px;">{{ msg.error }}</div>
-                  <pre style="white-space: pre-wrap; font-size: 12px; margin-top: 4px; color: #303133;">{{ msg.text }}</pre>
-                </div>
-                <!-- error: claude 进程错误 -->
-                <div v-else-if="msg.type === 'error'" style="background: #fef0f0; border-left: 3px solid #f56c6c; border-radius: 4px; padding: 8px 12px; margin: 4px 0;">
-                  <span style="color: #f56c6c;">错误: </span>
-                  <span style="color: #303133;">{{ msg.text }}</span>
-                </div>
-              </div>
-            </div>
-            <div :class="['chat-detail-scroll-btn', { 'chat-detail-scroll-btn--visible': chatDetailShowScrollBtn }]" @click="scrollChatToBottom(true)">
-              ↓
-            </div>
-            <TaskProgressPanel @scroll-to-msg="onTaskPanelScrollToMsg" />
-            <div class="chat-detail-input-row">
-              <el-input v-model="chatContinueInput" placeholder="输入新消息继续对话..." :disabled="chatDetailStatus === 'running'" @keyup.enter="chatDetailStatus !== 'running' ? continueChat : null" style="flex: 1;" />
-              <el-button v-if="chatDetailStatus === 'running'" type="danger" @click="stopChat">停止</el-button>
-              <el-button v-else type="primary" :loading="chatContinueLoading" @click="continueChat">发送</el-button>
-            </div>
-          </template>
-        </div>
-      </div>
-    </el-dialog>
 
     <!-- zcode 配置弹窗 -->
     <el-dialog
@@ -953,7 +777,7 @@
     <!-- 执行历史弹窗（按 prompt_type） -->
     <el-dialog
       v-model="promptChatHistoryVisible"
-      :title="'执行历史 - ' + promptChatHistoryTitle"
+      :title="promptChatHistoryPromptType ? '执行历史 - ' + promptChatHistoryTitle : '历史对话'"
       width="80vw"
       top="3vh"
       destroy-on-close
@@ -1005,9 +829,9 @@
                   <div style="background: #ecf5ff; border-radius: 8px 8px 0 8px; padding: 8px 12px; max-width: 75%; width: fit-content; border: 1px solid #d9ecff;">
                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
                       <span style="font-size: 11px; color: #909399;">提示词</span>
-                      <span @click="msg.collapsed = !msg.collapsed" style="cursor: pointer; font-size: 11px; color: #409eff; user-select: none;">{{ msg.collapsed ? '展开 ▼' : '收起 ▲' }}</span>
+                      <span v-if="needCollapseBtn(msg.text)" @click="msg.collapsed = !msg.collapsed" style="cursor: pointer; font-size: 11px; color: #409eff; user-select: none;">{{ msg.collapsed ? '展开 ▼' : '收起 ▲' }}</span>
                     </div>
-                    <div :style="{ maxHeight: msg.collapsed ? '16em' : 'none', overflow: 'hidden', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '12px', color: '#303133', lineHeight: '1.6' }">{{ msg.text }}</div>
+                    <div :style="{ maxHeight: needCollapseBtn(msg.text) && msg.collapsed ? '16em' : 'none', overflow: 'hidden', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '12px', color: '#303133', lineHeight: '1.6' }">{{ msg.text }}</div>
                   </div>
                 </div>
                 <div v-else-if="msg.type === 'system_hook'" style="color: #909399; font-size: 12px;">
@@ -1265,11 +1089,7 @@ export default {
       issueFixInput: '',
       issueFixResolvedTemplate: '',
       // claude code 对话
-      chatCombinedDialogVisible: false,
-      chatHistoryList: [],
       _chatHistoryDurationTimer: null, // 历史对话列表运行中对话的实时耗时定时器
-      chatHistoryLoading: false,
-      chatCounts: { running: 0, interrupted: 0, total: 0 },
       promptChatCounts: {},
       chatDetailId: 0,
       chatDetailPrompt: '',
@@ -1277,10 +1097,12 @@ export default {
       chatDetailStatus: '',
       chatDetailMessages: [],
       chatDetailSSERegistered: false,
-      chatDetailSSELines: [], // SSE 累积的原始行，用于全量重解析
+      chatDetailSSELines: [], // SSE 累积的原始行
       chatDetailAutoScroll: true,
-      chatDetailShowScrollBtn: false,
-      _autoScrollLocked: false, // 程序化滚动锁，防止内容更新引发的scroll事件误关自动滚动
+      _autoScrollLocked: false, // 程序化滚动锁
+      _sseLineBuffer: [], // SSE 行缓冲（批处理），每100ms刷新一次
+      _sseBatchTimer: null, // 批处理定时器
+      _sseParseState: null, // 增量解析状态 { currentMessage, toolUseMap, pendingPatches }
       thinkingStreamElapsed: 0, // 思考流式阶段的实时已用秒数
       chatContinueInput: '',
       chatContinueLoading: false,
@@ -1395,6 +1217,7 @@ export default {
   beforeUnmount() {
     window.removeEventListener('keydown', this.handleCtrlS)
     this._stopChatHistoryDurationTimer()
+    if (this._sseBatchTimer) { clearTimeout(this._sseBatchTimer); this._sseBatchTimer = null }
     this.unregisterWorkflowSse()
     if (this._chatEventSource) {
       this._chatEventSource.close()
@@ -1612,6 +1435,16 @@ export default {
       // chat 状态变更时刷新执行历史按钮的计数和动画
       if (data.type === 'chat_status_change') {
         this.loadChatCounts()
+        return
+      }
+      // 节点状态变更时直接更新本地 nodeStatuses，无需重新请求接口
+      if (data.type === 'node_status_change') {
+        try {
+          const parsed = data.node_statuses ? JSON.parse(data.node_statuses) : {}
+          this.nodeStatuses = parsed
+        } catch (e) {
+          // 解析失败忽略，保留当前状态
+        }
         return
       }
       this.requirementFetchLogs.push({
@@ -1919,29 +1752,13 @@ export default {
         }
       })
     },
-    // 打开历史对话合并弹窗
+    // 打开历史对话弹窗（复用执行历史弹窗，查全部对话）
     openChatHistoryDialog() {
-      this.chatCombinedDialogVisible = true
-      this.chatHistoryLoading = true
-      taskWorkflowApi.TaskWorkflowChatList(this.workflowId, (res) => {
-        this.chatHistoryLoading = false
-        if (res.ErrCode === 0 && res.Data) {
-          const list = res.Data.list || []
-          this.chatHistoryList = list
-          this._startChatHistoryDurationTimer()
-          this.updateChatCountsFromList(list)
-          if (this.chatHistoryList.length > 0) {
-            this.onChatRowClick(this.chatHistoryList[0])
-          }
-        }
-      })
+      this.openPromptChatHistory('issue_fix')
     },
     updateChatCountsFromList(list) {
-      let running = 0, interrupted = 0
       const byType = {}
       for (const item of list) {
-        if (item.status === 'running') running++
-        else if (item.status === 'interrupted') interrupted++
         const pt = item.prompt_type || ''
         if (pt) {
           const c = byType[pt] || { running: 0, interrupted: 0, total: 0 }
@@ -1951,31 +1768,7 @@ export default {
           byType[pt] = c
         }
       }
-      this.chatCounts = { running, interrupted, total: list.length }
       this.promptChatCounts = byType
-    },
-    // 点击左侧列表行，加载右侧详情
-    onChatRowClick(row) {
-      if (this.chatDetailId === row.id) return
-      // 切到不同 chat 时才断开旧 SSE
-      if (this._chatEventSource && this._sseChatId !== row.id) {
-        this._chatEventSource.close()
-        this._chatEventSource = null
-        this._sseChatId = 0
-      }
-      this.chatDetailId = row.id
-      this.chatDetailStatus = row.status
-      this.chatDetailAutoScroll = true
-      this.chatDetailShowScrollBtn = false
-      // SSE 已连接此 chat 时不清理数据，复用已有输出
-      if (this._sseChatId !== row.id) {
-        this.chatDetailSSELines = []
-        this.chatDetailMessages = []
-        taskProgressStore.reset()
-        this.loadChatDetail()
-      } else {
-        this.$nextTick(() => { this.scrollChatToBottom() })
-      }
     },
     // 加载对话详情
     loadChatDetail() {
@@ -2005,7 +1798,7 @@ export default {
               msg._thinkingCollapsed = true
             }
           })
-          this.$nextTick(() => { this.scrollChatToBottom(true) })
+          this.$nextTick(() => { this.scrollPromptChatToBottom(true) })
           // 正在执行的对话未连接 SSE 时自动重连，保证刷新后仍能实时更新
           if (this.chatDetailStatus === 'running' && this._sseChatId !== this.chatDetailId) {
             this.connectChatStream(this.chatDetailId)
@@ -2024,7 +1817,10 @@ export default {
       this._sseChatId = chatId
       this.chatDetailSSERegistered = true
       this._thinkingStreamStartTime = 0 // 当前对话思考计时的起始时间戳
-      this._thinkingStreamMsgIdx = -1  // 当前思考所属的消息索引（在 chatDetailMessages 中的位置）
+      // 初始化增量解析状态
+      this._sseParseState = { currentMessage: null, toolUseMap: new Map(), pendingPatches: [] }
+      this._sseLineBuffer = []
+      if (this._sseBatchTimer) { clearTimeout(this._sseBatchTimer); this._sseBatchTimer = null }
       // 启动思考耗时动态更新定时器
       if (this._thinkingTimer) { clearInterval(this._thinkingTimer); this._thinkingTimer = null }
       this.thinkingStreamElapsed = 0
@@ -2048,14 +1844,16 @@ export default {
         try {
           const obj = JSON.parse(line)
           if (obj.type === 'chat' && obj.subtype === 'completed') {
+            this._flushSseBatch()
             this.chatDetailSSELines.push(line)
             this._sseChatId = 0
             this.chatDetailSSERegistered = false
             es.close()
             this._chatEventSource = null
+            this._sseParseState = null
             this.loadChatDetail()
             this.loadChatCounts()
-            this.$nextTick(() => { this.scrollChatToBottom() })
+            this.$nextTick(() => { this.scrollPromptChatToBottom() })
             return
           }
           // 追踪思考耗时：首次 thinking_delta 时记录起始时间
@@ -2074,97 +1872,61 @@ export default {
             }
           }
         } catch (e) { /* ignore parse errors */ }
-        // 收集之前所有需要保持折叠状态的消息（按类型反向队列，避免 re-parse 后索引偏移导致状态丢失）
-        const prevThinkStates = [] // [{_thinkingCollapsed, _thinkingManuallyToggled}]，按消息顺序排列
-        const prevCollapseStates = [] // [{collapsed}]，按消息顺序排列
-        const prevResultCollapseById = {}
-        const prevInputExpandedById = {}
-        this.chatDetailMessages.forEach((msg) => {
-          if (msg.type === 'assistant' && msg.thinking) {
-            prevThinkStates.push({
-              _thinkingCollapsed: msg._thinkingCollapsed,
-              _thinkingManuallyToggled: !!msg._thinkingManuallyToggled,
-            })
-          }
-          if (msg.collapsed !== undefined) {
-            prevCollapseStates.push({ collapsed: msg.collapsed })
-          }
-          // 收集 tool_use 结果的折叠状态（按 id，避免索引偏移导致状态丢失）
-          if (msg.type === 'tool_use' && msg._result) {
-            prevResultCollapseById[msg.id] = msg._result.collapsed
-          }
-          if (msg.type === 'assistant') {
-            for (const block of (msg.content || [])) {
-              if (block.type === 'tool_use' && block._result && block.id) {
-                prevResultCollapseById[block.id] = block._result.collapsed
-              }
-            }
-          }
-          // 收集 tool_use 参数展开状态（按 id，避免 re-parse 后丢失用户手动展开的参数面板）
-          if (msg.type === 'tool_use' && msg.id && msg._inputExpanded !== undefined) {
-            prevInputExpandedById[msg.id] = msg._inputExpanded
-          }
-          if (msg.type === 'assistant') {
-            for (const block of (msg.content || [])) {
-              if (block.type === 'tool_use' && block.id && block._inputExpanded !== undefined) {
-                prevInputExpandedById[block.id] = block._inputExpanded
-              }
-            }
-          }
-        })
+        // 行缓冲：每 100ms 批量刷新，避免每条 SSE 事件都触发全量解析和 DOM 更新
+        this._sseLineBuffer.push(line)
+        if (!this._sseBatchTimer) {
+          this._sseBatchTimer = setTimeout(() => {
+            this._flushSseBatch()
+          }, 100)
+        }
+      }
+      es.onerror = () => {
+        this._flushSseBatch()
+        if (this._thinkingTimer) { clearInterval(this._thinkingTimer); this._thinkingTimer = null }
+        this.thinkingStreamElapsed = 0
+        this.chatDetailSSERegistered = false
+        es.close()
+        this._chatEventSource = null
+        this._sseParseState = null
+        this.loadChatDetail()
+        this.loadChatCounts()
+      }
+    },
+    // _flushSseBatch 将缓冲区中的 SSE 行批量增量解析并追加到消息列表。
+    _flushSseBatch() {
+      if (this._sseBatchTimer) {
+        clearTimeout(this._sseBatchTimer)
+        this._sseBatchTimer = null
+      }
+      const newLines = this._sseLineBuffer.splice(0)
+      if (newLines.length === 0) return
+      for (const l of newLines) {
+        this.chatDetailSSELines.push(l)
+      }
+      const result = chatParser.parseChatLinesIncremental(newLines, this._sseParseState, this.chatDetailMessages.length)
+      this._sseParseState = result.parseState
+      if (result.newMessages.length > 0) {
         this._autoScrollLocked = true
-        this.chatDetailSSELines.push(line)
-        this.chatDetailMessages = chatParser.parseChatLines(this.chatDetailSSELines)
-        // 恢复折叠状态：从尾部反向匹配，避免 re-parse 中插入系统消息导致的索引偏移
-        let ti = prevThinkStates.length - 1
-        for (let i = this.chatDetailMessages.length - 1; i >= 0 && ti >= 0; i--) {
-          const msg = this.chatDetailMessages[i]
-          if (msg.type === 'assistant' && msg.thinking) {
-            const saved = prevThinkStates[ti]
-            msg._thinkingCollapsed = saved._thinkingCollapsed
-            msg._thinkingManuallyToggled = saved._thinkingManuallyToggled
-            ti--
-          }
+        for (const msg of result.newMessages) {
+          this.chatDetailMessages.push(msg)
         }
-        let ci = prevCollapseStates.length - 1
-        for (let i = this.chatDetailMessages.length - 1; i >= 0 && ci >= 0; i--) {
+      }
+      for (const patch of result.parseState.pendingPatches) {
+        for (let i = this.chatDetailMessages.length - 1; i >= 0; i--) {
           const msg = this.chatDetailMessages[i]
-          if (msg.collapsed !== undefined) {
-            msg.collapsed = prevCollapseStates[ci].collapsed
-            ci--
-          }
-        }
-        // 恢复 tool_use 结果的折叠状态（按 id，避免 re-parse 后索引偏移）
-        if (Object.keys(prevResultCollapseById).length > 0) {
-          this.chatDetailMessages.forEach((msg) => {
-            if (msg.type === 'tool_use' && msg._result && prevResultCollapseById[msg.id] !== undefined) {
-              msg._result.collapsed = prevResultCollapseById[msg.id]
-            }
-            if (msg.type === 'assistant') {
-              for (const block of (msg.content || [])) {
-                if (block.type === 'tool_use' && block._result && block.id && prevResultCollapseById[block.id] !== undefined) {
-                  block._result.collapsed = prevResultCollapseById[block.id]
-                }
+          if (msg.type === 'assistant') {
+            for (const block of (msg.content || [])) {
+              if (block.type === 'tool_use' && block.id === patch.blockId) {
+                block._result = patch.resultData
               }
             }
-          })
+          } else if (msg.type === 'tool_use' && msg.id === patch.blockId) {
+            msg._result = patch.resultData
+          }
         }
-        // 恢复 tool_use 参数展开状态（按 id，避免 re-parse 后丢失用户手动展开的参数面板）
-        if (Object.keys(prevInputExpandedById).length > 0) {
-          this.chatDetailMessages.forEach((msg) => {
-            if (msg.type === 'tool_use' && msg.id && prevInputExpandedById[msg.id] !== undefined) {
-              msg._inputExpanded = prevInputExpandedById[msg.id]
-            }
-            if (msg.type === 'assistant') {
-              for (const block of (msg.content || [])) {
-                if (block.type === 'tool_use' && block.id && prevInputExpandedById[block.id] !== undefined) {
-                  block._inputExpanded = prevInputExpandedById[block.id]
-                }
-              }
-            }
-          })
-        }
-        // 思考完成时：注入耗时并自动折叠（用户手动切换过则保留其选择）
+      }
+      result.parseState.pendingPatches.length = 0
+      if (result.newMessages.length > 0) {
         if (this._pendingThinkingDurationMs > 0) {
           for (let i = this.chatDetailMessages.length - 1; i >= 0; i--) {
             const msg = this.chatDetailMessages[i]
@@ -2180,11 +1942,9 @@ export default {
           this._pendingThinkingDurationMs = 0
         }
         this.$nextTick(() => {
-          this.scrollChatToBottom()
-          // 自动滚动可见的思考框到底部
+          this.scrollPromptChatToBottom()
           const boxes = document.querySelectorAll('.thinking-blockquote')
           boxes.forEach(box => { box.scrollTop = box.scrollHeight })
-          // 双重RAF后解锁，确保重渲染引发的scroll事件已全部触发完毕
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
               this._autoScrollLocked = false
@@ -2192,20 +1952,14 @@ export default {
           })
         })
       }
-      es.onerror = () => {
-        if (this._thinkingTimer) { clearInterval(this._thinkingTimer); this._thinkingTimer = null }
-        this.thinkingStreamElapsed = 0
-        this.chatDetailSSERegistered = false
-        es.close()
-        this._chatEventSource = null
-        this.loadChatDetail()
-        this.loadChatCounts()
-      }
     },
     // 切换思考过程的折叠/展开
     toggleThinkingCollapse(msg) {
       msg._thinkingCollapsed = !msg._thinkingCollapsed
       msg._thinkingManuallyToggled = true
+    },
+    needCollapseBtn(text) {
+      return (text || '').split('\n').length > 10
     },
     // 判断当前消息是否正在思考中（实时流式阶段）
     isCurrentThinking(msg) {
@@ -2218,39 +1972,11 @@ export default {
       }
       return false
     },
-    // 滚动对话详情到底部
-    scrollChatToBottom(force) {
-      if (force) {
-        this.chatDetailAutoScroll = true
-        this.promptChatDetailShowScrollBtn = false
-        this.chatDetailShowScrollBtn = false
-      }
-      if (!this.chatDetailAutoScroll) return
-      this.$nextTick(() => {
-        const el = this.promptChatHistoryVisible
-          ? this.$refs.promptChatDetailContainer
-          : this.$refs.chatDetailContainer
-        if (el) {
-          el.scrollTop = el.scrollHeight
-        }
-      })
-    },
-    // 监听对话详情区域滚动
-    onChatDetailScroll() {
-      if (this._autoScrollLocked) return
-      const el = this.$refs.chatDetailContainer
-      if (!el) return
-      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30
-      if (atBottom) {
-        this.chatDetailAutoScroll = true
-        this.chatDetailShowScrollBtn = false
-      } else {
-        this.chatDetailAutoScroll = false
-        this.chatDetailShowScrollBtn = true
-      }
-    },
     // 关闭对话详情（彻底断开 SSE 并清空状态）
     closeChatDetail() {
+      if (this._sseBatchTimer) { clearTimeout(this._sseBatchTimer); this._sseBatchTimer = null }
+      this._sseLineBuffer = []
+      this._sseParseState = null
       if (this._thinkingTimer) { clearInterval(this._thinkingTimer); this._thinkingTimer = null }
       this.thinkingStreamElapsed = 0
       if (this._chatEventSource) {
@@ -2264,10 +1990,6 @@ export default {
       taskProgressStore.reset()
       this.chatDetailId = 0
       this.chatContinueInput = ''
-    },
-    // 历史对话合并弹窗关闭（保留 SSE 连接与聊天状态）
-    onChatCombinedDialogClosed() {
-      this._stopChatHistoryDurationTimer()
     },
     sendToClaudeCode() {
       const prompt = this.issueFixCombinedText
@@ -2397,6 +2119,7 @@ export default {
     // 打开按类型的执行历史弹窗
     openPromptChatHistory(promptType, focusChatId) {
       const titleMap = {
+        '': '历史对话',
         plain_text_requirement: '纯文本需求',
         requirement: '需求分析',
         design_plan_requirement: '需求设计方案',
@@ -2412,19 +2135,23 @@ export default {
       this.promptChatHistoryVisible = true
       this.promptChatHistoryLoading = true
       this.promptChatDetailId = 0
-      taskWorkflowApi.TaskWorkflowChatListByPromptType(this.workflowId, promptType, (res) => {
+      const loadApi = promptType
+        ? (cb) => taskWorkflowApi.TaskWorkflowChatListByPromptType(this.workflowId, promptType, cb)
+        : (cb) => taskWorkflowApi.TaskWorkflowChatList(this.workflowId, cb)
+      loadApi((res) => {
         this.promptChatHistoryLoading = false
         if (res.ErrCode === 0 && res.Data) {
           this.promptChatHistoryList = res.Data.list || []
           this._startChatHistoryDurationTimer()
+          if (!promptType) {
+            this.updateChatCountsFromList(this.promptChatHistoryList)
+          }
           if (focusChatId) {
             const found = this.promptChatHistoryList.find(item => item.id === focusChatId)
             if (found) {
               this.onPromptChatRowClick(found)
               return
             }
-            // 列表中没有找到 focusChatId（刚创建的对话可能尚未同步到 session_ids）
-            // 若 chatDetailId 已指向该对话，则直接关联
             if (this.chatDetailId === focusChatId) {
               this.promptChatDetailId = focusChatId
             }
@@ -2434,7 +2161,6 @@ export default {
             this.onPromptChatRowClick(this.promptChatHistoryList[0])
           }
         } else if (focusChatId && this.chatDetailId === focusChatId) {
-          // API 失败但有 focusChatId，直接关联到正在执行的对话
           this.promptChatDetailId = focusChatId
         }
       })
@@ -2459,7 +2185,7 @@ export default {
         taskProgressStore.reset()
         this.loadChatDetail()
       } else {
-        this.$nextTick(() => { this.scrollChatToBottom() })
+        this.$nextTick(() => { this.scrollPromptChatToBottom() })
       }
     },
     // 执行历史对话框滚动
@@ -2485,7 +2211,7 @@ export default {
       this.$nextTick(() => {
         const el = this.$refs.promptChatDetailContainer
         if (el) {
-          el.scrollTop = el.scrollHeight
+          el.scrollTo({ top: el.scrollHeight, behavior: 'auto' })
         }
       })
     },
@@ -2503,7 +2229,6 @@ export default {
         const item = list.find(i => i.id === chatId)
         if (item) item.status = status
       }
-      updateItem(this.chatHistoryList)
       updateItem(this.promptChatHistoryList)
     },
     statusText(status) {
@@ -2534,9 +2259,6 @@ export default {
     _startChatHistoryDurationTimer() {
       this._stopChatHistoryDurationTimer()
       this._chatHistoryDurationTimer = setInterval(() => {
-        if (this.chatHistoryList.some(item => item.status === 'running')) {
-          this.chatHistoryList = this.chatHistoryList.slice()
-        }
         if (this.promptChatHistoryList.some(item => item.status === 'running')) {
           this.promptChatHistoryList = this.promptChatHistoryList.slice()
         }
@@ -2549,7 +2271,6 @@ export default {
               item.line_count = count
             }
           }
-          updateLineCount(this.chatHistoryList)
           updateLineCount(this.promptChatHistoryList)
         }
       }, 1000)
@@ -2737,15 +2458,6 @@ export default {
         return str
       }
       return str.slice(0, TASK_WORKFLOW_CONFIG_MAX_CHARS) + '...'
-    },
-    // 历史对话弹窗：点击任务项滚动到对应消息
-    onTaskPanelScrollToMsg(msgIndex) {
-      const container = this.$refs.chatDetailContainer
-      if (!container) return
-      const children = container.children
-      if (msgIndex >= 0 && msgIndex < children.length) {
-        children[msgIndex].scrollIntoView({ behavior: 'smooth', block: 'center' })
-      }
     },
     // 执行历史弹窗：点击任务项滚动到对应消息
     onPromptTaskPanelScrollToMsg(msgIndex) {
@@ -3466,21 +3178,23 @@ export default {
   background: #909399;
 }
 
-/* 历史对话按钮 — 执行中动画（使用伪元素避免 git-action-button 的 box-shadow: none !important 覆盖） */
+/* 历史对话按钮 — 执行中动画：左侧圆圈转圈 */
 .chat-history-btn--running {
   position: relative;
+  padding-left: 22px;
 }
-.chat-history-btn--running::after {
+.chat-history-btn--running::before {
   content: '';
   position: absolute;
-  top: -2px;
-  left: -2px;
-  right: -2px;
-  bottom: -2px;
-  border-radius: 10px;
-  pointer-events: none;
-  z-index: 0;
-  animation: chat-history-pulse 1.8s ease-in-out infinite;
+  left: 6px;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin-top: -8px;
+  border: 2px solid #dcdfe6;
+  border-top-color: #409eff;
+  border-radius: 50%;
+  animation: chat-history-spin 0.8s linear infinite;
 }
 
 .chat-history-btn__counts {
@@ -3493,9 +3207,8 @@ export default {
   z-index: 1;
 }
 
-@keyframes chat-history-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(64, 158, 255, 0.7); }
-  50% { box-shadow: 0 0 0 6px rgba(64, 158, 255, 0); }
+@keyframes chat-history-spin {
+  to { transform: rotate(360deg); }
 }
 
 @keyframes status-icon-pulse {

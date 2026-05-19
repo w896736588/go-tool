@@ -1,7 +1,6 @@
 package common
 
 import (
-	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -26,19 +25,6 @@ const (
 	taskWorkflowChatStatusError       = `error`
 	taskWorkflowChatStatusInterrupted = `interrupted`
 )
-
-// taskWorkflowChatSessionIDFieldMap 将 prompt_type 映射到 tbl_task_workflow 中对应的 chat_session_ids 字段名。
-var taskWorkflowChatSessionIDFieldMap = map[string]string{
-	"plain_text_requirement":  "prompt_plain_text_requirement_chat_session_ids",
-	"requirement":             "prompt_requirement_chat_session_ids",
-	"design_plan_requirement": "prompt_design_plan_requirement_chat_session_ids",
-	"design":                  "prompt_design_chat_session_ids",
-	"api_dev":                 "prompt_api_dev_chat_session_ids",
-	"code_review":             "prompt_code_review_chat_session_ids",
-	"browser_test":            "prompt_browser_test_chat_session_ids",
-	"api_test":                "prompt_api_test_chat_session_ids",
-	"issue_fix":               "prompt_issue_fix_chat_session_ids",
-}
 
 // TaskWorkflowCreateOrGetByHomeTaskID 查询或创建任务工作流主记录。
 func (h *CSqlite) TaskWorkflowCreateOrGetByHomeTaskID(homeTaskID int) (map[string]any, error) {
@@ -422,7 +408,7 @@ func (h *CSqlite) TaskWorkflowBindApiDocFragment(workflowID int, fragmentID stri
 	return err
 }
 
-// TaskWorkflowChatCreate 创建对话记录并追加到对应的 chat_session_ids 字段。
+// TaskWorkflowChatCreate 创建对话记录。
 func (h *CSqlite) TaskWorkflowChatCreate(workflowID int, prompt, promptType, cliType string, modelID int, localDir, settingsPath string, thinkingCollapsed int, thinkingIntensity string) (int64, error) {
 	if strings.TrimSpace(cliType) == `` {
 		cliType = `claude`
@@ -431,6 +417,8 @@ func (h *CSqlite) TaskWorkflowChatCreate(workflowID int, prompt, promptType, cli
 	id, err := h.Client.QuickCreate(`tbl_task_workflow_chat`, map[string]any{
 		`workflow_id`:        workflowID,
 		`prompt`:             prompt,
+		`prompt_type`:        promptType,
+		`cli_type`:           cliType,
 		`model_id`:           modelID,
 		`local_dir`:          localDir,
 		`settings_path`:      settingsPath,
@@ -444,30 +432,7 @@ func (h *CSqlite) TaskWorkflowChatCreate(workflowID int, prompt, promptType, cli
 	if err != nil {
 		return 0, err
 	}
-	chatID := id
-
-	// 追加到对应的 xxx_chat_session_ids 字段
-	sessionField, ok := taskWorkflowChatSessionIDFieldMap[promptType]
-	if ok {
-		workflowInfo, _ := h.TaskWorkflowInfo(workflowID)
-		if len(workflowInfo) > 0 {
-			existingJSON := cast.ToString(workflowInfo[sessionField])
-			sessions := h.parseChatSessionIDs(existingJSON)
-			sessions = append(sessions, map[string]any{
-				`chat_id`:  chatID,
-				`cli_type`: cliType,
-			})
-			newJSON := gstool.JsonEncode(sessions)
-			_, _ = h.Client.QuickUpdate(`tbl_task_workflow`, map[string]any{
-				`id`: workflowID,
-			}, map[string]any{
-				sessionField:  newJSON,
-				`update_time`: time.Now().Unix(),
-			}).Exec()
-		}
-	}
-
-	return chatID, nil
+	return id, nil
 }
 
 // TaskWorkflowChatUpdateSessionID 更新 session_id。
@@ -579,26 +544,13 @@ func (h *CSqlite) TaskWorkflowChatInfo(chatID int64) (map[string]any, error) {
 	}).One()
 }
 
-// TaskWorkflowChatList 获取 workflow 下所有对话记录，并附加 prompt_type。
+// TaskWorkflowChatList 获取 workflow 下所有对话记录。
 func (h *CSqlite) TaskWorkflowChatList(workflowID int) ([]map[string]any, error) {
 	rows, err := h.Client.QuickQuery(`tbl_task_workflow_chat`, `*`, map[string]any{
 		`workflow_id`: workflowID,
 	}).Order(`id DESC`).All()
 	if err != nil {
 		return nil, err
-	}
-	// 构建 chat_id → prompt_type 反向映射
-	workflowInfo, err := h.TaskWorkflowInfo(workflowID)
-	if err == nil && len(workflowInfo) > 0 {
-		chatTypeMap := make(map[int64]string)
-		for promptType, sessionField := range taskWorkflowChatSessionIDFieldMap {
-			for _, s := range h.parseChatSessionIDs(cast.ToString(workflowInfo[sessionField])) {
-				chatTypeMap[cast.ToInt64(s[`chat_id`])] = promptType
-			}
-		}
-		for _, row := range rows {
-			row[`prompt_type`] = chatTypeMap[cast.ToInt64(row[`id`])]
-		}
 	}
 	return rows, nil
 }
@@ -627,74 +579,34 @@ func (h *CSqlite) TaskWorkflowChatMarkInterrupted(chatID int64) error {
 	return err
 }
 
-// parseChatSessionIDs 解析 xxx_chat_session_ids 字段 JSON 为切片。
-func (h *CSqlite) parseChatSessionIDs(jsonStr string) []map[string]any {
-	jsonStr = strings.TrimSpace(jsonStr)
-	if jsonStr == `` {
-		return []map[string]any{}
-	}
-	var result []map[string]any
-	if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
-		return []map[string]any{}
-	}
-	return result
-}
-
 // TaskWorkflowChatListByPromptType 按提示词类型查询对话历史。
 func (h *CSqlite) TaskWorkflowChatListByPromptType(workflowID int, promptType string) ([]map[string]any, error) {
 	if workflowID <= 0 {
 		return nil, errors.New(`工作流id不能为空`)
 	}
 	promptType = strings.TrimSpace(promptType)
-	sessionField, ok := taskWorkflowChatSessionIDFieldMap[promptType]
-	if !ok {
-		return nil, errors.New(`不支持的提示词类型: ` + promptType)
+	if promptType == `` {
+		return nil, errors.New(`提示词类型不能为空`)
 	}
-	workflowInfo, err := h.TaskWorkflowInfo(workflowID)
+	rows, err := h.Client.QuickQuery(`tbl_task_workflow_chat`, `*`, map[string]any{
+		`workflow_id`: workflowID,
+		`prompt_type`: promptType,
+	}).Order(`id DESC`).All()
 	if err != nil {
 		return nil, err
-	}
-	sessions := h.parseChatSessionIDs(cast.ToString(workflowInfo[sessionField]))
-	if len(sessions) == 0 {
-		return []map[string]any{}, nil
-	}
-	chatIDs := make([]any, 0, len(sessions))
-	for _, s := range sessions {
-		chatIDs = append(chatIDs, cast.ToInt64(s[`chat_id`]))
-	}
-	placeholders := make([]string, len(chatIDs))
-	for i := range chatIDs {
-		placeholders[i] = `?`
-	}
-	rows, err := h.Client.QueryBySql(
-		`select * from tbl_task_workflow_chat where id in (`+strings.Join(placeholders, `,`)+`) order by id desc`,
-		chatIDs...,
-	).All()
-	if err != nil {
-		return nil, err
-	}
-	// 附加 cli_type
-	cliTypeMap := map[int64]string{}
-	for _, s := range sessions {
-		cliTypeMap[cast.ToInt64(s[`chat_id`])] = cast.ToString(s[`cli_type`])
-	}
-	for _, row := range rows {
-		row[`cli_type`] = cliTypeMap[cast.ToInt64(row[`id`])]
 	}
 	return rows, nil
 }
 
-// TaskWorkflowClearChatSessionIDs 清空指定 prompt_type 对应的 chat_session_ids。
+// TaskWorkflowClearChatSessionIDs 删除指定 prompt_type 的所有对话记录。
 func (h *CSqlite) TaskWorkflowClearChatSessionIDs(workflowID int, promptType string) error {
-	sessionField, ok := taskWorkflowChatSessionIDFieldMap[promptType]
-	if !ok {
+	promptType = strings.TrimSpace(promptType)
+	if promptType == `` {
 		return nil
 	}
-	_, err := h.Client.QuickUpdate(`tbl_task_workflow`, map[string]any{
-		`id`: workflowID,
-	}, map[string]any{
-		sessionField:  ``,
-		`update_time`: time.Now().Unix(),
+	_, err := h.Client.QuickDelete(`tbl_task_workflow_chat`, map[string]any{
+		`workflow_id`: workflowID,
+		`prompt_type`: promptType,
 	}).Exec()
 	return err
 }
