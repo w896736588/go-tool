@@ -224,3 +224,28 @@ func ToggleClaudeMem(settingsPath string, enable bool) error {
 	}
 	return nil
 }
+
+// GetAgentCliModelConfig 从 settings.json 内容中提取模型连接配置。
+func GetAgentCliModelConfig(content string) (model string, baseURL string, apiKey string) {
+	if content == "" {
+		return "", "", ""
+	}
+	var configData map[string]any
+	if err := json.Unmarshal([]byte(content), &configData); err != nil {
+		return "", "", ""
+	}
+	if m, ok := configData["model"]; ok {
+		model = cast.ToString(m)
+	}
+	if env, ok := configData["env"]; ok {
+		if envMap, ok := env.(map[string]any); ok {
+			if url, ok := envMap["ANTHROPIC_BASE_URL"]; ok {
+				baseURL = cast.ToString(url)
+			}
+			if key, ok := envMap["ANTHROPIC_AUTH_TOKEN"]; ok {
+				apiKey = cast.ToString(key)
+			}
+		}
+	}
+	return
+}

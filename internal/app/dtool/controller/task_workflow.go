@@ -11,7 +11,6 @@ import (
 	"dev_tool/internal/pkg/p_claude"
 	"dev_tool/internal/pkg/p_define"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -2343,11 +2342,6 @@ func TaskWorkflowChatStreamOpen(urlValues url.Values, stopC chan int, c *gin.Con
 		gstool.FmtPrintlnLogTime("[chat-stream] chat_id=%d 对话未找到工作目录", chatID)
 		return nil, fmt.Errorf(`对话未找到工作目录`)
 	}
-	modelID := cast.ToInt(chatInfo[`model_id`])
-	if modelID <= 0 {
-		gstool.FmtPrintlnLogTime("[chat-stream] chat_id=%d 对话未找到模型配置", chatID)
-		return nil, fmt.Errorf(`对话未找到模型配置`)
-	}
 
 	prompt := strings.TrimSpace(urlValues.Get(`prompt`))
 	isContinue := strings.TrimSpace(urlValues.Get(`continue`)) == `1`
@@ -2394,25 +2388,19 @@ func TaskWorkflowChatStreamOpen(urlValues url.Values, stopC chan int, c *gin.Con
 		return sse, nil
 	}
 
-	modelInfo, err := common.DbMain.AiModelInfo(modelID)
-	if err != nil {
-		gstool.FmtPrintlnLogTime("[chat-stream] chat_id=%d 查询模型信息失败 model_id=%d: %v", chatID, modelID, err)
-		return nil, err
-	}
-	providerType := strings.ToLower(cast.ToString(modelInfo[`provider_type`]))
-	if providerType != `anthropic` {
-		gstool.FmtPrintlnLogTime("[chat-stream] chat_id=%d 不支持的服务商类型: %s", chatID, providerType)
-		return nil, fmt.Errorf(`仅支持 anthropic 服务商的模型`)
-	}
-	baseURL := strings.TrimSpace(cast.ToString(modelInfo[`base_url`]))
-	apiKey := strings.TrimSpace(cast.ToString(modelInfo[`api_key`]))
-	modelName := strings.TrimSpace(cast.ToString(modelInfo[`model`]))
 	settingsPath := cast.ToString(chatInfo[`settings_path`])
+	modelName, baseURL, apiKey := ``, ``, ``
+	if settingsPath != `` {
+		_, content, _ := business.ReadAgentCliSettings(settingsPath)
+		if content != `` {
+			modelName, baseURL, apiKey = business.GetAgentCliModelConfig(content)
+		}
+	}
 	thinkingIntensity := cast.ToString(chatInfo[`thinking_intensity`])
 	thinkingBudget := define.ThinkingIntensityBudgetMap[thinkingIntensity]
 	thinkingEffort := define.ThinkingIntensityEffortMap[thinkingIntensity]
 
-	go runClaudeCommand(chatID, localDir, prompt, isContinue, sessionID, modelID, baseURL, apiKey, modelName, settingsPath, thinkingEffort, thinkingBudget, sse, stopC)
+	go runClaudeCommand(chatID, localDir, prompt, isContinue, sessionID, baseURL, apiKey, modelName, settingsPath, thinkingEffort, thinkingBudget, sse, stopC)
 	return sse, nil
 }
 
@@ -2461,33 +2449,12 @@ func TaskWorkflowChatSend(c *gin.Context) {
 		}
 		settingsPath = cast.ToString(cliRow["settings_path"])
 		thinkingCollapsed = cast.ToInt(cliRow["thinking_collapsed"])
-		// 若未传 model_name，从 Agent CLI 的 settings.json 中读取
-		if strings.TrimSpace(req.ModelName) == `` {
-			exists, content, _ := business.ReadAgentCliSettings(settingsPath)
-			if exists {
-				req.ModelName, _, _ = business.GetAgentCliSettingsSummary(content)
-			}
-		}
 	}
 
-	// 根据 model_name 或 model_id 获取模型记录
-	modelID := req.ModelID
-	if modelID <= 0 {
-		if strings.TrimSpace(req.ModelName) == `` {
-			gsgin.GinResponseError(c, `模型名称不能为空`, nil)
-			return
-		}
-		var err error
-		modelID, err = getOrCreateClaudeModelByName(req.ModelName)
-		if err != nil {
-			gsgin.GinResponseError(c, err.Error(), nil)
-			return
-		}
-	}
 	// prompt_type 为可选，非空时用于按类型查询对话历史
 	promptType := strings.TrimSpace(req.PromptType)
 
-	chatID, err := common.DbMain.TaskWorkflowChatCreate(req.WorkflowID, req.Prompt, promptType, req.CliType, modelID, req.LocalDir, settingsPath, thinkingCollapsed, req.ThinkingIntensity)
+	chatID, err := common.DbMain.TaskWorkflowChatCreate(req.WorkflowID, req.Prompt, promptType, req.CliType, req.AgentCliId, req.LocalDir, settingsPath, thinkingCollapsed, req.ThinkingIntensity)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
@@ -2527,11 +2494,6 @@ func TaskWorkflowChatContinue(c *gin.Context) {
 	localDir := cast.ToString(chatInfo[`local_dir`])
 	if localDir == `` {
 		gsgin.GinResponseError(c, `对话未找到工作目录`, nil)
-		return
-	}
-	modelID := cast.ToInt(chatInfo[`model_id`])
-	if modelID <= 0 {
-		gsgin.GinResponseError(c, `对话未找到模型配置`, nil)
 		return
 	}
 
@@ -2596,7 +2558,7 @@ func TaskWorkflowChatList(c *gin.Context) {
 		SessionID  string `json:"session_id"`
 		Prompt     string `json:"prompt"`
 		PromptType string `json:"prompt_type"`
-		ModelID    int    `json:"model_id"`
+		AgentCliId int    `json:"agent_cli_id"`
 		LocalDir   string `json:"local_dir"`
 		Status     string `json:"status"`
 		CreatedAt  string `json:"created_at"`
@@ -2628,7 +2590,7 @@ func TaskWorkflowChatList(c *gin.Context) {
 			SessionID:  cast.ToString(row[`session_id`]),
 			Prompt:     cast.ToString(row[`prompt`]),
 			PromptType: cast.ToString(row[`prompt_type`]),
-			ModelID:    cast.ToInt(row[`model_id`]),
+			AgentCliId: cast.ToInt(row[`agent_cli_id`]),
 			LocalDir:   cast.ToString(row[`local_dir`]),
 			Status:     status,
 			CreatedAt:  cast.ToString(row[`created_at`]),
@@ -2669,9 +2631,10 @@ func TaskWorkflowChatDetail(c *gin.Context) {
 	}
 
 	modelName := ``
-	if modelID := cast.ToInt(info[`model_id`]); modelID > 0 {
-		if modelInfo, err := common.DbMain.AiModelInfo(modelID); err == nil {
-			modelName = cast.ToString(modelInfo[`model`])
+	if agentCliId := cast.ToInt(info[`agent_cli_id`]); agentCliId > 0 {
+		cliRow, err := common.DbMain.Client.QueryBySql(`SELECT name FROM tbl_agent_cli WHERE id = ?`, agentCliId).One()
+		if err == nil && len(cliRow) > 0 {
+			modelName = cast.ToString(cliRow["name"])
 		}
 	}
 
@@ -2679,7 +2642,7 @@ func TaskWorkflowChatDetail(c *gin.Context) {
 		`chat_id`:            info[`id`],
 		`session_id`:         info[`session_id`],
 		`prompt`:             info[`prompt`],
-		`model_id`:           info[`model_id`],
+		`agent_cli_id`:       info[`agent_cli_id`],
 		`model_name`:         modelName,
 		`local_dir`:          info[`local_dir`],
 		`status`:             info[`status`],
@@ -2760,7 +2723,7 @@ func TaskWorkflowChatListByPromptType(c *gin.Context) {
 		ID         int64  `json:"id"`
 		SessionID  string `json:"session_id"`
 		Prompt     string `json:"prompt"`
-		ModelID    int    `json:"model_id"`
+		AgentCliId int    `json:"agent_cli_id"`
 		LocalDir   string `json:"local_dir"`
 		Status     string `json:"status"`
 		CliType    string `json:"cli_type"`
@@ -2792,7 +2755,7 @@ func TaskWorkflowChatListByPromptType(c *gin.Context) {
 			ID:         cast.ToInt64(row[`id`]),
 			SessionID:  cast.ToString(row[`session_id`]),
 			Prompt:     cast.ToString(row[`prompt`]),
-			ModelID:    cast.ToInt(row[`model_id`]),
+			AgentCliId: cast.ToInt(row[`agent_cli_id`]),
 			LocalDir:   cast.ToString(row[`local_dir`]),
 			Status:     status,
 			CliType:    cast.ToString(row[`cli_type`]),
@@ -2804,48 +2767,6 @@ func TaskWorkflowChatListByPromptType(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`list`: list,
 	})
-}
-
-// getOrCreateClaudeModelByName 根据模型名称查找或自动创建一条 anthropic 模型记录。
-func getOrCreateClaudeModelByName(modelName string) (int, error) {
-	modelName = strings.TrimSpace(modelName)
-	if modelName == `` {
-		return 0, errors.New(`模型名称不能为空`)
-	}
-	// 先查找现有 anthropic 模型
-	rows, err := common.DbMain.Client.QueryBySql(
-		`select id from tbl_ai_model where model = ? and status = 1 limit 1`, modelName,
-	).All()
-	if err != nil {
-		return 0, err
-	}
-	if len(rows) > 0 {
-		return cast.ToInt(rows[0][`id`]), nil
-	}
-	// 查找一个 anthropic provider
-	providerRows, err := common.DbMain.Client.QueryBySql(
-		`select id from tbl_ai_provider where provider_type = 'anthropic' and status = 1 limit 1`,
-	).All()
-	if err != nil {
-		return 0, err
-	}
-	if len(providerRows) == 0 {
-		return 0, errors.New(`未找到可用的 anthropic 服务商，请先在AI模型管理中配置`)
-	}
-	providerID := cast.ToInt(providerRows[0][`id`])
-	newID, err := common.DbMain.Client.QuickCreate(`tbl_ai_model`, map[string]any{
-		`provider_id`: providerID,
-		`name`:        modelName,
-		`model`:       modelName,
-		`model_type`:  `llm`,
-		`status`:      1,
-		`create_time`: time.Now().Unix(),
-		`update_time`: time.Now().Unix(),
-	}).Exec()
-	if err != nil {
-		return 0, err
-	}
-	return cast.ToInt(newID), nil
 }
 
 // TaskWorkflowZcodeSave 保存 zcode 工作目录配置，自动扫描子文件夹解析项目映射。
@@ -2993,7 +2914,7 @@ func scanZcodeProjects(zcodeDir string) ([]_struct.TaskWorkflowZcodeProjectItem,
 }
 
 // runClaudeCommand 后台执行 claude 命令并将输出推送到专用 SSE。
-func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sessionID string, modelID int, baseURL, apiKey, modelName, settingsPath, thinkingEffort string, thinkingBudget int, sse *gsgin.Sse, stopC chan int) {
+func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sessionID string, baseURL, apiKey, modelName, settingsPath, thinkingEffort string, thinkingBudget int, sse *gsgin.Sse, stopC chan int) {
 	distributeID := define.SseTaskWorkflowChatPrefix + cast.ToString(chatID)
 
 	defer func() {

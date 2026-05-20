@@ -967,7 +967,7 @@
                   <div v-if="chatDetailThinkingIntensity || chatDetailModelName" class="chat-detail-info-bar">
                     <span v-if="chatDetailThinkingIntensity">思考强度: {{ chatDetailThinkingIntensity }}</span>
                     <span v-if="chatDetailThinkingIntensity && chatDetailModelName"> | </span>
-                    <span v-if="chatDetailModelName">模型: {{ chatDetailModelName }}</span>
+                    <span v-if="chatDetailModelName">智能体: {{ chatDetailModelName }}</span>
                   </div>
                   <el-button v-if="chatDetailStatus === 'running'" type="danger" size="small" @click="stopChat">停止</el-button>
                   <el-button v-else type="primary" size="small" :loading="chatContinueLoading" @click="continueChat">发送</el-button>
@@ -2166,11 +2166,9 @@ export default {
         taskWorkflowApi.TaskWorkflowChatSend(
           this.workflowId,
           this.promptExecPromptValue,
-          null,
           this.promptExecPromptType,
           localDir,
           'claude',
-          0,
           this.promptExecCliId,
           this.promptExecThinkingIntensity,
           (chatRes) => {
