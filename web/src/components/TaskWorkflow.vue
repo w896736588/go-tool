@@ -1017,6 +1017,7 @@ const NODE_STATUS_LABELS = {
 }
 
 const ACTIVE_NODE_CACHE_PREFIX = 'task_workflow_active_node_'
+const PROMPT_EXEC_CACHE_PREFIX = 'task_workflow_prompt_exec_'
 
 const TASK_STATUS_TODO = '待开始'
 const TASK_STATUS_DEVELOPING = '开发中'
@@ -2069,15 +2070,30 @@ export default {
       }
       this.promptExecPromptType = promptType
       this.promptExecPromptValue = promptValue
-      this.promptExecCliId = 0
-      this.promptExecThinkingIntensity = '高'
+      // 从缓存恢复该 promptType 上次的选择
+      const cached = this.getPromptExecCache(promptType)
+      if (cached) {
+        this.promptExecCliId = cached.cliId || 0
+        this.promptExecThinkingIntensity = cached.thinkingIntensity || '高'
+      } else {
+        this.promptExecCliId = 0
+        this.promptExecThinkingIntensity = '高'
+      }
       this.promptExecDialogVisible = true
       // 加载 Agent CLI 列表
       agentCliApi.AgentCliList((res) => {
         if (res.ErrCode === 0 && res.Data) {
           this.promptExecCliList = res.Data.list || []
-          if (this.promptExecCliList.length === 1) {
+          // 如果无缓存且仅有一个 CLI，自动选中
+          if (!cached && this.promptExecCliList.length === 1) {
             this.promptExecCliId = this.promptExecCliList[0].id
+          }
+          // 如果有缓存 CLI，校验其是否仍在列表中
+          if (cached && cached.cliId) {
+            const found = this.promptExecCliList.find(c => c.id === cached.cliId)
+            if (!found) {
+              this.promptExecCliId = 0
+            }
           }
         }
       })
@@ -2092,6 +2108,8 @@ export default {
         this.$helperNotify.warning('请选择 CLI 实例')
         return
       }
+      // 记录本次选择到缓存
+      this.savePromptExecCache(this.promptExecPromptType)
       // 获取第一个可用目录
       taskWorkflowApi.TaskWorkflowChatDirs(this.workflowId, (res) => {
         if (res.ErrCode !== 0) {
@@ -2512,6 +2530,25 @@ export default {
       const pad = (n) => String(n).padStart(2, '0')
       return d.getFullYear() + '/' + pad(d.getMonth() + 1) + '/' + pad(d.getDate()) + ' ' +
         pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds())
+    },
+    // 获取执行弹窗缓存的配置（按 promptType 区分）
+    getPromptExecCacheKey(promptType) {
+      return PROMPT_EXEC_CACHE_PREFIX + promptType
+    },
+    getPromptExecCache(promptType) {
+      try {
+        const raw = localStorage.getItem(this.getPromptExecCacheKey(promptType))
+        return raw ? JSON.parse(raw) : null
+      } catch {
+        return null
+      }
+    },
+    savePromptExecCache(promptType) {
+      const data = {
+        cliId: this.promptExecCliId,
+        thinkingIntensity: this.promptExecThinkingIntensity,
+      }
+      localStorage.setItem(this.getPromptExecCacheKey(promptType), JSON.stringify(data))
     },
   },
 }

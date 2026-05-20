@@ -74,25 +74,44 @@ func AgentCliSave(c *gin.Context) {
 			gsgin.GinResponseError(c, err.Error(), nil)
 			return
 		}
-	} else {
-		name := req.Name
-		if name == "" {
-			name = "Claude Code CLI"
+		savedItem := define.AgentCliItem{
+			Id:                req.Id,
+			Name:              req.Name,
+			Type:              req.Type,
+			SettingsPath:      req.SettingsPath,
+			ThinkingCollapsed: req.ThinkingCollapsed,
+			CreatedAt:         0,
+			UpdatedAt:         now,
 		}
-		if req.Type == "" {
-			req.Type = define.AgentCliTypeClaudeCodeCli
-		}
-		_, err := common.DbMain.Client.ExecBySql(
-			`INSERT INTO tbl_agent_cli (name, type, settings_path, thinking_collapsed, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
-			name, req.Type, req.SettingsPath, req.ThinkingCollapsed, now, now,
-		).Exec()
-		if err != nil {
-			gsgin.GinResponseError(c, err.Error(), nil)
-			return
-		}
+		gsgin.GinResponseSuccess(c, "", savedItem)
+		return
 	}
 
-	gsgin.GinResponseSuccess(c, "", nil)
+	name := req.Name
+	if name == "" {
+		name = "Claude Code CLI"
+	}
+	if req.Type == "" {
+		req.Type = define.AgentCliTypeClaudeCodeCli
+	}
+	lastId, err := common.DbMain.Client.InsertBySql(
+		`INSERT INTO tbl_agent_cli (name, type, settings_path, thinking_collapsed, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		name, req.Type, req.SettingsPath, req.ThinkingCollapsed, now, now,
+	).Exec()
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	savedItem := define.AgentCliItem{
+		Id:                int(lastId),
+		Name:              name,
+		Type:              req.Type,
+		SettingsPath:      req.SettingsPath,
+		ThinkingCollapsed: req.ThinkingCollapsed,
+		CreatedAt:         now,
+		UpdatedAt:         now,
+	}
+	gsgin.GinResponseSuccess(c, "", savedItem)
 }
 
 // AgentCliDelete 删除 Agent Cli 实例

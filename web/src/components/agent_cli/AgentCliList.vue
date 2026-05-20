@@ -129,6 +129,10 @@ export default {
       }
       agentCliApi.AgentCliSave(data, (response) => {
         if (response && response.ErrCode === 0) {
+          // 新建时从返回值取 ID，后续 DeepSeek 写入依赖此 ID
+          if (!this.editingId && response.Data && response.Data.id) {
+            this.editingId = response.Data.id
+          }
           // 密钥字段非空时，一并写入 DeepSeek 配置
           if (this.form.model_name.trim() && this.form.api_key.trim()) {
             const dsData = {
