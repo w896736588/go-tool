@@ -2284,6 +2284,7 @@ export default {
               taskProgressStore.reset()
               this._initialSseRetryCount = 0
               this.connectChatStream(chatId, null, true)
+              this.loadChatDetail()
               this.loadChatCounts()
               // 打开执行历史，定位到新对话
               this.openPromptChatHistory(this.promptExecPromptType, chatId)

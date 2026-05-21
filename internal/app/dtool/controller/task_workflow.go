@@ -2639,12 +2639,22 @@ func TaskWorkflowChatDetail(c *gin.Context) {
 		}
 	}
 
+	taskName := ""
+	if workflowID := cast.ToInt(info["workflow_id"]); workflowID > 0 {
+		wfRow, _ := common.DbMain.Client.QueryBySql(`SELECT home_task_id FROM tbl_task_workflow WHERE id = ?`, workflowID).One()
+		if homeTaskId := cast.ToInt(wfRow["home_task_id"]); homeTaskId > 0 {
+			htRow, _ := common.DbMain.Client.QueryBySql(`SELECT name FROM tbl_home_task WHERE id = ?`, homeTaskId).One()
+			taskName = cast.ToString(htRow["name"])
+		}
+	}
+
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`chat_id`:            info[`id`],
 		`session_id`:         info[`session_id`],
 		`prompt`:             info[`prompt`],
 		`agent_cli_id`:       info[`agent_cli_id`],
 		`model_name`:         modelName,
+		`task_name`:          taskName,
 		`local_dir`:          info[`local_dir`],
 		`status`:             info[`status`],
 		`created_at`:         info[`created_at`],
@@ -3223,9 +3233,14 @@ func taskWorkflowSendWebhookNotify(chatID int64, lastText string) {
 	if taskName != "" {
 		header = fmt.Sprintf("[%s] %s - 对话 #%d 已结束", agentName, taskName, chatID)
 	}
-	content := fmt.Sprintf("%s\n%s", header, msg)
+	replyLink := ""
+	if len(component.EnvClient.Ports) > 0 {
+		replyLink = fmt.Sprintf("http://localhost:%s/#/ChatReply/%d", component.EnvClient.Ports[0], chatID)
+	}
 
-	if err := business.SendWebhookNotify(config, content); err != nil {
+	// 钉钉 actionCard 的 title 仅用于消息列表预览,不会出现在消息正文,因此 text 里需要再带一次 header 才能看到。
+	displayText := fmt.Sprintf("## %s\n\n%s", header, msg)
+	if err := business.SendWebhookNotify(config, header, displayText, replyLink); err != nil {
 		gstool.FmtPrintlnLogTime("[webhook-notify] chat_id=%d 发送失败: %v", chatID, err)
 	} else {
 		gstool.FmtPrintlnLogTime("[webhook-notify] chat_id=%d 发送成功", chatID)
