@@ -17,11 +17,8 @@
         <el-table-column prop="remark" label="备注" min-width="200" show-overflow-tooltip />
         <el-table-column label="使用状态" width="100">
           <template #default="scope">
-            <el-switch
-              :model-value="!!scope.row.is_used"
-              @change="toggleUsed(scope.row)"
-              size="small"
-            />
+            <el-tag v-if="scope.row.is_used" type="success" size="small">使用中</el-tag>
+            <el-tag v-else type="info" size="small">空闲</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="260" fixed="right">
@@ -121,6 +118,7 @@
 <script>
 import mcpApi from '@/utils/base/mcp'
 import copy from '@/utils/base/copy'
+import sseDistribute from '@/utils/base/sse_distribute'
 
 const CHROME_DEVTOOLS_TYPE = 'chrome-devtools'
 
@@ -168,8 +166,18 @@ export default {
     this.mcpTypeDef = MCP_TYPE_DEFS[this.mcpType] || null
     if (this.isChromeDevtools) {
       this.loadConfigList()
+      // 注册 SSE 端口状态变更回调，端口分配/释放时自动刷新列表
+      this._ssePortStatusId = 'chrome_devtools_port_status'
+      sseDistribute.RegisterReceive(this._ssePortStatusId, () => {
+        this.loadConfigList()
+      })
     } else {
       this.loadAgentTargets()
+    }
+  },
+  beforeDestroy() {
+    if (this._ssePortStatusId) {
+      sseDistribute.UnRegisterReceive(this._ssePortStatusId)
     }
   },
   methods: {
@@ -228,15 +236,6 @@ export default {
           }
         })
       }).catch(function() {})
-    },
-    toggleUsed(row) {
-      mcpApi.McpChromeDevtoolsConfigToggleUsed(row.id, (response) => {
-        if (response && response.ErrCode === 0) {
-          row.is_used = response.Data ? response.Data.is_used : (row.is_used ? 0 : 1)
-        } else {
-          this.$helperNotify.error(response && response.ErrMsg ? response.ErrMsg : '切换失败')
-        }
-      })
     },
     viewConfig(row) {
       const cfg = {

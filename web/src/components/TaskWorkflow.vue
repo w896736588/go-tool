@@ -791,7 +791,7 @@
             :class="['chat-list-item', { 'chat-list-item--active': promptChatDetailId === item.id }]"
             @click="onPromptChatRowClick(item)"
           >
-            <div class="chat-list-item__name" :title="item.prompt || '未命名'">{{ (item.prompt || '未命名').substring(0, 30) }}{{ (item.prompt || '').length > 30 ? '...' : '' }}</div>
+            <div class="chat-list-item__name" :title="item.prompt || '未命名'"><span class="chat-list-item__id">{{ item.id }}</span>{{ (item.prompt || '未命名').substring(0, 30) }}{{ (item.prompt || '').length > 30 ? '...' : '' }}</div>
             <div class="chat-list-item__time">
               <span v-if="item.status === 'running' && runtimeDurationText(item)" style="color: #409eff;">{{ runtimeDurationText(item) }}</span>
               <span v-else-if="item.duration_ms > 0">{{ formatDurationDisplay(item.duration_ms) }}</span>
@@ -884,6 +884,16 @@
                       <pre v-if="!block.displayInput && !block._tasks && block._inputExpanded" style="white-space: pre-wrap; font-size: 12px; color: #606266; margin-top: 4px; font-family: Consolas, monospace;">{{ block.input }}</pre>
                       <div v-if="block._result" style="color: #909399; font-size: 12px; margin-top: 6px; border-top: 1px dashed #dcdfe6; padding-top: 4px;">
                         <span @click="block._result.collapsed = !block._result.collapsed" style="cursor: pointer;">{{ block._result.collapsed ? '▶' : '▼' }} 工具执行结果</span>
+                        <!-- 工具执行结果中的任务列表 -->
+                        <div v-if="!block._result.collapsed && block._result._tasks" style="margin-top: 6px; padding: 6px 8px; background: #fafafa; border-radius: 4px;">
+                          <div v-for="(task, ti) in block._result._tasks" :key="ti" style="display: flex; align-items: center; gap: 6px; padding: 2px 0; font-size: 12px;">
+                            <span :style="{ color: task.status === 'completed' ? '#67c23a' : task.status === 'in_progress' ? '#409eff' : '#909399', fontSize: '14px', lineHeight: 1 }">
+                              {{ task.status === 'completed' ? '✅' : task.status === 'in_progress' ? '🔄' : '⬜' }}
+                            </span>
+                            <span :style="task.status === 'completed' ? 'text-decoration: line-through; color: #909399;' : ''">{{ task.content }}</span>
+                            <span v-if="task.activeForm && task.status === 'in_progress'" style="color: #909399; font-size: 10px; margin-left: 4px;">{{ task.activeForm }}</span>
+                          </div>
+                        </div>
                         <pre v-if="!block._result.collapsed" style="white-space: pre-wrap; font-size: 11px; margin-top: 4px; max-height: 200px; overflow-y: auto; font-family: Consolas, monospace;">{{ block._result.text }}</pre>
                       </div>
                     </div>
@@ -915,12 +925,32 @@
                   <pre v-if="!msg.displayInput && !msg._tasks && msg._inputExpanded" style="white-space: pre-wrap; font-size: 12px; color: #606266; margin-top: 4px; font-family: Consolas, monospace;">{{ msg.input }}</pre>
                   <div v-if="msg._result" style="color: #909399; font-size: 12px; margin-top: 6px; border-top: 1px dashed #dcdfe6; padding-top: 4px;">
                     <span @click="msg._result.collapsed = !msg._result.collapsed" style="cursor: pointer;">{{ msg._result.collapsed ? '▶' : '▼' }} 工具执行结果</span>
+                    <!-- 工具执行结果中的任务列表 -->
+                    <div v-if="!msg._result.collapsed && msg._result._tasks" style="margin-top: 6px; padding: 6px 8px; background: #fafafa; border-radius: 4px;">
+                      <div v-for="(task, ti) in msg._result._tasks" :key="ti" style="display: flex; align-items: center; gap: 6px; padding: 2px 0; font-size: 12px;">
+                        <span :style="{ color: task.status === 'completed' ? '#67c23a' : task.status === 'in_progress' ? '#409eff' : '#909399', fontSize: '14px', lineHeight: 1 }">
+                          {{ task.status === 'completed' ? '✅' : task.status === 'in_progress' ? '🔄' : '⬜' }}
+                        </span>
+                        <span :style="task.status === 'completed' ? 'text-decoration: line-through; color: #909399;' : ''">{{ task.content }}</span>
+                        <span v-if="task.activeForm && task.status === 'in_progress'" style="color: #909399; font-size: 10px; margin-left: 4px;">{{ task.activeForm }}</span>
+                      </div>
+                    </div>
                     <pre v-if="!msg._result.collapsed" style="white-space: pre-wrap; font-size: 11px; margin-top: 4px; max-height: 200px; overflow-y: auto; font-family: Consolas, monospace;">{{ msg._result.text }}</pre>
                   </div>
                 </div>
                 <!-- tool_result（未匹配的降级展示） -->
                 <div v-else-if="msg.type === 'tool_result'" style="color: #909399; font-size: 12px;">
                   <span @click="msg.collapsed = !msg.collapsed" style="cursor: pointer;">{{ msg.collapsed ? '▶' : '▼' }} 工具执行结果</span>
+                  <!-- 工具执行结果中的任务列表 -->
+                  <div v-if="!msg.collapsed && msg._tasks" style="margin-top: 6px; padding: 6px 8px; background: #fafafa; border-radius: 4px;">
+                    <div v-for="(task, ti) in msg._tasks" :key="ti" style="display: flex; align-items: center; gap: 6px; padding: 2px 0; font-size: 12px;">
+                      <span :style="{ color: task.status === 'completed' ? '#67c23a' : task.status === 'in_progress' ? '#409eff' : '#909399', fontSize: '14px', lineHeight: 1 }">
+                        {{ task.status === 'completed' ? '✅' : task.status === 'in_progress' ? '🔄' : '⬜' }}
+                      </span>
+                      <span :style="task.status === 'completed' ? 'text-decoration: line-through; color: #909399;' : ''">{{ task.content }}</span>
+                      <span v-if="task.activeForm && task.status === 'in_progress'" style="color: #909399; font-size: 10px; margin-left: 4px;">{{ task.activeForm }}</span>
+                    </div>
+                  </div>
                   <pre v-if="!msg.collapsed" style="white-space: pre-wrap; font-size: 11px; margin-top: 4px; max-height: 200px; overflow-y: auto; font-family: Consolas, monospace;">{{ msg.text }}</pre>
                 </div>
                 <div v-else-if="msg.type === 'assistant_text'" class="markdown-body chat-markdown-body" v-html="renderMarkdown(msg.text)"></div>
@@ -3448,6 +3478,18 @@ export default {
   color: #303133;
   line-height: 1.4;
   padding-right: 14px;
+}
+
+.chat-list-item__id {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 400;
+  color: #909399;
+  background: #f0f2f5;
+  padding: 0 6px;
+  border-radius: 8px;
+  margin-right: 6px;
+  flex-shrink: 0;
 }
 
 .chat-list-item__time {

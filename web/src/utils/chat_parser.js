@@ -20,10 +20,10 @@ function buildToolDisplayInput(name, parsed) {
   if (parsed.description) return parsed.description
   if (parsed.command) return parsed.command
   if (parsed.file_path) return parsed.file_path
-  // TodoWrite: 支持数组、{ newTodos }、或 JSON 字符串
+  // TodoWrite: 支持数组、{ newTodos }、{ todos }、或 JSON 字符串
   if (n === 'todowrite') {
     const obj = tryParse(parsed)
-    const todos = Array.isArray(obj) ? obj : (obj && Array.isArray(obj.newTodos) ? obj.newTodos : null)
+    const todos = Array.isArray(obj) ? obj : (obj && Array.isArray(obj.newTodos) ? obj.newTodos : (obj && Array.isArray(obj.todos) ? obj.todos : null))
     if (todos && todos.length) {
       const total = todos.length
       const completed = todos.filter(t => t.status === 'completed').length
@@ -55,7 +55,7 @@ function extractTasks(name, parsed) {
   const n = name.toLowerCase()
   const obj = tryParse(parsed)
   if (n === 'todowrite') {
-    const todos = Array.isArray(obj) ? obj : (obj && Array.isArray(obj.newTodos) ? obj.newTodos : null)
+    const todos = Array.isArray(obj) ? obj : (obj && Array.isArray(obj.newTodos) ? obj.newTodos : (obj && Array.isArray(obj.todos) ? obj.todos : null))
     if (todos && todos.length) return todos
   }
   if ((n === 'taskcreate' || n === 'taskupdate') && Array.isArray(obj) && obj.length) {
@@ -64,10 +64,19 @@ function extractTasks(name, parsed) {
   return null
 }
 
+// extractTasksFromToolUseResult 从顶层 tool_use_result 字段提取任务列表。
+// tool_use_result 格式: { oldTodos: [...], newTodos: [...], verificationNudgeNeeded: false }
+function extractTasksFromToolUseResult(toolUseResult) {
+  if (!toolUseResult) return null
+  const todos = toolUseResult.newTodos || toolUseResult.todos
+  if (Array.isArray(todos) && todos.length) return todos
+  return null
+}
+
 // parseChatLines 将 claude stream-json 输出解析为可渲染的消息数组。
 // parseOneLine 解析单行 SSE 数据，更新 messages、currentMessage 和 toolUseMap。
 // 提取为独立函数以便全量解析和增量解析共用。
-function parseOneLine(line, messages, currentMessageRef, toolUseMap, msgIndexOffset) {
+function parseOneLine(line, messages, currentMessageRef, toolUseMap, msgIndexOffset, skipTypes) {
   const idxOffset = msgIndexOffset || 0
   if (!line || !line.trim()) return currentMessageRef.value
   let obj = null
@@ -79,6 +88,12 @@ function parseOneLine(line, messages, currentMessageRef, toolUseMap, msgIndexOff
   }
 
   const lineType = obj.type || ''
+
+  // 当 stream_event 行存在时，跳过 assistant 行以避免重复渲染
+  // assistant 行是会话历史的汇总格式，其内容已通过 stream_event 行呈现
+  if (skipTypes && skipTypes.has(lineType)) {
+    return currentMessageRef.value
+  }
   let cm = currentMessageRef.value
 
   if (lineType === 'system') {
@@ -212,6 +227,8 @@ function parseOneLine(line, messages, currentMessageRef, toolUseMap, msgIndexOff
     }
   } else if (lineType === 'user') {
     const content = obj.message?.content || []
+    // 提取顶层 tool_use_result 中的任务数据（如有）
+    const toolUseResultTasks = extractTasksFromToolUseResult(obj.tool_use_result)
     for (const part of content) {
       if (part.type === 'tool_result') {
         const text = typeof part.content === 'string' ? part.content : JSON.stringify(part.content || '')
@@ -220,6 +237,7 @@ function parseOneLine(line, messages, currentMessageRef, toolUseMap, msgIndexOff
         const target = toolUseMap.get(toolUseId)
         if (target) {
           const resultData = { text, collapsed: true }
+          if (toolUseResultTasks) resultData._tasks = toolUseResultTasks
           if (target.isNew) {
             // 当前 batch 内新创建的对象，直接赋值即可（尚未变为响应式）
             if (target.block) {
@@ -233,7 +251,9 @@ function parseOneLine(line, messages, currentMessageRef, toolUseMap, msgIndexOff
           }
         } else {
           // 未找到 tool_use，保留为独立消息
-          messages.push({ type: 'tool_result', text, collapsed: true, toolUseId })
+          const standalone = { type: 'tool_result', text, collapsed: true, toolUseId }
+          if (toolUseResultTasks) standalone._tasks = toolUseResultTasks
+          messages.push(standalone)
         }
       }
     }
@@ -300,8 +320,21 @@ function parseChatLines(lines) {
   let currentMessage = null
   const toolUseMap = new Map()
 
+  // 检查是否包含 stream_event 行，若有则跳过 assistant 行以避免重复
+  // assistant 行是会话历史的汇总格式，其内容已通过 stream_event 行呈现
+  let skipTypes = null
   for (const line of lines) {
-    currentMessage = parseOneLine(line, messages, { value: currentMessage }, toolUseMap)
+    try {
+      const obj = JSON.parse(line)
+      if (obj.type === 'stream_event') {
+        skipTypes = new Set(['assistant'])
+        break
+      }
+    } catch (e) { /* ignore parse errors in quick scan */ }
+  }
+
+  for (const line of lines) {
+    currentMessage = parseOneLine(line, messages, { value: currentMessage }, toolUseMap, 0, skipTypes)
   }
 
   // flush remaining message
@@ -348,7 +381,7 @@ function parseChatLines(lines) {
 }
 
 // parseChatLinesIncremental 增量解析新增的 SSE 行。
-// parseState 包含 { currentMessage, toolUseMap, pendingPatches }。
+// parseState 包含 { currentMessage, toolUseMap, pendingPatches, skipTypes }。
 // 返回 { newMessages, parseState }。
 // - newMessages: 新增的消息数组，调用方通过 push 追加即可
 // - parseState: 更新后的解析状态，供下一次增量调用
@@ -365,8 +398,22 @@ function parseChatLinesIncremental(newLines, parseState, msgIndexOffset) {
   const toolUseMap = (parseState && parseState.toolUseMap) || new Map()
   const messages = []
 
+  // 继承或检测 skipTypes：若已确认存在 stream_event，则跳过 assistant 行
+  let skipTypes = (parseState && parseState.skipTypes) || null
+  if (!skipTypes) {
+    for (const line of newLines) {
+      try {
+        const obj = JSON.parse(line)
+        if (obj.type === 'stream_event') {
+          skipTypes = new Set(['assistant'])
+          break
+        }
+      } catch (e) { /* ignore parse errors in quick scan */ }
+    }
+  }
+
   for (const line of newLines) {
-    currentMessage = parseOneLine(line, messages, { value: currentMessage }, toolUseMap, msgIndexOffset || 0)
+    currentMessage = parseOneLine(line, messages, { value: currentMessage }, toolUseMap, msgIndexOffset || 0, skipTypes)
   }
 
   // 不 flush currentMessage —— 保留到下次增量或最终 flush
@@ -399,7 +446,7 @@ function parseChatLinesIncremental(newLines, parseState, msgIndexOffset) {
 
   return {
     newMessages: messages,
-    parseState: { currentMessage, toolUseMap, pendingPatches },
+    parseState: { currentMessage, toolUseMap, pendingPatches, skipTypes },
   }
 }
 

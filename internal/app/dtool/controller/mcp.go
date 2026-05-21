@@ -401,11 +401,24 @@ func McpChromeDevtoolsConfigList(c *gin.Context) {
 	}
 	items := make([]define.McpChromeDevtoolsConfigItem, 0, len(rows))
 	for _, row := range rows {
+		port := cast.ToInt(row["port"])
+		isUsed := 0
+		if globalBrowserPortPool != nil {
+			globalBrowserPortPool.mu.Lock()
+			for _, item := range globalBrowserPortPool.items {
+				if item.Config.Port == port && item.InUse {
+					isUsed = 1
+					break
+				}
+			}
+			globalBrowserPortPool.mu.Unlock()
+		}
 		items = append(items, define.McpChromeDevtoolsConfigItem{
 			Id:         cast.ToInt(row["id"]),
 			Name:       cast.ToString(row["name"]),
-			Port:       cast.ToInt(row["port"]),
+			Port:       port,
 			Remark:     cast.ToString(row["remark"]),
+			IsUsed:     isUsed,
 			CreateTime: cast.ToInt64(row["create_time"]),
 			UpdateTime: cast.ToInt64(row["update_time"]),
 		})

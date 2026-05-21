@@ -74,11 +74,6 @@ function McpChromeDevtoolsConfigDelete(id, callBack) {
   base.BasePost('/api/McpChromeDevtoolsConfigDelete', { id: id }, callBack)
 }
 
-// McpChromeDevtoolsConfigToggleUsed 切换 Chrome DevTools 端口使用状态
-function McpChromeDevtoolsConfigToggleUsed(id, callBack) {
-  base.BasePost('/api/McpChromeDevtoolsConfigToggleUsed', { id: id }, callBack)
-}
-
 export default {
   McpTypeList,
   McpBindingList,
@@ -92,5 +87,4 @@ export default {
   McpChromeDevtoolsConfigList,
   McpChromeDevtoolsConfigSave,
   McpChromeDevtoolsConfigDelete,
-  McpChromeDevtoolsConfigToggleUsed,
 }

@@ -5,13 +5,16 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"dev_tool/internal/app/dtool/common"
 	"dev_tool/internal/app/dtool/component"
 	"dev_tool/internal/app/dtool/define"
+	"dev_tool/internal/pkg/p_define"
 
+	"gitee.com/Sxiaobai/gs/v2/gsgin"
 	"gitee.com/Sxiaobai/gs/v2/gstool"
 	"github.com/spf13/cast"
 )
@@ -111,6 +114,8 @@ func (p *browserPortPool) Acquire() (*define.McpChromeDevtoolsConfigItem, error)
 			}
 			item.InUse = true
 			gstool.FmtPrintlnLogTime("[端口池] 分配端口 %d (%s)", item.Config.Port, item.Config.Name)
+			// 通知前端端口状态变更
+			broadcastChromeDevtoolsPortStatusChange()
 			return &item.Config, nil
 		}
 	}
@@ -129,6 +134,8 @@ func (p *browserPortPool) Release(port int) {
 				gstool.FmtPrintlnLogTime("[端口池] 重新预热端口 %d 失败: %v", port, err)
 			} else {
 				gstool.FmtPrintlnLogTime("[端口池] 端口 %d 已释放并重新预热", port)
+				// 通知前端端口状态变更
+				broadcastChromeDevtoolsPortStatusChange()
 			}
 			return
 		}
@@ -196,4 +203,28 @@ func (p *browserPortPool) startPreWarm(item *browserPortItem) error {
 		return fmt.Errorf("启动浏览器失败: %w", err)
 	}
 	return nil
+}
+
+const chromeDevtoolsPortStatusSsePrefix = `ClientId:`
+
+// broadcastChromeDevtoolsPortStatusChange 向所有已连接的 SSE 客户端广播端口状态变更通知。
+// 前端 McpBinding 组件收到后自动刷新配置列表。
+func broadcastChromeDevtoolsPortStatusChange() {
+	msg := gstool.JsonEncode(p_define.SseData{
+		SseDistributeId: define.SseChromeDevtoolsPortStatus,
+		Data:            "changed",
+		Type:            p_define.SseContentTypeMsg,
+	})
+
+	for _, item := range gsgin.SseStatus() {
+		clientID := strings.TrimSpace(strings.TrimPrefix(item, chromeDevtoolsPortStatusSsePrefix))
+		if clientID == `` || clientID == item {
+			continue
+		}
+		sse := gsgin.SseGetByClientId(clientID)
+		if sse == nil {
+			continue
+		}
+		_ = sse.SendToChan(msg)
+	}
 }

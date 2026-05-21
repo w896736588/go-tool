@@ -77,12 +77,21 @@ func AIBrowserSessionOpen(c *gin.Context) {
 
 	// MCP 模式：分配一个未使用的 Chrome DevTools 调试端口
 	var debugPortConfig *define.McpChromeDevtoolsConfigItem
+	var mcpSessionCreated bool
 	if req.EnableMCP {
 		debugPortConfig, err = acquireBrowserPort()
 		if err != nil {
 			gsgin.GinResponseError(c, err.Error(), nil)
 			return
 		}
+		// MCP模式下如果发生错误且会话未成功创建，必须释放端口，
+		// 否则端口会一直处于"使用中"状态，造成端口泄漏
+		defer func() {
+			if !mcpSessionCreated && debugPortConfig != nil {
+				component.PlaywrightClient.Log.Infof("MCP会话未创建成功，释放端口: %d", debugPortConfig.Port)
+				releaseBrowserPort(debugPortConfig.Port)
+			}
+		}()
 		runParams.ExtraBrowserArgs = append(runParams.ExtraBrowserArgs,
 			fmt.Sprintf("--remote-debugging-port=%d", debugPortConfig.Port))
 	}
@@ -133,6 +142,9 @@ func AIBrowserSessionOpen(c *gin.Context) {
 			gsgin.GinResponseError(c, fmt.Sprintf("创建MCP会话失败: %v", mcpErr), nil)
 			return
 		}
+		// MCP会话创建成功，标记端口由会话管理生命周期，defer不再释放
+		mcpSessionCreated = true
+
 		if debugPortConfig != nil {
 			browserSession.OnClose = func() {
 				releaseBrowserPort(debugPortConfig.Port)
