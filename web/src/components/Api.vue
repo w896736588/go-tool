@@ -1443,6 +1443,14 @@ export default {
         const folderNode = this.findFolderNode(collectionId, folderId)
         if (folderNode) {
           treeRef.setCurrentKey(folderNode.uniqueid)
+          this.$nextTick(() => {
+            setTimeout(() => {
+              const el = treeRef.$el?.querySelector('.el-tree-node.is-current')
+              if (el) {
+                el.scrollIntoView({ block: 'center' })
+              }
+            }, 300)
+          })
           this.openWorkspaceTab(folderNode, { reload: true })
           return
         }

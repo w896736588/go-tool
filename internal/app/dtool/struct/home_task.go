@@ -81,3 +81,8 @@ type HomeTaskZcodeSessionIdAppendRequest struct {
 	ID        int    `json:"id"`
 	SessionID string `json:"session_id"`
 }
+
+// HomeTaskUnusedLocalDirsRequest 查询历史任务中未被活跃任务占用的本地目录请求。
+type HomeTaskUnusedLocalDirsRequest struct {
+	ExcludeTaskID int `json:"exclude_task_id"`
+}

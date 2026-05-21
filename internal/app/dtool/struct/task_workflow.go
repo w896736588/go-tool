@@ -64,7 +64,10 @@ type TaskWorkflowRequirementFetchRequest struct {
 // TaskWorkflowNodeStatusUpdateRequest 更新工作流节点状态请求。
 type TaskWorkflowNodeStatusUpdateRequest struct {
 	WorkflowID   int    `json:"workflow_id"`
+	HomeTaskID   int    `json:"home_task_id"`
 	NodeStatuses string `json:"node_statuses"`
+	Step         string `json:"step"`
+	Status       string `json:"status"`
 }
 
 // TaskWorkflowBatchNodeStatusRequest 批量查询工作流节点状态请求。
@@ -74,10 +77,13 @@ type TaskWorkflowBatchNodeStatusRequest struct {
 
 // TaskWorkflowChatSendRequest 发送对话到 claude code 请求。
 type TaskWorkflowChatSendRequest struct {
-	WorkflowID int    `json:"workflow_id"`
-	Prompt     string `json:"prompt"`
-	ModelID    int    `json:"model_id"`
-	LocalDir   string `json:"local_dir"`
+	WorkflowID        int    `json:"workflow_id"`
+	Prompt            string `json:"prompt"`
+	PromptType        string `json:"prompt_type"`
+	CliType           string `json:"cli_type"`
+	LocalDir          string `json:"local_dir"`
+	AgentCliId        int    `json:"agent_cli_id"`
+	ThinkingIntensity string `json:"thinking_intensity"`
 }
 
 // TaskWorkflowChatDirsRequest 获取可选工作目录列表请求。
@@ -111,4 +117,15 @@ type TaskWorkflowZcodeProjectItem struct {
 	ProjectKey    string `json:"project_key"`
 	WorkspacePath string `json:"workspace_path"`
 	SettingsPath  string `json:"settings_path"`
+}
+
+// TaskWorkflowChatStopRequest 停止运行中的对话请求。
+type TaskWorkflowChatStopRequest struct {
+	ChatID int `json:"chat_id"`
+}
+
+// TaskWorkflowChatListByPromptTypeRequest 按提示词类型查询对话列表请求。
+type TaskWorkflowChatListByPromptTypeRequest struct {
+	WorkflowID int    `json:"workflow_id"`
+	PromptType string `json:"prompt_type"`
 }

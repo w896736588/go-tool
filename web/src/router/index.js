@@ -148,6 +148,14 @@ const router = createRouter({
           },
           meta: { keepAlive: false, title: 'MCP 绑定' },
         },
+        {
+          path: '/AgentCli',
+          name: 'AgentCli',
+          components: {
+            home: () => import('../components/agent_cli/AgentCliList'),
+          },
+          meta: { keepAlive: true, title: 'Agent Cli' },
+        },
       ],
     },
     {

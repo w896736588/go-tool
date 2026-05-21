@@ -441,6 +441,22 @@
   padding-bottom: 12px;
 }
 
+.home-task-unused-dirs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.home-task-unused-dir-tag {
+  cursor: pointer;
+  display: block;
+  width: fit-content;
+}
+
+.home-task-unused-dir-tag:hover {
+  opacity: 0.8;
+}
+
 @media (max-width: 900px) {
   .home-task-header-card {
     padding: 14px;

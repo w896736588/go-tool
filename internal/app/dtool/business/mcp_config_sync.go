@@ -54,8 +54,11 @@ func SyncMcpConfig(agentTargetId int) error {
 		return fmt.Errorf("query bindings failed: %w", err)
 	}
 
-	// 构建 mcpServers 映射
+	// 构建 mcpServers 映射，按 user_data_dir 去重。
+	// 多个目录映射可能指向同一个浏览器 profile，chrome-devtools-mcp 只支持单浏览器连接，
+	// 因此相同 user_data_dir 共享一个 MCP 实例，避免为每个映射重复启动进程。
 	mcpServers := make(map[string]McpServerEntry)
+	seenDirs := make(map[string]string) // user_data_dir -> first mapping_key
 	for _, row := range rows {
 		mcpType := cast.ToString(row["mcp_type"])
 		mappingKey := cast.ToString(row["mapping_key"])
@@ -70,6 +73,11 @@ func SyncMcpConfig(agentTargetId int) error {
 		if common.DbMain.Env != nil {
 			userDataDir = filepath.Join(common.DbMain.Env.WebkitDataPath, cast.ToString(userDataIndex))
 		}
+
+		if _, exists := seenDirs[userDataDir]; exists {
+			continue
+		}
+		seenDirs[userDataDir] = mappingKey
 
 		mcpServers[mappingKey] = McpServerEntry{
 			Type:    "stdio",
@@ -150,6 +158,7 @@ func GetMcpConfigPreview(agentTargetId int) (oldContent string, newContent strin
 	}
 
 	mcpServers := make(map[string]McpServerEntry)
+	seenDirs := make(map[string]string)
 	for _, row := range rows {
 		mcpType := cast.ToString(row["mcp_type"])
 		mappingKey := cast.ToString(row["mapping_key"])
@@ -163,6 +172,12 @@ func GetMcpConfigPreview(agentTargetId int) (oldContent string, newContent strin
 		if common.DbMain.Env != nil {
 			userDataDir = filepath.Join(common.DbMain.Env.WebkitDataPath, cast.ToString(userDataIndex))
 		}
+
+		if _, exists := seenDirs[userDataDir]; exists {
+			continue
+		}
+		seenDirs[userDataDir] = mappingKey
+
 		mcpServers[mappingKey] = McpServerEntry{
 			Type:    "stdio",
 			Command: typeDef.Command,

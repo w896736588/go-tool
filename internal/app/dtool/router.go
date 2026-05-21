@@ -6,7 +6,6 @@ import (
 	"dev_tool/internal/app/dtool/middleware"
 	"dev_tool/internal/pkg/p_define"
 	"dev_tool/internal/pkg/p_gin"
-	"fmt"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -51,6 +50,8 @@ func InitRouter(tGin *p_gin.Gin) {
 	api(tGin)
 	apiUse(tGin)
 	mcp(tGin)
+	agentCli(tGin)
+	webhookConfig(tGin)
 	tGin.GinPost(`/test/multiformdata`, func(c *gin.Context) {
 		// 解析 multipart/form-data
 		form, err := c.MultipartForm()
@@ -333,6 +334,7 @@ func homeTask(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/HomeTaskLastDevConfigByGitId`, controller.HomeTaskLastDevConfigByGitId)
 	tGin.GinPost(`/api/HomeTaskBranchNameGenerate`, controller.HomeTaskBranchNameGenerate)
 	tGin.GinPost(`/api/HomeTaskZcodeSessionIdAppend`, controller.HomeTaskZcodeSessionIdAppend)
+	tGin.GinPost(`/api/HomeTaskUnusedLocalDirs`, controller.HomeTaskUnusedLocalDirs)
 }
 
 func taskWorkflow(tGin *p_gin.Gin) {
@@ -358,9 +360,11 @@ func taskWorkflow(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/task/workflow/issue-fix/resolve`, controller.TaskWorkflowIssueFixResolve)
 	tGin.GinPost(`/api/task/workflow/chat/send`, controller.TaskWorkflowChatSend)
 	tGin.GinPost(`/api/task/workflow/chat/continue`, controller.TaskWorkflowChatContinue)
+	tGin.GinPost(`/api/task/workflow/chat/stop`, controller.TaskWorkflowChatStop)
 	tGin.GinPost(`/api/task/workflow/chat/list`, controller.TaskWorkflowChatList)
 	tGin.GinPost(`/api/task/workflow/chat/detail`, controller.TaskWorkflowChatDetail)
 	tGin.GinPost(`/api/task/workflow/chat/dirs`, controller.TaskWorkflowChatDirs)
+	tGin.GinPost(`/api/task/workflow/chat/list-by-prompt-type`, controller.TaskWorkflowChatListByPromptType)
 	tGin.GinPost(`/api/task/workflow/zcode/save`, controller.TaskWorkflowZcodeSave)
 	tGin.GinPost(`/api/task/workflow/zcode/get`, controller.TaskWorkflowZcodeGet)
 	tGin.GinPost(`/api/task/workflow/zcode/delete`, controller.TaskWorkflowZcodeDelete)
@@ -527,23 +531,8 @@ func apiUse(tGin *p_gin.Gin) {
 		}))
 		sse.UnRegister()
 	})
-	// Claude Code 对话实时推送 SSE
-	tGin.SseRoute(`/api/task/workflow/chat/stream`, func(urlValues url.Values, stopC chan int, c *gin.Context) (*gsgin.Sse, error) {
-		chatID := strings.TrimSpace(urlValues.Get(`chat_id`))
-		if chatID == `` {
-			return nil, fmt.Errorf(`chat_id 不能为空`)
-		}
-		distributeID := define.SseTaskWorkflowChatPrefix + chatID
-		sse := gsgin.SseRegister(distributeID, stopC, c)
-		return sse, nil
-	}, func(sse *gsgin.Sse) {
-		_ = sse.SendToChan(gstool.JsonEncode(p_define.SseData{
-			SseDistributeId: ``,
-			Data:            `[DONE]`,
-			Type:            p_define.SseContentTypeMsg,
-		}))
-		sse.UnRegister()
-	})
+	// Claude Code 对话实时推送 SSE（每个 chat 独立 EventSource）
+	tGin.SseRoute(`/api/task/workflow/chat/stream`, controller.TaskWorkflowChatStreamOpen, controller.TaskWorkflowChatStreamClose)
 	// SSE 可用端口查询接口（所有 gin 实例均可访问）
 	tGin.GinPost(`/api/SseAvailablePort`, controller.SseAvailablePort)
 	// 判断当前 gin 实例是否是 SSE 端口，仅 SSE 端口才注册 /sse 路由
@@ -572,5 +561,22 @@ func mcp(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/McpChromeDevtoolsConfigList`, controller.McpChromeDevtoolsConfigList)
 	tGin.GinPost(`/api/McpChromeDevtoolsConfigSave`, controller.McpChromeDevtoolsConfigSave)
 	tGin.GinPost(`/api/McpChromeDevtoolsConfigDelete`, controller.McpChromeDevtoolsConfigDelete)
-	tGin.GinPost(`/api/McpChromeDevtoolsConfigToggleUsed`, controller.McpChromeDevtoolsConfigToggleUsed)
+}
+
+// agentCli 路由
+func agentCli(tGin *p_gin.Gin) {
+	tGin.GinPost(`/api/AgentCliList`, controller.AgentCliList)
+	tGin.GinPost(`/api/AgentCliSave`, controller.AgentCliSave)
+	tGin.GinPost(`/api/AgentCliDelete`, controller.AgentCliDelete)
+	tGin.GinPost(`/api/AgentCliReadSettings`, controller.AgentCliReadSettings)
+	tGin.GinPost(`/api/AgentCliWriteMcpServers`, controller.AgentCliWriteMcpServers)
+	tGin.GinPost(`/api/AgentCliWriteDeepSeek`, controller.AgentCliWriteDeepSeek)
+	tGin.GinPost(`/api/AgentCliToggleClaudeMem`, controller.AgentCliToggleClaudeMem)
+}
+
+// webhookConfig 路由
+func webhookConfig(tGin *p_gin.Gin) {
+	tGin.GinPost(`/api/WebhookConfigList`, controller.WebhookConfigList)
+	tGin.GinPost(`/api/WebhookConfigSave`, controller.WebhookConfigSave)
+	tGin.GinPost(`/api/WebhookConfigDelete`, controller.WebhookConfigDelete)
 }

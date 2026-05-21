@@ -1,21 +1,35 @@
 package p_claude
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cast"
 )
 
+// CleanupOrphanedMcpProcesses 清理残留的 chrome-devtools-mcp 子进程。
+// 用于 Go 进程崩溃后重启时的兜底清扫（Windows Job Object / Unix 进程组已覆盖正常退出场景）。
+func CleanupOrphanedMcpProcesses() {
+	cleanupOrphanedMcpProcesses()
+}
+
 // maxScanTokenSize bufio.Scanner 最大缓冲区大小（10MB）。
 // stream-json 输出中单行可能远超默认 64KB（尤其是工具调用结果）。
 const maxScanTokenSize = 10 * 1024 * 1024
+
+// ptyResult 进程启动结果，由各平台 startClaude 实现返回。
+type ptyResult struct {
+	lineCh   <-chan string       // stdout 行数据通道
+	stderrCh <-chan string       // stderr 行数据通道
+	pid      int                 // 进程 ID
+	waitFn   func() (int, error) // 等待进程退出并返回退出码
+	closeFn  func()              // 强制终止进程（含子进程清理：Windows Job Object / Unix 进程组）
+}
 
 // RunClaudeStream 执行 claude 命令并逐行推送解析后的消息。
 // callback 每收到一行 stream-json 时同步调用。
@@ -26,59 +40,75 @@ func RunClaudeStream(ctx context.Context, cfg RunConfig, callback func(msg Strea
 
 	log.Printf("[claude-exec] 启动进程, dir=%s model=%s", cfg.WorkingDir, cfg.Model)
 
-	cmd := exec.CommandContext(ctx, `claude`, args...)
-	cmd.Dir = cfg.WorkingDir
-	cmd.Env = env
-	cmd.Stderr = os.Stderr
-
-	stdout, err := cmd.StdoutPipe()
+	result, err := startClaude(ctx, args, cfg.WorkingDir, env)
 	if err != nil {
-		log.Printf("[claude-exec] stdout pipe 失败: %v", err)
-		return ``, fmt.Errorf("stdout pipe failed: %w", err)
-	}
-
-	if err := cmd.Start(); err != nil {
 		log.Printf("[claude-exec] 启动失败: %v", err)
 		return ``, fmt.Errorf("claude start failed: %w", err)
 	}
-	log.Printf("[claude-exec] 进程已启动, pid=%d", cmd.Process.Pid)
+	defer result.closeFn()
+	log.Printf("[claude-exec] 进程已启动, pid=%d", result.pid)
+
+	// 后台收集 stderr
+	var stderrLines []string
+	stderrDone := make(chan struct{})
+	go func() {
+		defer close(stderrDone)
+		for line := range result.stderrCh {
+			stderrLines = append(stderrLines, line)
+		}
+	}()
 
 	sessionID := ``
 	sessionExtracted := false
 	lineCount := 0
-	scanner := bufio.NewScanner(stdout)
-	scanner.Buffer(make([]byte, maxScanTokenSize), maxScanTokenSize)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == `` {
-			continue
-		}
-		lineCount++
-		if lineCount <= 3 {
-			log.Printf("[claude-exec] 收到第%d行(len=%d): %.200s", lineCount, len(line), line)
-		}
-		msg := parseLine(line)
-		callback(msg)
+	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("[claude-exec] 上下文已取消，退出读取循环 (lineCount=%d)", lineCount)
+			return sessionID, ctx.Err()
+		case line, ok := <-result.lineCh:
+			if !ok {
+				goto doneReading
+			}
+			line = strings.TrimSpace(line)
+			if line == `` {
+				continue
+			}
+			lineCount++
+			if lineCount <= 3 {
+				log.Printf("[claude-exec] 收到第%d行(len=%d): %.200s", lineCount, len(line), line)
+			}
+			msg := parseLine(line)
+			callback(msg)
 
-		if !sessionExtracted && cfg.SessionID == `` {
-			if sid := extractSessionIDFromLine(line); sid != `` {
-				sessionID = sid
-				log.Printf("[claude-exec] 提取到 session_id=%s", sid)
-				sessionExtracted = true
+			if !sessionExtracted && cfg.SessionID == `` {
+				if sid := extractSessionIDFromLine(line); sid != `` {
+					sessionID = sid
+					log.Printf("[claude-exec] 提取到 session_id=%s", sid)
+					sessionExtracted = true
+				}
 			}
 		}
 	}
+doneReading:
 
-	log.Printf("[claude-exec] scanner 循环结束, 总行数=%d", lineCount)
-	if err := scanner.Err(); err != nil {
-		log.Printf("[claude-exec] scanner 错误: %v", err)
-		return sessionID, fmt.Errorf("scan stdout: %w", err)
-	}
+	log.Printf("[claude-exec] 行通道关闭, 总行数=%d", lineCount)
+	<-stderrDone
 
-	waitErr := cmd.Wait()
-	log.Printf("[claude-exec] 进程结束, waitErr=%v", waitErr)
+	exitCode, waitErr := result.waitFn()
+	stderrSummary := strings.Join(stderrLines, "\n")
+	log.Printf("[claude-exec] 进程结束, exitCode=%d waitErr=%v stderr=%s", exitCode, waitErr, stderrSummary)
 	if waitErr != nil {
-		return sessionID, fmt.Errorf("claude exited with error: %w", waitErr)
+		if stderrSummary != `` {
+			return sessionID, fmt.Errorf("claude 退出异常: %s (stderr: %s)", waitErr.Error(), stderrSummary)
+		}
+		return sessionID, fmt.Errorf("claude 退出异常: %w", waitErr)
+	}
+	if exitCode != 0 {
+		if stderrSummary != `` {
+			return sessionID, fmt.Errorf("claude 返回失败 (exit code %d): %s", exitCode, stderrSummary)
+		}
+		return sessionID, fmt.Errorf("claude 返回失败 (exit code %d)，无更多错误详情", exitCode)
 	}
 	return sessionID, nil
 }
@@ -90,11 +120,12 @@ func buildArgs(cfg RunConfig) []string {
 		args = append(args, `--resume`, cfg.SessionID)
 	}
 	args = append(args,
-		`-p`, cfg.Prompt,
+		`-p`, sanitizePrompt(cfg.Prompt),
 		`--add-dir`, cfg.WorkingDir,
 		`--output-format`, `stream-json`,
 		`--include-partial-messages`,
 		`--verbose`,
+		`--permission-mode`, `bypassPermissions`,
 	)
 	if cfg.Model != `` {
 		args = append(args, `--model`, cfg.Model)
@@ -102,10 +133,16 @@ func buildArgs(cfg RunConfig) []string {
 	if cfg.UserDataDir != `` {
 		args = append(args, `--user-data-dir`, cfg.UserDataDir)
 	}
+	if cfg.SettingsPath != `` {
+		args = append(args, `--settings`, cfg.SettingsPath)
+	}
+	if cfg.Effort != `` {
+		args = append(args, `--effort`, cfg.Effort)
+	}
 	return args
 }
 
-// buildEnv 构建环境变量（在系统环境基础上追加）。
+// buildEnv 构建环境变量。
 func buildEnv(cfg RunConfig) []string {
 	env := os.Environ()
 	if cfg.BaseURL != `` {
@@ -113,6 +150,9 @@ func buildEnv(cfg RunConfig) []string {
 	}
 	if cfg.APIKey != `` {
 		env = append(env, `ANTHROPIC_API_KEY=`+cfg.APIKey)
+	}
+	if cfg.ThinkingBudget > 0 {
+		env = append(env, `THINKING_BUDGET=`+strconv.Itoa(cfg.ThinkingBudget))
 	}
 	return env
 }
@@ -122,9 +162,8 @@ func parseLine(line string) StreamMessage {
 	msg := StreamMessage{RawJSON: line}
 	var raw map[string]any
 	if err := json.Unmarshal([]byte(line), &raw); err != nil {
-		msg.Type = `parse_error`
-		msg.Data = map[string]any{`error`: err.Error(), `line`: line}
-		// 生成合法 JSON 作为 RawJSON，确保前端和数据库可解析
+		msg.Type = `raw_text`
+		msg.Data = map[string]any{`text`: line}
 		if errJSON, e := json.Marshal(msg); e == nil {
 			msg.RawJSON = string(errJSON)
 		}
@@ -137,6 +176,18 @@ func parseLine(line string) StreamMessage {
 	}
 	msg.Data = raw
 	return msg
+}
+
+// sanitizePrompt 将 prompt 中的换行符替换为空格，避免多行内容作为命令行参数传递时导致 claude CLI 解析异常。
+// 如果内容以 "-" 开头，在前面加空格，防止 claude CLI 将其误解析为选项标志。
+func sanitizePrompt(prompt string) string {
+	s := strings.ReplaceAll(prompt, "\r\n", " ")
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.ReplaceAll(s, "\r", " ")
+	if strings.HasPrefix(s, "-") {
+		s = " " + s
+	}
+	return s
 }
 
 // extractSessionIDFromLine 从 stream-json 行提取 session_id。

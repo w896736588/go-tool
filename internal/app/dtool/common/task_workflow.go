@@ -20,8 +20,10 @@ const (
 )
 
 const (
-	taskWorkflowChatStatusRunning   = `running`
-	taskWorkflowChatStatusCompleted = `completed`
+	taskWorkflowChatStatusRunning     = `running`
+	taskWorkflowChatStatusCompleted   = `completed`
+	taskWorkflowChatStatusError       = `error`
+	taskWorkflowChatStatusInterrupted = `interrupted`
 )
 
 // TaskWorkflowCreateOrGetByHomeTaskID 查询或创建任务工作流主记录。
@@ -407,17 +409,25 @@ func (h *CSqlite) TaskWorkflowBindApiDocFragment(workflowID int, fragmentID stri
 }
 
 // TaskWorkflowChatCreate 创建对话记录。
-func (h *CSqlite) TaskWorkflowChatCreate(workflowID int, prompt string, modelID int, localDir string) (int64, error) {
+func (h *CSqlite) TaskWorkflowChatCreate(workflowID int, prompt, promptType, cliType string, agentCliID int, localDir, settingsPath string, thinkingCollapsed int, thinkingIntensity string) (int64, error) {
+	if strings.TrimSpace(cliType) == `` {
+		cliType = `claude`
+	}
 	now := time.Now().Format(`2006-01-02 15:04:05`)
 	id, err := h.Client.QuickCreate(`tbl_task_workflow_chat`, map[string]any{
-		`workflow_id`: workflowID,
-		`prompt`:      prompt,
-		`model_id`:    modelID,
-		`local_dir`:   localDir,
-		`status`:      taskWorkflowChatStatusRunning,
-		`raw_output`:  ``,
-		`created_at`:  now,
-		`updated_at`:  now,
+		`workflow_id`:        workflowID,
+		`prompt`:             prompt,
+		`prompt_type`:        promptType,
+		`cli_type`:           cliType,
+		`agent_cli_id`:       agentCliID,
+		`local_dir`:          localDir,
+		`settings_path`:      settingsPath,
+		`thinking_collapsed`: thinkingCollapsed,
+		`thinking_intensity`: thinkingIntensity,
+		`status`:             taskWorkflowChatStatusRunning,
+		`raw_output`:         ``,
+		`created_at`:         now,
+		`updated_at`:         now,
 	}).Exec()
 	if err != nil {
 		return 0, err
@@ -436,6 +446,11 @@ func (h *CSqlite) TaskWorkflowChatUpdateSessionID(chatID int64, sessionID string
 	}).Exec()
 	return err
 }
+
+const (
+	// ChatOutputFlushBatchSize SSE 对话输出批量写 DB 的行数阈值
+	ChatOutputFlushBatchSize = 200
+)
 
 // TaskWorkflowChatAppendOutput 追加一行 raw_output。
 func (h *CSqlite) TaskWorkflowChatAppendOutput(chatID int64, line string) error {
@@ -459,6 +474,31 @@ func (h *CSqlite) TaskWorkflowChatAppendOutput(chatID int64, line string) error 
 	return err
 }
 
+// TaskWorkflowChatAppendOutputBatch 批量追加多行 raw_output，一次 DB 读写完成。
+func (h *CSqlite) TaskWorkflowChatAppendOutputBatch(chatID int64, lines []string) error {
+	if len(lines) == 0 {
+		return nil
+	}
+	now := time.Now().Format(`2006-01-02 15:04:05`)
+	info, err := h.TaskWorkflowChatInfo(chatID)
+	if err != nil {
+		return err
+	}
+	current := cast.ToString(info[`raw_output`])
+	newOutput := current
+	if current != `` {
+		newOutput += "\n"
+	}
+	newOutput += strings.Join(lines, "\n")
+	_, err = h.Client.QuickUpdate(`tbl_task_workflow_chat`, map[string]any{
+		`id`: chatID,
+	}, map[string]any{
+		`raw_output`: newOutput,
+		`updated_at`: now,
+	}).Exec()
+	return err
+}
+
 // TaskWorkflowChatMarkCompleted 标记对话完成。
 func (h *CSqlite) TaskWorkflowChatMarkCompleted(chatID int64) error {
 	now := time.Now().Format(`2006-01-02 15:04:05`)
@@ -471,6 +511,32 @@ func (h *CSqlite) TaskWorkflowChatMarkCompleted(chatID int64) error {
 	return err
 }
 
+// TaskWorkflowChatMarkError 标记对话异常终止。
+func (h *CSqlite) TaskWorkflowChatMarkError(chatID int64) error {
+	now := time.Now().Format(`2006-01-02 15:04:05`)
+	_, err := h.Client.QuickUpdate(`tbl_task_workflow_chat`, map[string]any{
+		`id`: chatID,
+	}, map[string]any{
+		`status`:     taskWorkflowChatStatusError,
+		`updated_at`: now,
+	}).Exec()
+	return err
+}
+
+// TaskWorkflowChatRecoverInterrupted 启动时将所有 running 状态的记录标记为 interrupted（进程已随上次进程退出而终止）。
+func (h *CSqlite) TaskWorkflowChatRecoverInterrupted() {
+	now := time.Now().Format(`2006-01-02 15:04:05`)
+	upNumber, err := h.Client.ExecBySql(
+		`update tbl_task_workflow_chat set status = ?, updated_at = ? where status = ?`,
+		taskWorkflowChatStatusInterrupted, now, taskWorkflowChatStatusRunning,
+	).Exec()
+	if err != nil {
+		gstool.FmtPrintlnLogTime(`TaskWorkflowChatRecoverInterrupted 失败: %v`, err)
+	} else {
+		gstool.FmtPrintlnLogTime(`[agent cli] 更新状态进行中的为异常中断，数量%d`, upNumber)
+	}
+}
+
 // TaskWorkflowChatInfo 获取单条对话记录。
 func (h *CSqlite) TaskWorkflowChatInfo(chatID int64) (map[string]any, error) {
 	return h.Client.QuickQuery(`tbl_task_workflow_chat`, `*`, map[string]any{
@@ -480,9 +546,13 @@ func (h *CSqlite) TaskWorkflowChatInfo(chatID int64) (map[string]any, error) {
 
 // TaskWorkflowChatList 获取 workflow 下所有对话记录。
 func (h *CSqlite) TaskWorkflowChatList(workflowID int) ([]map[string]any, error) {
-	return h.Client.QuickQuery(`tbl_task_workflow_chat`, `*`, map[string]any{
+	rows, err := h.Client.QuickQuery(`tbl_task_workflow_chat`, `*`, map[string]any{
 		`workflow_id`: workflowID,
 	}).Order(`id DESC`).All()
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
 }
 
 // TaskWorkflowChatMarkRunning 标记对话为运行中（用于继续对话）。
@@ -493,6 +563,50 @@ func (h *CSqlite) TaskWorkflowChatMarkRunning(chatID int64) error {
 	}, map[string]any{
 		`status`:     taskWorkflowChatStatusRunning,
 		`updated_at`: now,
+	}).Exec()
+	return err
+}
+
+// TaskWorkflowChatMarkInterrupted 标记对话为用户主动中断。
+func (h *CSqlite) TaskWorkflowChatMarkInterrupted(chatID int64) error {
+	now := time.Now().Format(`2006-01-02 15:04:05`)
+	_, err := h.Client.QuickUpdate(`tbl_task_workflow_chat`, map[string]any{
+		`id`: chatID,
+	}, map[string]any{
+		`status`:     taskWorkflowChatStatusInterrupted,
+		`updated_at`: now,
+	}).Exec()
+	return err
+}
+
+// TaskWorkflowChatListByPromptType 按提示词类型查询对话历史。
+func (h *CSqlite) TaskWorkflowChatListByPromptType(workflowID int, promptType string) ([]map[string]any, error) {
+	if workflowID <= 0 {
+		return nil, errors.New(`工作流id不能为空`)
+	}
+	promptType = strings.TrimSpace(promptType)
+	if promptType == `` {
+		return nil, errors.New(`提示词类型不能为空`)
+	}
+	rows, err := h.Client.QuickQuery(`tbl_task_workflow_chat`, `*`, map[string]any{
+		`workflow_id`: workflowID,
+		`prompt_type`: promptType,
+	}).Order(`id DESC`).All()
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// TaskWorkflowClearChatSessionIDs 删除指定 prompt_type 的所有对话记录。
+func (h *CSqlite) TaskWorkflowClearChatSessionIDs(workflowID int, promptType string) error {
+	promptType = strings.TrimSpace(promptType)
+	if promptType == `` {
+		return nil
+	}
+	_, err := h.Client.QuickDelete(`tbl_task_workflow_chat`, map[string]any{
+		`workflow_id`: workflowID,
+		`prompt_type`: promptType,
 	}).Exec()
 	return err
 }

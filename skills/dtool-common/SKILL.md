@@ -163,16 +163,16 @@ description: Use when operating the dtool 通用工具模块 and the task involv
 ### 9. 更新知识片段（按文件路径）
 
 通过传入相对于知识片段文件夹的文件路径更新片段内容。Python 脚本会自动从路径中提取片段 ID 并调用保存接口。
+注意：禁止更新文档名称（文件内容开头的title）
 
 - **路径**: `/api/MemoryFragmentSave`
-- **Python 函数**: `memory_fragment_update_by_path(relative_path, content, title=None)`
+- **Python 函数**: `memory_fragment_update_by_path(relative_path, content)`（不传 title，禁止修改标题）
 - **参数**:
 
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
 | `relative_path` | string | 是 | 相对于知识片段文件夹（`fragments/`）的路径，如 `"2026/05/a59db79a-3e4d-4f37-a02d-1bf87cc0c590.md"` |
 | `content` | string | 是 | 新的 Markdown 正文内容，支持占位符 `{需求文档纯文本文件相对地址}`（后端自动替换为实际路径） |
-| `title` | string | 否 | 新标题（不传则不修改） |
 
 - **返回**: 更新后的片段对象，包含 `id`、`title`、`content`、`update_time_desc` 等字段
 - **注意**: 函数内部从 `relative_path` 的文件名（去掉 `.md` 后缀）提取片段 ID，然后调用 `/api/MemoryFragmentSave`
@@ -262,8 +262,8 @@ description: Use when operating the dtool 通用工具模块 and the task involv
 
 1. 向用户确认 `base_url`、`Token`
 2. 确认要更新的知识片段相对路径（如 `2026/05/uuid.md`）
-3. 确认新的正文内容 `content` 和可选的新标题 `title`
-4. 调用 `memory_fragment_update_by_path(relative_path, content, title)`
+3. 确认新的正文内容 `content`（禁止修改标题）
+4. 调用 `memory_fragment_update_by_path(relative_path, content)`
 5. 返回更新后的片段信息
 ## Git 分支变更查看脚本
 
@@ -280,6 +280,72 @@ python skills/dtool-common/scripts/show_branch_diff.py <基分支>
 ```bash
 python skills/dtool-common/scripts/show_file_diff.py <基分支> <文件路径>
 ```
+
+## 通用代码编辑脚本
+
+当 Edit 工具因中文、特殊字符或空白字符匹配失败时，使用 `code_edit.py` 替代。
+
+原理：通过 JSON 描述文件声明要修改的文件和操作列表，脚本内部处理编码（BOM、CRLF/LF），每次修改前自动备份。
+
+### 用法
+
+```bash
+# 预览（不写入）
+python skills/dtool-common/scripts/code_edit.py <描述.json> --dry-run
+
+# 执行修改
+python skills/dtool-common/scripts/code_edit.py <描述.json>
+```
+
+### 描述文件格式
+
+```json
+{
+  "files": [
+    {
+      "path": "C:/work/project/src/file.go",
+      "ops": [
+        {
+          "op": "replace",
+          "find": "待替换的原始文本（需精确匹配，含空白字符）",
+          "replace": "替换后的文本"
+        },
+        {
+          "op": "replace_all",
+          "find": "全文多次出现的文本",
+          "replace": "替换后的文本"
+        },
+        {
+          "op": "insert_after",
+          "after": "在此行文本之后插入（精确匹配该行）",
+          "text": "要插入的文本"
+        },
+        {
+          "op": "insert_before",
+          "before": "在此行文本之前插入",
+          "text": "要插入的文本"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### 支持的操作
+
+| 操作 | 说明 |
+|------|------|
+| `replace` | 精确替换一处文本，若匹配到多处则报错（需改为 `replace_all`） |
+| `replace_all` | 替换所有匹配到的文本 |
+| `insert_after` | 在匹配行之后插入文本 |
+| `insert_before` | 在匹配行之前插入文本 |
+
+### 特性
+
+- 自动检测并保留原文件 BOM、换行符（CRLF/LF）、末尾换行
+- 修改前在同目录创建 `.bak` 备份文件
+- `--dry-run` 仅打印将要执行的修改，不写入文件
+- `find`/`after`/`before` 区分大小写、区分空白字符，要求精确匹配
 
 ### API 接口按 URI 同步脚本
 

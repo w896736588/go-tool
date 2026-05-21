@@ -55,7 +55,7 @@
                             v-if="tag.type === col.key"
                             :content="tag.label"
                             placement="top"
-                            :disabled="tag.type === 'branch_name' || tag.type === 'local_dir' || tag.label.length <= HOME_TASK_CONFIG_TAG_MAX_LENGTH"
+                            :disabled="!shouldTruncateTagLabel(tag)"
                           >
                             <span class="home-task-config-tag-wrapper">
                               <el-tag
@@ -65,7 +65,7 @@
                                 :class="['home-task-config-tag', tag.type === 'branch_name' ? 'home-task-config-tag--copy' : '']"
                                 @click.stop="tag.type === 'branch_name' ? copyHomeTaskBranchName(tag.label) : navigateToDevConfig(tag)"
                               >
-                                {{ (tag.type === 'branch_name' || tag.type === 'local_dir') ? tag.label : (tag.label.length > HOME_TASK_CONFIG_TAG_MAX_LENGTH ? tag.label.slice(0, HOME_TASK_CONFIG_TAG_MAX_LENGTH) + '...' : tag.label) }}
+                                {{ shouldTruncateTagLabel(tag) ? truncateTagLabel(tag.label) : tag.label }}
                               </el-tag>
                               <span v-if="tag.type === 'local_dir' && homeTaskLocalDirStatusMap[tag.label] !== undefined" class="home-task-dir-status" :class="homeTaskLocalDirStatusMap[tag.label] ? 'home-task-dir-status--ok' : 'home-task-dir-status--err'">
                                 <svg v-if="homeTaskLocalDirStatusMap[tag.label]" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
@@ -188,7 +188,7 @@
                             v-if="tag.type === col.key"
                             :content="tag.label"
                             placement="top"
-                            :disabled="tag.type === 'branch_name' || tag.type === 'local_dir' || tag.label.length <= HOME_TASK_CONFIG_TAG_MAX_LENGTH"
+                            :disabled="!shouldTruncateTagLabel(tag)"
                           >
                             <span class="home-task-config-tag-wrapper">
                               <el-tag
@@ -198,7 +198,7 @@
                                 :class="['home-task-config-tag', tag.type === 'branch_name' ? 'home-task-config-tag--copy' : '']"
                                 @click.stop="tag.type === 'branch_name' ? copyHomeTaskBranchName(tag.label) : navigateToDevConfig(tag)"
                               >
-                                {{ (tag.type === 'branch_name' || tag.type === 'local_dir') ? tag.label : (tag.label.length > HOME_TASK_CONFIG_TAG_MAX_LENGTH ? tag.label.slice(0, HOME_TASK_CONFIG_TAG_MAX_LENGTH) + '...' : tag.label) }}
+                                {{ shouldTruncateTagLabel(tag) ? truncateTagLabel(tag.label) : tag.label }}
                               </el-tag>
                               <span v-if="tag.type === 'local_dir' && homeTaskLocalDirStatusMap[tag.label] !== undefined" class="home-task-dir-status" :class="homeTaskLocalDirStatusMap[tag.label] ? 'home-task-dir-status--ok' : 'home-task-dir-status--err'">
                                 <svg v-if="homeTaskLocalDirStatusMap[tag.label]" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
@@ -344,6 +344,23 @@
                 inactive-text="否"
                 style="--el-switch-on-color: #3a7a3a; --el-color-primary: #3a7a3a"
               />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row v-if="homeTaskUnusedLocalDirs.length > 0" :gutter="12">
+          <el-col :span="24">
+            <el-form-item label="可用目录">
+              <div class="home-task-unused-dirs">
+                <el-tag
+                  v-for="(dir, idx) in homeTaskUnusedLocalDirs"
+                  :key="idx"
+                  class="home-task-unused-dir-tag"
+                  type="info"
+                  @click="copyUnusedLocalDir(dir)"
+                >
+                  {{ dir }}
+                </el-tag>
+              </div>
             </el-form-item>
           </el-col>
         </el-row>
@@ -510,7 +527,7 @@
                         clearable
                         style="width: 100%"
                         placeholder="留空则自动创建"
-                        :loading="homeTaskApiFolderLoading"
+                        :loading="homeTaskApiFolderLoadingMap && homeTaskApiFolderLoadingMap[cfg.collection_id]"
                         :disabled="!cfg.collection_id"
                       >
                         <el-option
@@ -627,6 +644,7 @@ const HOME_TASK_ARCHIVED_NO = 0
 const HOME_TASK_ARCHIVED_YES = 1
 const HOME_TASK_STATUS_TODO = '待开始'
 const HOME_TASK_STATUS_DEVELOPING = '开发中'
+const HOME_TASK_STATUS_DEV_COMPLETED = '开发完'
 const HOME_TASK_STATUS_SELF_TESTING = '自测中'
 const HOME_TASK_STATUS_SELF_TESTED = '自测完'
 const HOME_TASK_STATUS_PENDING_INTEGRATION = '待对接'
@@ -634,6 +652,8 @@ const HOME_TASK_STATUS_INTEGRATING = '对接中'
 const HOME_TASK_STATUS_TESTING = '测试中'
 const HOME_TASK_STATUS_RELEASING = '上线中'
 const HOME_TASK_STATUS_ONLINE = '已上线'
+const HOME_TASK_STATUS_PENDING_TEST = '待测试'
+const HOME_TASK_STATUS_ABANDONED = '已废弃'
 const HOME_TASK_OPERATE_SAVE = 'save'
 const HOME_TASK_OPERATE_STATUS = 'status'
 const HOME_TASK_OPERATE_ARCHIVE = 'archive'
@@ -650,7 +670,7 @@ const HOME_TASK_DAILY_REPORT_BUTTON_TEXT = 'AI 生成工作日报'
 const HOME_TASK_DAILY_REPORT_SUCCESS_MESSAGE = '工作日报任务已加入异步任务列表'
 const HOME_TASK_DAILY_REPORT_FAILED_MESSAGE = '工作日报生成失败'
 const HOME_TASK_ACTION_COMMAND_STATUS_PREFIX = 'status:'
-const HOME_TASK_CONFIG_TAG_MAX_LENGTH = 15
+const HOME_TASK_CONFIG_TAG_MAX_LENGTH = 20
 const HOME_TASK_USE_WORKFLOW_YES = 1
 const HOME_TASK_USE_WORKFLOW_NO = 0
 const HOME_TASK_WORKFLOW_NODE_KEYS = [
@@ -665,13 +685,16 @@ const HOME_TASK_WORKFLOW_NODE_KEYS = [
 const HOME_TASK_STATUS_OPTIONS = [
   HOME_TASK_STATUS_TODO,
   HOME_TASK_STATUS_DEVELOPING,
+  HOME_TASK_STATUS_DEV_COMPLETED,
   HOME_TASK_STATUS_SELF_TESTING,
   HOME_TASK_STATUS_SELF_TESTED,
   HOME_TASK_STATUS_PENDING_INTEGRATION,
   HOME_TASK_STATUS_INTEGRATING,
   HOME_TASK_STATUS_TESTING,
+  HOME_TASK_STATUS_PENDING_TEST,
   HOME_TASK_STATUS_RELEASING,
   HOME_TASK_STATUS_ONLINE,
+  HOME_TASK_STATUS_ABANDONED,
 ]
 
 function getTodayDateText() {
@@ -739,12 +762,13 @@ export default {
       homeTaskEditFeedbackDurationMs: 1000,
       homeTaskWorkflowCountMap: {},
       homeTaskLocalDirStatusMap: {},
+      homeTaskUnusedLocalDirs: [],
       homeTaskGitRepoList: [],
       homeTaskGitRepoLoading: false,
       homeTaskApiCollectionList: [],
       homeTaskApiFolderMap: {},
       homeTaskApiCollectionLoading: false,
-      homeTaskApiFolderLoading: false,
+      homeTaskApiFolderLoadingMap: {},
       homeTaskMysqlList: [],
       homeTaskMysqlLoading: false,
       homeTaskDockerList: [],
@@ -832,15 +856,18 @@ export default {
           this.homeTaskActiveList = taskList
           this.loadHomeTaskWorkflowCounts(taskList)
         }
-        // 预加载 dev_configs 中引用的 API 文件夹
+        // 预加载 dev_configs 中引用的 API 文件夹（去重）
+        const devColIds = new Set()
         for (const t of taskList) {
           if (Array.isArray(t.dev_configs)) {
             for (const cfg of t.dev_configs) {
-              if (Number(cfg.collection_id || 0) > 0) {
-                this.loadHomeTaskApiFoldersForCollection(cfg.collection_id)
-              }
+              const colId = Number(cfg.collection_id || 0)
+              if (colId > 0) devColIds.add(colId)
             }
           }
+        }
+        for (const colId of devColIds) {
+          this.loadHomeTaskApiFoldersForCollection(colId)
         }
         // 批量检查本地目录是否存在
         this.checkLocalDirExists(taskList)
@@ -905,9 +932,11 @@ export default {
     loadHomeTaskApiFoldersForCollection(collectionId) {
       if (!collectionId) return
       if (this.homeTaskApiFolderMap[collectionId]) return
-      this.homeTaskApiFolderLoading = true
+      if (this.homeTaskApiFolderLoadingMap && this.homeTaskApiFolderLoadingMap[collectionId]) return
+      if (!this.homeTaskApiFolderLoadingMap) this.homeTaskApiFolderLoadingMap = {}
+      this.homeTaskApiFolderLoadingMap[collectionId] = true
       apiManagement.CollectionFoldersBasic({ collection_id: collectionId }, (response) => {
-        this.homeTaskApiFolderLoading = false
+        this.homeTaskApiFolderLoadingMap[collectionId] = false
         if (!(response && response.ErrCode === 0)) return
         const list = Array.isArray(response.Data?.list) ? response.Data.list : []
         this.homeTaskApiFolderMap = { ...this.homeTaskApiFolderMap, [collectionId]: list }
@@ -1046,6 +1075,7 @@ export default {
       this.loadHomeTaskMysqlList()
       this.loadHomeTaskDockerList()
       this.loadHomeTaskSmartLinkList()
+      this.loadHomeTaskUnusedLocalDirs(0)
       this.homeTaskDialogVisible = true
     },
     openHomeTaskSettingsPage() {
@@ -1144,11 +1174,14 @@ export default {
       this.loadHomeTaskMysqlList()
       this.loadHomeTaskDockerList()
       this.loadHomeTaskSmartLinkList()
+      const devColIds = new Set()
       for (const cfg of devConfigs) {
-        if (cfg.collection_id > 0) {
-          this.loadHomeTaskApiFoldersForCollection(cfg.collection_id)
-        }
+        if (cfg.collection_id > 0) devColIds.add(cfg.collection_id)
       }
+      for (const colId of devColIds) {
+        this.loadHomeTaskApiFoldersForCollection(colId)
+      }
+      this.loadHomeTaskUnusedLocalDirs(Number(task.id || 0))
       this.homeTaskDialogVisible = true
     },
     openHomeTaskMemoryFragment(task) {
@@ -1512,7 +1545,7 @@ export default {
       return Math.floor(new Date(`${normalizedDateText}T00:00:00`).getTime() / 1000)
     },
     getHomeTaskStatusTagType(taskStatus) {
-      if (taskStatus === HOME_TASK_STATUS_DEVELOPING) {
+      if (taskStatus === HOME_TASK_STATUS_DEVELOPING || taskStatus === HOME_TASK_STATUS_DEV_COMPLETED) {
         return 'success'
       }
       if (taskStatus === HOME_TASK_STATUS_SELF_TESTING || taskStatus === HOME_TASK_STATUS_TESTING) {
@@ -1530,10 +1563,25 @@ export default {
       if (taskStatus === HOME_TASK_STATUS_ONLINE) {
         return 'info'
       }
+      if (taskStatus === HOME_TASK_STATUS_PENDING_TEST) {
+        return 'info'
+      }
+      if (taskStatus === HOME_TASK_STATUS_ABANDONED) {
+        return 'danger'
+      }
       return ''
     },
     getHomeTaskActionButtonVariant(taskStatus) {
-      return 'primary'
+      return 'warning'
+    },
+    loadHomeTaskUnusedLocalDirs(excludeTaskId) {
+      homeTaskApi.HomeTaskUnusedLocalDirs(excludeTaskId || 0, (response) => {
+        if (response && response.ErrCode === 0 && response.Data) {
+          this.homeTaskUnusedLocalDirs = Array.isArray(response.Data.dirs) ? response.Data.dirs : []
+        } else {
+          this.homeTaskUnusedLocalDirs = []
+        }
+      })
     },
     // 批量检查任务列表中的本地目录是否存在
     checkLocalDirExists(taskList) {
@@ -1610,10 +1658,29 @@ export default {
         this.homeTaskWorkflowCountMap = newMap
       })
     },
+    shouldTruncateTagLabel(tag) {
+      // 接口集合(api)和分支名(branch_name)需要截断显示
+      if (tag.type === 'api' || tag.type === 'branch_name') {
+        return tag.label.length > HOME_TASK_CONFIG_TAG_MAX_LENGTH
+      }
+      // 其他类型保持原有逻辑：除 local_dir, parent_branch 外截断
+      if (tag.type === 'local_dir' || tag.type === 'parent_branch') {
+        return false
+      }
+      return tag.label.length > HOME_TASK_CONFIG_TAG_MAX_LENGTH
+    },
+    truncateTagLabel(label) {
+      return label.slice(0, HOME_TASK_CONFIG_TAG_MAX_LENGTH) + '...'
+    },
     getHomeTaskWorkflowCountText(task) {
       const taskId = Number(task?.id || 0)
       const display = this.homeTaskWorkflowCountMap[taskId]
       return display || ''
+    },
+    copyUnusedLocalDir(dir) {
+      navigator.clipboard.writeText(dir).then(() => {
+        this.$message.success('已复制')
+      })
     },
   },
   components: {

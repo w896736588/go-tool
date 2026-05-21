@@ -537,3 +537,17 @@ func HomeTaskZcodeSessionIdAppend(c *gin.Context) {
 	}
 	gsgin.GinResponseSuccess(c, `已追加`, nil)
 }
+
+// HomeTaskUnusedLocalDirs 查询最近50个历史任务中未被活跃任务占用的本地目录。
+func HomeTaskUnusedLocalDirs(c *gin.Context) {
+	request := _struct.HomeTaskUnusedLocalDirsRequest{}
+	_ = gsgin.GinPostBody(c, &request)
+	dirs, err := common.DbMain.HomeTaskUnusedLocalDirs(request.ExcludeTaskID)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`dirs`: dirs,
+	})
+}

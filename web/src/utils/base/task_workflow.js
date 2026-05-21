@@ -63,12 +63,22 @@ function TaskWorkflowIssueFixResolve(workflowId, callBack) {
 }
 
 // TaskWorkflowChatSend 发送对话到 claude code。
-function TaskWorkflowChatSend(workflowId, prompt, modelId, localDir, callBack) {
+function TaskWorkflowChatSend(workflowId, prompt, promptType, localDir, cliType, agentCliId, thinkingIntensity, callBack) {
   base.BasePost('/api/task/workflow/chat/send', {
     workflow_id: workflowId,
     prompt: prompt,
-    model_id: modelId,
+    prompt_type: promptType || '',
     local_dir: localDir,
+    cli_type: cliType || 'claude',
+    agent_cli_id: agentCliId || 0,
+    thinking_intensity: thinkingIntensity || '高',
+  }, callBack)
+}
+
+// TaskWorkflowChatStop 停止运行中的对话。
+function TaskWorkflowChatStop(chatId, callBack) {
+  base.BasePost('/api/task/workflow/chat/stop', {
+    chat_id: chatId,
   }, callBack)
 }
 
@@ -118,6 +128,14 @@ function TaskWorkflowZcodeDelete(callBack) {
   base.BasePost('/api/task/workflow/zcode/delete', {}, callBack)
 }
 
+// TaskWorkflowChatListByPromptType 按提示词类型查询对话列表。
+function TaskWorkflowChatListByPromptType(workflowId, promptType, callBack) {
+  base.BasePost('/api/task/workflow/chat/list-by-prompt-type', {
+    workflow_id: workflowId,
+    prompt_type: promptType,
+  }, callBack)
+}
+
 export default {
   TaskWorkflowBatchNodeStatus,
   TaskWorkflowCreateOrGet,
@@ -129,6 +147,7 @@ export default {
   TaskWorkflowNodeStatusUpdate,
   TaskWorkflowIssueFixResolve,
   TaskWorkflowChatSend,
+  TaskWorkflowChatStop,
   TaskWorkflowChatContinue,
   TaskWorkflowChatList,
   TaskWorkflowChatDetail,
@@ -136,4 +155,5 @@ export default {
   TaskWorkflowZcodeSave,
   TaskWorkflowZcodeGet,
   TaskWorkflowZcodeDelete,
+  TaskWorkflowChatListByPromptType,
 }
