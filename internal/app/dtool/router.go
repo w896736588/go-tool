@@ -51,6 +51,7 @@ func InitRouter(tGin *p_gin.Gin) {
 	apiUse(tGin)
 	mcp(tGin)
 	agentCli(tGin)
+	webhookConfig(tGin)
 	tGin.GinPost(`/test/multiformdata`, func(c *gin.Context) {
 		// 解析 multipart/form-data
 		form, err := c.MultipartForm()
@@ -571,4 +572,11 @@ func agentCli(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/AgentCliWriteMcpServers`, controller.AgentCliWriteMcpServers)
 	tGin.GinPost(`/api/AgentCliWriteDeepSeek`, controller.AgentCliWriteDeepSeek)
 	tGin.GinPost(`/api/AgentCliToggleClaudeMem`, controller.AgentCliToggleClaudeMem)
+}
+
+// webhookConfig 路由
+func webhookConfig(tGin *p_gin.Gin) {
+	tGin.GinPost(`/api/WebhookConfigList`, controller.WebhookConfigList)
+	tGin.GinPost(`/api/WebhookConfigSave`, controller.WebhookConfigSave)
+	tGin.GinPost(`/api/WebhookConfigDelete`, controller.WebhookConfigDelete)
 }

@@ -4,6 +4,7 @@
       <span class="agent-cli-page__title">Agent Cli 管理</span>
       <div class="agent-cli-page__actions">
         <el-button type="primary" size="small" @click="openCreateDialog">新建</el-button>
+        <el-button type="primary" size="small" @click="webhookDialogVisible = true; loadWebhookList()">Webhook 配置</el-button>
         <el-button type="primary" size="small" @click="chromeDevtoolsDialogVisible = true">ChromeDevTools</el-button>
       </div>
     </div>
@@ -40,6 +41,24 @@
               @change="toggleClaudeMem(item)"
             />
             <span style="font-size: 12px; color: #909399; margin-left: 6px;">{{ item.claude_mem_enabled ? '已启用' : '已禁用' }}</span>
+          </div>
+          <div class="agent-cli-card__body-item agent-cli-card__body-webhook">
+            <span class="agent-cli-card__body-label">通知:</span>
+            <el-select
+              v-model="item.webhook_config_id"
+              size="small"
+              placeholder="未配置"
+              clearable
+              style="width: 160px;"
+              @change="updateWebhookConfig(item)"
+            >
+              <el-option
+                v-for="wh in webhookOptions"
+                :key="wh.id"
+                :label="wh.name"
+                :value="String(wh.id)"
+              />
+            </el-select>
           </div>
         </div>
         <div class="agent-cli-card__footer">
@@ -83,6 +102,16 @@
           <el-input v-model="form.settings_path" placeholder="请输入 settings.json 的绝对路径" />
           <div class="agent-cli-form-tip">例如: C:\Users\xxx\.claude\settings.json</div>
         </el-form-item>
+        <el-form-item label="Webhook 通知">
+          <el-select v-model="form.webhook_config_id" placeholder="不通知" clearable style="width: 100%">
+            <el-option
+              v-for="wh in webhookOptions"
+              :key="wh.id"
+              :label="wh.name"
+              :value="String(wh.id)"
+            />
+          </el-select>
+        </el-form-item>
         <el-form-item label="模型名">
           <el-input v-model="form.model_name" placeholder="deepseek-v4-pro[1m]" />
         </el-form-item>
@@ -97,6 +126,55 @@
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="saveItem">保存</el-button>
       </template>
+    </el-dialog>
+
+    <!-- Webhook 配置管理弹窗 -->
+    <el-dialog v-model="webhookDialogVisible" title="Webhook 通知配置" width="640px">
+      <div style="margin-bottom: 12px; text-align: right;">
+        <el-button type="primary" size="small" @click="openWebhookForm(null)">新增</el-button>
+      </div>
+      <el-table :data="webhookList" v-loading="webhookLoading" size="small" border>
+        <el-table-column prop="name" label="名称" min-width="100" />
+        <el-table-column prop="type" label="类型" width="90">
+          <template #default="{ row }">
+            <el-tag size="small">{{ webhookTypeLabel(row.type) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="webhook_url" label="Webhook 地址" min-width="180" show-overflow-tooltip />
+        <el-table-column label="操作" width="130" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" link type="primary" @click="openWebhookForm(row)">编辑</el-button>
+            <el-button size="small" link type="danger" @click="deleteWebhook(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <!-- 内嵌新增/编辑表单 -->
+      <div v-if="webhookFormVisible" class="webhook-form-section">
+        <div class="webhook-form-section__title">{{ webhookForm.id > 0 ? '编辑配置' : '新增配置' }}</div>
+        <el-form :model="webhookForm" label-width="100px" size="small">
+          <el-form-item label="名称">
+            <el-input v-model="webhookForm.name" placeholder="如: 前端组钉钉群" />
+          </el-form-item>
+          <el-form-item label="类型">
+            <el-select v-model="webhookForm.type" style="width: 100%">
+              <el-option label="钉钉" value="dingtalk" />
+              <el-option label="飞书" value="feishu" />
+              <el-option label="企业微信" value="wecom" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="Webhook 地址">
+            <el-input v-model="webhookForm.webhook_url" placeholder="https://oapi.dingtalk.com/robot/send?access_token=xxx" />
+          </el-form-item>
+          <el-form-item label="签名密钥">
+            <el-input v-model="webhookForm.secret" placeholder="SEC... (可选)" />
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" :loading="webhookSaving" @click="saveWebhook">保存</el-button>
+            <el-button @click="webhookFormVisible = false">取消</el-button>
+          </el-form-item>
+        </el-form>
+      </div>
     </el-dialog>
 
   </div>
@@ -119,14 +197,30 @@ export default {
         name: '',
         type: 'claude-code-cli',
         settings_path: '',
+        webhook_config_id: '',
         model_name: '',
         api_key: '',
         base_url: '',
+      },
+      // webhook 配置
+      webhookDialogVisible: false,
+      webhookLoading: false,
+      webhookList: [],
+      webhookOptions: [],
+      webhookFormVisible: false,
+      webhookSaving: false,
+      webhookForm: {
+        id: 0,
+        name: '',
+        type: 'dingtalk',
+        webhook_url: '',
+        secret: '',
       },
     }
   },
   mounted() {
     this.loadList()
+    this.loadWebhookOptions()
   },
   methods: {
     loadList() {
@@ -134,13 +228,17 @@ export default {
       agentCliApi.AgentCliList((response) => {
         this.loading = false
         if (response && response.ErrCode === 0 && response.Data) {
-          this.list = response.Data.list || []
+          const items = response.Data.list || []
+          items.forEach(item => {
+            item.webhook_config_id = item.webhook_config_id ? String(item.webhook_config_id) : ''
+          })
+          this.list = items
         }
       })
     },
     openCreateDialog() {
       this.editingId = 0
-      this.form = { name: '', type: 'claude-code-cli', settings_path: '', model_name: '', api_key: '', base_url: '' }
+      this.form = { name: '', type: 'claude-code-cli', settings_path: '', webhook_config_id: '', model_name: '', api_key: '', base_url: '' }
       this.dialogVisible = true
     },
     saveItem() {
@@ -154,6 +252,7 @@ export default {
         name: this.form.name,
         type: this.form.type,
         settings_path: this.form.settings_path.trim(),
+        webhook_config_id: parseInt(this.form.webhook_config_id) || 0,
       }
       agentCliApi.AgentCliSave(data, (response) => {
         if (response && response.ErrCode === 0) {
@@ -238,6 +337,7 @@ export default {
         name: item.name || '',
         type: item.type || 'claude-code-cli',
         settings_path: item.settings_path || '',
+        webhook_config_id: item.webhook_config_id || '',
         model_name: '',
         api_key: '',
         base_url: '',
@@ -254,6 +354,95 @@ export default {
               this.form.base_url = config.env.ANTHROPIC_BASE_URL || ''
             }
           } catch(e) {}
+        }
+      })
+    },
+    // ---- Webhook 配置相关 ----
+    loadWebhookOptions() {
+      agentCliApi.WebhookConfigList((response) => {
+        if (response && response.ErrCode === 0 && response.Data) {
+          this.webhookOptions = response.Data.list || []
+        }
+      })
+    },
+    loadWebhookList() {
+      this.webhookLoading = true
+      agentCliApi.WebhookConfigList((response) => {
+        this.webhookLoading = false
+        if (response && response.ErrCode === 0 && response.Data) {
+          this.webhookList = response.Data.list || []
+          this.webhookOptions = this.webhookList
+        }
+      })
+    },
+    webhookTypeLabel(type) {
+      const map = { dingtalk: '钉钉', feishu: '飞书', wecom: '企微' }
+      return map[type] || type
+    },
+    openWebhookForm(row) {
+      if (row) {
+        this.webhookForm = {
+          id: row.id,
+          name: row.name,
+          type: row.type,
+          webhook_url: row.webhook_url,
+          secret: row.secret,
+        }
+      } else {
+        this.webhookForm = { id: 0, name: '', type: 'dingtalk', webhook_url: '', secret: '' }
+      }
+      this.webhookFormVisible = true
+    },
+    saveWebhook() {
+      if (!this.webhookForm.name.trim()) {
+        this.$message.warning('请输入配置名称')
+        return
+      }
+      if (!this.webhookForm.webhook_url.trim()) {
+        this.$message.warning('请输入 Webhook 地址')
+        return
+      }
+      this.webhookSaving = true
+      agentCliApi.WebhookConfigSave(this.webhookForm, (response) => {
+        this.webhookSaving = false
+        if (response && response.ErrCode === 0) {
+          this.$message.success('保存成功')
+          this.webhookFormVisible = false
+          this.loadWebhookList()
+        } else {
+          this.$message.error(response?.ErrMsg || '保存失败')
+        }
+      })
+    },
+    deleteWebhook(row) {
+      this.$confirm(`确定要删除 "${row.name}" 吗？`, '确认删除', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }).then(() => {
+        agentCliApi.WebhookConfigDelete(row.id, (response) => {
+          if (response && response.ErrCode === 0) {
+            this.$message.success('删除成功')
+            this.loadWebhookList()
+          } else {
+            this.$message.error(response?.ErrMsg || '删除失败')
+          }
+        })
+      }).catch(() => {})
+    },
+    updateWebhookConfig(item) {
+      const data = {
+        id: item.id,
+        name: item.name,
+        type: item.type,
+        settings_path: item.settings_path,
+        webhook_config_id: parseInt(item.webhook_config_id) || 0,
+      }
+      agentCliApi.AgentCliSave(data, (response) => {
+        if (response && response.ErrCode === 0) {
+          this.$message.success('通知配置已更新')
+        } else {
+          this.$message.error(response?.ErrMsg || '更新失败')
         }
       })
     },

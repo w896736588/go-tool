@@ -96,3 +96,22 @@
   font-size: 12px;
   margin-top: 4px;
 }
+
+.agent-cli-card__body-webhook {
+  margin-top: 4px;
+  align-items: center;
+}
+
+.webhook-form-section {
+  margin-top: 16px;
+  padding: 16px;
+  background: #f5f7fa;
+  border-radius: 6px;
+}
+
+.webhook-form-section__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 12px;
+}

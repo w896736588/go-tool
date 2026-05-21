@@ -22,6 +22,16 @@ func AgentCliList(c *gin.Context) {
 	}
 
 	items := make([]define.AgentCliStatusItem, 0, len(rows))
+
+	// 预加载 webhook 配置名称映射
+	webhookNameMap := make(map[int]string)
+	webhookRows, _ := common.DbMain.Client.QueryBySql(
+		`SELECT id, name FROM tbl_webhook_config`,
+	).All()
+	for _, wr := range webhookRows {
+		webhookNameMap[cast.ToInt(wr["id"])] = cast.ToString(wr["name"])
+	}
+
 	for _, row := range rows {
 		item := define.AgentCliStatusItem{
 			AgentCliItem: define.AgentCliItem{
@@ -30,9 +40,14 @@ func AgentCliList(c *gin.Context) {
 				Type:              cast.ToString(row["type"]),
 				SettingsPath:      cast.ToString(row["settings_path"]),
 				ThinkingCollapsed: cast.ToInt(row["thinking_collapsed"]),
+				WebhookConfigId:   cast.ToInt(row["webhook_config_id"]),
 				CreatedAt:         cast.ToInt64(row["created_at"]),
 				UpdatedAt:         cast.ToInt64(row["updated_at"]),
 			},
+		}
+
+		if item.WebhookConfigId > 0 {
+			item.WebhookConfigName = webhookNameMap[item.WebhookConfigId]
 		}
 
 		exists, content, _ := business.ReadAgentCliSettings(item.SettingsPath)
@@ -67,8 +82,8 @@ func AgentCliSave(c *gin.Context) {
 
 	if req.Id > 0 {
 		_, err := common.DbMain.Client.ExecBySql(
-			`UPDATE tbl_agent_cli SET name = ?, type = ?, settings_path = ?, thinking_collapsed = ?, updated_at = ? WHERE id = ?`,
-			req.Name, req.Type, req.SettingsPath, req.ThinkingCollapsed, now, req.Id,
+			`UPDATE tbl_agent_cli SET name = ?, type = ?, settings_path = ?, thinking_collapsed = ?, webhook_config_id = ?, updated_at = ? WHERE id = ?`,
+			req.Name, req.Type, req.SettingsPath, req.ThinkingCollapsed, req.WebhookConfigId, now, req.Id,
 		).Exec()
 		if err != nil {
 			gsgin.GinResponseError(c, err.Error(), nil)
@@ -80,6 +95,7 @@ func AgentCliSave(c *gin.Context) {
 			Type:              req.Type,
 			SettingsPath:      req.SettingsPath,
 			ThinkingCollapsed: req.ThinkingCollapsed,
+			WebhookConfigId:   req.WebhookConfigId,
 			CreatedAt:         0,
 			UpdatedAt:         now,
 		}
@@ -95,8 +111,8 @@ func AgentCliSave(c *gin.Context) {
 		req.Type = define.AgentCliTypeClaudeCodeCli
 	}
 	lastId, err := common.DbMain.Client.InsertBySql(
-		`INSERT INTO tbl_agent_cli (name, type, settings_path, thinking_collapsed, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
-		name, req.Type, req.SettingsPath, req.ThinkingCollapsed, now, now,
+		`INSERT INTO tbl_agent_cli (name, type, settings_path, thinking_collapsed, webhook_config_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		name, req.Type, req.SettingsPath, req.ThinkingCollapsed, req.WebhookConfigId, now, now,
 	).Exec()
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
@@ -108,6 +124,7 @@ func AgentCliSave(c *gin.Context) {
 		Type:              req.Type,
 		SettingsPath:      req.SettingsPath,
 		ThinkingCollapsed: req.ThinkingCollapsed,
+		WebhookConfigId:   req.WebhookConfigId,
 		CreatedAt:         now,
 		UpdatedAt:         now,
 	}

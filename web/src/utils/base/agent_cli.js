@@ -35,6 +35,21 @@ function AgentCliToggleClaudeMem(data, callBack) {
   base.BasePost('/api/AgentCliToggleClaudeMem', data, callBack)
 }
 
+// WebhookConfigList 获取 Webhook 配置列表
+function WebhookConfigList(callBack) {
+  base.BasePost('/api/WebhookConfigList', {}, callBack)
+}
+
+// WebhookConfigSave 新建/编辑 Webhook 配置
+function WebhookConfigSave(data, callBack) {
+  base.BasePost('/api/WebhookConfigSave', data, callBack)
+}
+
+// WebhookConfigDelete 删除 Webhook 配置
+function WebhookConfigDelete(id, callBack) {
+  base.BasePost('/api/WebhookConfigDelete', { id: id }, callBack)
+}
+
 export default {
   AgentCliList,
   AgentCliSave,
@@ -43,4 +58,7 @@ export default {
   AgentCliWriteMcpServers,
   AgentCliWriteDeepSeek,
   AgentCliToggleClaudeMem,
+  WebhookConfigList,
+  WebhookConfigSave,
+  WebhookConfigDelete,
 }

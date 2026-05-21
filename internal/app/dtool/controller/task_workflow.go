@@ -3023,6 +3023,7 @@ func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sess
 
 	sessionExtracted := false
 	callbackCount := 0
+	var lastAssistantText string
 
 	gstool.FmtPrintlnLogTime("[chat-run] chat_id=%d 开始RunClaudeStream dir=%s model=%s", chatID, localDir, modelName)
 
@@ -3042,6 +3043,13 @@ func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sess
 			}
 		}
 		sendLine(rawJSON)
+
+		// 跟踪最后一条 assistant 消息的文本内容
+		if msg.Type == `assistant` {
+			if text := extractAssistantText(msg.Data); text != "" {
+				lastAssistantText = text
+			}
+		}
 
 		if !sessionExtracted && !isResume && msg.Type == `system` && msg.Subtype == `init` {
 			if sid, ok := msg.Data[`session_id`].(string); ok && sid != `` {
@@ -3072,6 +3080,8 @@ func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sess
 	sendLine(fmt.Sprintf(`{"type":"chat","subtype":"completed","chat_id":%d}`, chatID))
 	// 通知工作流页面刷新 chat 状态计数（执行历史按钮动画和状态数量）
 	taskWorkflowBroadcastChatStatus(chatID)
+	// 异步发送 webhook 通知
+	go taskWorkflowSendWebhookNotify(chatID, lastAssistantText)
 }
 
 // taskWorkflowAutoCompleteNode 自动将指定节点标记为已完成。
@@ -3120,5 +3130,85 @@ func taskWorkflowBroadcastChatStatus(chatID int64) {
 			continue
 		}
 		_ = sse.SendToChan(msg)
+	}
+}
+
+// extractAssistantText 从 assistant 消息中提取文本内容。
+func extractAssistantText(data map[string]any) string {
+	contentRaw, ok := data["content"]
+	if !ok {
+		return ""
+	}
+	contentArr, ok := contentRaw.([]any)
+	if !ok {
+		return ""
+	}
+	var texts []string
+	for _, block := range contentArr {
+		blockMap, ok := block.(map[string]any)
+		if !ok {
+			continue
+		}
+		if cast.ToString(blockMap["type"]) == "text" {
+			if t := cast.ToString(blockMap["text"]); t != "" {
+				texts = append(texts, t)
+			}
+		}
+	}
+	return strings.Join(texts, "\n")
+}
+
+// taskWorkflowSendWebhookNotify 根据 chat 关联的 agent_cli webhook 配置发送通知。
+func taskWorkflowSendWebhookNotify(chatID int64, lastText string) {
+	chatInfo, err := common.DbMain.TaskWorkflowChatInfo(chatID)
+	if err != nil || len(chatInfo) == 0 {
+		return
+	}
+	agentCliId := cast.ToInt(chatInfo["agent_cli_id"])
+	if agentCliId <= 0 {
+		return
+	}
+	config := business.GetWebhookConfigByAgentCliId(agentCliId)
+	if config == nil {
+		return
+	}
+
+	// 截取最后消息的前 500 字符
+	const maxLen = 500
+	msg := lastText
+	if len([]rune(msg)) > maxLen {
+		msg = string([]rune(msg)[:maxLen]) + "..."
+	}
+	if msg == "" {
+		msg = "(无文本内容)"
+	}
+
+	agentName := "Agent CLI"
+	cliRow, _ := common.DbMain.Client.QueryBySql(`SELECT name FROM tbl_agent_cli WHERE id = ?`, agentCliId).One()
+	if len(cliRow) > 0 && cast.ToString(cliRow["name"]) != "" {
+		agentName = cast.ToString(cliRow["name"])
+	}
+
+	// 获取关联的工作流任务名称
+	taskName := ""
+	workflowID := cast.ToInt(chatInfo["workflow_id"])
+	if workflowID > 0 {
+		wfRow, _ := common.DbMain.Client.QueryBySql(`SELECT home_task_id FROM tbl_task_workflow WHERE id = ?`, workflowID).One()
+		if homeTaskId := cast.ToInt(wfRow["home_task_id"]); homeTaskId > 0 {
+			htRow, _ := common.DbMain.Client.QueryBySql(`SELECT name FROM tbl_home_task WHERE id = ?`, homeTaskId).One()
+			taskName = cast.ToString(htRow["name"])
+		}
+	}
+
+	header := fmt.Sprintf("[%s] 对话 #%d 已结束", agentName, chatID)
+	if taskName != "" {
+		header = fmt.Sprintf("[%s] %s - 对话 #%d 已结束", agentName, taskName, chatID)
+	}
+	content := fmt.Sprintf("%s\n%s", header, msg)
+
+	if err := business.SendWebhookNotify(config, content); err != nil {
+		gstool.FmtPrintlnLogTime("[webhook-notify] chat_id=%d 发送失败: %v", chatID, err)
+	} else {
+		gstool.FmtPrintlnLogTime("[webhook-notify] chat_id=%d 发送成功", chatID)
 	}
 }

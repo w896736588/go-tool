@@ -12,6 +12,7 @@ type AgentCliItem struct {
 	Type              string `json:"type"`
 	SettingsPath      string `json:"settings_path"`
 	ThinkingCollapsed int    `json:"thinking_collapsed"`
+	WebhookConfigId   int    `json:"webhook_config_id"`
 	CreatedAt         int64  `json:"created_at"`
 	UpdatedAt         int64  `json:"updated_at"`
 }
@@ -23,6 +24,7 @@ type AgentCliSaveRequest struct {
 	Type              string `json:"type,omitempty"`
 	SettingsPath      string `json:"settings_path,omitempty"`
 	ThinkingCollapsed int    `json:"thinking_collapsed,omitempty"`
+	WebhookConfigId   int    `json:"webhook_config_id,omitempty"`
 }
 
 // AgentCliDeleteRequest 删除请求
@@ -85,10 +87,11 @@ var ThinkingIntensityEffortMap = map[string]string{
 // AgentCliStatusItem 列表带状态
 type AgentCliStatusItem struct {
 	AgentCliItem
-	SettingsExists   bool   `json:"settings_exists"`
-	CurrentModel     string `json:"current_model"`
-	McpServerCount   int    `json:"mcp_server_count"`
-	ClaudeMemEnabled bool   `json:"claude_mem_enabled"`
+	SettingsExists    bool   `json:"settings_exists"`
+	CurrentModel      string `json:"current_model"`
+	McpServerCount    int    `json:"mcp_server_count"`
+	ClaudeMemEnabled  bool   `json:"claude_mem_enabled"`
+	WebhookConfigName string `json:"webhook_config_name"`
 }
 
 // AgentCliToggleClaudeMemRequest 切换 claude-mem 启停请求
