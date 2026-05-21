@@ -276,6 +276,7 @@ func setRouter(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/Set/PromptChangeLogList`, controller.SetPromptChangeLogList)
 	tGin.GinPost(`/api/Set/LocalDirList`, controller.SetLocalDirList)
 	tGin.GinPost(`/api/Set/LocalDirBatchCheck`, controller.SetLocalDirBatchCheck)
+	tGin.GinPost(`/api/Set/LocalBranchBatchCheck`, controller.SetLocalBranchBatchCheck)
 	tGin.GinPost(`/api/Set/OpenLocalDir`, controller.SetOpenLocalDir)
 }
 

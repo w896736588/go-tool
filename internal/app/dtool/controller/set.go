@@ -1618,7 +1618,7 @@ var promptConfigKeys = map[string]string{
 	define.HomeTaskConfigPromptPlainTextReq: `纯文本TAPD需求提示词`,
 	define.HomeTaskConfigPromptBrowserTest:  `需求核对浏览器测试提示词`,
 	define.HomeTaskConfigPromptCodeReview:   `代码检查提示词`,
-	define.HomeTaskConfigPromptIssueFix:    `问题修改提示词`,
+	define.HomeTaskConfigPromptIssueFix:     `问题修改提示词`,
 	define.HomeTaskConfigDevEnvironment:     `开发环境`,
 	define.HomeTaskConfigBranchNamePrompt:   `分支名生成提示词`,
 }
@@ -1956,4 +1956,62 @@ func SetPromptChangeLogList(c *gin.Context) {
 		list[i][`create_time_desc`] = gstool.TimeUnixToString(time.Unix(cast.ToInt64(list[i][`create_time`]), 0), `Y-m-d H:i:s`)
 	}
 	gsgin.GinResponseSuccess(c, ``, list)
+}
+
+// localBranchBatchCheckKeySep 是 SetLocalBranchBatchCheck 返回结果中 key 的分隔符（local_dir|branch_name）。
+const localBranchBatchCheckKeySep = `|`
+
+// SetLocalBranchBatchCheck 批量检查本地目录当前 Git 分支是否与期望分支匹配。
+// 入参: { items: [{ local_dir: "C:\\...", branch_name: "feature_xxx" }] }
+// 出参: map[string]object，key 为 "local_dir|branch_name"，value 含 current_branch / expected_branch / matched。
+func SetLocalBranchBatchCheck(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	itemsRaw, _ := dataMap[`items`].([]any)
+	result := make(map[string]map[string]any, len(itemsRaw))
+	for _, raw := range itemsRaw {
+		item, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		localDir := strings.TrimSpace(cast.ToString(item[`local_dir`]))
+		branchName := strings.TrimSpace(cast.ToString(item[`branch_name`]))
+		if localDir == `` || branchName == `` {
+			continue
+		}
+		key := localDir + localBranchBatchCheckKeySep + branchName
+		if _, exists := result[key]; exists {
+			continue
+		}
+		// 检查目录是否存在
+		info, statErr := os.Stat(localDir)
+		if statErr != nil || !info.IsDir() {
+			result[key] = map[string]any{
+				`current_branch`:  ``,
+				`expected_branch`: branchName,
+				`matched`:         false,
+				`error`:           `目录不存在`,
+			}
+			continue
+		}
+		// 执行 git rev-parse --abbrev-ref HEAD 获取当前分支
+		cmd := exec.Command(`git`, `-C`, localDir, `rev-parse`, `--abbrev-ref`, `HEAD`)
+		output, runErr := cmd.Output()
+		if runErr != nil {
+			result[key] = map[string]any{
+				`current_branch`:  ``,
+				`expected_branch`: branchName,
+				`matched`:         false,
+				`error`:           `获取分支失败`,
+			}
+			continue
+		}
+		currentBranch := strings.TrimSpace(string(output))
+		result[key] = map[string]any{
+			`current_branch`:  currentBranch,
+			`expected_branch`: branchName,
+			`matched`:         currentBranch == branchName,
+		}
+	}
+	gsgin.GinResponseSuccess(c, ``, result)
 }

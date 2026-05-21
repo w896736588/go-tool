@@ -58,9 +58,9 @@
               <span class="task-workflow-header__dev-sep">|</span>
               <span class="task-workflow-header__dev-item">父分支: {{ cfg.parent_branch || '-' }}</span>
               <span class="task-workflow-header__dev-sep">|</span>
-              <span class="task-workflow-header__dev-item">分支名: <span class="task-workflow-header__branch" @click="copyText(cfg.branch_name, '分支名已复制')" :title="cfg.branch_name">{{ truncateWorkflowLabel(cfg.branch_name || '-') }}</span></span>
+              <span class="task-workflow-header__dev-item">分支名: <span class="task-workflow-header__branch" @click="copyText(cfg.branch_name, '分支名已复制')" :title="cfg.branch_name">{{ truncateWorkflowLabel(cfg.branch_name || '-') }}</span><el-tooltip v-if="cfg.local_dir && cfg.branch_name && branchStatusMap[cfg.local_dir + '|' + cfg.branch_name]" :content="branchStatusMap[cfg.local_dir + '|' + cfg.branch_name].matched ? '分支匹配' : '当前分支: ' + (branchStatusMap[cfg.local_dir + '|' + cfg.branch_name].current_branch || '未知')" placement="top"><span style="display: inline-flex; align-items: center; vertical-align: middle; margin-left: 4px;" :style="{ color: branchStatusMap[cfg.local_dir + '|' + cfg.branch_name].matched ? '#4caf50' : '#e53935' }"><svg v-if="branchStatusMap[cfg.local_dir + '|' + cfg.branch_name].matched" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><svg v-else viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span></el-tooltip></span>
               <span class="task-workflow-header__dev-sep">|</span>
-              <span class="task-workflow-header__dev-item">本地目录: {{ cfg.local_dir || '-' }}</span>
+              <span class="task-workflow-header__dev-item">本地目录: {{ cfg.local_dir || '-' }}<el-tooltip v-if="cfg.local_dir && localDirStatusMap[cfg.local_dir] !== undefined" :content="localDirStatusMap[cfg.local_dir] ? '目录存在' : '目录不存在'" placement="top"><span style="display: inline-flex; align-items: center; vertical-align: middle; margin-left: 4px;" :style="{ color: localDirStatusMap[cfg.local_dir] ? '#4caf50' : '#e53935' }"><svg v-if="localDirStatusMap[cfg.local_dir]" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><svg v-else viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span></el-tooltip></span>
             </div>
           </div>
         </div>
@@ -1285,6 +1285,9 @@ export default {
       apiDevDialogVisible: false,
       apiDevDialogUrl: '',
       apiDevDialogTitle: '',
+      // 本地目录与分支状态检测
+      localDirStatusMap: {},
+      branchStatusMap: {},
     }
   },
   computed: {
@@ -1443,6 +1446,8 @@ export default {
           return
         }
         this.applyWorkflowPayload(response.Data)
+        this.checkWorkflowLocalDirExists()
+        this.checkWorkflowBranchStatus()
         this.activeNode = this.restoreActiveNodeCache() || this.firstRunningNodeKey
         this.loadRequirementFragment(() => {
           this.loading = false
@@ -2247,6 +2252,13 @@ export default {
         this.$helperNotify.warning('请选择 CLI 实例')
         return
       }
+      // 执行前检查分支是否匹配
+      this.confirmBranchBeforeExec().then((confirmed) => {
+        if (!confirmed) return
+        this._doExecPromptToClaude()
+      })
+    },
+    _doExecPromptToClaude() {
       // 记录本次选择到缓存
       this.savePromptExecCache(this.promptExecPromptType)
       // 获取第一个可用目录
@@ -2703,6 +2715,77 @@ export default {
         thinkingIntensity: this.promptExecThinkingIntensity,
       }
       localStorage.setItem(this.getPromptExecCacheKey(promptType), JSON.stringify(data))
+    },
+    // 批量检查工作流页面中本地目录是否存在
+    checkWorkflowLocalDirExists() {
+      const configs = this.parsedTaskDevConfigs
+      const paths = []
+      for (const cfg of configs) {
+        const dir = String(cfg.local_dir || '').trim()
+        if (dir && !paths.includes(dir)) {
+          paths.push(dir)
+        }
+      }
+      if (paths.length === 0) return
+      homeTaskApi.LocalDirBatchCheck(paths, (response) => {
+        if (response && response.ErrCode === 0 && response.Data) {
+          this.localDirStatusMap = { ...this.localDirStatusMap, ...response.Data }
+        }
+      })
+    },
+    // 批量检查工作流页面中本地目录的当前 Git 分支是否与配置的分支名匹配
+    checkWorkflowBranchStatus() {
+      const configs = this.parsedTaskDevConfigs
+      const items = []
+      const seen = new Set()
+      for (const cfg of configs) {
+        const dir = String(cfg.local_dir || '').trim()
+        const branch = String(cfg.branch_name || '').trim()
+        if (!dir || !branch) continue
+        const key = dir + '|' + branch
+        if (seen.has(key)) continue
+        seen.add(key)
+        items.push({ local_dir: dir, branch_name: branch })
+      }
+      if (items.length === 0) return
+      homeTaskApi.LocalBranchBatchCheck(items, (response) => {
+        if (response && response.ErrCode === 0 && response.Data) {
+          this.branchStatusMap = { ...this.branchStatusMap, ...response.Data }
+        }
+      })
+    },
+    // 检查所有 dev_config 的分支是否匹配，返回不匹配的列表
+    getMismatchedBranches() {
+      const mismatched = []
+      for (const cfg of this.parsedTaskDevConfigs) {
+        const dir = String(cfg.local_dir || '').trim()
+        const branch = String(cfg.branch_name || '').trim()
+        if (!dir || !branch) continue
+        const key = dir + '|' + branch
+        const status = this.branchStatusMap[key]
+        if (status && !status.matched) {
+          mismatched.push({
+            local_dir: dir,
+            expected_branch: branch,
+            current_branch: status.current_branch || '未知',
+          })
+        }
+      }
+      return mismatched
+    },
+    // 执行前检查分支是否匹配，不匹配时弹出确认框，返回 Promise<boolean>
+    confirmBranchBeforeExec() {
+      const mismatched = this.getMismatchedBranches()
+      if (mismatched.length === 0) {
+        return Promise.resolve(true)
+      }
+      const lines = mismatched.map(m => `${m.local_dir}\n  期望分支: ${m.expected_branch}\n  当前分支: ${m.current_branch}`)
+      const msg = '以下目录的分支与配置不一致：\n\n' + lines.join('\n\n') + '\n\n是否继续执行？'
+      return this.$confirm(msg, '分支不匹配警告', {
+        confirmButtonText: '继续执行',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }).then(() => true).catch(() => false)
     },
   },
 }
