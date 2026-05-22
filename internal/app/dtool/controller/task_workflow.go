@@ -2574,18 +2574,25 @@ func TaskWorkflowChatList(c *gin.Context) {
 		return
 	}
 	type chatItem struct {
-		ID         int64  `json:"id"`
-		SessionID  string `json:"session_id"`
-		Prompt     string `json:"prompt"`
-		PromptType string `json:"prompt_type"`
-		AgentCliId int    `json:"agent_cli_id"`
-		LocalDir   string `json:"local_dir"`
-		Status     string `json:"status"`
-		CreatedAt  string `json:"created_at"`
-		DurationMs int64  `json:"duration_ms"`
-		LineCount  int    `json:"line_count"`
+		ID           int64  `json:"id"`
+		SessionID    string `json:"session_id"`
+		Prompt       string `json:"prompt"`
+		PromptType   string `json:"prompt_type"`
+		AgentCliId   int    `json:"agent_cli_id"`
+		AgentCliName string `json:"agent_cli_name"`
+		LocalDir     string `json:"local_dir"`
+		Status       string `json:"status"`
+		CreatedAt    string `json:"created_at"`
+		DurationMs   int64  `json:"duration_ms"`
+		LineCount    int    `json:"line_count"`
 	}
 	const timeLayout = `2006-01-02 15:04:05`
+	// 预加载 Agent CLI id→name 映射
+	cliNameMap := make(map[int]string)
+	cliRows, _ := common.DbMain.Client.QueryBySql(`SELECT id, name FROM tbl_agent_cli`).All()
+	for _, cr := range cliRows {
+		cliNameMap[cast.ToInt(cr[`id`])] = cast.ToString(cr[`name`])
+	}
 	list := make([]chatItem, 0, len(rows))
 	for _, row := range rows {
 		status := cast.ToString(row[`status`])
@@ -2606,16 +2613,17 @@ func TaskWorkflowChatList(c *gin.Context) {
 			lineCount = len(strings.Split(rawOutput, "\n"))
 		}
 		list = append(list, chatItem{
-			ID:         cast.ToInt64(row[`id`]),
-			SessionID:  cast.ToString(row[`session_id`]),
-			Prompt:     cast.ToString(row[`prompt`]),
-			PromptType: cast.ToString(row[`prompt_type`]),
-			AgentCliId: cast.ToInt(row[`agent_cli_id`]),
-			LocalDir:   cast.ToString(row[`local_dir`]),
-			Status:     status,
-			CreatedAt:  cast.ToString(row[`created_at`]),
-			DurationMs: durationMs,
-			LineCount:  lineCount,
+			ID:           cast.ToInt64(row[`id`]),
+			SessionID:    cast.ToString(row[`session_id`]),
+			Prompt:       cast.ToString(row[`prompt`]),
+			PromptType:   cast.ToString(row[`prompt_type`]),
+			AgentCliId:   cast.ToInt(row[`agent_cli_id`]),
+			AgentCliName: cliNameMap[cast.ToInt(row[`agent_cli_id`])],
+			LocalDir:     cast.ToString(row[`local_dir`]),
+			Status:       status,
+			CreatedAt:    cast.ToString(row[`created_at`]),
+			DurationMs:   durationMs,
+			LineCount:    lineCount,
 		})
 	}
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
@@ -2751,18 +2759,25 @@ func TaskWorkflowChatListByPromptType(c *gin.Context) {
 		return
 	}
 	type chatItem struct {
-		ID         int64  `json:"id"`
-		SessionID  string `json:"session_id"`
-		Prompt     string `json:"prompt"`
-		AgentCliId int    `json:"agent_cli_id"`
-		LocalDir   string `json:"local_dir"`
-		Status     string `json:"status"`
-		CliType    string `json:"cli_type"`
-		CreatedAt  string `json:"created_at"`
-		DurationMs int64  `json:"duration_ms"`
-		LineCount  int    `json:"line_count"`
+		ID           int64  `json:"id"`
+		SessionID    string `json:"session_id"`
+		Prompt       string `json:"prompt"`
+		AgentCliId   int    `json:"agent_cli_id"`
+		AgentCliName string `json:"agent_cli_name"`
+		LocalDir     string `json:"local_dir"`
+		Status       string `json:"status"`
+		CliType      string `json:"cli_type"`
+		CreatedAt    string `json:"created_at"`
+		DurationMs   int64  `json:"duration_ms"`
+		LineCount    int    `json:"line_count"`
 	}
 	const timeLayout2 = `2006-01-02 15:04:05`
+	// 预加载 Agent CLI id→name 映射
+	cliNameMap2 := make(map[int]string)
+	cliRows2, _ := common.DbMain.Client.QueryBySql(`SELECT id, name FROM tbl_agent_cli`).All()
+	for _, cr := range cliRows2 {
+		cliNameMap2[cast.ToInt(cr[`id`])] = cast.ToString(cr[`name`])
+	}
 	list := make([]chatItem, 0, len(rows))
 	for _, row := range rows {
 		status := cast.ToString(row[`status`])
@@ -2783,16 +2798,17 @@ func TaskWorkflowChatListByPromptType(c *gin.Context) {
 			lineCount = len(strings.Split(rawOutput, "\n"))
 		}
 		list = append(list, chatItem{
-			ID:         cast.ToInt64(row[`id`]),
-			SessionID:  cast.ToString(row[`session_id`]),
-			Prompt:     cast.ToString(row[`prompt`]),
-			AgentCliId: cast.ToInt(row[`agent_cli_id`]),
-			LocalDir:   cast.ToString(row[`local_dir`]),
-			Status:     status,
-			CliType:    cast.ToString(row[`cli_type`]),
-			CreatedAt:  cast.ToString(row[`created_at`]),
-			DurationMs: durationMs,
-			LineCount:  lineCount,
+			ID:           cast.ToInt64(row[`id`]),
+			SessionID:    cast.ToString(row[`session_id`]),
+			Prompt:       cast.ToString(row[`prompt`]),
+			AgentCliId:   cast.ToInt(row[`agent_cli_id`]),
+			AgentCliName: cliNameMap2[cast.ToInt(row[`agent_cli_id`])],
+			LocalDir:     cast.ToString(row[`local_dir`]),
+			Status:       status,
+			CliType:      cast.ToString(row[`cli_type`]),
+			CreatedAt:    cast.ToString(row[`created_at`]),
+			DurationMs:   durationMs,
+			LineCount:    lineCount,
 		})
 	}
 	gsgin.GinResponseSuccess(c, ``, map[string]any{

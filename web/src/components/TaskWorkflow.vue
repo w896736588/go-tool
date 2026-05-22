@@ -799,7 +799,10 @@
             :class="['chat-list-item', { 'chat-list-item--active': promptChatDetailId === item.id }]"
             @click="onPromptChatRowClick(item)"
           >
-            <div class="chat-list-item__name" :title="item.prompt || '未命名'"><span class="chat-list-item__id">{{ item.id }}</span>{{ (item.prompt || '未命名').substring(0, 30) }}{{ (item.prompt || '').length > 30 ? '...' : '' }}</div>
+            <div class="chat-list-item__name">
+              <div class="chat-list-item__tags"><span class="chat-list-item__id">{{ item.id }}</span><span v-if="item.agent_cli_name" class="chat-list-item__agent-name">{{ item.agent_cli_name }}</span></div>
+              <div class="chat-list-item__prompt" :title="item.prompt || '未命名'">{{ (item.prompt || '未命名').substring(0, 30) }}{{ (item.prompt || '').length > 30 ? '...' : '' }}</div>
+            </div>
             <div class="chat-list-item__time">
               <span v-if="item.status === 'running' && runtimeDurationText(item)" style="color: #409eff;">{{ runtimeDurationText(item) }}</span>
               <span v-else-if="item.duration_ms > 0">{{ formatDurationDisplay(item.duration_ms) }}</span>
@@ -3726,12 +3729,40 @@ export default {
   padding-right: 14px;
 }
 
+.chat-list-item__tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.chat-list-item__prompt {
+  font-size: 13px;
+  font-weight: 400;
+  color: #606266;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .chat-list-item__id {
   display: inline-block;
   font-size: 11px;
   font-weight: 400;
   color: #909399;
   background: #f0f2f5;
+  padding: 0 6px;
+  border-radius: 8px;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+
+.chat-list-item__agent-name {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 400;
+  color: #409eff;
+  background: #ecf5ff;
   padding: 0 6px;
   border-radius: 8px;
   margin-right: 6px;
