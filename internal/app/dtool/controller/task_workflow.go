@@ -3033,9 +3033,11 @@ func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sess
 	// 推送提示词到前端展示
 	if prompt != "" {
 		promptJSON, _ := json.Marshal(map[string]string{
-			`type`:    `system`,
-			`subtype`: `command`,
-			`text`:    prompt,
+			`type`:     `system`,
+			`subtype`:  `command`,
+			`cli_type`: `claude`,
+			`cmd_line`: p_claude.BuildCommandLine(cfg),
+			`text`:     prompt,
 		})
 		sendLine(string(promptJSON))
 	}
@@ -3226,9 +3228,11 @@ func runCodexCommand(chatID int64, localDir, prompt string, isResume bool, sessi
 	// 推送提示词到前端展示（复用 Claude 的 system/command 格式，前端可统一识别）
 	if prompt != "" {
 		promptJSON, _ := json.Marshal(map[string]string{
-			`type`:    `system`,
-			`subtype`: `command`,
-			`text`:    prompt,
+			`type`:     `system`,
+			`subtype`:  `command`,
+			`cli_type`: `codex`,
+			`cmd_line`: p_codex.BuildCommandLine(cfg),
+			`text`:     prompt,
 		})
 		sendLine(string(promptJSON))
 	}

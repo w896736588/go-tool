@@ -4,6 +4,7 @@ import (
 	"dev_tool/internal/app/dtool/business"
 	"dev_tool/internal/app/dtool/common"
 	"dev_tool/internal/app/dtool/define"
+	"log"
 	"time"
 
 	"gitee.com/Sxiaobai/gs/v2/gsgin"
@@ -87,15 +88,17 @@ func AgentCliSave(c *gin.Context) {
 	}
 
 	// 根据 CLI 类型验证必填字段
+	var codexCfg *define.CodexCliConfig
 	if req.Type == define.AgentCliTypeCodexCli {
 		if req.Config == "" {
 			gsgin.GinResponseError(c, "Codex CLI 配置不能为空", nil)
 			return
 		}
 		// 验证 config JSON 中 api_key 必填
-		codexCfg, err := business.GetCodexCliConfig(req.Config)
-		if err != nil {
-			gsgin.GinResponseError(c, err.Error(), nil)
+		var cfgErr error
+		codexCfg, cfgErr = business.GetCodexCliConfig(req.Config)
+		if cfgErr != nil {
+			gsgin.GinResponseError(c, cfgErr.Error(), nil)
 			return
 		}
 		if codexCfg.ApiKey == "" {
@@ -110,6 +113,7 @@ func AgentCliSave(c *gin.Context) {
 	}
 
 	now := time.Now().Unix()
+	var savedItem define.AgentCliItem
 
 	if req.Id > 0 {
 		_, err := common.DbMain.Client.ExecBySql(
@@ -120,7 +124,7 @@ func AgentCliSave(c *gin.Context) {
 			gsgin.GinResponseError(c, err.Error(), nil)
 			return
 		}
-		savedItem := define.AgentCliItem{
+		savedItem = define.AgentCliItem{
 			Id:                req.Id,
 			Name:              req.Name,
 			Type:              req.Type,
@@ -131,40 +135,51 @@ func AgentCliSave(c *gin.Context) {
 			CreatedAt:         0,
 			UpdatedAt:         now,
 		}
-		gsgin.GinResponseSuccess(c, "", savedItem)
-		return
-	}
-
-	name := req.Name
-	if name == "" {
-		if req.Type == define.AgentCliTypeCodexCli {
-			name = "Codex CLI"
-		} else {
-			name = "Claude Code CLI"
+	} else {
+		name := req.Name
+		if name == "" {
+			if req.Type == define.AgentCliTypeCodexCli {
+				name = "Codex CLI"
+			} else {
+				name = "Claude Code CLI"
+			}
+		}
+		if req.Type == "" {
+			req.Type = define.AgentCliTypeClaudeCodeCli
+		}
+		lastId, err := common.DbMain.Client.InsertBySql(
+			`INSERT INTO tbl_agent_cli (name, type, settings_path, config, thinking_collapsed, webhook_config_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			name, req.Type, req.SettingsPath, req.Config, req.ThinkingCollapsed, req.WebhookConfigId, now, now,
+		).Exec()
+		if err != nil {
+			gsgin.GinResponseError(c, err.Error(), nil)
+			return
+		}
+		savedItem = define.AgentCliItem{
+			Id:                int(lastId),
+			Name:              name,
+			Type:              req.Type,
+			SettingsPath:      req.SettingsPath,
+			Config:            req.Config,
+			ThinkingCollapsed: req.ThinkingCollapsed,
+			WebhookConfigId:   req.WebhookConfigId,
+			CreatedAt:         now,
+			UpdatedAt:         now,
 		}
 	}
-	if req.Type == "" {
-		req.Type = define.AgentCliTypeClaudeCodeCli
+
+	// DB 保存成功后，将 Codex CLI 配置写入文件系统（config.toml + auth.json）
+	if codexCfg != nil {
+		if writeErr := business.WriteCodexConfigToToml(codexCfg); writeErr != nil {
+			log.Printf("[agent-cli] 写入 Codex config.toml 失败: %v", writeErr)
+		}
+		if codexCfg.BaseURL != "" && codexCfg.ApiKey != "" {
+			if writeErr := business.WriteCodexAuthJson(codexCfg.ApiKey); writeErr != nil {
+				log.Printf("[agent-cli] 写入 Codex auth.json 失败: %v", writeErr)
+			}
+		}
 	}
-	lastId, err := common.DbMain.Client.InsertBySql(
-		`INSERT INTO tbl_agent_cli (name, type, settings_path, config, thinking_collapsed, webhook_config_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		name, req.Type, req.SettingsPath, req.Config, req.ThinkingCollapsed, req.WebhookConfigId, now, now,
-	).Exec()
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	savedItem := define.AgentCliItem{
-		Id:                int(lastId),
-		Name:              name,
-		Type:              req.Type,
-		SettingsPath:      req.SettingsPath,
-		Config:            req.Config,
-		ThinkingCollapsed: req.ThinkingCollapsed,
-		WebhookConfigId:   req.WebhookConfigId,
-		CreatedAt:         now,
-		UpdatedAt:         now,
-	}
+
 	gsgin.GinResponseSuccess(c, "", savedItem)
 }
 

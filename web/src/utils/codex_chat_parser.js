@@ -48,7 +48,7 @@ function parseOneLine(line, messages, currentItems) {
   } else if (eventType === 'system') {
     // 后端注入的 system/command 提示词展示（runCodexCommand 推送）
     if (obj.subtype === 'command') {
-      messages.push({ type: 'system_command', text: obj.text || '', collapsed: true })
+      messages.push({ type: 'system_command', text: obj.text || '', cliType: obj.cli_type || '', cmdLine: obj.cmd_line || '', collapsed: true })
     } else {
       messages.push({ type: 'system', text: JSON.stringify(obj) })
     }
@@ -205,10 +205,59 @@ function handleItemEvent(eventType, obj, messages, currentItems) {
       } else if (existingMsg.content && existingMsg.content.length > 0) {
         existingMsg.content[0]._codexStatus = item.status || existingMsg.content[0]._codexStatus
       }
+    } else if (!tracked) {
+      // 兜底路径：未收到 item.started，从 item.updated 创建进行中的消息
+      if (itemType === 'agent_message') {
+        const msg = {
+          type: 'assistant',
+          role: 'assistant',
+          model: '',
+          content: [{ type: 'text', text: item.text || '' }],
+          thinking: '',
+          _codexItemId: itemId,
+        }
+        const newTracked = { itemId, itemType, data: item, msgIndex: messages.length }
+        messages.push(msg)
+        if (itemId) currentItems.set(itemId, newTracked)
+      } else if (itemType === 'reasoning') {
+        const msg = {
+          type: 'assistant',
+          role: 'assistant',
+          model: '',
+          content: [],
+          thinking: item.text || item.summary || '',
+          _thinkingTiming: { startMs: Date.now(), durationMs: 0 },
+          _thinkingCollapsed: false,
+          _codexItemId: itemId,
+        }
+        const newTracked = { itemId, itemType, data: item, msgIndex: messages.length }
+        messages.push(msg)
+        if (itemId) currentItems.set(itemId, newTracked)
+      } else if (itemType === 'command_execution') {
+        const msg = {
+          type: 'assistant',
+          role: 'assistant',
+          model: '',
+          content: [{
+            type: 'tool_use',
+            name: 'Bash',
+            id: itemId,
+            input: JSON.stringify({ command: item.command || '' }, null, 2),
+            displayInput: item.command || '',
+            _codexStatus: item.status || 'in_progress',
+          }],
+          thinking: '',
+          _codexItemId: itemId,
+        }
+        const newTracked = { itemId, itemType, data: item, msgIndex: messages.length }
+        messages.push(msg)
+        if (itemId) currentItems.set(itemId, newTracked)
+      }
     }
   } else if (eventType === 'item.completed') {
     const tracked = itemId ? currentItems.get(itemId) : null
     if (tracked && tracked.msgIndex !== undefined && tracked.msgIndex < messages.length) {
+      // 正常路径：已收到 item.started，更新已有消息
       const existingMsg = messages[tracked.msgIndex]
       if (itemType === 'agent_message' && existingMsg.content && existingMsg.content.length > 0) {
         existingMsg.content[0].text = item.text || existingMsg.content[0].text
@@ -236,6 +285,122 @@ function handleItemEvent(eventType, obj, messages, currentItems) {
         existingMsg.status = 'completed'
       } else if (existingMsg.content && existingMsg.content.length > 0) {
         existingMsg.content[0]._codexStatus = 'completed'
+      }
+    } else {
+      // 兜底路径：未收到 item.started，直接从 item.completed 创建完整消息
+      // 典型场景：历史数据加载、消息流丢失、或 Codex CLI 仅输出 completed 事件
+      if (itemType === 'agent_message') {
+        const msg = {
+          type: 'assistant',
+          role: 'assistant',
+          model: '',
+          content: [{ type: 'text', text: item.text || '' }],
+          thinking: '',
+          _codexItemId: itemId,
+        }
+        messages.push(msg)
+      } else if (itemType === 'reasoning') {
+        const msg = {
+          type: 'assistant',
+          role: 'assistant',
+          model: '',
+          content: [],
+          thinking: item.text || item.summary || '',
+          _thinkingTiming: { startMs: 0, durationMs: 0 },
+          _thinkingCollapsed: true,
+          _codexItemId: itemId,
+        }
+        messages.push(msg)
+      } else if (itemType === 'command_execution') {
+        const resultParts = []
+        if (item.stdout) resultParts.push(item.stdout)
+        if (item.stderr) resultParts.push('[stderr] ' + item.stderr)
+        if (item.exit_code !== undefined && item.exit_code !== 0) resultParts.push('[exit_code] ' + item.exit_code)
+        const block = {
+          type: 'tool_use',
+          name: 'Bash',
+          id: itemId,
+          input: JSON.stringify({ command: item.command || '' }, null, 2),
+          displayInput: item.command || '',
+          _codexStatus: 'completed',
+        }
+        if (resultParts.length > 0) {
+          block._result = { text: resultParts.join('\n'), collapsed: true }
+        }
+        const msg = {
+          type: 'assistant',
+          role: 'assistant',
+          model: '',
+          content: [block],
+          thinking: '',
+          _codexItemId: itemId,
+        }
+        messages.push(msg)
+      } else if (itemType === 'file_change') {
+        const changes = item.changes || []
+        const changesSummary = changes.map(ch => `${ch.type || 'modify'}: ${ch.path || ''}`).join('\n')
+        const msg = {
+          type: 'assistant',
+          role: 'assistant',
+          model: '',
+          content: [{
+            type: 'tool_use',
+            name: 'FileChange',
+            id: itemId,
+            input: JSON.stringify(item, null, 2),
+            displayInput: changesSummary || '文件变更',
+            _codexStatus: 'completed',
+          }],
+          thinking: '',
+          _codexItemId: itemId,
+        }
+        messages.push(msg)
+      } else if (itemType === 'mcp_tool_call') {
+        const msg = {
+          type: 'assistant',
+          role: 'assistant',
+          model: '',
+          content: [{
+            type: 'tool_use',
+            name: `MCP:${item.server || ''}/${item.tool || ''}`,
+            id: itemId,
+            input: JSON.stringify(item.arguments || {}, null, 2),
+            displayInput: `${item.server || ''}/${item.tool || ''}`,
+            _codexStatus: 'completed',
+          }],
+          thinking: '',
+          _codexItemId: itemId,
+        }
+        messages.push(msg)
+      } else if (itemType === 'web_search') {
+        const msg = {
+          type: 'assistant',
+          role: 'assistant',
+          model: '',
+          content: [{
+            type: 'tool_use',
+            name: 'WebSearch',
+            id: itemId,
+            input: JSON.stringify(item, null, 2),
+            displayInput: item.query || '网络搜索',
+            _codexStatus: 'completed',
+          }],
+          thinking: '',
+          _codexItemId: itemId,
+        }
+        messages.push(msg)
+      } else if (itemType === 'todo_list') {
+        const msg = {
+          type: 'system_task',
+          description: '任务列表',
+          status: 'completed',
+          _codexItemId: itemId,
+          _todoItems: item.items || item.todos || [],
+        }
+        messages.push(msg)
+      } else {
+        // 未知 item 类型
+        messages.push({ type: 'raw_text', text: JSON.stringify(obj) })
       }
     }
     // 清理追踪

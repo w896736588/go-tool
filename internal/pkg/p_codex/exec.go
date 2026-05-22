@@ -190,6 +190,41 @@ func sanitizePrompt(prompt string) string {
 	return s
 }
 
+// BuildCommandLine 根据配置构建完整的 codex CLI 命令字符串（用于前端展示）。
+func BuildCommandLine(cfg RunConfig) string {
+	var sb strings.Builder
+	sb.WriteString(`codex`)
+	if cfg.SessionID != `` {
+		sb.WriteString(` exec resume `)
+		sb.WriteString(cfg.SessionID)
+		sb.WriteString(` --json`)
+		if cfg.Prompt != `` {
+			sb.WriteString(` "`)
+			sb.WriteString(sanitizePrompt(cfg.Prompt))
+			sb.WriteString(`"`)
+		}
+	} else {
+		sb.WriteString(` exec "`)
+		sb.WriteString(sanitizePrompt(cfg.Prompt))
+		sb.WriteString(`" --json`)
+		if cfg.WorkingDir != `` {
+			sb.WriteString(` --cd `)
+			sb.WriteString(cfg.WorkingDir)
+		}
+		if cfg.Model != `` {
+			sb.WriteString(` --model `)
+			sb.WriteString(cfg.Model)
+		}
+		sandboxMode := cfg.SandboxMode
+		if sandboxMode == `` {
+			sandboxMode = DefaultSandboxMode
+		}
+		sb.WriteString(` --sandbox `)
+		sb.WriteString(sandboxMode)
+	}
+	return sb.String()
+}
+
 // extractSessionIDFromLine 从 JSONL 行提取 session_id。
 // Codex 的 thread.started 事件包含 thread_id，即为 resume 使用的 session ID。
 func extractSessionIDFromLine(line string) string {

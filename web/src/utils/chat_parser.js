@@ -116,7 +116,7 @@ function parseOneLine(line, messages, currentMessageRef, toolUseMap, msgIndexOff
     if (subtype === 'init') {
       messages.push({ type: 'system_init', text: obj.is_resume ? '继续对话' : '会话已创建', model: obj.model || '', sessionId: obj.session_id || '' })
     } else if (subtype === 'command') {
-      messages.push({ type: 'system_command', text: obj.text || '', collapsed: true })
+      messages.push({ type: 'system_command', text: obj.text || '', cliType: obj.cli_type || '', cmdLine: obj.cmd_line || '', collapsed: true })
     } else if (subtype === 'hook_started' || subtype === 'hook_response') {
       messages.push({ type: 'system_hook', text: subtype === 'hook_started' ? 'Hook started: ' + (obj.hook_name || '') : 'Hook response: ' + (obj.hook_name || ''), collapsed: true })
     } else if (subtype === 'hook_progress') {

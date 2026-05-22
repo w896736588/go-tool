@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cast"
 )
@@ -248,6 +249,236 @@ func GetCodexCliStatusSummary(configJson string) (model string) {
 		return ""
 	}
 	return cfg.Model
+}
+
+// codexModelProviderKey Codex CLI config.toml 中自定义 API 提供商的 key
+const codexModelProviderKey = "dtool-api"
+
+// WriteCodexConfigToToml 将 Codex CLI 的 model 和 base_url 写入 ~/.codex/config.toml。
+// base_url 通过顶层 openai_base_url 字段配置（apikey 模式专用），
+// 同时清理残留的 model_providers.dtool-api 段（旧方案，已废弃）。
+func WriteCodexConfigToToml(cfg *define.CodexCliConfig) error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("获取用户目录失败: %w", err)
+	}
+	configPath := filepath.Join(homeDir, ".codex", "config.toml")
+
+	// 读取已有配置
+	content := ""
+	data, readErr := os.ReadFile(configPath)
+	if readErr == nil {
+		content = string(data)
+	}
+
+	// 更新 model 行
+	if cfg.Model != "" {
+		content = setTomlTopLevelField(content, "model", cfg.Model)
+	}
+
+	// 处理 openai_base_url 顶层字段（apikey 模式走此配置）
+	if cfg.BaseURL != "" {
+		content = setTomlTopLevelField(content, "openai_base_url", cfg.BaseURL)
+	} else {
+		content = removeTomlTopLevelField(content, "openai_base_url")
+	}
+
+	// 清理旧方案的 model_providers.dtool-api 段（若有）
+	content = removeTomlModelProviderSection(content, codexModelProviderKey)
+
+	// 确保目录存在
+	dir := filepath.Dir(configPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("创建配置目录失败 %s: %w", dir, err)
+	}
+
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("写入 config.toml 失败 %s: %w", configPath, err)
+	}
+	return nil
+}
+
+// WriteCodexAuthJson 将 API Key 写入 ~/.codex/auth.json 并切换认证模式为 api-key。
+// 仅在 base_url 非空时调用，因为自定义 API 端点需要 API Key 认证而非 chatgpt OAuth。
+func WriteCodexAuthJson(apiKey string) error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("获取用户目录失败: %w", err)
+	}
+	authPath := filepath.Join(homeDir, ".codex", "auth.json")
+
+	// 读取已有配置，保留原有字段（如 tokens）以便切换回 chatgpt 模式
+	authData := make(map[string]any)
+	content, readErr := os.ReadFile(authPath)
+	if readErr == nil && len(content) > 0 {
+		if err := json.Unmarshal(content, &authData); err != nil {
+			return fmt.Errorf("解析 auth.json 失败 %s: %w", authPath, err)
+		}
+	}
+
+	// 切换认证模式并写入 API Key（Codex CLI 认证模式枚举值：apikey / chatgpt / chatgptAuthTokens）
+	authData["auth_mode"] = "apikey"
+	authData["OPENAI_API_KEY"] = apiKey
+
+	// 确保目录存在
+	dir := filepath.Dir(authPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("创建配置目录失败 %s: %w", dir, err)
+	}
+
+	newContent, err := json.MarshalIndent(authData, "", "  ")
+	if err != nil {
+		return fmt.Errorf("序列化 auth.json 失败: %w", err)
+	}
+	newContent = append(newContent, '\n')
+
+	if err := os.WriteFile(authPath, newContent, 0644); err != nil {
+		return fmt.Errorf("写入 auth.json 失败 %s: %w", authPath, err)
+	}
+	return nil
+}
+
+// setTomlTopLevelField 设置 TOML 顶层字符串字段，存在则更新，不存在则在第一个 [section] 前插入
+func setTomlTopLevelField(content, key, value string) string {
+	lines := strings.Split(content, "\n")
+	found := false
+	newLine := key + ` = "` + value + `"`
+
+	for i, line := range lines {
+		// 遇到 [section] 说明已过顶层，停止扫描
+		if strings.HasPrefix(strings.TrimSpace(line), "[") {
+			break
+		}
+		trimmed := strings.TrimSpace(line)
+		afterKey := strings.TrimPrefix(trimmed, key)
+		if afterKey != trimmed {
+			afterKey = strings.TrimSpace(afterKey)
+			if strings.HasPrefix(afterKey, "=") {
+				lines[i] = newLine
+				found = true
+				break
+			}
+		}
+	}
+
+	if !found {
+		// 在第一个 [section] 之前插入
+		insertIdx := len(lines)
+		for i, line := range lines {
+			if strings.HasPrefix(strings.TrimSpace(line), "[") {
+				insertIdx = i
+				break
+			}
+		}
+		lines = append(lines[:insertIdx], append([]string{newLine}, lines[insertIdx:]...)...)
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// removeTomlTopLevelField 移除 TOML 顶层字符串字段
+func removeTomlTopLevelField(content, key string) string {
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "[") {
+			break
+		}
+		trimmed := strings.TrimSpace(line)
+		afterKey := strings.TrimPrefix(trimmed, key)
+		if afterKey != trimmed {
+			afterKey = strings.TrimSpace(afterKey)
+			if strings.HasPrefix(afterKey, "=") {
+				lines = append(lines[:i], lines[i+1:]...)
+				break
+			}
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// setTomlModelProviderSection 设置 [model_providers.xxx] 段的 base_url 字段。
+// 若段不存在则在文件末尾追加完整段。
+func setTomlModelProviderSection(content, providerKey, baseURL string) string {
+	sectionHeader := fmt.Sprintf("[model_providers.%s]", providerKey)
+	lines := strings.Split(content, "\n")
+
+	// 查找段起始位置
+	sectionStart := -1
+	for i, line := range lines {
+		if strings.TrimSpace(line) == sectionHeader {
+			sectionStart = i
+			break
+		}
+	}
+
+	if sectionStart >= 0 {
+		// 段已存在，查找并更新 base_url 行
+		baseURLLine := fmt.Sprintf(`base_url = "%s"`, baseURL)
+		found := false
+		for i := sectionStart + 1; i < len(lines); i++ {
+			trimmed := strings.TrimSpace(lines[i])
+			// 遇到下一个段，停止
+			if strings.HasPrefix(trimmed, "[") {
+				break
+			}
+			afterKey := strings.TrimPrefix(trimmed, "base_url")
+			if afterKey != trimmed {
+				afterKey = strings.TrimSpace(afterKey)
+				if strings.HasPrefix(afterKey, "=") {
+					lines[i] = baseURLLine
+					found = true
+					break
+				}
+			}
+		}
+		if !found {
+			// 在段头之后插入 base_url
+			lines = append(lines[:sectionStart+1], append([]string{baseURLLine}, lines[sectionStart+1:]...)...)
+		}
+		return strings.Join(lines, "\n")
+	}
+
+	// 段不存在，追加到末尾
+	newSection := fmt.Sprintf("\n%s\nname = \"Custom API\"\nwire_api = \"responses\"\nbase_url = \"%s\"\n", sectionHeader, baseURL)
+	return content + newSection
+}
+
+// removeTomlModelProviderSection 移除 [model_providers.xxx] 段（含段前空行）
+func removeTomlModelProviderSection(content, providerKey string) string {
+	sectionHeader := fmt.Sprintf("[model_providers.%s]", providerKey)
+	lines := strings.Split(content, "\n")
+
+	sectionStart := -1
+	sectionEnd := -1
+
+	for i, line := range lines {
+		if strings.TrimSpace(line) == sectionHeader {
+			sectionStart = i
+			continue
+		}
+		if sectionStart >= 0 && sectionEnd < 0 {
+			if strings.HasPrefix(strings.TrimSpace(line), "[") {
+				sectionEnd = i
+				break
+			}
+		}
+	}
+
+	if sectionStart < 0 {
+		return content // 段不存在，无需处理
+	}
+	if sectionEnd < 0 {
+		sectionEnd = len(lines)
+	}
+
+	// 移除段前空行
+	start := sectionStart
+	if start > 0 && strings.TrimSpace(lines[start-1]) == "" {
+		start--
+	}
+
+	newLines := append(lines[:start], lines[sectionEnd:]...)
+	return strings.Join(newLines, "\n")
 }
 
 // GetAgentCliModelConfig 从 settings.json 内容中提取模型连接配置。

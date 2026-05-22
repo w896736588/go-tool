@@ -21,12 +21,16 @@
             {{ msg.text }} | model: {{ msg.model }}
           </div>
           <div v-else-if="msg.type === 'system_command'" style="display: flex; justify-content: flex-end; margin: 4px 0;">
-            <div style="background: #ecf5ff; border-radius: 8px 8px 0 8px; padding: 8px 12px; max-width: 75%; width: fit-content; border: 1px solid #d9ecff;">
+            <div style="background: #ecf5ff; border-radius: 8px 8px 0 8px; padding: 8px 12px; max-width: 70%; width: fit-content; min-width: 280px; border: 1px solid #d9ecff;">
               <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
-                <span style="font-size: 11px; color: #909399;">提示词</span>
-                <span v-if="needCollapseBtn(msg.text)" @click="msg.collapsed = !msg.collapsed" style="cursor: pointer; font-size: 11px; color: #409eff; user-select: none;">{{ msg.collapsed ? '展开 ▼' : '收起 ▲' }}</span>
+                <span style="font-size: 11px; color: #909399;">{{ formatCliType(msg.cliType) }}</span>
+                <span v-if="isLongText(msg.cmdLine || msg.text, 20)" @click="msg.collapsed = !msg.collapsed" style="cursor: pointer; font-size: 11px; color: #409eff; user-select: none;">{{ msg.collapsed ? '展开 ▼' : '收起 ▲' }}</span>
               </div>
-              <div :style="{ maxHeight: needCollapseBtn(msg.text) && msg.collapsed ? '16em' : 'none', overflow: 'hidden', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '12px', color: '#303133', lineHeight: '1.6' }">{{ msg.text }}</div>
+              <!-- 命令行: markdown 块引用格式（完整展示，不折叠高度） -->
+              <div v-if="msg.cmdLine" class="markdown-body cr-markdown-body" v-html="renderMarkdown('> ' + (msg.collapsed ? truncateCmdPrompt(msg.cmdLine, 15) : msg.cmdLine))"></div>
+              <div v-else style="white-space: pre-wrap; word-break: break-word; font-size: 12px; color: #303133; line-height: 1.6;" :style="{ maxHeight: msg.collapsed ? '20em' : 'none', overflow: msg.collapsed ? 'hidden' : 'visible' }">{{ msg.text }}</div>
+              <!-- 完整提示词（显示在命令下方，收起时最多 15 行） -->
+              <div v-if="msg.cmdLine" style="white-space: pre-wrap; word-break: break-word; font-size: 12px; color: #303133; line-height: 1.6; margin-top: 8px; border-top: 1px dashed #dcdfe6; padding-top: 6px;" :style="{ maxHeight: msg.collapsed ? '15em' : 'none', overflow: msg.collapsed ? 'hidden' : 'visible' }">{{ msg.text }}</div>
             </div>
           </div>
           <div v-else-if="msg.type === 'system_hook'" style="color: #909399; font-size: 12px;">
@@ -263,7 +267,9 @@ export default {
       this.closeSSE()
       this._sseChatId = chatId
       this._thinkingStreamStartTime = 0
-      this._sseParseState = { currentMessage: null, toolUseMap: new Map(), pendingPatches: [] }
+      this._sseParseState = this.cliType === 'codex'
+        ? { currentItems: new Map(), pendingPatches: [] }
+        : { currentMessage: null, toolUseMap: new Map(), pendingPatches: [] }
       this._sseLineBuffer = []
       if (this._sseBatchTimer) { clearTimeout(this._sseBatchTimer); this._sseBatchTimer = null }
       if (this._thinkingTimer) { clearInterval(this._thinkingTimer); this._thinkingTimer = null }
@@ -410,6 +416,40 @@ export default {
     },
     needCollapseBtn(text) {
       return (text || '').split('\n').length > 10
+    },
+    
+    formatCliType(cliType) {
+      if (!cliType) return '提示词'
+      return cliType.charAt(0).toUpperCase() + cliType.slice(1)
+    },
+    displayCmdPreview(msg) {
+      const source = msg.cmdLine || msg.text || ''
+      const preview = this.truncateUtf8(source, 20)
+      return msg.cmdLine ? '> ' + preview : preview
+    },
+    isLongText(text, maxBytes) {
+      if (!text) return false
+      return new TextEncoder().encode(text).length > maxBytes
+    },
+    truncateUtf8(text, maxBytes) {
+      if (!text) return ''
+      const bytes = new TextEncoder().encode(text)
+      if (bytes.length <= maxBytes) return text
+      let end = maxBytes
+      while (end > 0 && (bytes[end] & 0xc0) === 0x80) {
+        end--
+      }
+      return new TextDecoder().decode(bytes.slice(0, end)) + '...'
+    },
+    truncateCmdPrompt(cmdLine, maxLen) {
+      if (!cmdLine) return ''
+      return cmdLine.replace(/(-p |exec |--json )"([^"]+)"/, (full, prefix, prompt) => {
+        const bytes = new TextEncoder().encode(prompt)
+        if (bytes.length <= maxLen) return full
+        let end = maxLen
+        while (end > 0 && (bytes[end] & 0xc0) === 0x80) end--
+        return prefix + '"' + new TextDecoder().decode(bytes.slice(0, end)) + '..."'
+      })
     },
     isCurrentThinking(msg) {
       if (!this._thinkingStreamStartTime) return false
