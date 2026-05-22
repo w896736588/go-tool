@@ -1,0 +1,10 @@
+[
+  {
+    "id": "09343370-84bb-411f-b027-5cf31d7af9a7",
+    "name": "home ds-v4-pro",
+    "port": 9091,
+    "host": "0.0.0.0",
+    "target_url": "https://api.deepseek.com/anthropic",
+    "format": "anthropic"
+  }
+]
