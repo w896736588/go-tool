@@ -40,6 +40,18 @@ function AgentCliToggleEnabled(data, callBack) {
   base.BasePost('/api/AgentCliToggleEnabled', data, callBack)
 }
 
+// AgentChatSend 发送独立 Agent CLI 对话
+function AgentChatSend(data, callBack) {
+  base.BasePost('/api/agent/chat/send', data, callBack)
+}
+
+// AgentChatListByAgentCli 按 Agent CLI 查询独立执行历史
+function AgentChatListByAgentCli(agentCliId, callBack) {
+  base.BasePost('/api/agent/chat/list-by-agent-cli', {
+    agent_cli_id: agentCliId,
+  }, callBack)
+}
+
 // WebhookConfigList 获取 Webhook 配置列表
 function WebhookConfigList(callBack) {
   base.BasePost('/api/WebhookConfigList', {}, callBack)
@@ -64,6 +76,8 @@ export default {
   AgentCliWriteDeepSeek,
   AgentCliToggleClaudeMem,
   AgentCliToggleEnabled,
+  AgentChatSend,
+  AgentChatListByAgentCli,
   WebhookConfigList,
   WebhookConfigSave,
   WebhookConfigDelete,

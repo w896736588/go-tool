@@ -17,138 +17,136 @@
       </div>
     </div>
 
-    <div v-loading="loading" class="agent-cli-content-card">
-      <div class="agent-cli-list">
-        <div v-if="list.length === 0" class="agent-cli-empty">
-          暂无 Agent Cli 实例，点击“新建”创建
-        </div>
-        <div
-          v-for="row in list"
-          :key="row.id"
-          class="agent-cli-card"
-          :class="{ 'agent-cli-card--inactive': !row.displayed_enabled }"
-        >
-          <div class="agent-cli-card__header">
-            <div class="agent-cli-card__main">
-              <div class="agent-cli-card__title-row">
-                <div class="agent-cli-card__title">{{ row.name || '-' }}</div>
-                <el-tag size="small" type="info">{{ formatTypeLabel(row.type) }}</el-tag>
-                <span class="agent-cli-card__status-dot" :class="row.displayed_enabled ? 'agent-cli-card__status-dot--active' : 'agent-cli-card__status-dot--inactive'"></span>
-                <span class="agent-cli-card__status-text">{{ row.displayed_enabled ? '已启用' : '已停止' }}</span>
-              </div>
-              <div class="agent-cli-card__meta">
-                <span>ID：{{ row.id }}</span>
-                <span v-if="row.type !== 'codex-cli'">配置文件：{{ row.settings_exists ? '存在' : '不存在' }}</span>
-                <span>可选模型：{{ formatModelOptions(row.model_options) }}</span>
-                <span v-if="row.type !== 'codex-cli'">McpServers：{{ row.mcp_server_count || 0 }} 个</span>
-              </div>
-              <div class="agent-cli-card__summary-grid">
-                <div class="agent-cli-info-block">
-                  <div class="agent-cli-info-block__label">启停状态</div>
-                  <div class="agent-cli-switch-line">
-                    <el-switch
-                      :model-value="row.displayed_enabled"
-                      size="small"
-                      :loading="row._togglingEnabled"
-                      @change="toggleEnabled(row, $event)"
-                    />
-                    <span class="agent-cli-switch-line__text">{{ row.displayed_enabled ? '运行中' : '已停止' }}</span>
-                  </div>
-                </div>
-
-                <div class="agent-cli-info-block">
-                  <div class="agent-cli-info-block__label">通知配置</div>
-                  <el-select
-                    v-model="row.webhook_config_id"
+    <div v-loading="loading" class="agent-cli-list">
+      <div v-if="list.length === 0" class="agent-cli-empty">
+        暂无 Agent Cli 实例，点击“新建”创建
+      </div>
+      <div
+        v-for="row in list"
+        :key="row.id"
+        class="agent-cli-card"
+        :class="{ 'agent-cli-card--inactive': !row.displayed_enabled }"
+      >
+        <div class="agent-cli-card__header">
+          <div class="agent-cli-card__main">
+            <div class="agent-cli-card__title-row">
+              <div class="agent-cli-card__title">{{ row.name || '-' }}</div>
+              <el-tag size="small" type="info">{{ formatTypeLabel(row.type) }}</el-tag>
+              <span class="agent-cli-card__status-dot" :class="row.displayed_enabled ? 'agent-cli-card__status-dot--active' : 'agent-cli-card__status-dot--inactive'"></span>
+              <span class="agent-cli-card__status-text">{{ row.displayed_enabled ? '已启用' : '已停止' }}</span>
+            </div>
+            <div class="agent-cli-card__meta">
+              <span>ID：{{ row.id }}</span>
+              <span v-if="row.type !== 'codex-cli'">配置文件：{{ row.settings_exists ? '存在' : '不存在' }}</span>
+              <span>可选模型：{{ formatModelOptions(row.model_options) }}</span>
+              <span v-if="row.type !== 'codex-cli'">McpServers：{{ row.mcp_server_count || 0 }} 个</span>
+            </div>
+            <div class="agent-cli-card__summary-grid">
+              <div class="agent-cli-info-block">
+                <div class="agent-cli-info-block__label">启停状态</div>
+                <div class="agent-cli-switch-line">
+                  <el-switch
+                    :model-value="row.displayed_enabled"
                     size="small"
-                    placeholder="未配置"
-                    clearable
-                    class="agent-cli-webhook-select"
-                    @change="updateWebhookConfig(row)"
-                  >
-                    <el-option
-                      v-for="wh in webhookOptions"
-                      :key="wh.id"
-                      :label="wh.name"
-                      :value="String(wh.id)"
-                    />
-                  </el-select>
-                </div>
-
-                <div v-if="row.type !== 'codex-cli'" class="agent-cli-info-block">
-                  <div class="agent-cli-info-block__label">claude-mem</div>
-                  <div class="agent-cli-switch-line">
-                    <el-switch
-                      v-model="row.claude_mem_enabled"
-                      size="small"
-                      :loading="row._togglingMem"
-                      @change="toggleClaudeMem(row)"
-                    />
-                    <span class="agent-cli-switch-line__text">{{ row.claude_mem_enabled ? '已启用' : '已禁用' }}</span>
-                  </div>
+                    :loading="row._togglingEnabled"
+                    @change="toggleEnabled(row, $event)"
+                  />
+                  <span class="agent-cli-switch-line__text">{{ row.displayed_enabled ? '运行中' : '已停止' }}</span>
                 </div>
               </div>
 
-              <div class="agent-cli-config-table-wrap">
-                <table class="agent-cli-config-table">
-                  <tbody>
-                    <tr>
-                      <th>类型</th>
-                      <td>{{ formatTypeLabel(row.type) }}</td>
-                      <th>模型列表</th>
-                      <td colspan="3" class="agent-cli-config-table__value agent-cli-config-table__value--break">{{ formatModelOptions(row.model_options) }}</td>
-                    </tr>
-                    <tr>
-                      <th>请求地址</th>
-                      <td class="agent-cli-config-table__value agent-cli-config-table__value--break">{{ row.request_url || '-' }}</td>
-                      <th>Webhook</th>
-                      <td>{{ row.webhook_config_name || '-' }}</td>
-                    </tr>
-                    <tr v-if="row.type !== 'codex-cli'">
-                      <th>路径</th>
-                      <td class="agent-cli-config-table__value agent-cli-config-table__value--break">{{ row.settings_path || '-' }}</td>
-                      <th>配置文件</th>
-                      <td>
-                        <el-tag :type="row.settings_exists ? 'success' : 'danger'" size="small">
-                          {{ row.settings_exists ? '存在' : '不存在' }}
-                        </el-tag>
-                      </td>
-                    </tr>
-                    <tr v-if="row.type !== 'codex-cli'">
-                      <th>McpServers</th>
-                      <td>{{ row.mcp_server_count || 0 }} 个</td>
-                      <th>claude-mem</th>
-                      <td>{{ row.claude_mem_enabled ? '已启用' : '已禁用' }}</td>
-                    </tr>
-                  </tbody>
-                </table>
+              <div class="agent-cli-info-block">
+                <div class="agent-cli-info-block__label">通知配置</div>
+                <el-select
+                  v-model="row.webhook_config_id"
+                  size="small"
+                  placeholder="未配置"
+                  clearable
+                  class="agent-cli-webhook-select"
+                  @change="updateWebhookConfig(row)"
+                >
+                  <el-option
+                    v-for="wh in webhookOptions"
+                    :key="wh.id"
+                    :label="wh.name"
+                    :value="String(wh.id)"
+                  />
+                </el-select>
+              </div>
+
+              <div v-if="row.type !== 'codex-cli'" class="agent-cli-info-block">
+                <div class="agent-cli-info-block__label">claude-mem</div>
+                <div class="agent-cli-switch-line">
+                  <el-switch
+                    v-model="row.claude_mem_enabled"
+                    size="small"
+                    :loading="row._togglingMem"
+                    @change="toggleClaudeMem(row)"
+                  />
+                  <span class="agent-cli-switch-line__text">{{ row.claude_mem_enabled ? '已启用' : '已禁用' }}</span>
+                </div>
               </div>
             </div>
 
-            <div class="agent-cli-card__actions">
-              <GitActionButton compact variant="success" @click="openAgentExecDialog(row)">执行</GitActionButton>
-              <GitActionButton
-                compact
-                variant="info"
-                :class="{ 'chat-history-btn--running': getAgentChatCounts(row.id).running > 0 }"
-                @click="openAgentChatHistory(row)"
-              >
-                执行历史
-                <span v-if="getAgentChatCounts(row.id).total > 0" class="chat-history-btn__counts">
-                  {{ getAgentChatCounts(row.id).running }}/{{ getAgentChatCounts(row.id).total }}
-                </span>
-              </GitActionButton>
-              <GitActionButton
-                v-if="row.type !== 'codex-cli'"
-                compact
-                variant="primary"
-                @click="configureMcp(row)"
-              >
-                配置DevtoolsMcp
-              </GitActionButton>
-              <GitActionButton compact variant="info" @click="editItem(row)">编辑</GitActionButton>
-              <GitActionButton compact variant="danger" @click="deleteItem(row)">删除</GitActionButton>
+            <div class="agent-cli-config-table-wrap">
+              <table class="agent-cli-config-table">
+                <tbody>
+                  <tr>
+                    <th>类型</th>
+                    <td>{{ formatTypeLabel(row.type) }}</td>
+                    <th>模型列表</th>
+                    <td colspan="3" class="agent-cli-config-table__value agent-cli-config-table__value--break">{{ formatModelOptions(row.model_options) }}</td>
+                  </tr>
+                  <tr>
+                    <th>请求地址</th>
+                    <td class="agent-cli-config-table__value agent-cli-config-table__value--break">{{ row.request_url || '-' }}</td>
+                    <th>Webhook</th>
+                    <td>{{ row.webhook_config_name || '-' }}</td>
+                  </tr>
+                  <tr v-if="row.type !== 'codex-cli'">
+                    <th>路径</th>
+                    <td class="agent-cli-config-table__value agent-cli-config-table__value--break">{{ row.settings_path || '-' }}</td>
+                    <th>配置文件</th>
+                    <td>
+                      <el-tag :type="row.settings_exists ? 'success' : 'danger'" size="small">
+                        {{ row.settings_exists ? '存在' : '不存在' }}
+                      </el-tag>
+                    </td>
+                  </tr>
+                  <tr v-if="row.type !== 'codex-cli'">
+                    <th>McpServers</th>
+                    <td>{{ row.mcp_server_count || 0 }} 个</td>
+                    <th>claude-mem</th>
+                    <td>{{ row.claude_mem_enabled ? '已启用' : '已禁用' }}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
+          </div>
+
+          <div class="agent-cli-card__actions">
+            <GitActionButton compact variant="success" @click="openAgentExecDialog(row)">执行</GitActionButton>
+            <GitActionButton
+              compact
+              variant="info"
+              :class="{ 'chat-history-btn--running': getAgentChatCounts(row.id).running > 0 }"
+              @click="openAgentChatHistory(row)"
+            >
+              执行历史
+              <span v-if="getAgentChatCounts(row.id).total > 0" class="chat-history-btn__counts">
+                {{ getAgentChatCounts(row.id).running }}/{{ getAgentChatCounts(row.id).total }}
+              </span>
+            </GitActionButton>
+            <GitActionButton
+              v-if="row.type !== 'codex-cli'"
+              compact
+              variant="primary"
+              @click="configureMcp(row)"
+            >
+              配置DevtoolsMcp
+            </GitActionButton>
+            <GitActionButton compact variant="info" @click="editItem(row)">编辑</GitActionButton>
+            <GitActionButton compact variant="danger" @click="deleteItem(row)">删除</GitActionButton>
           </div>
         </div>
       </div>
@@ -187,17 +185,9 @@
             <el-input v-model="form.settings_path" placeholder="请输入 settings.json 的绝对路径" />
             <div class="agent-cli-form-tip">例如: C:\Users\xxx\.claude\settings.json</div>
           </el-form-item>
-          <el-form-item label="模型名">
-            <el-input v-model="form.model_name" placeholder="默认模型，例如 deepseek-v4-pro[1m]" />
-          </el-form-item>
-          <el-form-item label="模型列表">
-            <el-input
-              v-model="form.model_list_text"
-              type="textarea"
-              :rows="4"
-              placeholder="每行一个模型；留空则仅使用上方默认模型"
-            />
-            <div class="agent-cli-form-tip">首个模型会作为默认模型；执行任务时可再选择具体模型。</div>
+          <el-form-item label="模型">
+            <el-input v-model="form.model_name" placeholder="例如 deepseek-v4-pro[1m]" />
+            <div class="agent-cli-form-tip">此模型将同时作为默认模型和可选模型。</div>
           </el-form-item>
           <el-form-item label="API Key">
             <el-input v-model="form.api_key" type="password" show-password placeholder="请输入 DeepSeek API Key" />
@@ -222,6 +212,10 @@
           </el-form-item>
           <el-form-item label="Base URL">
             <el-input v-model="form.codex_base_url" placeholder="自定义 API 端点（可选）" />
+          </el-form-item>
+          <el-form-item label="WebSocket">
+            <el-switch v-model="form.codex_supports_websockets" />
+            <div class="agent-cli-form-tip">关闭后写入 supports_websockets = false，强制走 HTTP。 Turn off to force HTTP instead of WebSocket.</div>
           </el-form-item>
           <el-form-item label="Sandbox Mode">
             <el-input v-model="form.codex_sandbox_mode" placeholder="danger-full-access" />
@@ -492,6 +486,7 @@ export default {
         codex_model_list_text: '',
         codex_base_url: '',
         codex_sandbox_mode: '',
+        codex_supports_websockets: true,
       },
       // webhook 配置
       webhookDialogVisible: false,
@@ -596,7 +591,7 @@ export default {
     loadAgentChatCounts() {
       const rows = Array.isArray(this.list) ? this.list.filter(item => item.id > 0) : []
       rows.forEach((row) => {
-        taskWorkflowApi.TaskWorkflowChatListByAgentCli(row.id, (response) => {
+        agentCliApi.AgentChatListByAgentCli(row.id, (response) => {
           if (!(response && response.ErrCode === 0 && response.Data)) return
           const list = Array.isArray(response.Data.list) ? response.Data.list : []
           this.agentChatCounts = {
@@ -659,7 +654,7 @@ export default {
     // loadAgentExecHistoryDirs 加载当前 Agent 的历史工作目录，去重后展示在执行弹窗顶部。 // Loads and de-duplicates history working directories for the current Agent execution dialog.
     loadAgentExecHistoryDirs(agentCliId) {
       this.agentExecHistoryDirLoading = true
-      taskWorkflowApi.TaskWorkflowChatListByAgentCli(agentCliId, (response) => {
+      agentCliApi.AgentChatListByAgentCli(agentCliId, (response) => {
         this.agentExecHistoryDirLoading = false
         if (!(response && response.ErrCode === 0 && response.Data)) {
           this.agentExecHistoryDirs = []
@@ -707,16 +702,15 @@ export default {
       }
       this.agentExecLoading = true
       this.saveAgentExecCache()
-      taskWorkflowApi.TaskWorkflowChatSend(
-        0,
-        this.agentExecPrompt,
-        'agent_cli_manual',
-        this.agentExecLocalDir.trim(),
-        this.getAgentExecCliType(),
-        this.agentExecCliId,
-        this.agentExecModelName,
-        this.agentExecThinkingIntensity,
-        (response) => {
+      agentCliApi.AgentChatSend({
+        agent_cli_id: this.agentExecCliId,
+        prompt: this.agentExecPrompt,
+        prompt_type: 'agent_cli_manual',
+        local_dir: this.agentExecLocalDir.trim(),
+        cli_type: this.getAgentExecCliType(),
+        model_name: this.agentExecModelName,
+        thinking_intensity: this.agentExecThinkingIntensity,
+      }, (response) => {
           this.agentExecLoading = false
           if (!(response && response.ErrCode === 0 && response.Data)) {
             this.$message.error(response?.ErrMsg || '发送失败')
@@ -740,8 +734,7 @@ export default {
           if (currentCli) {
             this.openAgentChatHistory(currentCli, chatId)
           }
-        }
-      )
+        })
     },
     openAgentChatHistory(row, focusChatId) {
       this.agentChatHistoryCliId = row.id
@@ -749,7 +742,7 @@ export default {
       this.agentChatHistoryVisible = true
       this.agentChatHistoryLoading = true
       this.agentChatDetailId = 0
-      taskWorkflowApi.TaskWorkflowChatListByAgentCli(row.id, (response) => {
+      agentCliApi.AgentChatListByAgentCli(row.id, (response) => {
         this.agentChatHistoryLoading = false
         if (!(response && response.ErrCode === 0 && response.Data)) {
           this.$message.error(response?.ErrMsg || '加载执行历史失败')
@@ -855,6 +848,7 @@ export default {
         codex_model_list_text: '',
         codex_base_url: '',
         codex_sandbox_mode: '',
+        codex_supports_websockets: true,
       }
       this.dialogVisible = true
     },
@@ -864,7 +858,7 @@ export default {
     },
     saveItem() {
       const isCodex = this.form.type === 'codex-cli'
-      const claudeModels = this.parseModelList(this.form.model_list_text, this.form.model_name)
+      const claudeModels = this.form.model_name.trim() ? [this.form.model_name.trim()] : []
       const codexModels = this.parseModelList(this.form.codex_model_list_text, '')
       if (isCodex) {
         // Codex 现在只保留模型列表字段，首项作为默认模型 / Codex now only uses the model list and the first item becomes default.
@@ -899,6 +893,7 @@ export default {
           models: codexModels,
           base_url: this.form.codex_base_url.trim() || undefined,
           sandbox_mode: this.form.codex_sandbox_mode.trim() || undefined,
+          supports_websockets: this.form.codex_base_url.trim() ? !!this.form.codex_supports_websockets : undefined,
         })
       }
       agentCliApi.AgentCliSave(data, (response) => {
@@ -1023,7 +1018,10 @@ export default {
           this.form.codex_model_list_text = Array.isArray(cfg.models) ? cfg.models.join('\n') : (cfg.model || '')
           this.form.codex_base_url = cfg.base_url || ''
           this.form.codex_sandbox_mode = cfg.sandbox_mode || ''
-        } catch (e) {}
+          this.form.codex_supports_websockets = cfg.supports_websockets !== false
+        } catch (e) {
+          // 解析失败时忽略，保持编辑弹窗可用。 // Ignore parse errors and keep the editor usable.
+        }
       }
       this.dialogVisible = true
       // Claude: 读取 settings.json 以预填密钥字段
@@ -1033,12 +1031,13 @@ export default {
             try {
               const config = JSON.parse(response.Data.content)
               this.form.model_name = config.model || ''
-              this.form.model_list_text = Array.isArray(config.dtool_models) ? config.dtool_models.join('\n') : (config.model || '')
               if (config.env) {
                 this.form.api_key = config.env.ANTHROPIC_AUTH_TOKEN || ''
                 this.form.base_url = config.env.ANTHROPIC_BASE_URL || ''
               }
-            } catch(e) {}
+            } catch(e) {
+              // 读取历史配置失败时忽略。 // Ignore malformed history config.
+            }
           }
         })
       }
@@ -1173,7 +1172,9 @@ export default {
               this._pendingThinkingDurationMs = durationMs
             }
           }
-        } catch (e) {}
+        } catch (e) {
+          // SSE 解析失败时跳过该行。 // Skip malformed SSE lines.
+        }
         this._sseLineBuffer.push(line)
         if (!this._sseBatchTimer) {
           this._sseBatchTimer = setTimeout(() => {

@@ -2437,6 +2437,29 @@ func TaskWorkflowChatStreamClose(sse *gsgin.Sse) {
 	sse.UnRegister()
 }
 
+// loadAgentCliChatRuntimeConfig 加载 Agent CLI 运行配置。
+// loadAgentCliChatRuntimeConfig resolves settings/model metadata shared by workflow chats and standalone AgentCli chats.
+func loadAgentCliChatRuntimeConfig(agentCliID int, requestedModelName string, c *gin.Context) (settingsPath string, modelName string, thinkingCollapsed int, ok bool) {
+	settingsPath = ``
+	modelName = strings.TrimSpace(requestedModelName)
+	thinkingCollapsed = 0
+	ok = true
+	if agentCliID <= 0 {
+		return
+	}
+	cliRow, err := common.DbMain.Client.QueryBySql(
+		`SELECT * FROM tbl_agent_cli WHERE id = ?`, agentCliID,
+	).One()
+	if err != nil || len(cliRow) == 0 {
+		gsgin.GinResponseError(c, `Agent Cli 实例不存在`, nil)
+		ok = false
+		return
+	}
+	settingsPath = cast.ToString(cliRow["settings_path"])
+	thinkingCollapsed = cast.ToInt(cliRow["thinking_collapsed"])
+	return
+}
+
 // TaskWorkflowChatSend 启动新的 claude code 对话。
 func TaskWorkflowChatSend(c *gin.Context) {
 	var req _struct.TaskWorkflowChatSendRequest
@@ -2460,21 +2483,9 @@ func TaskWorkflowChatSend(c *gin.Context) {
 		req.CliType = `claude`
 	}
 
-	settingsPath := `` // Agent CLI 的 settings.json 路径
-	modelName := strings.TrimSpace(req.ModelName)
-	thinkingCollapsed := 0
-
-	// 若指定了 agent_cli_id，读取其配置
-	if req.AgentCliId > 0 {
-		cliRow, err := common.DbMain.Client.QueryBySql(
-			`SELECT * FROM tbl_agent_cli WHERE id = ?`, req.AgentCliId,
-		).One()
-		if err != nil || len(cliRow) == 0 {
-			gsgin.GinResponseError(c, `Agent Cli 实例不存在`, nil)
-			return
-		}
-		settingsPath = cast.ToString(cliRow["settings_path"])
-		thinkingCollapsed = cast.ToInt(cliRow["thinking_collapsed"])
+	settingsPath, modelName, thinkingCollapsed, ok := loadAgentCliChatRuntimeConfig(req.AgentCliId, req.ModelName, c)
+	if !ok {
+		return
 	}
 
 	// prompt_type 为可选，非空时用于按类型查询对话历史
@@ -2486,6 +2497,43 @@ func TaskWorkflowChatSend(c *gin.Context) {
 		return
 	}
 
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`chat_id`: chatID,
+	})
+}
+
+// AgentChatSend 启动新的 AgentCli 独立对话。
+// AgentChatSend starts a standalone AgentCli execution without requiring any workflow id.
+func AgentChatSend(c *gin.Context) {
+	var req _struct.AgentChatSendRequest
+	if err := gsgin.GinPostBody(c, &req); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	if req.AgentCliId <= 0 {
+		gsgin.GinResponseError(c, `agent_cli_id不能为空`, nil)
+		return
+	}
+	if strings.TrimSpace(req.Prompt) == `` {
+		gsgin.GinResponseError(c, `提示词不能为空`, nil)
+		return
+	}
+	if strings.TrimSpace(req.LocalDir) == `` {
+		gsgin.GinResponseError(c, `请选择工作目录`, nil)
+		return
+	}
+	if strings.TrimSpace(req.CliType) == `` {
+		req.CliType = `claude`
+	}
+	settingsPath, modelName, thinkingCollapsed, ok := loadAgentCliChatRuntimeConfig(req.AgentCliId, req.ModelName, c)
+	if !ok {
+		return
+	}
+	chatID, err := common.DbMain.AgentChatCreate(req.AgentCliId, req.Prompt, strings.TrimSpace(req.PromptType), req.CliType, req.LocalDir, settingsPath, modelName, thinkingCollapsed, req.ThinkingIntensity)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`chat_id`: chatID,
 	})
@@ -2563,43 +2611,16 @@ func TaskWorkflowChatStop(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, `对话已停止`, nil)
 }
 
-// TaskWorkflowChatList 列出工作流的所有对话。
-func TaskWorkflowChatList(c *gin.Context) {
-	var req _struct.TaskWorkflowChatListRequest
-	if err := gsgin.GinPostBody(c, &req); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	if req.WorkflowID <= 0 {
-		gsgin.GinResponseError(c, `工作流id不能为空`, nil)
-		return
-	}
-	rows, err := common.DbMain.TaskWorkflowChatList(req.WorkflowID)
-	if err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	type chatItem struct {
-		ID           int64  `json:"id"`
-		SessionID    string `json:"session_id"`
-		Prompt       string `json:"prompt"`
-		PromptType   string `json:"prompt_type"`
-		AgentCliId   int    `json:"agent_cli_id"`
-		AgentCliName string `json:"agent_cli_name"`
-		LocalDir     string `json:"local_dir"`
-		Status       string `json:"status"`
-		CreatedAt    string `json:"created_at"`
-		DurationMs   int64  `json:"duration_ms"`
-		LineCount    int    `json:"line_count"`
-	}
+// buildAgentChatListResponse 构造统一的对话列表响应。
+// buildAgentChatListResponse keeps workflow and standalone AgentCli history cards on the same response schema.
+func buildAgentChatListResponse(rows []map[string]any) []map[string]any {
 	const timeLayout = `2006-01-02 15:04:05`
-	// 预加载 Agent CLI id→name 映射
 	cliNameMap := make(map[int]string)
 	cliRows, _ := common.DbMain.Client.QueryBySql(`SELECT id, name FROM tbl_agent_cli`).All()
 	for _, cr := range cliRows {
 		cliNameMap[cast.ToInt(cr[`id`])] = cast.ToString(cr[`name`])
 	}
-	list := make([]chatItem, 0, len(rows))
+	list := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
 		status := cast.ToString(row[`status`])
 		var durationMs int64
@@ -2618,22 +2639,42 @@ func TaskWorkflowChatList(c *gin.Context) {
 		if rawOutput != `` {
 			lineCount = len(strings.Split(rawOutput, "\n"))
 		}
-		list = append(list, chatItem{
-			ID:           cast.ToInt64(row[`id`]),
-			SessionID:    cast.ToString(row[`session_id`]),
-			Prompt:       cast.ToString(row[`prompt`]),
-			PromptType:   cast.ToString(row[`prompt_type`]),
-			AgentCliId:   cast.ToInt(row[`agent_cli_id`]),
-			AgentCliName: cliNameMap[cast.ToInt(row[`agent_cli_id`])],
-			LocalDir:     cast.ToString(row[`local_dir`]),
-			Status:       status,
-			CreatedAt:    cast.ToString(row[`created_at`]),
-			DurationMs:   durationMs,
-			LineCount:    lineCount,
+		list = append(list, map[string]any{
+			`id`:             cast.ToInt64(row[`id`]),
+			`session_id`:     cast.ToString(row[`session_id`]),
+			`prompt`:         cast.ToString(row[`prompt`]),
+			`prompt_type`:    cast.ToString(row[`prompt_type`]),
+			`agent_cli_id`:   cast.ToInt(row[`agent_cli_id`]),
+			`agent_cli_name`: cliNameMap[cast.ToInt(row[`agent_cli_id`])],
+			`local_dir`:      cast.ToString(row[`local_dir`]),
+			`status`:         status,
+			`cli_type`:       cast.ToString(row[`cli_type`]),
+			`created_at`:     cast.ToString(row[`created_at`]),
+			`duration_ms`:    durationMs,
+			`line_count`:     lineCount,
 		})
 	}
+	return list
+}
+
+// TaskWorkflowChatList 列出工作流的所有对话。
+func TaskWorkflowChatList(c *gin.Context) {
+	var req _struct.TaskWorkflowChatListRequest
+	if err := gsgin.GinPostBody(c, &req); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	if req.WorkflowID <= 0 {
+		gsgin.GinResponseError(c, `工作流id不能为空`, nil)
+		return
+	}
+	rows, err := common.DbMain.TaskWorkflowChatList(req.WorkflowID)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
-		`list`: list,
+		`list`: buildAgentChatListResponse(rows),
 	})
 }
 
@@ -2677,11 +2718,14 @@ func TaskWorkflowChatDetail(c *gin.Context) {
 	}
 
 	taskName := ""
-	if workflowID := cast.ToInt(info["workflow_id"]); workflowID > 0 {
-		wfRow, _ := common.DbMain.Client.QueryBySql(`SELECT home_task_id FROM tbl_task_workflow WHERE id = ?`, workflowID).One()
-		if homeTaskId := cast.ToInt(wfRow["home_task_id"]); homeTaskId > 0 {
-			htRow, _ := common.DbMain.Client.QueryBySql(`SELECT name FROM tbl_home_task WHERE id = ?`, homeTaskId).One()
-			taskName = cast.ToString(htRow["name"])
+	// 只有工作流来源才反查任务名，避免 AgentCli 独立执行误关联任务。 // Only workflow-origin chats should resolve workflow task names.
+	if cast.ToString(info["from_type"]) == common.AgentChatSourceTypeWorkflow {
+		if workflowID := cast.ToInt(info["from_id"]); workflowID > 0 {
+			wfRow, _ := common.DbMain.Client.QueryBySql(`SELECT home_task_id FROM tbl_task_workflow WHERE id = ?`, workflowID).One()
+			if homeTaskId := cast.ToInt(wfRow["home_task_id"]); homeTaskId > 0 {
+				htRow, _ := common.DbMain.Client.QueryBySql(`SELECT name FROM tbl_home_task WHERE id = ?`, homeTaskId).One()
+				taskName = cast.ToString(htRow["name"])
+			}
 		}
 	}
 
@@ -2768,61 +2812,8 @@ func TaskWorkflowChatListByPromptType(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	type chatItem struct {
-		ID           int64  `json:"id"`
-		SessionID    string `json:"session_id"`
-		Prompt       string `json:"prompt"`
-		AgentCliId   int    `json:"agent_cli_id"`
-		AgentCliName string `json:"agent_cli_name"`
-		LocalDir     string `json:"local_dir"`
-		Status       string `json:"status"`
-		CliType      string `json:"cli_type"`
-		CreatedAt    string `json:"created_at"`
-		DurationMs   int64  `json:"duration_ms"`
-		LineCount    int    `json:"line_count"`
-	}
-	const timeLayout2 = `2006-01-02 15:04:05`
-	// 预加载 Agent CLI id→name 映射
-	cliNameMap2 := make(map[int]string)
-	cliRows2, _ := common.DbMain.Client.QueryBySql(`SELECT id, name FROM tbl_agent_cli`).All()
-	for _, cr := range cliRows2 {
-		cliNameMap2[cast.ToInt(cr[`id`])] = cast.ToString(cr[`name`])
-	}
-	list := make([]chatItem, 0, len(rows))
-	for _, row := range rows {
-		status := cast.ToString(row[`status`])
-		var durationMs int64
-		if status != `running` {
-			createdAt, _ := time.Parse(timeLayout2, cast.ToString(row[`created_at`]))
-			updatedAt, _ := time.Parse(timeLayout2, cast.ToString(row[`updated_at`]))
-			if !createdAt.IsZero() && !updatedAt.IsZero() {
-				durationMs = updatedAt.Sub(createdAt).Milliseconds()
-				if durationMs < 0 {
-					durationMs = 0
-				}
-			}
-		}
-		rawOutput := cast.ToString(row[`raw_output`])
-		lineCount := 0
-		if rawOutput != `` {
-			lineCount = len(strings.Split(rawOutput, "\n"))
-		}
-		list = append(list, chatItem{
-			ID:           cast.ToInt64(row[`id`]),
-			SessionID:    cast.ToString(row[`session_id`]),
-			Prompt:       cast.ToString(row[`prompt`]),
-			AgentCliId:   cast.ToInt(row[`agent_cli_id`]),
-			AgentCliName: cliNameMap2[cast.ToInt(row[`agent_cli_id`])],
-			LocalDir:     cast.ToString(row[`local_dir`]),
-			Status:       status,
-			CliType:      cast.ToString(row[`cli_type`]),
-			CreatedAt:    cast.ToString(row[`created_at`]),
-			DurationMs:   durationMs,
-			LineCount:    lineCount,
-		})
-	}
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
-		`list`: list,
+		`list`: buildAgentChatListResponse(rows),
 	})
 }
 
@@ -2834,71 +2825,34 @@ func TaskWorkflowChatListByAgentCli(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	if req.AgentCliID <= 0 {
+	agentChatListByAgentCli(c, req.AgentCliID)
+}
+
+// AgentChatListByAgentCli 按 Agent CLI 列出独立执行对话。
+// AgentChatListByAgentCli exposes the dedicated AgentCli history endpoint while reusing the same query logic.
+func AgentChatListByAgentCli(c *gin.Context) {
+	var req _struct.AgentChatListByAgentCliRequest
+	if err := gsgin.GinPostBody(c, &req); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	agentChatListByAgentCli(c, req.AgentCliID)
+}
+
+// agentChatListByAgentCli 返回一个 Agent CLI 的独立执行历史。
+// agentChatListByAgentCli is shared by the new Agent endpoint and the temporary workflow-compatible endpoint.
+func agentChatListByAgentCli(c *gin.Context, agentCliID int) {
+	if agentCliID <= 0 {
 		gsgin.GinResponseError(c, `agent_cli_id不能为空`, nil)
 		return
 	}
-	rows, err := common.DbMain.TaskWorkflowChatListByAgentCli(req.AgentCliID)
+	rows, err := common.DbMain.AgentChatListByAgentCli(agentCliID)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	type chatItem struct {
-		ID           int64  `json:"id"`
-		SessionID    string `json:"session_id"`
-		Prompt       string `json:"prompt"`
-		PromptType   string `json:"prompt_type"`
-		AgentCliId   int    `json:"agent_cli_id"`
-		AgentCliName string `json:"agent_cli_name"`
-		LocalDir     string `json:"local_dir"`
-		Status       string `json:"status"`
-		CliType      string `json:"cli_type"`
-		CreatedAt    string `json:"created_at"`
-		DurationMs   int64  `json:"duration_ms"`
-		LineCount    int    `json:"line_count"`
-	}
-	const timeLayout = `2006-01-02 15:04:05`
-	cliNameMap := make(map[int]string)
-	cliRows, _ := common.DbMain.Client.QueryBySql(`SELECT id, name FROM tbl_agent_cli`).All()
-	for _, cr := range cliRows {
-		cliNameMap[cast.ToInt(cr[`id`])] = cast.ToString(cr[`name`])
-	}
-	list := make([]chatItem, 0, len(rows))
-	for _, row := range rows {
-		status := cast.ToString(row[`status`])
-		var durationMs int64
-		if status != `running` {
-			createdAt, _ := time.Parse(timeLayout, cast.ToString(row[`created_at`]))
-			updatedAt, _ := time.Parse(timeLayout, cast.ToString(row[`updated_at`]))
-			if !createdAt.IsZero() && !updatedAt.IsZero() {
-				durationMs = updatedAt.Sub(createdAt).Milliseconds()
-				if durationMs < 0 {
-					durationMs = 0
-				}
-			}
-		}
-		rawOutput := cast.ToString(row[`raw_output`])
-		lineCount := 0
-		if rawOutput != `` {
-			lineCount = len(strings.Split(rawOutput, "\n"))
-		}
-		list = append(list, chatItem{
-			ID:           cast.ToInt64(row[`id`]),
-			SessionID:    cast.ToString(row[`session_id`]),
-			Prompt:       cast.ToString(row[`prompt`]),
-			PromptType:   cast.ToString(row[`prompt_type`]),
-			AgentCliId:   cast.ToInt(row[`agent_cli_id`]),
-			AgentCliName: cliNameMap[cast.ToInt(row[`agent_cli_id`])],
-			LocalDir:     cast.ToString(row[`local_dir`]),
-			Status:       status,
-			CliType:      cast.ToString(row[`cli_type`]),
-			CreatedAt:    cast.ToString(row[`created_at`]),
-			DurationMs:   durationMs,
-			LineCount:    lineCount,
-		})
-	}
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
-		`list`: list,
+		`list`: buildAgentChatListResponse(rows),
 	})
 }
 
@@ -3428,7 +3382,11 @@ func taskWorkflowBroadcastChatStatus(chatID int64) {
 	if err != nil || len(chatInfo) == 0 {
 		return
 	}
-	workflowID := cast.ToInt(chatInfo[`workflow_id`])
+	// 仅工作流来源的 chat 需要广播到工作流页面。 // Only workflow-origin chats should refresh workflow-side counters.
+	if cast.ToString(chatInfo[`from_type`]) != common.AgentChatSourceTypeWorkflow {
+		return
+	}
+	workflowID := cast.ToInt(chatInfo[`from_id`])
 	if workflowID <= 0 {
 		return
 	}
@@ -3519,12 +3477,14 @@ func taskWorkflowSendWebhookNotify(chatID int64, lastText string) {
 
 	// 获取关联的工作流任务名称
 	taskName := ""
-	workflowID := cast.ToInt(chatInfo["workflow_id"])
-	if workflowID > 0 {
-		wfRow, _ := common.DbMain.Client.QueryBySql(`SELECT home_task_id FROM tbl_task_workflow WHERE id = ?`, workflowID).One()
-		if homeTaskId := cast.ToInt(wfRow["home_task_id"]); homeTaskId > 0 {
-			htRow, _ := common.DbMain.Client.QueryBySql(`SELECT name FROM tbl_home_task WHERE id = ?`, homeTaskId).One()
-			taskName = cast.ToString(htRow["name"])
+	if cast.ToString(chatInfo["from_type"]) == common.AgentChatSourceTypeWorkflow {
+		workflowID := cast.ToInt(chatInfo["from_id"])
+		if workflowID > 0 {
+			wfRow, _ := common.DbMain.Client.QueryBySql(`SELECT home_task_id FROM tbl_task_workflow WHERE id = ?`, workflowID).One()
+			if homeTaskId := cast.ToInt(wfRow["home_task_id"]); homeTaskId > 0 {
+				htRow, _ := common.DbMain.Client.QueryBySql(`SELECT name FROM tbl_home_task WHERE id = ?`, homeTaskId).One()
+				taskName = cast.ToString(htRow["name"])
+			}
 		}
 	}
 

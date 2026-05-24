@@ -315,12 +315,12 @@ func GetCodexCliModelOptions(configJson string) []string {
 	return append([]string{}, cfg.Models...)
 }
 
-// codexModelProviderKey Codex CLI config.toml 中自定义 API 提供商的 key
-const codexModelProviderKey = "dtool-api"
+// codexModelProviderKey Codex CLI config.toml 中自定义 API 提供商的 key。
+// codexModelProviderKey is the custom provider key used in Codex config.toml.
+const codexModelProviderKey = "myprovider"
 
-// WriteCodexConfigToToml 将 Codex CLI 的 model 和 base_url 写入 ~/.codex/config.toml。
-// base_url 通过顶层 openai_base_url 字段配置（apikey 模式专用），
-// 同时清理残留的 model_providers.dtool-api 段（旧方案，已废弃）。
+// WriteCodexConfigToToml 将 Codex CLI 的 model/provider 写入 ~/.codex/config.toml。
+// WriteCodexConfigToToml writes Codex CLI model/provider settings to ~/.codex/config.toml.
 func WriteCodexConfigToToml(cfg *define.CodexCliConfig) error {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -335,20 +335,20 @@ func WriteCodexConfigToToml(cfg *define.CodexCliConfig) error {
 		content = string(data)
 	}
 
-	// 更新 model 行
+	// 更新 model 行 / Update the active model.
 	if cfg.Model != "" {
 		content = setTomlTopLevelField(content, "model", cfg.Model)
 	}
 
-	// 处理 openai_base_url 顶层字段（apikey 模式走此配置）
-	if cfg.BaseURL != "" {
-		content = setTomlTopLevelField(content, "openai_base_url", cfg.BaseURL)
-	} else {
-		content = removeTomlTopLevelField(content, "openai_base_url")
-	}
-
-	// 清理旧方案的 model_providers.dtool-api 段（若有）
+	// 处理自定义 provider 模式 / Configure the custom provider block.
+	content = removeTomlTopLevelField(content, "openai_base_url")
 	content = removeTomlModelProviderSection(content, codexModelProviderKey)
+	if cfg.BaseURL != "" {
+		content = setTomlTopLevelField(content, "model_provider", codexModelProviderKey)
+		content = appendCodexModelProviderSection(content, codexModelProviderKey, cfg.BaseURL, cfg.ApiKey, cfg.SupportsWebsockets)
+	} else {
+		content = removeTomlTopLevelField(content, "model_provider")
+	}
 
 	// 确保目录存在
 	dir := filepath.Dir(configPath)
@@ -360,6 +360,17 @@ func WriteCodexConfigToToml(cfg *define.CodexCliConfig) error {
 		return fmt.Errorf("写入 config.toml 失败 %s: %w", configPath, err)
 	}
 	return nil
+}
+
+// appendCodexModelProviderSection 追加 Codex 自定义 provider 段。
+// appendCodexModelProviderSection appends the Codex custom provider section.
+// 使用 api_key 直接写入密钥而非 env_key，避免 Codex CLI 要求必须设置环境变量。
+func appendCodexModelProviderSection(content, providerKey, baseURL, apiKey string, supportsWebsockets *bool) string {
+	section := fmt.Sprintf("\n[model_providers.%s]\nname = \"My Local Proxy\"\nbase_url = \"%s\"\nwire_api = \"responses\"\napi_key = \"%s\"\n", providerKey, baseURL, apiKey)
+	if supportsWebsockets != nil {
+		section += fmt.Sprintf("supports_websockets = %t\n", *supportsWebsockets)
+	}
+	return content + section
 }
 
 // WriteCodexAuthJson 将 API Key 写入 ~/.codex/auth.json 并切换认证模式为 api-key。

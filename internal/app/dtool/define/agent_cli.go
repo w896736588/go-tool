@@ -17,11 +17,12 @@ const CodexCliDefaultSandboxMode = "danger-full-access"
 
 // CodexCliConfig Codex CLI 实例配置（存储在 tbl_agent_cli.config JSON 字段中）
 type CodexCliConfig struct {
-	ApiKey      string   `json:"api_key"`
-	Model       string   `json:"model"`
-	Models      []string `json:"models,omitempty"`       // 可选模型列表，首个模型视为默认模型。 // Optional model list, the first item is treated as default.
-	BaseURL     string   `json:"base_url,omitempty"`     // 自定义 API 端点（可选）
-	SandboxMode string   `json:"sandbox_mode,omitempty"` // 默认 "danger-full-access"
+	ApiKey             string   `json:"api_key"`
+	Model              string   `json:"model"`
+	Models             []string `json:"models,omitempty"`              // 可选模型列表，首个模型视为默认模型。 // Optional model list, the first item is treated as default.
+	BaseURL            string   `json:"base_url,omitempty"`            // 自定义 API 端点（可选）
+	SandboxMode        string   `json:"sandbox_mode,omitempty"`        // 默认 "danger-full-access"
+	SupportsWebsockets *bool    `json:"supports_websockets,omitempty"` // 是否允许 Responses API WebSocket 传输。 // Whether Responses API WebSocket transport is enabled.
 }
 
 // AgentCliConfig Agent CLI 通用配置（当前仅存储模型列表等 UI 扩展字段）。

@@ -87,6 +87,18 @@ type TaskWorkflowChatSendRequest struct {
 	ThinkingIntensity string `json:"thinking_intensity"`
 }
 
+// AgentChatSendRequest 发送独立 AgentCli 对话请求。
+// AgentChatSendRequest starts a standalone AgentCli chat without requiring any workflow context.
+type AgentChatSendRequest struct {
+	AgentCliId        int    `json:"agent_cli_id"`
+	Prompt            string `json:"prompt"`
+	PromptType        string `json:"prompt_type"`
+	CliType           string `json:"cli_type"`
+	LocalDir          string `json:"local_dir"`
+	ModelName         string `json:"model_name"`
+	ThinkingIntensity string `json:"thinking_intensity"`
+}
+
 // TaskWorkflowChatDirsRequest 获取可选工作目录列表请求。
 type TaskWorkflowChatDirsRequest struct {
 	WorkflowID int `json:"workflow_id"`
@@ -134,5 +146,11 @@ type TaskWorkflowChatListByPromptTypeRequest struct {
 // TaskWorkflowChatListByAgentCliRequest 按 Agent CLI 查询对话列表请求。
 // TaskWorkflowChatListByAgentCliRequest lists chat records bound to a specific Agent CLI.
 type TaskWorkflowChatListByAgentCliRequest struct {
+	AgentCliID int `json:"agent_cli_id"`
+}
+
+// AgentChatListByAgentCliRequest 按 Agent CLI 查询独立执行对话列表请求。
+// AgentChatListByAgentCliRequest lists standalone AgentCli chat records for one execution card.
+type AgentChatListByAgentCliRequest struct {
 	AgentCliID int `json:"agent_cli_id"`
 }

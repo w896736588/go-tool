@@ -149,7 +149,9 @@ func buildEnv(cfg RunConfig) []string {
 	if cfg.APIKey != `` {
 		env = append(env, `OPENAI_API_KEY=`+cfg.APIKey)
 	}
-	if cfg.BaseURL != `` {
+	// 自定义 provider 模式由 ~/.codex/config.toml 的 model_providers 段承载 base_url，
+	// 避免再注入 OPENAI_BASE_URL 覆盖 provider 路由。 // Custom provider mode stores base_url in model_providers; avoid overriding it via OPENAI_BASE_URL.
+	if cfg.BaseURL != `` && cfg.APIKey == `` {
 		env = append(env, `OPENAI_BASE_URL=`+cfg.BaseURL)
 	}
 	return env
