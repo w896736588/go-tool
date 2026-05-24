@@ -126,17 +126,16 @@
 
           <div class="agent-cli-card__actions">
             <GitActionButton compact variant="success" @click="openAgentExecDialog(row)">执行</GitActionButton>
-            <GitActionButton
-              compact
+            <ChatHistoryButton
               variant="info"
-              :class="{ 'chat-history-btn--running': getAgentChatCounts(row.id).running > 0 }"
+              :running="getAgentChatCounts(row.id).running > 0"
+              :running-count="getAgentChatCounts(row.id).running"
+              :interrupted-count="0"
+              :total-count="getAgentChatCounts(row.id).total"
               @click="openAgentChatHistory(row)"
             >
               执行历史
-              <span v-if="getAgentChatCounts(row.id).total > 0" class="chat-history-btn__counts">
-                {{ getAgentChatCounts(row.id).running }}/{{ getAgentChatCounts(row.id).total }}
-              </span>
-            </GitActionButton>
+            </ChatHistoryButton>
             <GitActionButton
               v-if="row.type !== 'codex-cli'"
               compact
@@ -347,95 +346,43 @@
       </template>
     </el-dialog>
 
-    <el-dialog
+    <ChatHistoryDialog
+      ref="agentChatHistoryDialog"
       v-model="agentChatHistoryVisible"
       :title="'执行历史 - ' + (agentChatHistoryTitle || 'Agent CLI')"
-      width="80vw"
-      top="3vh"
-      destroy-on-close
+      :loading="agentChatHistoryLoading"
+      :items="agentChatHistoryList"
+      :selected-id="agentChatDetailId"
+      :detail-title="agentChatHistoryTitle || '-'"
+      :model-name="chatDetailModelName"
+      :local-dir="chatDetailLocalDir"
+      :thinking-intensity="chatDetailThinkingIntensity"
+      :detail-status="chatDetailStatus"
+      :detail-messages="chatDetailMessages"
+      :continue-input="chatContinueInput"
+      :continue-loading="chatContinueLoading"
+      :scroll-button-visible="agentChatDetailShowScrollBtn"
+      :running-text="'等待 Agent CLI 响应...'"
+      :thinking-stream-elapsed="thinkingStreamElapsed"
+      :item-msg-count-fn="getItemMsgCount"
+      :runtime-duration-text-fn="runtimeDurationText"
+      :format-duration-display-fn="formatDurationDisplay"
+      :format-created-at-fn="formatCreatedAt"
+      :render-markdown-fn="renderMarkdown"
+      :is-current-thinking-fn="isCurrentThinking"
+      :format-cli-type-fn="formatCliType"
+      :is-long-text-fn="isLongText"
+      :truncate-cmd-prompt-fn="truncateCmdPrompt"
+      :stop-reason-label-fn="stopReasonLabel"
+      :format-num-fn="formatNum"
+      @select="onAgentChatRowClick"
+      @update:continueInput="chatContinueInput = $event"
+      @continue="continueChat"
+      @stop="stopChat"
+      @scroll="onAgentChatDetailScroll"
+      @scroll-to-bottom="scrollAgentChatToBottom(true)"
       @closed="onAgentChatHistoryClosed"
-    >
-      <div class="chat-combined-body" v-loading="agentChatHistoryLoading">
-        <div class="chat-combined-list">
-          <div
-            v-for="item in agentChatHistoryList"
-            :key="item.id"
-            :class="['chat-list-item', { 'chat-list-item--active': agentChatDetailId === item.id }]"
-            @click="onAgentChatRowClick(item)"
-          >
-            <div class="chat-list-item__name">
-              <div class="chat-list-item__tags"><span class="chat-list-item__id">{{ item.id }}</span></div>
-              <div class="chat-list-item__prompt" :title="item.prompt || '未命名'">{{ (item.prompt || '未命名').substring(0, 30) }}{{ (item.prompt || '').length > 30 ? '...' : '' }}</div>
-            </div>
-            <div class="chat-list-item__time">
-              <span v-if="item.status === 'running' && runtimeDurationText(item)" style="color: #409eff;">{{ runtimeDurationText(item) }}</span>
-              <span v-else-if="item.duration_ms > 0">{{ formatDurationDisplay(item.duration_ms) }}</span>
-              <span v-else>{{ item.created_at || '-' }}</span>
-              <span v-if="getItemMsgCount(item) > 0" class="chat-list-item__msg-count">{{ getItemMsgCount(item) }}条</span>
-            </div>
-            <span :class="['chat-list-item__status', 'chat-list-item__status--' + (item.status || '')]">
-              <span v-if="item.status === 'running'" class="chat-list-item__running-dot"></span>
-              <span v-else-if="item.status === 'error'" class="chat-list-item__error-icon">!</span>
-              {{ statusText(item.status) }} {{ formatCreatedAt(item.created_at) }}
-            </span>
-          </div>
-          <div v-if="agentChatHistoryList.length === 0 && !agentChatHistoryLoading" class="chat-combined-list__empty">暂无执行记录</div>
-        </div>
-        <div class="chat-combined-detail">
-          <div v-if="!agentChatDetailId" class="chat-combined-detail__placeholder">请选择一条执行记录</div>
-          <template v-else>
-            <div class="chat-detail-task-name">{{ agentChatHistoryTitle || '-' }}</div>
-            <div v-if="chatDetailModelName || chatDetailLocalDir" style="margin-bottom: 12px; color: #909399; font-size: 12px;">
-              <span v-if="chatDetailModelName">模型: {{ chatDetailModelName }}</span>
-              <span v-if="chatDetailModelName && chatDetailLocalDir"> | </span>
-              <span v-if="chatDetailLocalDir">目录: {{ chatDetailLocalDir }}</span>
-            </div>
-            <div ref="agentChatDetailContainer" class="chat-detail-container" @scroll="onAgentChatDetailScroll">
-              <div v-if="chatDetailMessages.length === 0 && chatDetailStatus === 'running'" style="text-align: center; padding: 40px; color: #909399;">
-                <div>等待 Agent CLI 响应...</div>
-              </div>
-              <div v-for="(msg, idx) in chatDetailMessages" :key="idx" style="margin-bottom: 8px;">
-                <div v-if="msg.type === 'system_init'" style="color: #67c23a; font-size: 12px; padding: 4px 0;">
-                  {{ msg.text }} | model: {{ msg.model }}
-                </div>
-                <div v-else-if="msg.type === 'system_command'" style="display: flex; justify-content: flex-end; margin: 4px 0;">
-                  <div style="background: #ecf5ff; border-radius: 8px 8px 0 8px; padding: 8px 12px; max-width: 70%; width: fit-content; min-width: 280px; border: 1px solid #d9ecff;">
-                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
-                      <span style="font-size: 11px; color: #909399;">{{ formatCliType(msg.cliType) }}</span>
-                      <span v-if="isLongText(msg.cmdLine || msg.text, 20)" @click="msg.collapsed = !msg.collapsed" style="cursor: pointer; font-size: 11px; color: #409eff; user-select: none;">{{ msg.collapsed ? '展开 ▼' : '收起 ▲' }}</span>
-                    </div>
-                    <div v-if="msg.cmdLine" class="markdown-body chat-markdown-body" v-html="renderMarkdown('> ' + (msg.collapsed ? truncateCmdPrompt(msg.cmdLine, 15) : msg.cmdLine))"></div>
-                    <div v-else style="white-space: pre-wrap; word-break: break-word; font-size: 12px; color: #303133; line-height: 1.6;" :style="{ maxHeight: msg.collapsed ? '20em' : 'none', overflow: msg.collapsed ? 'hidden' : 'visible' }">{{ msg.text }}</div>
-                    <div v-if="msg.cmdLine" style="white-space: pre-wrap; word-break: break-word; font-size: 12px; color: #303133; line-height: 1.6; margin-top: 8px; border-top: 1px dashed #dcdfe6; padding-top: 6px;" :style="{ maxHeight: msg.collapsed ? '15em' : 'none', overflow: msg.collapsed ? 'hidden' : 'visible' }">{{ msg.text }}</div>
-                  </div>
-                </div>
-                <div v-else-if="msg.type === 'system_hook'" style="color: #909399; font-size: 12px;">{{ msg.text }}</div>
-                <div v-else-if="msg.type === 'user'" style="display: flex; justify-content: flex-end; margin: 4px 0;">
-                  <div style="background: #f0f9eb; border-radius: 8px 8px 0 8px; padding: 8px 12px; max-width: 70%; white-space: pre-wrap; word-break: break-word;">{{ msg.text }}</div>
-                </div>
-                <div v-else-if="msg.type === 'assistant'" style="display: flex; justify-content: flex-start; margin: 4px 0;">
-                  <div style="background: #fff; border-radius: 8px 8px 8px 0; padding: 8px 12px; max-width: 78%; border: 1px solid #ebeef5;">
-                    <template v-if="msg.thinking">
-                      <div class="thinking-blockquote" :style="{ maxHeight: msg._thinkingCollapsed ? '220px' : 'none', overflow: msg._thinkingCollapsed ? 'auto' : 'visible' }">
-                        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
-                          <span style="font-size:12px; color:#909399;">思考过程</span>
-                          <el-button v-if="needCollapseBtn(msg.thinking)" link type="primary" @click="toggleThinkingCollapse(msg)">
-                            {{ msg._thinkingCollapsed ? '展开' : '收起' }}
-                          </el-button>
-                        </div>
-                        <div style="white-space: pre-wrap; color: #606266;">{{ msg.thinking }}</div>
-                      </div>
-                    </template>
-                    <div class="markdown-body chat-markdown-body" v-html="renderMarkdown(msg.text || '')"></div>
-                  </div>
-                </div>
-                <div v-else style="white-space: pre-wrap; word-break: break-word;">{{ msg.text }}</div>
-              </div>
-            </div>
-          </template>
-        </div>
-      </div>
-    </el-dialog>
+    />
 
   </div>
 </template>
@@ -443,6 +390,8 @@
 <script>
 import agentCliApi from '../../utils/base/agent_cli'
 import GitActionButton from '@/components/base/GitActionButton.vue'
+import ChatHistoryButton from '@/components/shared/ChatHistoryButton.vue'
+import ChatHistoryDialog from '@/components/shared/ChatHistoryDialog.vue'
 import taskWorkflowApi from '@/utils/base/task_workflow'
 import baseUtils from '@/utils/base'
 import chatParser from '@/utils/chat_parser'
@@ -461,6 +410,8 @@ const md = new MarkdownIt({ html: true, breaks: true, linkify: true })
 export default {
   components: {
     GitActionButton,
+    ChatHistoryButton,
+    ChatHistoryDialog,
   },
   data() {
     return {
@@ -531,6 +482,9 @@ export default {
       chatDetailSSELines: [],
       chatDetailAutoScroll: true,
       chatDetailSSERegistered: false,
+      agentChatDetailShowScrollBtn: false,
+      chatContinueInput: '',
+      chatContinueLoading: false,
       thinkingStreamElapsed: 0,
     }
   },
@@ -781,6 +735,7 @@ export default {
       this.chatDetailId = row.id
       this.chatDetailStatus = row.status
       this.chatDetailAutoScroll = true
+      this.agentChatDetailShowScrollBtn = false
       if (this._sseChatId !== row.id) {
         this.chatDetailSSELines = []
         this.chatDetailMessages = []
@@ -797,17 +752,27 @@ export default {
     },
     onAgentChatDetailScroll() {
       if (this._autoScrollLocked) return
-      const el = this.$refs.agentChatDetailContainer
-      if (!el) return
-      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30
-      this.chatDetailAutoScroll = atBottom
+      const dialog = this.$refs.agentChatHistoryDialog
+      if (!dialog || !dialog.isDetailNearBottom) return
+      const atBottom = dialog.isDetailNearBottom(30)
+      if (atBottom) {
+        this.chatDetailAutoScroll = true
+        this.agentChatDetailShowScrollBtn = false
+      } else {
+        this.chatDetailAutoScroll = false
+        this.agentChatDetailShowScrollBtn = true
+      }
     },
     scrollAgentChatToBottom(force) {
       if (!force && !this.chatDetailAutoScroll) return
+      if (force) {
+        this.chatDetailAutoScroll = true
+        this.agentChatDetailShowScrollBtn = false
+      }
       this.$nextTick(() => {
-        const el = this.$refs.agentChatDetailContainer
-        if (el) {
-          el.scrollTo({ top: el.scrollHeight, behavior: 'auto' })
+        const dialog = this.$refs.agentChatHistoryDialog
+        if (dialog && dialog.scrollDetailToBottom) {
+          dialog.scrollDetailToBottom('auto')
         }
       })
     },
@@ -1263,6 +1228,16 @@ export default {
       msg._thinkingCollapsed = !msg._thinkingCollapsed
       msg._thinkingManuallyToggled = true
     },
+    isCurrentThinking(msg) {
+      if (this._thinkingStreamStartTime === 0) return false
+      for (let i = this.chatDetailMessages.length - 1; i >= 0; i--) {
+        const item = this.chatDetailMessages[i]
+        if (item.type === 'assistant' && item.thinking) {
+          return item === msg
+        }
+      }
+      return false
+    },
     needCollapseBtn(text) {
       return (text || '').split('\n').length > 10
     },
@@ -1300,6 +1275,7 @@ export default {
       this.chatDetailSSERegistered = false
       this.chatDetailMessages = []
       this.chatDetailSSELines = []
+      this.chatContinueInput = ''
       taskProgressStore.reset()
       this.chatDetailId = 0
       this.agentChatDetailId = 0
@@ -1345,6 +1321,54 @@ export default {
     renderMarkdown(text) {
       if (!text) return ''
       return md.render(text)
+    },
+    // formatNum 格式化数字，统一结果卡片中的 Token 展示。 // formatNum renders grouped numbers for result cards.
+    formatNum(num) {
+      if (num == null) return '0'
+      return Number(num).toLocaleString()
+    },
+    // stopReasonLabel 将停止原因映射为中文文案。 // stopReasonLabel maps structured stop reasons into readable labels.
+    stopReasonLabel(reason) {
+      const map = {
+        end_turn: '正常结束',
+        stop_sequence: '停止序列',
+        max_tokens: '达到上限',
+        tool_use: '工具调用',
+      }
+      return map[reason] || reason
+    },
+    // continueChat 继续当前 Agent CLI 历史对话。 // continueChat resumes the selected standalone AgentCli chat with a new user message.
+    continueChat() {
+      const input = this.chatContinueInput.trim()
+      if (!input) return
+      this.chatContinueLoading = true
+      taskWorkflowApi.TaskWorkflowChatContinue(this.chatDetailId, input, (res) => {
+        this.chatContinueLoading = false
+        if (res.ErrCode === 0) {
+          this.chatContinueInput = ''
+          this.chatDetailStatus = 'running'
+          this.connectChatStream(this.chatDetailId, input)
+          setTimeout(() => { this.loadChatDetail() }, 500)
+        } else {
+          this.$message.error(res.ErrMsg || '发送失败')
+        }
+      })
+    },
+    // stopChat 停止当前 Agent CLI 历史对话。 // stopChat interrupts the selected standalone AgentCli chat immediately on both UI and backend.
+    stopChat() {
+      if (this._chatEventSource) {
+        this._chatEventSource.close()
+        this._chatEventSource = null
+      }
+      this._sseChatId = 0
+      this.chatDetailSSERegistered = false
+      taskWorkflowApi.TaskWorkflowChatStop(this.chatDetailId, (res) => {
+        if (res.ErrCode !== 0) {
+          this.$message.error(res.ErrMsg || '停止失败')
+        }
+      })
+      this.chatDetailStatus = 'interrupted'
+      this.updateChatListStatus(this.chatDetailId, 'interrupted')
     },
     // ---- Webhook 配置相关 ----
     loadWebhookOptions() {
@@ -1454,274 +1478,3 @@ export default {
 </script>
 
 <style scoped src="@/css/components/agent_cli/AgentCliList.css"></style>
-
-<style>
-.chat-history-btn--running {
-  position: relative;
-}
-
-.chat-history-btn--running::before {
-  content: '';
-  position: absolute;
-  left: 8px;
-  top: 50%;
-  width: 10px;
-  height: 10px;
-  margin-top: -5px;
-  border-radius: 50%;
-  border: 2px solid #409eff;
-  border-top-color: transparent;
-  animation: chat-history-spin 0.8s linear infinite;
-}
-
-.chat-history-btn__counts {
-  display: inline-block;
-  margin-left: 6px;
-  font-size: 11px;
-  opacity: 0.85;
-  font-variant-numeric: tabular-nums;
-  position: relative;
-  z-index: 1;
-}
-
-@keyframes chat-history-spin {
-  to { transform: rotate(360deg); }
-}
-
-.chat-combined-body {
-  display: flex;
-  gap: 12px;
-  height: calc(90vh - 120px);
-  min-height: 500px;
-}
-
-.chat-combined-list {
-  width: 240px;
-  min-width: 240px;
-  border-right: 1px solid #e8e8e0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.chat-combined-list__empty {
-  padding: 24px 12px;
-  text-align: center;
-  color: #909399;
-  font-size: 13px;
-}
-
-.chat-list-item {
-  position: relative;
-  padding: 10px 12px 10px 16px;
-  cursor: pointer;
-  border-radius: 6px;
-  transition: background 0.15s;
-}
-
-.chat-list-item:hover {
-  background: #f0f2f5;
-}
-
-.chat-list-item--active {
-  background: #edf3e8;
-}
-
-.chat-list-item__name {
-  font-size: 14px;
-  font-weight: 500;
-  color: #303133;
-  line-height: 1.4;
-  padding-right: 14px;
-}
-
-.chat-list-item__tags {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 2px;
-}
-
-.chat-list-item__prompt {
-  font-size: 13px;
-  font-weight: 400;
-  color: #606266;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chat-list-item__id {
-  display: inline-block;
-  font-size: 11px;
-  font-weight: 400;
-  color: #909399;
-  background: #f0f2f5;
-  padding: 0 6px;
-  border-radius: 8px;
-  margin-right: 6px;
-  flex-shrink: 0;
-}
-
-.chat-list-item__time {
-  font-size: 12px;
-  color: #909399;
-  margin-top: 2px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.chat-list-item__msg-count {
-  font-size: 11px;
-  color: #606266;
-  background: #f0f2f5;
-  padding: 0 6px;
-  border-radius: 10px;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.chat-list-item__status {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  padding: 1px 0;
-  white-space: nowrap;
-  margin-top: 4px;
-}
-
-.chat-list-item__running-dot {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  border: 2px solid #409eff;
-  border-top-color: transparent;
-  animation: chat-status-dot-spin 0.8s linear infinite;
-  flex-shrink: 0;
-}
-
-@keyframes chat-status-dot-spin {
-  to { transform: rotate(360deg); }
-}
-
-.chat-list-item__error-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #f56c6c;
-  color: #fff;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1;
-  flex-shrink: 0;
-}
-
-.chat-list-item__status--running {
-  color: #409eff;
-}
-
-.chat-list-item__status--completed {
-  color: #67c23a;
-}
-
-.chat-list-item__status--error {
-  color: #f56c6c;
-}
-
-.chat-list-item__status--interrupted {
-  color: #e6a23c;
-}
-
-.chat-combined-detail {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  overflow: hidden;
-  position: relative;
-}
-
-.chat-combined-detail__placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: #909399;
-  font-size: 14px;
-}
-
-.chat-detail-task-name {
-  font-size: 15px;
-  font-weight: 600;
-  color: #303133;
-  margin-bottom: 12px;
-  line-height: 1.5;
-}
-
-.chat-detail-container {
-  flex: 1;
-  overflow-y: auto;
-  background: #fafbfc;
-  border: 1px solid #ebeef5;
-  border-radius: 8px;
-  padding: 16px;
-  color: #303133;
-  font-size: 14px;
-  line-height: 1.6;
-  min-height: 0;
-  scroll-behavior: smooth;
-}
-
-.chat-markdown-body {
-  word-wrap: break-word;
-  color: #303133;
-  background-color: transparent;
-}
-
-.chat-markdown-body table {
-  border-collapse: collapse;
-  width: 100%;
-  margin: 8px 0;
-}
-
-.chat-markdown-body th,
-.chat-markdown-body td {
-  padding: 6px 12px;
-  border: 1px solid #e4e7ed;
-  text-align: left;
-}
-
-.chat-markdown-body th {
-  font-weight: 600;
-  background-color: #f5f7fa;
-  color: #303133;
-}
-
-.chat-markdown-body td {
-  background-color: #fff;
-}
-
-.chat-markdown-body code {
-  font-family: 'Consolas', monospace;
-  font-size: 0.9em;
-  background-color: #f5f7fa;
-  padding: 0.2em 0.4em;
-  border-radius: 3px;
-  color: #e6a23c;
-}
-
-.thinking-blockquote {
-  background: #f8f8f8;
-  border-left: 3px solid #d0d7de;
-  padding: 10px 12px;
-  margin-bottom: 10px;
-  border-radius: 4px;
-}
-</style>
