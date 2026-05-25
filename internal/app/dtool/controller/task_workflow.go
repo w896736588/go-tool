@@ -2455,6 +2455,11 @@ func loadAgentCliChatRuntimeConfig(agentCliID int, requestedModelName string, c 
 		ok = false
 		return
 	}
+	if cast.ToInt(cliRow["enabled"]) != define.AgentCliEnabled {
+		gsgin.GinResponseError(c, `Agent Cli 实例未启用`, nil)
+		ok = false
+		return
+	}
 	settingsPath = cast.ToString(cliRow["settings_path"])
 	thinkingCollapsed = cast.ToInt(cliRow["thinking_collapsed"])
 	return
@@ -2525,11 +2530,20 @@ func AgentChatSend(c *gin.Context) {
 	if strings.TrimSpace(req.CliType) == `` {
 		req.CliType = `claude`
 	}
+	localDir := strings.TrimSpace(req.LocalDir)
+	if err := validateAgentCliLocalDir(localDir); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
 	settingsPath, modelName, thinkingCollapsed, ok := loadAgentCliChatRuntimeConfig(req.AgentCliId, req.ModelName, c)
 	if !ok {
 		return
 	}
-	chatID, err := common.DbMain.AgentChatCreate(req.AgentCliId, req.Prompt, strings.TrimSpace(req.PromptType), req.CliType, req.LocalDir, settingsPath, modelName, thinkingCollapsed, req.ThinkingIntensity)
+	if err := validateAgentCliRuntimeConfig(req.AgentCliId, req.CliType); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	chatID, err := common.DbMain.AgentChatCreate(req.AgentCliId, req.Prompt, strings.TrimSpace(req.PromptType), req.CliType, localDir, settingsPath, modelName, thinkingCollapsed, req.ThinkingIntensity)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
@@ -2537,6 +2551,20 @@ func AgentChatSend(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`chat_id`: chatID,
 	})
+}
+
+// validateAgentCliLocalDir 校验独立 Agent CLI 执行使用的工作目录。
+// 独立执行允许手工输入目录，需在入库前做存在性校验，避免把无效路径带入后续 CLI 启动层。
+func validateAgentCliLocalDir(localDir string) error {
+	localDir = strings.TrimSpace(localDir)
+	if localDir == `` {
+		return fmt.Errorf(`请选择工作目录`)
+	}
+	info, err := os.Stat(localDir)
+	if err != nil || !info.IsDir() {
+		return fmt.Errorf(`工作目录不存在或不是目录: %s`, localDir)
+	}
+	return nil
 }
 
 // TaskWorkflowChatContinue 继续已有对话。

@@ -125,7 +125,7 @@
           </div>
 
           <div class="agent-cli-card__actions">
-            <GitActionButton compact variant="success" @click="openAgentExecDialog(row)">执行</GitActionButton>
+            <GitActionButton compact variant="success" :disabled="!row.displayed_enabled" @click="openAgentExecDialog(row)">执行</GitActionButton>
             <ChatHistoryButton
               variant="info"
               :running="getAgentChatCounts(row.id).running > 0"
@@ -591,6 +591,10 @@ export default {
       localStorage.setItem(this.getAgentExecCacheKey(this.agentExecCliId), JSON.stringify(data))
     },
     openAgentExecDialog(row) {
+      if (!row?.displayed_enabled) {
+        this.$message.warning('请先启用当前 Agent CLI')
+        return
+      }
       this.agentExecCliId = row.id
       this.agentExecCliName = row.name || '-'
       const cached = this.getAgentExecCache(row.id)
@@ -642,6 +646,11 @@ export default {
         this.$message.warning('Agent 实例不存在')
         return
       }
+      const currentCli = this.getAgentExecCli()
+      if (!currentCli || !currentCli.displayed_enabled) {
+        this.$message.warning('请选择已启用的 Agent 实例')
+        return
+      }
       if (!String(this.agentExecLocalDir || '').trim()) {
         this.$message.warning('请输入工作目录')
         return
@@ -684,7 +693,6 @@ export default {
           this.connectChatStream(chatId, null, true)
           this.loadChatDetail()
           this.loadAgentChatCounts()
-          const currentCli = this.getAgentExecCli()
           if (currentCli) {
             this.openAgentChatHistory(currentCli, chatId)
           }

@@ -2054,8 +2054,8 @@ export default {
       // 加载 Agent CLI 列表
       agentCliApi.AgentCliList((res) => {
         if (res.ErrCode === 0 && res.Data) {
-          // 过滤掉配置文件不存在的 Claude Code CLI（codex 类型不受此限制）
-          this.promptExecCliList = (res.Data.list || []).filter(cli => cli.type === 'codex-cli' || cli.settings_exists)
+          // 仅展示“已启用且配置可用”的 Agent，避免把停用实例带入执行弹窗。
+          this.promptExecCliList = (res.Data.list || []).filter(cli => cli.displayed_enabled)
           // 如果无缓存且仅有一个 CLI，自动选中
           if (!cached && this.promptExecCliList.length === 1) {
             this.promptExecCliId = this.promptExecCliList[0].id

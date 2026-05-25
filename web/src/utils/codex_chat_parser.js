@@ -38,7 +38,7 @@ function parseOneLine(line, messages, currentItems) {
     })
   } else if (eventType === 'error') {
     // Codex 可能发出临时 reconnect 通知，也可能是真正的错误
-    const errorMsg = obj.message || obj.error || '未知错误'
+    const errorMsg = obj.text || obj.message || obj.error || '未知错误'
     messages.push({ type: 'error', text: errorMsg })
   } else if (eventType === 'item.started' || eventType === 'item.updated' || eventType === 'item.completed') {
     handleItemEvent(eventType, obj, messages, currentItems)
