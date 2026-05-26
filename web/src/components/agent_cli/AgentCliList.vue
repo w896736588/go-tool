@@ -204,9 +204,14 @@
             <el-input v-model="form.settings_path" placeholder="请输入 settings.json 的绝对路径" />
             <div class="agent-cli-form-tip">例如: C:\Users\xxx\.claude\settings.json</div>
           </el-form-item>
-          <el-form-item label="模型">
-            <el-input v-model="form.model_name" placeholder="例如 deepseek-v4-pro[1m]" />
-            <div class="agent-cli-form-tip">此模型将同时作为默认模型和可选模型。</div>
+          <el-form-item label="模型列表">
+            <el-input
+              v-model="form.model_list_text"
+              type="textarea"
+              :rows="4"
+              placeholder="每行一个模型；首个模型作为默认模型写入 settings.json"
+            />
+            <div class="agent-cli-form-tip">执行任务时可选择不同于 settings.json 配置的模型。</div>
           </el-form-item>
           <el-form-item label="API Key">
             <el-input v-model="form.api_key" type="password" show-password placeholder="请输入 DeepSeek API Key" />
@@ -951,7 +956,7 @@ export default {
     },
     saveItem() {
       const isCodex = this.form.type === 'codex-cli'
-      const claudeModels = this.form.model_name.trim() ? [this.form.model_name.trim()] : []
+      const claudeModels = this.parseModelList(this.form.model_list_text, '')
       const codexModels = this.parseModelList(this.form.codex_model_list_text, '')
       if (isCodex) {
         // Codex 现在只保留模型列表字段，首项作为默认模型 / Codex now only uses the model list and the first item becomes default.
@@ -998,10 +1003,10 @@ export default {
           // 保存分组关联
           this._saveGroupRel(this.editingId)
           // Claude 类型：只要配置项有输入就同步写入 settings.json，避免仅改模型时运行仍读取旧配置。
-          if (!isCodex && (this.form.model_name.trim() || this.form.api_key.trim() || this.form.base_url.trim())) {
+          if (!isCodex && (claudeModels.length > 0 || this.form.api_key.trim() || this.form.base_url.trim())) {
             const dsData = {
               id: this.editingId,
-              model_name: this.form.model_name.trim(),
+              model_name: claudeModels.length > 0 ? claudeModels[0] : '',
               model_list: claudeModels,
               api_key: this.form.api_key.trim(),
               base_url: this.form.base_url.trim(),
@@ -1126,7 +1131,13 @@ export default {
           if (response && response.ErrCode === 0 && response.Data && response.Data.content) {
             try {
               const config = JSON.parse(response.Data.content)
-              this.form.model_name = config.model || ''
+              // 优先读取 dtool_models 列表，兼容旧版单模型配置
+              const modelList = Array.isArray(config.dtool_models) ? config.dtool_models : []
+              if (modelList.length > 0) {
+                this.form.model_list_text = modelList.join('\n')
+              } else if (config.model) {
+                this.form.model_list_text = config.model
+              }
               if (config.env) {
                 this.form.api_key = config.env.ANTHROPIC_AUTH_TOKEN || ''
                 this.form.base_url = config.env.ANTHROPIC_BASE_URL || ''
