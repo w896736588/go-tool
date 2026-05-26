@@ -473,6 +473,8 @@ const AGENT_CLI_ENABLED_SORT_FALSE = 0
 const AGENT_EXEC_CACHE_PREFIX = 'agent_cli_exec_'
 // AGENT_CLI_GROUP_CACHE_KEY 记住上次选中的分组 ID。 // LocalStorage key for remembering the last selected group filter.
 const AGENT_CLI_GROUP_CACHE_KEY = 'agent_cli_selected_group'
+// AGENT_EXEC_SHARED_HISTORY_LIMIT 控制执行弹窗共享历史目录展示数量。 // Max shared working directories shown in the execution dialog.
+const AGENT_EXEC_SHARED_HISTORY_LIMIT = 20
 // markdown-it 实例，用于在"执行历史"对话框中渲染 markdown（包括表格）。 // Markdown renderer for execution history detail.
 const md = new MarkdownIt({ html: true, breaks: true, linkify: true })
 
@@ -706,29 +708,47 @@ export default {
         this.agentExecModelName = this.agentExecModelOptions[0]
       }
       this.agentExecDialogVisible = true
-      this.loadAgentExecHistoryDirs(row.id)
+      this.loadAgentExecHistoryDirs()
     },
-    // loadAgentExecHistoryDirs 加载当前 Agent 的历史工作目录，去重后展示在执行弹窗顶部。 // Loads and de-duplicates history working directories for the current Agent execution dialog.
-    loadAgentExecHistoryDirs(agentCliId) {
+    // loadAgentExecHistoryDirs 加载所有 Agent CLI 共享的历史工作目录。 // Loads globally shared history directories across all Agent CLI cards.
+    loadAgentExecHistoryDirs() {
       this.agentExecHistoryDirLoading = true
-      agentCliApi.AgentChatListByAgentCli(agentCliId, (response) => {
+      const rows = Array.isArray(this.list) ? this.list.filter(item => Number(item.id) > 0) : []
+      if (rows.length === 0) {
         this.agentExecHistoryDirLoading = false
-        if (!(response && response.ErrCode === 0 && response.Data)) {
-          this.agentExecHistoryDirs = []
-          return
-        }
-        const list = Array.isArray(response.Data.list) ? response.Data.list : []
-        this.agentExecHistoryDirs = this.extractAgentExecHistoryDirs(list)
+        this.agentExecHistoryDirs = []
+        return
+      }
+      let pending = rows.length
+      const mergedList = []
+      rows.forEach((row) => {
+        agentCliApi.AgentChatListByAgentCli(row.id, (response) => {
+          if (response && response.ErrCode === 0 && response.Data) {
+            const list = Array.isArray(response.Data.list) ? response.Data.list : []
+            mergedList.push(...list)
+          }
+          pending -= 1
+          if (pending <= 0) {
+            this.agentExecHistoryDirLoading = false
+            this.agentExecHistoryDirs = this.extractAgentExecHistoryDirs(mergedList)
+          }
+        })
       })
     },
     // extractAgentExecHistoryDirs 从执行历史中提取去重后的目录列表，最近使用优先。 // Extracts a unique directory list from execution history while preserving recency order.
     extractAgentExecHistoryDirs(list) {
+      const sortedList = Array.isArray(list) ? [...list] : []
+      sortedList.sort((firstItem, secondItem) => {
+        const secondTime = new Date(String(secondItem?.created_at || '').replace(/-/g, '/')).getTime() || 0
+        const firstTime = new Date(String(firstItem?.created_at || '').replace(/-/g, '/')).getTime() || 0
+        return secondTime - firstTime
+      })
       const dirSet = new Set()
       const dirList = []
-      list.forEach((item) => {
+      sortedList.forEach((item) => {
         const localDir = String(item?.local_dir || '').trim()
         // 空目录不展示，避免把无效历史写回输入框。 // Skip empty directories so invalid history values are never re-applied.
-        if (!localDir || dirSet.has(localDir)) {
+        if (!localDir || dirSet.has(localDir) || dirList.length >= AGENT_EXEC_SHARED_HISTORY_LIMIT) {
           return
         }
         dirSet.add(localDir)
@@ -977,8 +997,8 @@ export default {
           }
           // 保存分组关联
           this._saveGroupRel(this.editingId)
-          // Claude 类型：密钥字段非空时，一并写入 DeepSeek 配置
-          if (!isCodex && this.form.model_name.trim() && this.form.api_key.trim()) {
+          // Claude 类型：只要配置项有输入就同步写入 settings.json，避免仅改模型时运行仍读取旧配置。
+          if (!isCodex && (this.form.model_name.trim() || this.form.api_key.trim() || this.form.base_url.trim())) {
             const dsData = {
               id: this.editingId,
               model_name: this.form.model_name.trim(),

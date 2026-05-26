@@ -160,7 +160,7 @@ func AgentCliSave(c *gin.Context) {
 			gsgin.GinResponseError(c, err.Error(), nil)
 			return
 		}
-		if enabled == define.AgentCliEnabled {
+		if enabled == define.AgentCliEnabled && req.Type == define.AgentCliTypeCodexCli {
 			disableOtherAgentCliByType(req.Type, req.Id)
 		}
 		savedItem = define.AgentCliItem{
@@ -195,7 +195,7 @@ func AgentCliSave(c *gin.Context) {
 			gsgin.GinResponseError(c, err.Error(), nil)
 			return
 		}
-		if enabled == define.AgentCliEnabled {
+		if enabled == define.AgentCliEnabled && req.Type == define.AgentCliTypeCodexCli {
 			disableOtherAgentCliByType(req.Type, int(lastId))
 		}
 		savedItem = define.AgentCliItem{
@@ -212,8 +212,8 @@ func AgentCliSave(c *gin.Context) {
 		}
 	}
 
-	// DB 保存成功后，将 Codex CLI 配置写入文件系统（config.toml + auth.json）
-	if codexCfg != nil {
+	// 仅当当前 Codex CLI 实例处于启用态时，才同步全局 ~/.codex 配置，避免编辑其它实例时串改当前活动实例。
+	if codexCfg != nil && savedItem.Enabled == define.AgentCliEnabled {
 		if writeErr := business.WriteCodexConfigToToml(codexCfg); writeErr != nil {
 			log.Printf("[agent-cli] 写入 Codex config.toml 失败: %v", writeErr)
 		}
@@ -409,10 +409,11 @@ func AgentCliToggleEnabled(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
+	rowType := cast.ToString(row["type"])
 	if enabled == define.AgentCliEnabled {
-		disableOtherAgentCliByType(cast.ToString(row["type"]), req.Id)
 		// 启用 Codex CLI 时同步写入全局 codex 配置 / Sync global codex config when enabling a codex CLI.
-		if cast.ToString(row["type"]) == define.AgentCliTypeCodexCli {
+		if rowType == define.AgentCliTypeCodexCli {
+			disableOtherAgentCliByType(rowType, req.Id)
 			if err := applyCodexCliConfigByRow(row); err != nil {
 				gsgin.GinResponseError(c, err.Error(), nil)
 				return

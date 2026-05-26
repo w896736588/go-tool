@@ -126,6 +126,16 @@ func WriteDeepSeekToSettings(settingsPath string, modelName string, modelList []
 		}
 	}
 
+	existingModel, existingBaseURL, existingAPIKey := GetAgentCliModelConfig(string(content))
+	if strings.TrimSpace(modelName) == "" {
+		modelName = existingModel
+	}
+	if strings.TrimSpace(apiKey) == "" {
+		apiKey = existingAPIKey
+	}
+	if strings.TrimSpace(baseUrl) == "" {
+		baseUrl = existingBaseURL
+	}
 	if baseUrl == "" {
 		baseUrl = "https://api.deepseek.com/anthropic"
 	}
