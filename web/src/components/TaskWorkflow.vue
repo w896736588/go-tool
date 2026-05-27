@@ -2032,6 +2032,15 @@ export default {
       taskWorkflowApi.TaskWorkflowChatStop(this.chatDetailId, (res) => {
         if (res.ErrCode !== 0) {
           this.$helperNotify.error(res.ErrMsg || '停止失败')
+          return
+        }
+        // 从响应中获取 killed_pid 并更新到对话列表项（刷新页面后即消失）
+        const killedPid = res.Data && res.Data.killed_pid
+        if (killedPid > 0) {
+          const item = this.promptChatHistoryList.find(i => i.id === this.chatDetailId)
+          if (item) {
+            item._killed_pid = killedPid
+          }
         }
       })
       // 前端立即更新状态

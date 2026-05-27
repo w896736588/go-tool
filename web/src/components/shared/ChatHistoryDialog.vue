@@ -20,6 +20,7 @@
             <div class="chat-list-item__tags">
               <span class="chat-list-item__id">{{ item.id }}</span>
               <span v-if="item.agent_cli_name" class="chat-list-item__agent-name">{{ item.agent_cli_name }}</span>
+              <span v-if="item._killed_pid" class="chat-list-item__killed-pid">杀进程:{{ item._killed_pid }}</span>
             </div>
             <div class="chat-list-item__prompt" :title="item.prompt || '未命名'">
               {{ (item.prompt || '未命名').substring(0, 30) }}{{ (item.prompt || '').length > 30 ? '...' : '' }}

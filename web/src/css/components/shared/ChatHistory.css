@@ -115,6 +115,17 @@
   flex-shrink: 0;
 }
 
+.chat-list-item__killed-pid {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 500;
+  color: #e6a23c;
+  background: #fdf6ec;
+  padding: 0 6px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
 .chat-list-item__time {
   font-size: 12px;
   color: #909399;

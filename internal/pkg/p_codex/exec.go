@@ -47,6 +47,11 @@ func RunCodexStream(ctx context.Context, cfg RunConfig, callback func(msg Stream
 	defer result.closeFn()
 	log.Printf("[codex-exec] 进程已启动, pid=%d", result.pid)
 
+	// 进程启动回调，通知上层记录 PID
+	if cfg.ProcessStartCallback != nil {
+		cfg.ProcessStartCallback(result.pid)
+	}
+
 	// 后台收集 stderr
 	var stderrLines []string
 	stderrDone := make(chan struct{})

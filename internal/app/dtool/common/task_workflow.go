@@ -478,6 +478,18 @@ func (h *CSqlite) TaskWorkflowChatUpdateSessionID(chatID int64, sessionID string
 	return err
 }
 
+// TaskWorkflowChatUpdatePID 更新进程 PID。
+func (h *CSqlite) TaskWorkflowChatUpdatePID(chatID int64, pid int) error {
+	now := time.Now().Format(`2006-01-02 15:04:05`)
+	_, err := h.Client.QuickUpdate(agentChatTableName, map[string]any{
+		`id`: chatID,
+	}, map[string]any{
+		`pid`:        pid,
+		`updated_at`: now,
+	}).Exec()
+	return err
+}
+
 const (
 	// ChatOutputFlushBatchSize SSE 对话输出批量写 DB 的行数阈值
 	ChatOutputFlushBatchSize = 200

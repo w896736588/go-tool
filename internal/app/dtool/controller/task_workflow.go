@@ -2615,6 +2615,7 @@ func TaskWorkflowChatContinue(c *gin.Context) {
 }
 
 // TaskWorkflowChatStop 停止运行中的对话。
+// 先 context cancel 让 goroutine 正常退出，再通过 DB PID 强制杀进程兜底。
 func TaskWorkflowChatStop(c *gin.Context) {
 	var req _struct.TaskWorkflowChatStopRequest
 	if err := gsgin.GinPostBody(c, &req); err != nil {
@@ -2626,17 +2627,47 @@ func TaskWorkflowChatStop(c *gin.Context) {
 		return
 	}
 	chatID := int64(req.ChatID)
+
+	// 1. 先调 cancel 关闭 stopped 通道 + 取消 context，让 goroutine 感知用户主动停止
 	cancelVal, ok := chatCancelFuncs.LoadAndDelete(chatID)
-	if !ok {
-		// 没有找到取消函数，对话可能未在运行，直接标记为中断
-		_ = common.DbMain.TaskWorkflowChatMarkInterrupted(chatID)
-		gsgin.GinResponseSuccess(c, `对话已标记为中断`, nil)
-		return
+	if ok {
+		if cancelFn, ok := cancelVal.(func()); ok {
+			cancelFn()
+		}
 	}
-	if cancelFn, ok := cancelVal.(func()); ok {
-		cancelFn()
+
+	// 2. 兜底：通过 DB PID 强制杀进程（避免 cancel 未生效导致进程残留）
+	killedPID := killProcessByChatID(chatID)
+
+	_ = common.DbMain.TaskWorkflowChatMarkInterrupted(chatID)
+	gsgin.GinResponseSuccess(c, `对话已停止`, map[string]any{
+		`killed_pid`: killedPID,
+	})
+}
+
+// killProcessByChatID 从 agent_chat 表读取 pid 并强制杀进程兜底。
+// 无论 Kill 是否成功（可能已被 cancel 正常退出），都返回 DB 中的 pid 供前端展示。
+func killProcessByChatID(chatID int64) int {
+	info, err := common.DbMain.TaskWorkflowChatInfo(chatID)
+	if err != nil || len(info) == 0 {
+		return 0
 	}
-	gsgin.GinResponseSuccess(c, `对话已停止`, nil)
+	pid := cast.ToInt(info[`pid`])
+	if pid <= 0 {
+		return 0
+	}
+	// 兜底 Kill：cancel 可能已让进程退出，此处不判断返回值
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		gstool.FmtPrintlnLogTime("[chat-stop] chat_id=%d FindProcess(pid=%d) 进程已不存在: %v", chatID, pid, err)
+		return pid
+	}
+	if err := proc.Kill(); err != nil {
+		gstool.FmtPrintlnLogTime("[chat-stop] chat_id=%d Kill(pid=%d) 失败（可能已被 cancel 终止）: %v", chatID, pid, err)
+		return pid
+	}
+	gstool.FmtPrintlnLogTime("[chat-stop] chat_id=%d 已强制终止进程 pid=%d", chatID, pid)
+	return pid
 }
 
 // buildAgentChatListResponse 构造统一的对话列表响应。
@@ -3114,6 +3145,9 @@ func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sess
 		SettingsPath:   settingsPath,
 		Effort:         thinkingEffort,
 		ThinkingBudget: thinkingBudget,
+		ProcessStartCallback: func(pid int) {
+			_ = common.DbMain.TaskWorkflowChatUpdatePID(chatID, pid)
+		},
 	}
 
 	// 推送提示词到前端展示
@@ -3313,6 +3347,9 @@ func runCodexCommand(chatID int64, localDir, prompt string, isResume bool, sessi
 		BaseURL:     codexCfg.BaseURL,
 		WorkingDir:  localDir,
 		SandboxMode: codexCfg.SandboxMode,
+		ProcessStartCallback: func(pid int) {
+			_ = common.DbMain.TaskWorkflowChatUpdatePID(chatID, pid)
+		},
 	}
 
 	// 推送提示词到前端展示（复用 Claude 的 system/command 格式，前端可统一识别）
