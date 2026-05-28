@@ -56,14 +56,14 @@ func (h *MemoryGit) ListChangedFiles(dir, fileName string) ([]string, error) {
 	result := make([]string, 0, len(lines))
 	seen := make(map[string]bool)
 	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == `` {
+		rawLine := strings.TrimRight(line, " \t")
+		if strings.TrimSpace(rawLine) == `` {
 			continue
 		}
-		if len(line) < 4 {
+		if len(rawLine) < 4 {
 			continue
 		}
-		pathText := strings.TrimSpace(line[3:])
+		pathText := strings.TrimSpace(rawLine[3:])
 		if pathText == `` {
 			continue
 		}

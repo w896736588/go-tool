@@ -1,9 +1,11 @@
 package controller
 
 import (
+	"bytes"
 	"dev_tool/internal/app/dtool/business"
 	"dev_tool/internal/app/dtool/define"
 	"dev_tool/internal/pkg/p_define"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -127,12 +129,32 @@ func GitPendingStatus(c *gin.Context) {
 // GitPendingCommitPush 对指定仓库执行 add + commit + push。
 func GitPendingCommitPush(c *gin.Context) {
 	reqMap := gsgin.GinGetParams(c)
-	dir := filepath.Clean(strings.TrimSpace(cast.ToString(reqMap[`dir`])))
+	dir := strings.TrimSpace(cast.ToString(reqMap[`dir`]))
 	message := strings.TrimSpace(cast.ToString(reqMap[`message`]))
+	if dir == `` || message == `` {
+		var req struct {
+			Dir     string `json:"dir"`
+			Message string `json:"message"`
+		}
+		if len(c.Request.BodyBytes()) > 0 {
+			_ = json.Unmarshal(c.Request.BodyBytes(), &req)
+		} else if c.Request.Body != nil {
+			buf := new(bytes.Buffer)
+			_, _ = buf.ReadFrom(c.Request.Body)
+			_ = json.Unmarshal(buf.Bytes(), &req)
+		}
+		if dir == `` {
+			dir = strings.TrimSpace(req.Dir)
+		}
+		if message == `` {
+			message = strings.TrimSpace(req.Message)
+		}
+	}
 	if dir == `` {
 		gsgin.GinResponseError(c, `仓库目录不能为空`, nil)
 		return
 	}
+	dir = filepath.Clean(dir)
 	if message == `` {
 		message = fmt.Sprintf(`chore: sync pending changes %s`, time.Now().Format(`2006-01-02 15:04:05`))
 	}
