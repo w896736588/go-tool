@@ -44,7 +44,7 @@ const TABS = [
   { name: 'daily-report', label: '工作日报提示词' },
   { name: 'prompt-template', label: '工作流程提示词模板' },
   { name: 'dev-environment', label: '开发环境提示词模板' },
-  { name: 'tapd', label: 'TAPD 抓取配置' },
+  { name: 'requirement-fetch', label: '需求抓取配置' },
   { name: 'branch-name', label: '分支名生成提示词' },
 ]
 

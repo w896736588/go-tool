@@ -1775,7 +1775,7 @@ func taskWorkflowQueryNameByID(tableName string, id int) string {
 	return cast.ToString(info["name"])
 }
 
-// TaskWorkflowRequirementFetch 执行工作流首节点：抓取 TAPD 需求并直接写入知识片段。
+// TaskWorkflowRequirementFetch 执行工作流首节点：抓取需求并直接写入知识片段。
 func TaskWorkflowRequirementFetch(c *gin.Context) {
 	if common.DbMain == nil || common.DbMain.Client == nil {
 		gsgin.GinResponseError(c, `主库未初始化`, nil)
@@ -1791,9 +1791,17 @@ func TaskWorkflowRequirementFetch(c *gin.Context) {
 	if !ok {
 		return
 	}
-	tapdURL := strings.TrimSpace(cast.ToString(homeTaskInfo[`tapd_url`]))
-	if tapdURL == `` {
-		gsgin.GinResponseError(c, `当前任务未配置TAPD地址`, nil)
+	fetchType := strings.TrimSpace(strings.ToLower(cast.ToString(homeTaskInfo[`fetch_type`])))
+	if fetchType == `` {
+		fetchType = `tapd`
+	}
+	sourceName := requirementFetchSourceName(fetchType)
+	sourceURL := strings.TrimSpace(cast.ToString(homeTaskInfo[`tapd_url`]))
+	if fetchType == `zentao` {
+		sourceURL = strings.TrimSpace(cast.ToString(homeTaskInfo[`zentao_url`]))
+	}
+	if sourceURL == `` {
+		gsgin.GinResponseError(c, `当前任务未配置`+sourceName+`地址`, nil)
 		return
 	}
 	fragmentID := strings.TrimSpace(cast.ToString(workflowInfo[`requirement_fragment_id`]))
@@ -1806,16 +1814,16 @@ func TaskWorkflowRequirementFetch(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	taskWorkflowBroadcastStep(cast.ToInt(workflowInfo[`id`]), `load_config`, `running`, `开始读取 TAPD 抓取配置`)
-	if err = common.DbMain.TaskWorkflowMarkRequirementFetchRunning(request.WorkflowID, tapdURL); err != nil {
+	taskWorkflowBroadcastStep(cast.ToInt(workflowInfo[`id`]), `load_config`, `running`, `开始读取 `+sourceName+` 抓取配置`)
+	if err = common.DbMain.TaskWorkflowMarkRequirementFetchRunning(request.WorkflowID, sourceURL); err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	resultMap, err := buildAsyncHomeTaskTapdScrapeResultWithLog(tapdURL, fragmentID, func(step, message string) {
+	resultMap, err := buildAsyncHomeTaskRequirementScrapeResultWithLog(fetchType, sourceURL, fragmentID, func(step, message string) {
 		taskWorkflowBroadcastStep(cast.ToInt(workflowInfo[`id`]), taskWorkflowNormalizeFetchStep(step), `running`, message)
 	})
 	if err != nil {
-		_ = common.DbMain.TaskWorkflowMarkRequirementFetchFailed(request.WorkflowID, tapdURL, err.Error())
+		_ = common.DbMain.TaskWorkflowMarkRequirementFetchFailed(request.WorkflowID, sourceURL, err.Error())
 		taskWorkflowBroadcastStep(cast.ToInt(workflowInfo[`id`]), `error`, `failed`, err.Error())
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
@@ -1823,7 +1831,7 @@ func TaskWorkflowRequirementFetch(c *gin.Context) {
 	markdown := cast.ToString(resultMap[`markdown`])
 	if strings.TrimSpace(markdown) == `` {
 		err = fmt.Errorf(`抓取结果为空`)
-		_ = common.DbMain.TaskWorkflowMarkRequirementFetchFailed(request.WorkflowID, tapdURL, err.Error())
+		_ = common.DbMain.TaskWorkflowMarkRequirementFetchFailed(request.WorkflowID, sourceURL, err.Error())
 		taskWorkflowBroadcastStep(cast.ToInt(workflowInfo[`id`]), `error`, `failed`, err.Error())
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
@@ -1836,14 +1844,14 @@ func TaskWorkflowRequirementFetch(c *gin.Context) {
 		cast.ToStringSlice(existingFragment[`tags`]),
 	)
 	if err != nil {
-		_ = common.DbMain.TaskWorkflowMarkRequirementFetchFailed(request.WorkflowID, tapdURL, err.Error())
+		_ = common.DbMain.TaskWorkflowMarkRequirementFetchFailed(request.WorkflowID, sourceURL, err.Error())
 		taskWorkflowBroadcastStep(cast.ToInt(workflowInfo[`id`]), `error`, `failed`, err.Error())
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
 	component.MemoryRuntime.ScheduleSync()
 	broadcastMemoryFragmentUpsert(savedFragment)
-	if err = common.DbMain.TaskWorkflowMarkRequirementFetchSuccess(request.WorkflowID, tapdURL); err != nil {
+	if err = common.DbMain.TaskWorkflowMarkRequirementFetchSuccess(request.WorkflowID, sourceURL); err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
@@ -1853,7 +1861,7 @@ func TaskWorkflowRequirementFetch(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	taskWorkflowBroadcastStep(cast.ToInt(workflowInfo[`id`]), `done`, `success`, `TAPD 需求抓取完成并已写入知识片段`)
+	taskWorkflowBroadcastStep(cast.ToInt(workflowInfo[`id`]), `done`, `success`, sourceName+` 需求抓取完成并已写入知识片段`)
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`workflow`: updatedWorkflowInfo,
 		`fragment`: map[string]any{
@@ -1869,15 +1877,22 @@ func TaskWorkflowRequirementFetch(c *gin.Context) {
 
 // taskWorkflowRequirementFetchConfig 返回当前工作流首节点抓取配置快照。
 func taskWorkflowRequirementFetchConfig() map[string]any {
-	smartLinkIDStr, smartLinkErr := homeTaskConfigValue(define.HomeTaskConfigTapdSmartLinkID)
-	label, labelErr := homeTaskConfigValue(define.HomeTaskConfigTapdLinkLabel)
-	cssSelector, selectorErr := homeTaskConfigValue(define.HomeTaskConfigTapdCssSelector)
-	waitSecondsStr, waitErr := homeTaskConfigValue(define.HomeTaskConfigTapdWaitSeconds)
+	return taskWorkflowRequirementFetchConfigByType(`tapd`)
+}
+
+func taskWorkflowRequirementFetchConfigByType(fetchType string) map[string]any {
+	smartLinkIDKey, linkLabelKey, cssSelectorKey, waitSecondsKey := requirementFetchConfigKeys(fetchType)
+	smartLinkIDStr, smartLinkErr := homeTaskConfigValue(smartLinkIDKey)
+	label, labelErr := homeTaskConfigValue(linkLabelKey)
+	cssSelector, selectorErr := homeTaskConfigValue(cssSelectorKey)
+	waitSecondsStr, waitErr := homeTaskConfigValue(waitSecondsKey)
 	config := map[string]any{
 		`smart_link_id`: cast.ToInt(smartLinkIDStr),
 		`label`:         strings.TrimSpace(label),
 		`css_selector`:  strings.TrimSpace(cssSelector),
 		`wait_seconds`:  cast.ToInt(waitSecondsStr),
+		`fetch_type`:    strings.TrimSpace(strings.ToLower(fetchType)),
+		`source_name`:   requirementFetchSourceName(fetchType),
 		`configured`:    true,
 	}
 	if config[`wait_seconds`].(int) <= 0 {

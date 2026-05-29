@@ -8,6 +8,10 @@ const (
 	HomeTaskConfigTapdLinkLabel       = `home_task_tapd_link_label`
 	HomeTaskConfigTapdCssSelector     = `home_task_tapd_css_selector`
 	HomeTaskConfigTapdWaitSeconds     = `home_task_tapd_wait_seconds`
+	HomeTaskConfigZentaoSmartLinkID   = `home_task_zentao_smart_link_id`
+	HomeTaskConfigZentaoLinkLabel     = `home_task_zentao_link_label`
+	HomeTaskConfigZentaoCssSelector   = `home_task_zentao_css_selector`
+	HomeTaskConfigZentaoWaitSeconds   = `home_task_zentao_wait_seconds`
 	HomeTaskConfigPromptDev           = `home_task_prompt_dev`
 	HomeTaskConfigPromptApiGen        = `home_task_prompt_api_gen`
 	HomeTaskConfigPromptApiTest       = `home_task_prompt_api_test`

@@ -140,8 +140,9 @@
                     </el-dropdown>
                   </el-descriptions-item>
                   <el-descriptions-item label="开始日期">{{ homeTask.start_time_desc || '-' }}</el-descriptions-item>
-                  <el-descriptions-item label="TAPD地址">
-                    <a v-if="homeTask.tapd_url" :href="homeTask.tapd_url" target="_blank" class="task-workflow-config-link">{{ homeTask.tapd_url }}</a>
+                  <el-descriptions-item label="抓取类型">{{ requirementSourceName }}</el-descriptions-item>
+                  <el-descriptions-item :label="requirementSourceName + '地址'">
+                    <a v-if="requirementSourceUrl" :href="requirementSourceUrl" target="_blank" class="task-workflow-config-link">{{ requirementSourceUrl }}</a>
                     <span v-else>-</span>
                   </el-descriptions-item>
                   <el-descriptions-item label="使用工作流程">{{ Number(homeTask.use_workflow || 0) === 1 ? '是' : '否' }}</el-descriptions-item>
@@ -194,13 +195,13 @@
         <div v-else-if="activeNode === 'requirement-fetch'" class="task-workflow-tab">
           <div class="task-workflow-card">
             <div class="task-workflow-card__header">
-              <div class="task-workflow-card__title">抓取 TAPD 需求</div>
+              <div class="task-workflow-card__title">抓取 {{ requirementSourceName }} 需求</div>
               <div class="task-workflow-card__switch">
                 <div class="task-workflow-inner-tabs">
                   <button
                     :class="['task-workflow-inner-tab', { 'task-workflow-inner-tab--active': requirementFetchActiveTab === 'tapd-fetch' }]"
                     @click="requirementFetchActiveTab = 'tapd-fetch'"
-                  >抓取 TAPD 需求内容</button>
+                  >抓取 {{ requirementSourceName }} 需求内容</button>
                   <button
                     :class="['task-workflow-inner-tab', { 'task-workflow-inner-tab--active': requirementFetchActiveTab === 'plain-text-prompt' }]"
                     @click="requirementFetchActiveTab = 'plain-text-prompt'"
@@ -214,7 +215,7 @@
                 <GitActionButton compact :loading="requirementFetchRunning" @click="triggerRequirementFetch(false)">
                   重新抓取
                 </GitActionButton>
-                <GitActionButton compact variant="info" @click="openFragmentInDialog(requirementFragmentId, 'TAPD需求文档')" :disabled="!requirementFragmentId">
+                <GitActionButton compact variant="info" @click="openFragmentInDialog(requirementFragmentId, requirementSourceName + '需求文档')" :disabled="!requirementFragmentId">
                   <template #icon><el-icon><Link /></el-icon></template>
                   打开知识片段
                 </GitActionButton>
@@ -222,8 +223,8 @@
               <div v-if="workflow.requirement_fetch_error" class="task-workflow-card__hint task-workflow-card__hint--error">
                 最近错误：{{ workflow.requirement_fetch_error }}
               </div>
-              <div v-if="!homeTask.tapd_url" class="task-workflow-card__hint">
-                当前任务未配置 TAPD 地址，无法自动抓取。
+              <div v-if="!requirementSourceUrl" class="task-workflow-card__hint">
+                当前任务未配置 {{ requirementSourceName }} 地址，无法自动抓取。
               </div>
               <div class="task-workflow-fragment-view">
                 <iframe
@@ -956,7 +957,7 @@ const TASK_WORKFLOW_CONFIG_MAX_CHARS = 20
 
 const WORKFLOW_NODES = [
   { key: 'task-config', label: '任务配置', desc: '查看当前任务的所有配置信息' },
-  { key: 'requirement-fetch', label: '1.抓取TAPD需求', desc: '自动登录和解析tapd需求到知识片段，转为markdown格式供AI解析' },
+  { key: 'requirement-fetch', label: '1.抓取需求', desc: '自动登录和解析需求内容到知识片段，转为markdown格式供AI解析' },
   { key: 'requirement', label: '2.需求分析', desc: '编写提示词，AI自动结合数据库和代码分析需求，形成开发文档' },
   { key: 'design', label: '3.开发执行', desc: '编写提示词，AI自动结合数据库，代码和开发文档进行开发' },
   { key: 'api-dev', label: '4.接口生成', desc: '编写提示词，AI自动获取登录态，将所有改动接口写入接口开发中' },
@@ -1080,6 +1081,18 @@ export default {
     taskId() {
       return Number(this.$route.params.taskId || 0)
     },
+    requirementSourceType() {
+      return String(this.homeTask.fetch_type || 'tapd').toLowerCase() === 'zentao' ? 'zentao' : 'tapd'
+    },
+    requirementSourceName() {
+      return this.requirementSourceType === 'zentao' ? '禅道' : 'TAPD'
+    },
+    requirementSourceUrl() {
+      if (this.requirementSourceType === 'zentao') {
+        return String(this.homeTask.zentao_url || '').trim()
+      }
+      return String(this.homeTask.tapd_url || '').trim()
+    },
     requirementFetchStatus() {
       return String(this.workflow.requirement_fetch_status || 'idle').trim() || 'idle'
     },
@@ -1109,7 +1122,7 @@ export default {
     },
     workflowFragments() {
       return [
-        { label: 'TAPD需求文档', id: this.requirementFragmentId },
+        { label: this.requirementSourceName + '需求文档', id: this.requirementFragmentId },
         { label: '纯文本需求文档', id: this.plainTextReqFragmentId },
         { label: '需求设计方案文档', id: this.designPlanReqFragmentId },
       ]
@@ -1408,7 +1421,7 @@ export default {
       if (this.requirementFetchAutoTriggered) {
         return
       }
-      if (!String(this.homeTask.tapd_url || '').trim()) {
+      if (!this.requirementSourceUrl) {
         return
       }
       if (this.requirementFetchStatus === 'success') {
@@ -1428,8 +1441,8 @@ export default {
       if (this.workflowId <= 0 || this.requirementFetchRunning) {
         return
       }
-      if (!String(this.homeTask.tapd_url || '').trim()) {
-        this.$helperNotify.error('当前任务未配置 TAPD 地址')
+      if (!this.requirementSourceUrl) {
+        this.$helperNotify.error(`当前任务未配置 ${this.requirementSourceName} 地址`)
         return
       }
       if (!isAuto) {
@@ -1448,12 +1461,12 @@ export default {
       taskWorkflowApi.TaskWorkflowRequirementFetch(this.workflowId, (response) => {
         this.requirementFetchRunning = false
         if (!(response && response.ErrCode === 0 && response.Data)) {
-          this.errorMessage = response?.ErrMsg || '抓取 TAPD 需求失败'
+          this.errorMessage = response?.ErrMsg || `抓取${this.requirementSourceName}需求失败`
           this.$helperNotify.error(this.errorMessage)
           this.loadWorkflowPage()
           return
         }
-        this.$helperNotify.success('TAPD 需求已抓取并写入知识片段')
+        this.$helperNotify.success(`${this.requirementSourceName} 需求已抓取并写入知识片段`)
         this.applyWorkflowPayload({
           workflow: response.Data.workflow || {},
           home_task: this.homeTask,

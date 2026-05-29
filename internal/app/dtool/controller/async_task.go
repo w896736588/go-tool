@@ -459,37 +459,47 @@ func buildAsyncHomeTaskTapdScrapeResult(tapdURL, memoryFragmentID string) (map[s
 }
 
 func buildAsyncHomeTaskTapdScrapeResultWithLog(tapdURL, memoryFragmentID string, logStep func(string, string)) (map[string]any, error) {
+	return buildAsyncHomeTaskRequirementScrapeResultWithLog(`tapd`, tapdURL, memoryFragmentID, logStep)
+}
+
+func buildAsyncHomeTaskZentaoScrapeResultWithLog(zentaoURL, memoryFragmentID string, logStep func(string, string)) (map[string]any, error) {
+	return buildAsyncHomeTaskRequirementScrapeResultWithLog(`zentao`, zentaoURL, memoryFragmentID, logStep)
+}
+
+func buildAsyncHomeTaskRequirementScrapeResultWithLog(fetchType string, sourceURL string, memoryFragmentID string, logStep func(string, string)) (map[string]any, error) {
+	sourceName := requirementFetchSourceName(fetchType)
 	if logStep != nil {
-		logStep("读取配置", "开始读取 TAPD 抓取配置")
+		logStep("读取配置", "开始读取 "+sourceName+" 抓取配置")
 	}
-	smartLinkIDStr, err := homeTaskConfigValue(define.HomeTaskConfigTapdSmartLinkID)
+	smartLinkIDKey, linkLabelKey, cssSelectorKey, waitSecondsKey := requirementFetchConfigKeys(fetchType)
+	smartLinkIDStr, err := homeTaskConfigValue(smartLinkIDKey)
 	if err != nil {
-		return nil, fmt.Errorf("读取 TAPD 自定义网页配置失败: %w", err)
+		return nil, fmt.Errorf("读取 %s 自定义网页配置失败: %w", sourceName, err)
 	}
 	smartLinkID := cast.ToInt(smartLinkIDStr)
 	if smartLinkID <= 0 {
-		return nil, fmt.Errorf("TAPD 自定义网页未配置")
+		return nil, fmt.Errorf("%s 自定义网页未配置", sourceName)
 	}
 
-	linkLabel, err := homeTaskConfigValue(define.HomeTaskConfigTapdLinkLabel)
+	linkLabel, err := homeTaskConfigValue(linkLabelKey)
 	if err != nil {
-		return nil, fmt.Errorf("读取 TAPD 链接标签配置失败: %w", err)
+		return nil, fmt.Errorf("读取 %s 链接标签配置失败: %w", sourceName, err)
 	}
 	if strings.TrimSpace(linkLabel) == "" {
-		return nil, fmt.Errorf("TAPD 链接标签未配置")
+		return nil, fmt.Errorf("%s 链接标签未配置", sourceName)
 	}
 
-	cssSelector, err := homeTaskConfigValue(define.HomeTaskConfigTapdCssSelector)
+	cssSelector, err := homeTaskConfigValue(cssSelectorKey)
 	if err != nil {
-		return nil, fmt.Errorf("读取 TAPD CSS 选择器配置失败: %w", err)
+		return nil, fmt.Errorf("读取 %s CSS 选择器配置失败: %w", sourceName, err)
 	}
 	if strings.TrimSpace(cssSelector) == "" {
-		return nil, fmt.Errorf("TAPD CSS 选择器未配置")
+		return nil, fmt.Errorf("%s CSS 选择器未配置", sourceName)
 	}
 
-	waitSecondsStr, err := homeTaskConfigValue(define.HomeTaskConfigTapdWaitSeconds)
+	waitSecondsStr, err := homeTaskConfigValue(waitSecondsKey)
 	if err != nil {
-		return nil, fmt.Errorf("读取 TAPD 等待秒数配置失败: %w", err)
+		return nil, fmt.Errorf("读取 %s 等待秒数配置失败: %w", sourceName, err)
 	}
 	waitSeconds := cast.ToInt(waitSecondsStr)
 	if waitSeconds <= 0 {
@@ -502,7 +512,7 @@ func buildAsyncHomeTaskTapdScrapeResultWithLog(tapdURL, memoryFragmentID string,
 	if logStep != nil {
 		logStep("下发任务", fmt.Sprintf("准备下发 Agent 抓取任务 smart_link_id=%d label=%s wait_seconds=%d", smartLinkID, linkLabel, waitSeconds))
 	}
-	resultFile, dispatchErr := dispatchScrapeTaskAndAwait(smartLinkID, linkLabel, tapdURL, cssSelector, waitSeconds)
+	resultFile, dispatchErr := dispatchScrapeTaskAndAwait(smartLinkID, linkLabel, sourceURL, cssSelector, waitSeconds)
 	if dispatchErr != nil {
 		return nil, dispatchErr
 	}
@@ -520,6 +530,20 @@ func buildAsyncHomeTaskTapdScrapeResultWithLog(tapdURL, memoryFragmentID string,
 	}
 
 	return zipResult, nil
+}
+
+func requirementFetchConfigKeys(fetchType string) (string, string, string, string) {
+	if strings.TrimSpace(strings.ToLower(fetchType)) == `zentao` {
+		return define.HomeTaskConfigZentaoSmartLinkID, define.HomeTaskConfigZentaoLinkLabel, define.HomeTaskConfigZentaoCssSelector, define.HomeTaskConfigZentaoWaitSeconds
+	}
+	return define.HomeTaskConfigTapdSmartLinkID, define.HomeTaskConfigTapdLinkLabel, define.HomeTaskConfigTapdCssSelector, define.HomeTaskConfigTapdWaitSeconds
+}
+
+func requirementFetchSourceName(fetchType string) string {
+	if strings.TrimSpace(strings.ToLower(fetchType)) == `zentao` {
+		return `禅道`
+	}
+	return `TAPD`
 }
 
 // AsyncTaskRetry 重试失败的异步任务，根据任务类型从 request_payload 提取参数并重新调度。 // AsyncTaskRetry retries a failed async task by resetting its status and re-dispatching.

@@ -570,7 +570,7 @@ export default {
         codex_base_url: '',
         codex_wire_api: 'responses',
         codex_sandbox_mode: '',
-        codex_supports_websockets: true,
+        codex_supports_websockets: false,
         // 分组多选
         group_ids: [],
       },
@@ -1017,7 +1017,7 @@ export default {
         codex_base_url: '',
         codex_wire_api: 'responses',
         codex_sandbox_mode: '',
-        codex_supports_websockets: true,
+        codex_supports_websockets: false,
         group_ids: [],
       }
       this.dialogVisible = true
@@ -1186,7 +1186,7 @@ export default {
         codex_base_url: '',
         codex_wire_api: 'responses',
         codex_sandbox_mode: '',
-        codex_supports_websockets: true,
+        codex_supports_websockets: false,
         group_ids: Array.isArray(item.group_ids) ? [...item.group_ids] : [],
       }
       // Codex: 从 config JSON 预填
