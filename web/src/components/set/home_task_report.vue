@@ -187,67 +187,125 @@
       </div>
     </div>
 
-    <!-- TAPD 需求抓取配置 -->
-    <div v-show="activeTab === 'tapd'">
+    <!-- 需求抓取配置 -->
+    <div v-show="activeTab === 'requirement-fetch'">
       <div class="set-config-header">
-        <h3 class="set-config-title">TAPD 需求抓取配置</h3>
+        <h3 class="set-config-title">需求抓取配置</h3>
         <p class="set-config-desc">
-          从自定义网页中选择一个链接，用于在任务中快速跳转到 TAPD 登录页。
+          维护需求抓取入口和页面解析规则，新建任务后会根据抓取类型选择对应配置执行。
         </p>
       </div>
 
       <div class="set-config-table-card">
-        <el-form label-width="120px" class="memory-config-form">
-          <el-form-item label="自定义网页">
-            <el-select
-              v-model="form.home_task_tapd_smart_link_id"
-              clearable
-              filterable
-              style="width: 100%;"
-              placeholder="请选择自定义网页"
-              @change="onSmartLinkChange"
-            >
-              <el-option
-                v-for="item in smartLinkList"
-                :key="item.id"
-                :label="item.name"
-                :value="item.id"
-              />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="网页链接">
-            <el-select
-              v-model="form.home_task_tapd_link_label"
-              clearable
-              filterable
-              style="width: 100%;"
-              placeholder="请选择具体链接"
-            >
-              <el-option
-                v-for="(link, idx) in currentLinkOptions"
-                :key="idx"
-                :label="link.label"
-                :value="link.label"
-              />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="CSS选择器">
-            <el-input
-              v-model="form.home_task_tapd_css_selector"
-              placeholder="如 .content-wrapper 或 #main"
-            />
-          </el-form-item>
-          <el-form-item label="等待秒数">
-            <el-input-number
-              v-model="form.home_task_tapd_wait_seconds"
-              :min="1"
-              :max="30"
-            />
-          </el-form-item>
-          <el-form-item>
-            <pl-button type="primary" @click="saveTapdConfig">保存 TAPD 需求抓取配置</pl-button>
-          </el-form-item>
-        </el-form>
+        <el-tabs v-model="activeRequirementFetchTab">
+          <el-tab-pane label="TAPD 抓取配置" name="tapd">
+            <el-form label-width="120px" class="memory-config-form">
+              <el-form-item label="自定义网页">
+                <el-select
+                  v-model="form.home_task_tapd_smart_link_id"
+                  clearable
+                  filterable
+                  style="width: 100%;"
+                  placeholder="请选择自定义网页"
+                  @change="onRequirementSmartLinkChange('tapd')"
+                >
+                  <el-option
+                    v-for="item in smartLinkList"
+                    :key="item.id"
+                    :label="item.name"
+                    :value="item.id"
+                  />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="网页链接">
+                <el-select
+                  v-model="form.home_task_tapd_link_label"
+                  clearable
+                  filterable
+                  style="width: 100%;"
+                  placeholder="请选择具体链接"
+                >
+                  <el-option
+                    v-for="(link, idx) in currentTapdLinkOptions"
+                    :key="idx"
+                    :label="link.label"
+                    :value="link.label"
+                  />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="CSS选择器">
+                <el-input
+                  v-model="form.home_task_tapd_css_selector"
+                  placeholder="如 .content-wrapper 或 #main"
+                />
+              </el-form-item>
+              <el-form-item label="抓取前等待秒数">
+                <el-input-number
+                  v-model="form.home_task_tapd_wait_seconds"
+                  :min="1"
+                  :max="30"
+                />
+              </el-form-item>
+              <el-form-item>
+                <pl-button type="primary" @click="saveRequirementFetchConfig">保存 TAPD 抓取配置</pl-button>
+              </el-form-item>
+            </el-form>
+          </el-tab-pane>
+
+          <el-tab-pane label="禅道 抓取配置" name="zentao">
+            <el-form label-width="120px" class="memory-config-form">
+              <el-form-item label="自定义网页">
+                <el-select
+                  v-model="form.home_task_zentao_smart_link_id"
+                  clearable
+                  filterable
+                  style="width: 100%;"
+                  placeholder="请选择自定义网页"
+                  @change="onRequirementSmartLinkChange('zentao')"
+                >
+                  <el-option
+                    v-for="item in smartLinkList"
+                    :key="item.id"
+                    :label="item.name"
+                    :value="item.id"
+                  />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="网页链接">
+                <el-select
+                  v-model="form.home_task_zentao_link_label"
+                  clearable
+                  filterable
+                  style="width: 100%;"
+                  placeholder="请选择具体链接"
+                >
+                  <el-option
+                    v-for="(link, idx) in currentZentaoLinkOptions"
+                    :key="idx"
+                    :label="link.label"
+                    :value="link.label"
+                  />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="CSS选择器">
+                <el-input
+                  v-model="form.home_task_zentao_css_selector"
+                  placeholder="如 .content-wrapper 或 #main"
+                />
+              </el-form-item>
+              <el-form-item label="抓取前等待秒数">
+                <el-input-number
+                  v-model="form.home_task_zentao_wait_seconds"
+                  :min="1"
+                  :max="30"
+                />
+              </el-form-item>
+              <el-form-item>
+                <pl-button type="primary" @click="saveRequirementFetchConfig">保存禅道抓取配置</pl-button>
+              </el-form-item>
+            </el-form>
+          </el-tab-pane>
+        </el-tabs>
       </div>
     </div>
 
@@ -389,6 +447,7 @@ export default {
       aiModelList: [],
       smartLinkList: [],
       activePromptTab: 'dev',
+      activeRequirementFetchTab: 'tapd',
       form: {
         home_task_daily_report_model_id: null,
         home_task_daily_report_prompt: DEFAULT_HOME_TASK_DAILY_REPORT_PROMPT,
@@ -402,7 +461,11 @@ export default {
         home_task_tapd_smart_link_id: null,
         home_task_tapd_link_label: '',
         home_task_tapd_css_selector: '',
-        home_task_tapd_wait_seconds: 3,
+        home_task_tapd_wait_seconds: 5,
+        home_task_zentao_smart_link_id: null,
+        home_task_zentao_link_label: '',
+        home_task_zentao_css_selector: '',
+        home_task_zentao_wait_seconds: 5,
         home_task_dev_environment: '',
         home_task_branch_name_prompt: '',
         home_task_branch_name_model_id: null,
@@ -431,15 +494,11 @@ export default {
     devEnvironmentPlaceholders() {
       return PROMPT_PLACEHOLDERS.filter(ph => ph.value !== '{开发环境}')
     },
-    currentLinkOptions() {
-      if (!this.form.home_task_tapd_smart_link_id) return []
-      const smartLink = this.smartLinkList.find(item => item.id === this.form.home_task_tapd_smart_link_id)
-      if (!smartLink || !smartLink.links) return []
-      try {
-        return JSON.parse(smartLink.links)
-      } catch {
-        return []
-      }
+    currentTapdLinkOptions() {
+      return this.getSmartLinkOptions(this.form.home_task_tapd_smart_link_id)
+    },
+    currentZentaoLinkOptions() {
+      return this.getSmartLinkOptions(this.form.home_task_zentao_smart_link_id)
     },
   },
   mounted() {
@@ -453,7 +512,21 @@ export default {
       const model = item.name || item.model || `模型#${item.id}`
       return `${provider} / ${model}`
     },
-    onSmartLinkChange() {
+    getSmartLinkOptions(smartLinkId) {
+      if (!smartLinkId) return []
+      const smartLink = this.smartLinkList.find(item => item.id === smartLinkId)
+      if (!smartLink || !smartLink.links) return []
+      try {
+        return JSON.parse(smartLink.links)
+      } catch {
+        return []
+      }
+    },
+    onRequirementSmartLinkChange(type) {
+      if (type === 'zentao') {
+        this.form.home_task_zentao_link_label = ''
+        return
+      }
       this.form.home_task_tapd_link_label = ''
     },
     loadAiModelList() {
@@ -489,7 +562,11 @@ export default {
         this.form.home_task_tapd_smart_link_id = response.Data.home_task_tapd_smart_link_id || null
         this.form.home_task_tapd_link_label = response.Data.home_task_tapd_link_label || ''
         this.form.home_task_tapd_css_selector = response.Data.home_task_tapd_css_selector || ''
-        this.form.home_task_tapd_wait_seconds = response.Data.home_task_tapd_wait_seconds || 3
+        this.form.home_task_tapd_wait_seconds = response.Data.home_task_tapd_wait_seconds || 5
+        this.form.home_task_zentao_smart_link_id = response.Data.home_task_zentao_smart_link_id || null
+        this.form.home_task_zentao_link_label = response.Data.home_task_zentao_link_label || ''
+        this.form.home_task_zentao_css_selector = response.Data.home_task_zentao_css_selector || ''
+        this.form.home_task_zentao_wait_seconds = response.Data.home_task_zentao_wait_seconds || 5
         this.form.home_task_dev_environment = response.Data.home_task_dev_environment || ''
         this.form.home_task_branch_name_prompt = response.Data.home_task_branch_name_prompt || ''
         this.form.home_task_branch_name_model_id = response.Data.home_task_branch_name_model_id || null
@@ -507,11 +584,11 @@ export default {
         }
       })
     },
-    saveTapdConfig() {
+    saveRequirementFetchConfig() {
       const payload = this.buildFullPayload()
       set.HomeTaskConfigSave(payload, (response) => {
         if (response.ErrCode === 0) {
-          this.$helperNotify.success('TAPD 需求抓取配置已保存')
+          this.$helperNotify.success('需求抓取配置已保存')
           this.$emit('changed')
         }
       })
@@ -558,6 +635,10 @@ export default {
         home_task_tapd_link_label: this.form.home_task_tapd_link_label,
         home_task_tapd_css_selector: this.form.home_task_tapd_css_selector,
         home_task_tapd_wait_seconds: this.form.home_task_tapd_wait_seconds,
+        home_task_zentao_smart_link_id: this.form.home_task_zentao_smart_link_id,
+        home_task_zentao_link_label: this.form.home_task_zentao_link_label,
+        home_task_zentao_css_selector: this.form.home_task_zentao_css_selector,
+        home_task_zentao_wait_seconds: this.form.home_task_zentao_wait_seconds,
         home_task_dev_environment: this.form.home_task_dev_environment,
         home_task_branch_name_prompt: this.form.home_task_branch_name_prompt,
         home_task_branch_name_model_id: this.form.home_task_branch_name_model_id,

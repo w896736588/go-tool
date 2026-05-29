@@ -54,6 +54,14 @@ func (h *CSqlite) TaskWorkflowCreateOrGetByHomeTaskID(homeTaskID int) (map[strin
 		return nil, err
 	}
 	now := time.Now().Unix()
+	fetchType := strings.TrimSpace(strings.ToLower(cast.ToString(homeTaskInfo[`fetch_type`])))
+	if fetchType == `` {
+		fetchType = `tapd`
+	}
+	requirementSourceURL := strings.TrimSpace(cast.ToString(homeTaskInfo[`tapd_url`]))
+	if fetchType == `zentao` {
+		requirementSourceURL = strings.TrimSpace(cast.ToString(homeTaskInfo[`zentao_url`]))
+	}
 	newID, err := h.Client.QuickCreate(`tbl_task_workflow`, map[string]any{
 		`home_task_id`:                  homeTaskID,
 		`status`:                        taskWorkflowStatusInit,
@@ -63,7 +71,7 @@ func (h *CSqlite) TaskWorkflowCreateOrGetByHomeTaskID(homeTaskID int) (map[strin
 		`requirement_fetch_started_at`:  0,
 		`requirement_fetch_finished_at`: 0,
 		`requirement_fetch_error`:       ``,
-		`requirement_source_url`:        strings.TrimSpace(cast.ToString(homeTaskInfo[`tapd_url`])),
+		`requirement_source_url`:        requirementSourceURL,
 		`dev_plan_fragment_id`:          ``,
 		`latest_plan_run_id`:            0,
 		`latest_test_run_id`:            0,

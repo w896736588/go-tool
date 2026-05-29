@@ -45,13 +45,21 @@ func HomeTaskSave(c *gin.Context) {
 	if useWorkflow != 0 {
 		useWorkflow = 1
 	}
+	fetchType := strings.TrimSpace(strings.ToLower(request.FetchType))
+	if fetchType == `` {
+		fetchType = `tapd`
+	}
+	requirementURL := strings.TrimSpace(request.TapdUrl)
+	if fetchType == `zentao` {
+		requirementURL = strings.TrimSpace(request.ZentaoUrl)
+	}
 
 	var memoryFragmentID string
 	if useWorkflow == 1 {
 		var err error
 		memoryFragmentID, err = ensureHomeTaskMemoryFragment(
 			request.ID, request.Name, normalizeHomeTaskMemoryFragmentID(request.MemoryFragmentID),
-			request.TapdUrl, request.ApiHost, request.ApiToken,
+			requirementURL, request.ApiHost, request.ApiToken,
 		)
 		if err != nil {
 			gsgin.GinResponseError(c, err.Error(), nil)
@@ -131,7 +139,7 @@ func HomeTaskSave(c *gin.Context) {
 		request.MysqlID = devConfigs[0].MysqlID
 	}
 
-	info, err := common.DbMain.HomeTaskSave(request.ID, request.Name, request.TaskStatus, request.StartTime, memoryFragmentID, request.TapdUrl, request.GitID, apiDevEnabled, apiCollectionID, apiDirID, request.MysqlID, gitIDsJSON, apiDevEntriesJSON, devConfigsJSON, useWorkflow)
+	info, err := common.DbMain.HomeTaskSave(request.ID, request.Name, request.TaskStatus, request.StartTime, memoryFragmentID, fetchType, request.TapdUrl, request.ZentaoUrl, request.GitID, apiDevEnabled, apiCollectionID, apiDirID, request.MysqlID, gitIDsJSON, apiDevEntriesJSON, devConfigsJSON, useWorkflow)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
@@ -247,7 +255,7 @@ func HomeTaskDailyReportGenerate(c *gin.Context) {
 	})
 }
 
-func ensureHomeTaskMemoryFragment(taskID int, taskName string, memoryFragmentID string, tapdUrl string, apiHost string, apiToken string) (string, error) {
+func ensureHomeTaskMemoryFragment(taskID int, taskName string, memoryFragmentID string, requirementURL string, apiHost string, apiToken string) (string, error) {
 	taskName = strings.TrimSpace(taskName)
 	if taskName == `` {
 		return ``, gstool.Error(`任务名称不能为空`)
@@ -268,7 +276,7 @@ func ensureHomeTaskMemoryFragment(taskID int, taskName string, memoryFragmentID 
 	if !shouldAutoCreateHomeTaskMemoryFragment(taskID, memoryFragmentID) {
 		return ``, nil
 	}
-	fragmentContent := buildHomeTaskFragmentContent(taskName, tapdUrl, apiHost, apiToken)
+	fragmentContent := buildHomeTaskFragmentContent(taskName, requirementURL, apiHost, apiToken)
 	fragmentInfo, saveErr := memoryDB.MemoryFragmentSave(0, taskName, fragmentContent, []string{`需求`})
 	if saveErr != nil {
 		return ``, saveErr
@@ -285,7 +293,7 @@ func shouldAutoCreateHomeTaskMemoryFragment(taskID int, memoryFragmentID string)
 	return taskID <= 0 && strings.TrimSpace(memoryFragmentID) == ``
 }
 
-func buildHomeTaskFragmentContent(taskName string, tapdUrl string, apiHost string, apiToken string) string {
+func buildHomeTaskFragmentContent(taskName string, requirementURL string, apiHost string, apiToken string) string {
 	return "# " + taskName + "\n"
 }
 

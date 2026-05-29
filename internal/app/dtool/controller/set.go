@@ -1,4 +1,4 @@
-﻿package controller
+package controller
 
 import (
 	"dev_tool/internal/app/dtool/business"
@@ -1454,6 +1454,26 @@ func SetHomeTaskConfigGet(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
+	zentaoSmartLinkID, err := homeTaskConfigValue(define.HomeTaskConfigZentaoSmartLinkID)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	zentaoLinkLabel, err := homeTaskConfigValue(define.HomeTaskConfigZentaoLinkLabel)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	zentaoCssSelector, err := homeTaskConfigValue(define.HomeTaskConfigZentaoCssSelector)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	zentaoWaitSeconds, err := homeTaskConfigValue(define.HomeTaskConfigZentaoWaitSeconds)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
 	promptDev, err := homeTaskConfigValue(define.HomeTaskConfigPromptDev)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
@@ -1517,6 +1537,10 @@ func SetHomeTaskConfigGet(c *gin.Context) {
 		`home_task_tapd_link_label`:               tapdLinkLabel,
 		`home_task_tapd_css_selector`:             tapdCssSelector,
 		`home_task_tapd_wait_seconds`:             cast.ToInt(tapdWaitSeconds),
+		`home_task_zentao_smart_link_id`:          cast.ToInt(zentaoSmartLinkID),
+		`home_task_zentao_link_label`:             zentaoLinkLabel,
+		`home_task_zentao_css_selector`:           zentaoCssSelector,
+		`home_task_zentao_wait_seconds`:           cast.ToInt(zentaoWaitSeconds),
 		`home_task_prompt_dev`:                    promptDev,
 		`home_task_prompt_api_gen`:                promptApiGen,
 		`home_task_prompt_api_test`:               promptApiTest,
@@ -1609,6 +1633,26 @@ func SetHomeTaskConfigSave(c *gin.Context) {
 	}
 	homeTaskTapdWaitSeconds := cast.ToString(cast.ToInt(dataMap[`home_task_tapd_wait_seconds`]))
 	if err := common.DbMain.HomeTaskConfigSave(`TAPD抓取等待秒数`, define.HomeTaskConfigTapdWaitSeconds, homeTaskTapdWaitSeconds, `TAPD网页抓取前等待秒数`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskZentaoSmartLinkID := cast.ToString(cast.ToInt(dataMap[`home_task_zentao_smart_link_id`]))
+	if err := common.DbMain.HomeTaskConfigSave(`禅道自定义网页ID`, define.HomeTaskConfigZentaoSmartLinkID, homeTaskZentaoSmartLinkID, `禅道登录页所选自定义网页ID`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskZentaoLinkLabel := strings.TrimSpace(cast.ToString(dataMap[`home_task_zentao_link_label`]))
+	if err := common.DbMain.HomeTaskConfigSave(`禅道链接标签`, define.HomeTaskConfigZentaoLinkLabel, homeTaskZentaoLinkLabel, `禅道登录页所选链接的label`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskZentaoCssSelector := strings.TrimSpace(cast.ToString(dataMap[`home_task_zentao_css_selector`]))
+	if err := common.DbMain.HomeTaskConfigSave(`禅道抓取CSS选择器`, define.HomeTaskConfigZentaoCssSelector, homeTaskZentaoCssSelector, `禅道网页抓取区域CSS选择器`); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	homeTaskZentaoWaitSeconds := cast.ToString(cast.ToInt(dataMap[`home_task_zentao_wait_seconds`]))
+	if err := common.DbMain.HomeTaskConfigSave(`禅道抓取等待秒数`, define.HomeTaskConfigZentaoWaitSeconds, homeTaskZentaoWaitSeconds, `禅道网页抓取前等待秒数`); err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
@@ -1939,4 +1983,3 @@ func SetLocalBranchBatchCheck(c *gin.Context) {
 	}
 	gsgin.GinResponseSuccess(c, ``, result)
 }
-
