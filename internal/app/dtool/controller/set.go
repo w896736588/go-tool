@@ -966,7 +966,6 @@ func SetMemoryConfigGet(c *gin.Context) {
 		`memory_arrange_model_id`:   cast.ToInt(arrangeModelID),
 		`memory_ai_search_model_id`: cast.ToInt(aiSearchModelID),
 		`safe_password`:             component.ConfigViper.GetString(`safe.password`),
-		`run_mode`:                  component.EnvClient.SmartLinkConfig.RunMode,
 		`client_version`:            component.EnvClient.SmartLinkConfig.ClientVersion,
 	})
 }
@@ -1115,16 +1114,6 @@ func SetRuntimeConfigItemSave(c *gin.Context) {
 	// 根据 key 处理不同类型的配置项
 	needRestart := false
 	switch configKey {
-	case `run_mode`:
-		value := strings.TrimSpace(cast.ToString(configValue))
-		if value != string(define.SmartLinkRunModeServer) {
-			gsgin.GinResponseError(c, `run_mode 仅支持 server`, nil)
-			return
-		}
-		setIniKey(section, configKey, value)
-		// 更新内存中的配置
-		component.EnvClient.SmartLinkConfig.RunMode = define.SmartLinkRunMode(value)
-		needRestart = false
 	case `client_version`:
 		value := strings.TrimSpace(cast.ToString(configValue))
 		setIniKey(section, configKey, value)

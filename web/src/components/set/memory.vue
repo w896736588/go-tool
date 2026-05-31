@@ -21,31 +21,6 @@
           </el-descriptions-item>
         </el-descriptions>
 
-        <el-divider content-position="left">[smart_link]</el-divider>
-        <el-descriptions class="memory-config-display" :column="1" border>
-          <el-descriptions-item label="run_mode">
-            <div class="config-item-wrapper">
-              <template v-if="editingItem.key === 'run_mode'">
-                <div class="config-edit-row">
-                  <el-select v-model="editingItem.value" style="width: 200px">
-                    <el-option label="server" value="server" />
-                  </el-select>
-                  <div class="config-edit-actions">
-                    <GitActionButton compact size="small" @click="saveItem('smart_link', 'run_mode', editingItem.value)">保存</GitActionButton>
-                    <GitActionButton compact size="small" @click="cancelEdit">取消</GitActionButton>
-                  </div>
-                </div>
-              </template>
-              <template v-else>
-                <div class="config-display-row">
-                  <div class="config-value">{{ form.run_mode || 'server' }}</div>
-                  <GitActionButton compact size="small" @click="startEdit('run_mode', form.run_mode || 'server')">编辑</GitActionButton>
-                </div>
-              </template>
-            </div>
-          </el-descriptions-item>
-        </el-descriptions>
-
         <el-divider content-position="left">[base] 主库</el-divider>
         <el-descriptions class="memory-config-display" :column="1" border>
           <el-descriptions-item label="dbPath">
@@ -235,7 +210,6 @@ export default {
         memory_arrange_prompt: DEFAULT_MEMORY_ARRANGE_PROMPT,
         memory_ai_search_model_id: null,
         safe_password: '',
-        run_mode: 'server',
       },
     }
   },
@@ -290,7 +264,6 @@ export default {
         this.form.memory_arrange_prompt = response.Data.memory_arrange_prompt || DEFAULT_MEMORY_ARRANGE_PROMPT
         this.form.memory_ai_search_model_id = response.Data.memory_ai_search_model_id || null
         this.form.safe_password = response.Data.safe_password || ''
-        this.form.run_mode = response.Data.run_mode || 'server'
       })
     },
     startEdit(key, value) {
