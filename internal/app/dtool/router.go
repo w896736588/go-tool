@@ -577,4 +577,5 @@ func webhookConfig(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/WebhookConfigList`, controller.WebhookConfigList)
 	tGin.GinPost(`/api/WebhookConfigSave`, controller.WebhookConfigSave)
 	tGin.GinPost(`/api/WebhookConfigDelete`, controller.WebhookConfigDelete)
+	tGin.GinPost(`/api/WebhookConfigTest`, controller.WebhookConfigTest)
 }

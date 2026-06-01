@@ -2729,6 +2729,7 @@ func buildAgentChatListResponse(rows []map[string]any) []map[string]any {
 			`status`:           status,
 			`cli_type`:         cast.ToString(row[`cli_type`]),
 			`created_at`:       cast.ToString(row[`created_at`]),
+			`updated_at`:       cast.ToString(row[`updated_at`]),
 			`duration_ms`:      durationMs,
 			`line_count`:       lineCount,
 			`stop_reason`:      stopReason,
@@ -3319,13 +3320,13 @@ func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sess
 	} else {
 		_ = common.DbMain.TaskWorkflowChatMarkCompleted(chatID)
 	}
-	finalStatus := `completed`
+	finalStatus := common.TaskWorkflowChatStatusCompleted
 	if err != nil {
 		select {
 		case <-stopped:
-			finalStatus = `interrupted`
+			finalStatus = common.TaskWorkflowChatStatusInterrupted
 		default:
-			finalStatus = `error`
+			finalStatus = common.TaskWorkflowChatStatusError
 		}
 	}
 	sendLine(buildChatCompletedEvent(chatID, finalStatus))
@@ -3336,7 +3337,7 @@ func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sess
 	if notifyText == `` {
 		notifyText = lastAssistantText
 	}
-	go taskWorkflowSendWebhookNotify(chatID, notifyText)
+	go taskWorkflowSendWebhookNotify(chatID, notifyText, finalStatus)
 }
 
 // runCodexCommand 执行 Codex CLI 命令并推送流式输出到 SSE + DB。
@@ -3548,18 +3549,18 @@ func runCodexCommand(chatID int64, localDir, prompt string, isResume bool, sessi
 		`result`:      lastAgentMessageText,
 	})
 	sendLine(string(resultJSON))
-	finalStatus := `completed`
+	finalStatus := common.TaskWorkflowChatStatusCompleted
 	if err != nil {
 		select {
 		case <-stopped:
-			finalStatus = `interrupted`
+			finalStatus = common.TaskWorkflowChatStatusInterrupted
 		default:
-			finalStatus = `error`
+			finalStatus = common.TaskWorkflowChatStatusError
 		}
 	}
 	sendLine(buildChatCompletedEvent(chatID, finalStatus))
 	taskWorkflowBroadcastChatStatus(chatID)
-	go taskWorkflowSendWebhookNotify(chatID, lastAgentMessageText)
+	go taskWorkflowSendWebhookNotify(chatID, lastAgentMessageText, finalStatus)
 }
 
 // buildChatCompletedEvent 构造对话终态 SSE 事件，携带最终状态供前端背景列表即时更新。
@@ -3738,14 +3739,14 @@ func extractAssistantText(data map[string]any) string {
 }
 
 // taskWorkflowSendWebhookNotify 根据 chat 关联的 agent_cli webhook 配置发送通知。
-func taskWorkflowSendWebhookNotify(chatID int64, lastText string) {
-	chatInfo, err := common.DbMain.TaskWorkflowChatInfo(chatID)
-	if err != nil || len(chatInfo) == 0 {
+// finalStatus 由调用方直接传入（completed/interrupted/error），避免从 DB 重读 raw_output 时因并发写入导致 user_stop 标记丢失。
+func taskWorkflowSendWebhookNotify(chatID int64, lastText string, finalStatus string) {
+	if finalStatus == common.TaskWorkflowChatStatusInterrupted {
+		gstool.FmtPrintlnLogTime("[webhook-notify] chat_id=%d 跳过发送，用户主动终止 (finalStatus=%s)", chatID, finalStatus)
 		return
 	}
-	stopReason, _ := taskWorkflowExtractTerminalReason(cast.ToString(chatInfo[`status`]), cast.ToString(chatInfo[`raw_output`]))
-	if stopReason == taskWorkflowChatStopReasonUserStop {
-		gstool.FmtPrintlnLogTime("[webhook-notify] chat_id=%d 跳过发送，原因=%s", chatID, stopReason)
+	chatInfo, err := common.DbMain.TaskWorkflowChatInfo(chatID)
+	if err != nil || len(chatInfo) == 0 {
 		return
 	}
 	agentCliId := cast.ToInt(chatInfo["agent_cli_id"])

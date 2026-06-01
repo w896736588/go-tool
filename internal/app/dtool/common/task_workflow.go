@@ -27,6 +27,13 @@ const (
 )
 
 const (
+	TaskWorkflowChatStatusRunning     = taskWorkflowChatStatusRunning
+	TaskWorkflowChatStatusCompleted   = taskWorkflowChatStatusCompleted
+	TaskWorkflowChatStatusError       = taskWorkflowChatStatusError
+	TaskWorkflowChatStatusInterrupted = taskWorkflowChatStatusInterrupted
+)
+
+const (
 	// agentChatTableName 通用 Agent 对话表名。 // Shared table name for all agent chat records.
 	agentChatTableName = `agent_chat`
 	// AgentChatSourceTypeWorkflow 表示记录来自工作流。 // Source type used when the chat is created from a workflow.

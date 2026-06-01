@@ -67,6 +67,11 @@ function WebhookConfigDelete(id, callBack) {
   base.BasePost('/api/WebhookConfigDelete', { id: id }, callBack)
 }
 
+// WebhookConfigTest 测试发送 Webhook 配置
+function WebhookConfigTest(data, callBack) {
+  base.BasePost('/api/WebhookConfigTest', data, callBack)
+}
+
 // AgentCliGroupList 获取 AgentCli 专用分组列表
 function AgentCliGroupList(callBack) {
   base.BasePost('/api/AgentCliGroupList', {}, callBack)
@@ -101,6 +106,7 @@ export default {
   WebhookConfigList,
   WebhookConfigSave,
   WebhookConfigDelete,
+  WebhookConfigTest,
   AgentCliGroupList,
   AgentCliGroupSave,
   AgentCliGroupDelete,

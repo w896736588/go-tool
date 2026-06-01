@@ -13,7 +13,13 @@
         <div
           v-for="item in items"
           :key="item.id"
-          :class="['chat-list-item', { 'chat-list-item--active': selectedId === item.id }]"
+          :class="[
+            'chat-list-item',
+            {
+              'chat-list-item--active': selectedId === item.id,
+              'chat-list-item--stale': isItemStale(item),
+            },
+          ]"
           @click="$emit('select', item)"
         >
           <div class="chat-list-item__name">
@@ -547,6 +553,25 @@ export default {
       const rawReason = String(item?.stop_reason || '').trim()
       if (!rawReason) return ''
       return this.stopReasonLabel(rawReason)
+    },
+    // parseHistoryTime 统一解析历史列表中的时间字符串，兼容 YYYY-MM-DD HH:mm:ss 与 ISO 格式。
+    parseHistoryTime(value) {
+      const text = String(value || '').trim()
+      if (!text) return 0
+      const parsed = new Date(text.replace(/-/g, '/')).getTime()
+      return Number.isNaN(parsed) ? 0 : parsed
+    },
+    // getItemLastUpdateTime 返回历史项最后更新时间，优先使用 updated_at。
+    getItemLastUpdateTime(item) {
+      if (!item) return 0
+      return this.parseHistoryTime(item.updated_at || item.end_time || item.finished_at || item.created_at)
+    },
+    // isItemStale 标记 1 小时内没有更新过的任务，便于识别刚完成的记录。
+    isItemStale(item) {
+      if (!item || item.status === 'running') return false
+      const lastUpdateTime = this.getItemLastUpdateTime(item)
+      if (lastUpdateTime <= 0) return false
+      return (Date.now() - lastUpdateTime) >= 60 * 60 * 1000
     },
     // 获取详情滚动容器 / Get the detail scroll container.
     getDetailContainer() {

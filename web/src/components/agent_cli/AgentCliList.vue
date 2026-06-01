@@ -72,7 +72,7 @@
               <span>ID：{{ row.id }}</span>
               <span v-if="row.type !== 'codex-cli'">配置文件：{{ row.settings_exists ? '存在' : '不存在' }}</span>
               <span>可选模型：{{ formatModelOptions(row.model_options) }}</span>
-              <span v-if="row.type !== 'codex-cli'">McpServers：{{ row.mcp_server_count || 0 }} 个</span>
+              <span>McpServers：{{ row.mcp_server_count || 0 }} 个</span>
             </div>
 
             <div class="agent-cli-config-table-wrap">
@@ -175,10 +175,15 @@
                     </td>
                   </tr>
                   <tr v-else>
+                    <th>McpServers</th>
+                    <td>{{ row.mcp_server_count || 0 }} 个</td>
                     <th>Wire API</th>
                     <td>{{ getCodexWireApi(row) }}</td>
+                  </tr>
+                  <tr v-if="row.type === 'codex-cli'">
                     <th>WebSocket</th>
                     <td>{{ getCodexSupportsWebsocketsText(row) }}</td>
+                    <td colspan="2"></td>
                   </tr>
                 </tbody>
               </table>
@@ -198,7 +203,6 @@
               执行历史
             </ChatHistoryButton>
             <GitActionButton
-              v-if="row.type !== 'codex-cli'"
               compact
               variant="primary"
               @click="configureMcp(row)"
@@ -372,9 +376,10 @@
           </template>
         </el-table-column>
         <el-table-column prop="webhook_url" label="Webhook 地址" min-width="180" show-overflow-tooltip />
-        <el-table-column label="操作" width="130" fixed="right">
+        <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button size="small" link type="primary" @click="openWebhookForm(row)">编辑</el-button>
+            <el-button size="small" link type="success" :loading="row._testingWebhook === true" @click="testWebhook(row)">测试</el-button>
             <el-button size="small" link type="danger" @click="deleteWebhook(row)">删除</el-button>
           </template>
         </el-table-column>
@@ -395,13 +400,18 @@
             </el-select>
           </el-form-item>
           <el-form-item label="Webhook 地址">
-            <el-input v-model="webhookForm.webhook_url" placeholder="https://oapi.dingtalk.com/robot/send?access_token=xxx" />
+            <el-input v-model="webhookForm.webhook_url" :placeholder="webhookUrlPlaceholder" />
           </el-form-item>
           <el-form-item label="签名密钥">
-            <el-input v-model="webhookForm.secret" placeholder="SEC... (可选)" />
+            <el-input v-model="webhookForm.secret" :placeholder="webhookSecretPlaceholder" />
+          </el-form-item>
+          <el-form-item label="测试链接">
+            <el-input v-model="webhookForm.test_single_url" placeholder="https://example.com/detail (可选，用于测试卡片按钮)" />
           </el-form-item>
           <el-form-item>
             <el-button type="primary" :loading="webhookSaving" @click="saveWebhook">保存</el-button>
+            <el-button type="success" plain :loading="webhookTesting" @click="testWebhook(webhookForm)">测试发送</el-button>
+            <el-button type="warning" plain :loading="webhookLinkTesting" @click="testWebhookWithLink(webhookForm)">测试卡片按钮</el-button>
             <el-button @click="webhookFormVisible = false">取消</el-button>
           </el-form-item>
         </el-form>
@@ -595,12 +605,15 @@ export default {
       webhookOptions: [],
       webhookFormVisible: false,
       webhookSaving: false,
+      webhookTesting: false,
+      webhookLinkTesting: false,
       webhookForm: {
         id: 0,
         name: '',
         type: 'dingtalk',
         webhook_url: '',
         secret: '',
+        test_single_url: '',
       },
       agentExecDialogVisible: false,
       agentExecLoading: false,
@@ -660,6 +673,12 @@ export default {
       }
       const currentModel = String(cli.current_model || '').trim()
       return currentModel && currentModel !== '-' ? [currentModel] : []
+    },
+    webhookUrlPlaceholder() {
+      return this.webhookUrlPlaceholderByType(this.webhookForm.type)
+    },
+    webhookSecretPlaceholder() {
+      return this.webhookSecretPlaceholderByType(this.webhookForm.type)
     },
   },
   mounted() {
@@ -1801,6 +1820,22 @@ export default {
       const map = { dingtalk: '钉钉', feishu: '飞书', wecom: '企微' }
       return map[type] || type
     },
+    webhookUrlPlaceholderByType(type) {
+      const map = {
+        dingtalk: 'https://oapi.dingtalk.com/robot/send?access_token=xxx',
+        feishu: 'https://open.feishu.cn/open-apis/bot/v2/hook/xxx',
+        wecom: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx',
+      }
+      return map[type] || '请输入 Webhook 地址'
+    },
+    webhookSecretPlaceholderByType(type) {
+      const map = {
+        dingtalk: 'SEC... (可选)',
+        feishu: '签名校验密钥 (可选)',
+        wecom: '暂无扩展字段',
+      }
+      return map[type] || '请输入签名密钥'
+    },
     openWebhookForm(row) {
       if (row) {
         this.webhookForm = {
@@ -1809,9 +1844,10 @@ export default {
           type: row.type,
           webhook_url: row.webhook_url,
           secret: row.secret,
+          test_single_url: row.test_single_url || '',
         }
       } else {
-        this.webhookForm = { id: 0, name: '', type: 'dingtalk', webhook_url: '', secret: '' }
+        this.webhookForm = { id: 0, name: '', type: 'dingtalk', webhook_url: '', secret: '', test_single_url: '' }
       }
       this.webhookFormVisible = true
     },
@@ -1833,6 +1869,61 @@ export default {
           this.loadWebhookList()
         } else {
           this.$message.error(response?.ErrMsg || '保存失败')
+        }
+      })
+    },
+    testWebhook(row) {
+      this.sendWebhookTest(row, '')
+    },
+    testWebhookWithLink(row) {
+      const singleURL = String(row?.test_single_url || '').trim()
+      if (!singleURL) {
+        this.$message.warning('请输入测试链接')
+        return
+      }
+      this.sendWebhookTest(row, singleURL)
+    },
+    sendWebhookTest(row, singleURL = '') {
+      const payload = {
+        name: String(row?.name || '').trim(),
+        type: String(row?.type || 'dingtalk').trim(),
+        webhook_url: String(row?.webhook_url || '').trim(),
+        secret: String(row?.secret || '').trim(),
+        single_url: String(singleURL || '').trim(),
+      }
+      if (!payload.name) {
+        this.$message.warning('请输入配置名称')
+        return
+      }
+      if (!payload.webhook_url) {
+        this.$message.warning('请输入 Webhook 地址')
+        return
+      }
+      const isFormTarget = row === this.webhookForm
+      const isLinkTest = !!payload.single_url
+      if (isFormTarget) {
+        if (isLinkTest) {
+          this.webhookLinkTesting = true
+        } else {
+          this.webhookTesting = true
+        }
+        } else {
+          this.$set(row, '_testingWebhook', true)
+        }
+      agentCliApi.WebhookConfigTest(payload, (response) => {
+        if (isFormTarget) {
+          if (isLinkTest) {
+            this.webhookLinkTesting = false
+          } else {
+            this.webhookTesting = false
+          }
+          } else {
+            this.$set(row, '_testingWebhook', false)
+          }
+        if (response && response.ErrCode === 0) {
+          this.$message.success(response?.ErrMsg || '测试发送成功')
+        } else {
+          this.$message.error(response?.ErrMsg || '测试发送失败')
         }
       })
     },

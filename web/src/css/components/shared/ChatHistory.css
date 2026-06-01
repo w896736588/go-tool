@@ -67,6 +67,28 @@
   background: #edf3e8;
 }
 
+.chat-list-item--stale {
+  background: #f5f7fa;
+}
+
+.chat-list-item--stale:hover {
+  background: #ebeff3;
+}
+
+.chat-list-item--stale .chat-list-item__name,
+.chat-list-item--stale .chat-list-item__prompt {
+  color: #73767a;
+}
+
+.chat-list-item--stale .chat-list-item__time,
+.chat-list-item--stale .chat-list-item__status {
+  color: #a8abb2;
+}
+
+.chat-list-item--active.chat-list-item--stale {
+  background: #e3e7db;
+}
+
 .chat-list-item__name {
   font-size: 14px;
   font-weight: 500;
