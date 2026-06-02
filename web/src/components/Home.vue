@@ -46,10 +46,10 @@
           <el-icon><Link /></el-icon>
           <span>Playwright</span>
         </el-menu-item>
-        <el-menu-item v-if="checkModuleOpen('variable')" index="/Variable">
-          <el-icon><Document /></el-icon>
-          <span>Script</span>
-        </el-menu-item>
+<!--        <el-menu-item v-if="checkModuleOpen('variable')" index="/Variable">-->
+<!--          <el-icon><Document /></el-icon>-->
+<!--          <span>Script</span>-->
+<!--        </el-menu-item>-->
         <el-menu-item v-if="checkModuleOpen('memory_fragment')" index="/MemoryFragment">
           <el-icon><Memo /></el-icon>
           <span>Knowledge</span>
