@@ -1,9 +1,15 @@
-```shell
-#安装
+# go-tool
+
+[English](./README.en.md)
+
+## 安装
+
 ```shell
 go get -u github.com/w896736588/go-tool
 ```
+
 ## 一、mysql/pgsql/sqlite3
+
 ### 1. 创建连接
 
 ```go
@@ -33,15 +39,20 @@ mysql.SetOpenFunc(func(db *sql.DB) {
     db.SetConnMaxLifetime(time.Hour)
 })
 err := mysql.CreateConn()
-
 ```
+
 ### 2. 快捷操作
+
 #### 说明
+
 - 快捷操作设计的目的是为了将一些简单的sql使用链式来方便的书写，尤其是like  in这种，复杂的sql使用原生sql查询
 - 当开启了autoTrans时条件和设置的值都会根据表结构自动转换为对应类型 mysql本身也支持
-- 支持的操作符 > < >= <= <> like in not in between  
+- 支持的操作符 > < >= <= <> like in not in between
+
 #### 示例
+
 - 更新所有满足条件的
+
 ```go
 upNum, queryErr := mysql.QuickUpdate(`tbl_user`, map[string]any{
     `id`: [20,21], //会自动转为in
@@ -57,6 +68,7 @@ upNum, queryErr := mysql.QuickUpdate(`tbl_user`, map[string]any{
 ```
 
 - 查询100条
+
 ```go
 list , queryErr := mysql.QuickQuery(`tbl_user` , `*` , map[string]any{
 	`id` : []any{`>` , 1},
@@ -73,11 +85,13 @@ gstool.FmtPrintlnLogTime(`查询结果:%s`, gstool.JsonFormat(ma0))
 ```
 
 - pgsql的插入特殊处理 获取新增的id
+
 ```go
 id , queryErr := mysql.QuickInsert(`tbl_user`, map[string]any{} , `id`)
 ```
 
 - 使用事务 支持传递给多个数据库操作
+
 ```go
 err := msql.CreateConn()
 if err != nil {
@@ -103,6 +117,7 @@ _ = tx.Commit()
 ```
 
 - 快捷查询join等连接
+
 ```go
 q := msql.QuickQuery(`tbl_test1 r`, `r.id`, map[string]any{}).
     Join(`left join tbl_test2 u on u.id = r.xx and u.xxx = ?`, `xxxxx`).
@@ -112,6 +127,7 @@ gstool.FmtPrintlnLog(`%s`, q.GetSql())
 ```
 
 - 将结果提取为切片
+
 ```go
 ma4, err := client.QuickQuery(`tbl_staff`, `*`, map[string]any{}{
         `_id`: []any{`>`, 0},
@@ -124,6 +140,7 @@ gstool.FmtPrintlnLogTime(`查询结果:%s`, gstool.JsonFormat(ma4.ToIntFilter())
 ```
 
 - 将结果提取为map
+
 ```go
 ma3, err := client.QuickQuery(`tbl_staff`, `*`, map[string]any{}{
     `_id`: []any{`>`, 0},
@@ -136,6 +153,7 @@ gstool.FmtPrintlnLogTime(`查询结果:%s`, gstool.JsonFormat(ma3.ToStringInt())
 ```
 
 - 将结果按照某个字段分组
+
 ```go
 ma2, err := client.QuickQuery(`tbl_staff`, `*`, map[string]any{}{
     `_id`: []any{`>`, 0},
@@ -148,6 +166,7 @@ gstool.FmtPrintlnLogTime(`查询结果:%s`, gstool.JsonFormat(ma2))
 ```
 
 - 将结果转为map
+
 ```go
 ma1, err := client.QuickQuery(`tbl_staff`, `*`, map[string]any{}{
     `_id`: []any{`>`, 0},
@@ -160,6 +179,7 @@ gstool.FmtPrintlnLogTime(`查询结果:%s`, gstool.JsonFormat(ma1))
 ```
 
 - 获取单个字段值
+
 ```go
 ma0, err := client.QuickQuery(`tbl_staff`, `*`, map[string]any{}{
     `_id`: []any{`>`, 0},
@@ -172,7 +192,9 @@ gstool.FmtPrintlnLogTime(`查询结果:%d`, ma0)
 ```
 
 ### 3. 获取实际执行的sql日志
+
 - 获取单条执行的日志
+
 ```go
 q := mysql.QuickSelect(`tbl_user`, []string{
 	`id` : []any{`>` , 1}
@@ -180,7 +202,9 @@ q := mysql.QuickSelect(`tbl_user`, []string{
 _,_ := q.All()
 sql : q.GetSql() //获取实际执行的sql
 ```
+
 - 注册全局日志
+
 ```go
 client.RegisterDebugHook(func(sql string, err error) {
     gstool.FmtPrintlnLogTime(`sql %s`, sql)
@@ -188,23 +212,29 @@ client.RegisterDebugHook(func(sql string, err error) {
 })
 ```
 
-### 4. 自动转换类型说明  
-- 自动转换包括in not in 等各类操作的值，包括查询条件 更新的值  
+### 4. 自动转换类型说明
+
+- 自动转换包括in not in 等各类操作的值，包括查询条件 更新的值
 - 自动转换会查询表结构，如果遇到某个字段不存在时会重新更新表结构  如果更换了字段类型需要重新启动，否则可能导致插入类型错误，有可能执行失败
 - 如果某个字段的类型变更，那么需要重新启动服务，自动转换可能会转换为错误类型
 - rawsql类型的第二个参数，不会参与自动转换类型
 
 ### 5. 其他注意事项
+
 - "date", "datetime", "timestamp"类型字段，需要传入string，不要直接传time.Time
 
 ## 二、http客户端
+
 ### 1. GET
+
 ```go
 gshttp.Get(`http://xxxx/api`).Result()
 ```
 
 ### 2. POST
+
 #### 提交数组的方式(application/x-www-form-urlencoded或multipart/form-data)
+
 ```go
 //1.第一种方法 通过多次执行BodyMap()方法 可以给同一个key设置多个值 自动转为数组
 gshttp.PostForm(`http://xxxx.api`).
@@ -212,20 +242,26 @@ gshttp.PostForm(`http://xxxx.api`).
 //2.第二种方法 通过设置数组参数，将自动转为数组
 gshttp.PostForm(`http://xxxx.api`).
 	BodyMap(map[string]any{
-	`params` : []string{`a`, `b`}   
+	`params` : []string{`a`, `b`}
 }).Request(5).Result()
 ```
+
 #### application/json请求
+
 ```go
 gshttp.PostJson(`http://xxxx.api`).
 	BodyStr(`{"appid" : 1}`).Result()
 ```
+
 #### application/x-www-form-urlencoded请求
-```go 
+
+```go
 gshttp.PostForm(`http://xxxx.api`).
 	BodyMap(map[string]any{}).Request(5).Result()
 ```
+
 #### multipart/form-data方式提交 支持上传多个文件
+
 ```go
 gshttp.PostMultiForm(`http://xxxx.api`).BodyMap(map[string]any{}).
 	BodyFile(`file` , `本地地址` , `xxx.png`).
@@ -233,6 +269,7 @@ gshttp.PostMultiForm(`http://xxxx.api`).BodyMap(map[string]any{}).
 ```
 
 #### 示例微信上传文件获取素材id
+
 ```go
 func HttpWxPostFile(url, body string) (map[string]any,error) {
     data := make(map[string]any)
@@ -275,16 +312,19 @@ func HttpWxPostFile(url, body string) (map[string]any,error) {
     return dataM,nil
 }
 ```
+
 #### 允许非200的状态码
+
 ```go
 gshttp.Get(`http://xxxx/api`).SetAllowHttpStatus(200 , 204).Result()
 //keep-alive开启或者关闭 开启后 目标IP和端口相同时复用连接，不再需要三次握手 默认关闭
 gshttp.Get(`http://xxxx/api`).OpenKeepAlive().Result()
 ```
 
-
 #### 按流式接收
+
 ##### 按字符串作为分割
+
 ```go
 fac := &stream.Byts{
     Byts: []byte("\n\n"),
@@ -292,7 +332,7 @@ fac := &stream.Byts{
         h.StreamMsg(s, false)
     },
     FormatFunc: func(s []byte) []byte {
-        if gstool.SContains(cast.ToString(s), []string{`忽略`}) { //这种内容不汇集到result结果中 
+        if gstool.SContains(cast.ToString(s), []string{`忽略`}) { //这种内容不汇集到result结果中
             return []byte{} //返回的内容可以自己定义
         } else {
             return s //原样返回
@@ -303,6 +343,7 @@ result, err = gshttp.Get(`http://xxxx.api`).SetStreamFac(fac).Request(200).Resul
 ```
 
 ##### 按正则作为分割
+
 ```go
 fac := &stream.Reges{
     Reges: `\x00{4}|[\x00-\x1F]`, //按照ascii分割
@@ -310,7 +351,7 @@ fac := &stream.Reges{
         //分割得到的消息
     },
     FormatFunc: func(s []byte) []byte {
-        if gstool.SContains(cast.ToString(s), []string{`忽略`}) { //这种内容不汇集到result结果中 
+        if gstool.SContains(cast.ToString(s), []string{`忽略`}) { //这种内容不汇集到result结果中
             return []byte{} //返回的内容可以自己定义
         } else {
             return s //原样返回
@@ -321,6 +362,7 @@ result, err = gshttp.Get(`http://xxxx.api`).SetStreamFac(fac).Request(200).Resul
 ```
 
 ##### 按固定字节长度分割
+
 ```go
 fac := &stream.BytsNum{
     Num: 255, //按照固定字节长度返回
@@ -328,7 +370,7 @@ fac := &stream.BytsNum{
         //分割得到的消息
     },
     FormatFunc: func(s []byte) []byte {
-        if gstool.SContains(cast.ToString(s), []string{`忽略`}) { //这种内容不汇集到result结果中 
+        if gstool.SContains(cast.ToString(s), []string{`忽略`}) { //这种内容不汇集到result结果中
             return []byte{} //返回的内容可以自己定义
         } else {
             return s //原样返回
@@ -338,9 +380,10 @@ fac := &stream.BytsNum{
 result, err = gshttp.Get(`http://xxxx.api`).SetStreamFac(fac).Request(200).Result()
 ```
 
+## 三、并发执行通道
 
-## 三、 并发执行通道
 多个任务塞入执行队列中，可以选择执行所有或执行任一
+
 ```go
 //执行所有
 task := gstask.NewTask()
@@ -356,8 +399,11 @@ task.Add(callBack1) //继续往后添加
 resultList := task.RunAll() //执行所有
 result := task.RunOne() //执行，返回第一个执行完或者超时的结果
 ```
-## 四、 Nsq消费和发布消息
+
+## 四、Nsq消费和发布消息
+
 nsq不走协程并发，按照一个客户端同时只能处理一个消息处理
+
 ```go
 nsqConfig := gsnsq.NsqConfig{
     LookUpHost: "127.0.0.1:4161", //消费地址
@@ -378,8 +424,11 @@ nsq.ConsumerShutDown()
 //创建发布端 内置最高1000的并发发送缓冲区
 _ = nsq.CreateProducer()
 ```
-## 五、 Redis 
+
+## 五、Redis
+
 ### 基础配置
+
 ```json
 ssh := gsssh.SshConfig{
     Host:     `127.0.0.1`,
@@ -404,7 +453,9 @@ redis := gsdb.GsRedis{
 }
 err := redis.CreateConn()
 ```
+
 ### redis锁（等待或非等待）
+
 ```go
 lock := gslock.NewRedisLock(redisCli, time.Second*30)
 // 一次性判断锁值并返回
@@ -425,10 +476,13 @@ b, s, err := lock.GetWaitLock(`锁的key值`, `锁的值`, 10, time.Second, brea
 ```
 
 ### 缓存快速使用时构建
+
 - func()可以换为查询数据库操作
 - 遇到类型不匹配时将会返回传入类型的空值
 - 泛型支持常用类型
+
 #### hash存储map
+
 ```go
 data, err := gsdb.RedisGetHashFromMap(client, `test1`, func() (map[string]map[string]string, error) {
     return map[string]map[string]string{
@@ -441,6 +495,7 @@ data, err := gsdb.RedisGetHashFromMap(client, `test1`, func() (map[string]map[st
     }, nil
 }, time.Hour)
 ```
+
 ```go
 data, err := gsdb.RedisGetHashFromMap(client, `test1`, func() (map[string]string, error) {
     return map[string]string{
@@ -451,9 +506,11 @@ data, err := gsdb.RedisGetHashFromMap(client, `test1`, func() (map[string]string
 ```
 
 #### string存储map
+
 - func()可以换为查询数据库操作
 - 遇到类型不匹配时将会返回传入类型的空值
 - 泛型支持常用类型
+
 ```go
 data, err := gsdb.RedisGetMapString(client, `test2`, func() (map[int]map[any]any, error) {
     return map[int]map[any]any{
@@ -462,11 +519,12 @@ data, err := gsdb.RedisGetMapString(client, `test2`, func() (map[int]map[any]any
         },
     }, nil
 }, time.Hour)
-
 ```
 
-## 六、 Ssh
+## 六、Ssh
+
 ### 一次性命令
+
 ```go
 sshOnce := gsssh.NewSshOnce(gsssh.NewSsh(&gsssh.SshConfig{
     Host:     "11.11.11.11",
@@ -481,8 +539,11 @@ if err != nil {
 }
 gstool.FmtPrintlnLogTime(`%s`, ret)
 ```
+
 ### 交互式
+
 #### 交互式执行一个命令 接收所有返回 等待命令执行完
+
 ```go
 sshTerminal := gsssh.NewSshTerminal(gsssh.NewSsh(&gsssh.SshConfig{
     Host:     "11.11.11.11",
@@ -502,9 +563,10 @@ if err != nil {
     return
 }
 gstool.FmtPrintlnLogTime(`最终结果 %s`, ret)
-
 ```
+
 #### 交互式执行一个命令 接收命令返回（不要ssh链接时的系统信息） 等待命令执行完
+
 ```go
 sshTerminal := gsssh.NewSshTerminal(gsssh.NewSsh(&gsssh.SshConfig{
     Host:     "11.11.11.11",
@@ -532,5 +594,6 @@ if err != nil {
 gstool.FmtPrintlnLogTime(`最终结果 %s`, ret)
 ```
 
-## 八、 阿里云Oss
+## 八、阿里云Oss
+
 具体见gsali中的oss_client和oss_quick
