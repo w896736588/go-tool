@@ -1,0 +1,44 @@
+package stream
+
+import (
+	"bufio"
+	"bytes"
+	"net/http"
+)
+
+// Byts 按照字符串截取
+type Byts struct {
+	Byts       []byte              //按字符串进行分割如果是ascii 那么应该是\x00-\x1F
+	CallFunc   func(string, error) //截取后的回调
+	FormatFunc func([]byte) []byte //截取后的数据处理回调 这个结果将会存入最终返回的数据中，如果不设置就按照实际接收的计入最终结果
+}
+
+func (h *Byts) ReceiveSplit(response *http.Response, responseByte *[]byte) {
+	reader := bufio.NewScanner(response.Body)
+	//data 当前缓冲区的数据
+	//atEOF 是否到达末尾
+	//advance 告诉 Scanner 跳过多少字节（即已经处理了多少）
+	//token Scan返回的数据
+	reader.Split(func(data []byte, atEOF bool) (advance int, token []byte, err error) {
+		if atEOF && len(data) == 0 {
+			return 0, nil, nil
+		}
+		if i := bytes.Index(data, h.Byts); i >= 0 {
+			return i + len(h.Byts), data[0 : i+len(h.Byts)], nil
+		}
+		if atEOF {
+			return len(data), data, nil
+		}
+		return 0, nil, nil
+	})
+
+	for reader.Scan() {
+		resBytes := reader.Bytes()
+		h.CallFunc(string(resBytes), nil)
+		if h.FormatFunc != nil {
+			*responseByte = append(*responseByte, h.FormatFunc(resBytes)...)
+		} else {
+			*responseByte = append(*responseByte, resBytes...)
+		}
+	}
+}
