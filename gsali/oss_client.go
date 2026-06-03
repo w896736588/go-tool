@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
+	"github.com/w896736588/go-tool/gstool"
 )
 
 type OssConfig struct {

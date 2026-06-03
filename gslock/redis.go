@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/w896736588/go-tool/gsdb"
+	"github.com/w896736588/go-tool/gstool"
 )
 
 func NewRedisLock(redis *gsdb.GsRedis, expired time.Duration) *RedisLock {

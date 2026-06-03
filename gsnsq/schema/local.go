@@ -3,6 +3,8 @@ package schema
 import (
 	"sync"
 	"time"
+
+	"github.com/w896736588/go-tool/gstool"
 )
 
 type Local struct {

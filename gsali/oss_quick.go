@@ -3,6 +3,8 @@ package gsali
 import (
 	"path/filepath"
 	"strings"
+
+	"github.com/w896736588/go-tool/gstool"
 )
 
 type OssQuick struct {

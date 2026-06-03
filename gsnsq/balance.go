@@ -7,6 +7,7 @@ import (
 	"github.com/nsqio/go-nsq"
 	"github.com/w896736588/go-tool/gsdb"
 	"github.com/w896736588/go-tool/gsnsq/schema"
+	"github.com/w896736588/go-tool/gstool"
 )
 
 /**

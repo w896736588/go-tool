@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/nsqio/go-nsq"
+	"github.com/w896736588/go-tool/gstool"
 )
 
 type NsqStruct struct {

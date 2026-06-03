@@ -9,6 +9,7 @@ import (
 
 	_ "github.com/lib/pq"
 	"github.com/w896736588/go-tool/gsssh"
+	"github.com/w896736588/go-tool/gstool"
 )
 
 type PgsqlConfig struct {

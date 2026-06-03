@@ -1,10 +1,5 @@
 # Installation
 ```go
-// View all tags
-go list -m -versions github.com/w896736588/go-tool
-// Install the latest tag
-go install github.com/w896736588/go-tool@latest
-// Update to the latest tag
 go get -u github.com/w896736588/go-tool
 ```
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/w896736588/go-tool/gsdefine"
+	"github.com/w896736588/go-tool/gstool"
 )
 
 // RedisHash 获取hash中的某一个值
