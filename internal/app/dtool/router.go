@@ -568,7 +568,6 @@ func agentCli(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/AgentCliReadSettings`, controller.AgentCliReadSettings)
 	tGin.GinPost(`/api/AgentCliWriteMcpServers`, controller.AgentCliWriteMcpServers)
 	tGin.GinPost(`/api/AgentCliWriteDeepSeek`, controller.AgentCliWriteDeepSeek)
-	tGin.GinPost(`/api/AgentCliToggleClaudeMem`, controller.AgentCliToggleClaudeMem)
 	tGin.GinPost(`/api/AgentCliToggleEnabled`, controller.AgentCliToggleEnabled)
 	// AgentCli 分组管理
 	tGin.GinPost(`/api/AgentCliGroupList`, controller.AgentCliGroupList)

@@ -161,18 +161,7 @@
                   <tr v-if="row.type !== 'codex-cli'">
                     <th>McpServers</th>
                     <td>{{ row.mcp_server_count || 0 }} 个</td>
-                    <th>claude-mem</th>
-                    <td>
-                      <div class="agent-cli-table-control">
-                        <el-switch
-                          v-model="row.claude_mem_enabled"
-                          size="small"
-                          :loading="row._togglingMem"
-                          @change="toggleClaudeMem(row)"
-                        />
-                        <span class="agent-cli-switch-line__text">{{ row.claude_mem_enabled ? '已启用' : '已禁用' }}</span>
-                      </div>
-                    </td>
+                    <td colspan="2"></td>
                   </tr>
                   <tr v-else>
                     <th>McpServers</th>
@@ -1267,18 +1256,6 @@ export default {
           this.loadList()
         } else {
           this.$message.error(response?.ErrMsg || '配置失败')
-        }
-      })
-    },
-    toggleClaudeMem(item) {
-      item._togglingMem = true
-      agentCliApi.AgentCliToggleClaudeMem({ id: item.id, enable: item.claude_mem_enabled }, (response) => {
-        item._togglingMem = false
-        if (response && response.ErrCode === 0) {
-          this.$message.success(`claude-mem 已${item.claude_mem_enabled ? '启用' : '禁用'}`)
-        } else {
-          this.$message.error(response?.ErrMsg || '操作失败')
-          item.claude_mem_enabled = !item.claude_mem_enabled
         }
       })
     },
