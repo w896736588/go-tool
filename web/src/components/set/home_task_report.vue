@@ -355,6 +355,7 @@
               preview-theme="github"
               :preview="true"
               :toolbars="promptEditorToolbars"
+              class="branch-name-editor"
               style="height: 360px;"
             />
           </el-form-item>
@@ -705,11 +706,14 @@ export default {
 .prompt-template-section {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
+  height: 100%;
   min-height: 0;
 }
 
 .prompt-template-card {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
 }
@@ -717,6 +721,8 @@ export default {
 .prompt-template-card .el-tabs {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .prompt-template-card .el-tabs__header {
@@ -727,40 +733,83 @@ export default {
 }
 
 .prompt-template-card .el-tabs__content {
-  overflow: visible;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .prompt-template-card .el-tab-pane {
-  height: auto;
+  height: 100%;
 }
 
-.prompt-template-editor {
+.daily-report-editor,
+.prompt-template-editor,
+.branch-name-editor {
   height: calc(100vh - 460px);
   min-height: 200px;
   max-height: 800px;
 }
 
-.prompt-template-editor :deep(.md-editor) {
+.daily-report-editor :deep(.md-editor),
+.prompt-template-editor :deep(.md-editor),
+.branch-name-editor :deep(.md-editor) {
   --md-font-size: 13px;
   --md-code-font-size: 13px;
+  --md-font-family: Consolas, Avenir, Helvetica, Arial, sans-serif;
 }
 
+.prompt-template-editor {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.prompt-template-editor :deep(.md-editor) {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.daily-report-editor :deep(.md-editor-input),
+.daily-report-editor :deep(.md-editor-preview-wrapper),
+.daily-report-editor :deep(.cm-content),
+.daily-report-editor :deep(.md-editor-preview),
 .prompt-template-editor :deep(.md-editor-input),
 .prompt-template-editor :deep(.md-editor-preview-wrapper),
 .prompt-template-editor :deep(.cm-content),
-.prompt-template-editor :deep(.md-editor-preview) {
-  font-size: 14px !important;
+.prompt-template-editor :deep(.md-editor-preview),
+.branch-name-editor :deep(.md-editor-input),
+.branch-name-editor :deep(.md-editor-preview-wrapper),
+.branch-name-editor :deep(.cm-content),
+.branch-name-editor :deep(.md-editor-preview) {
+  font-family: Consolas, Avenir, Helvetica, Arial, sans-serif !important;
+  font-size: 13px !important;
   line-height: 1.6;
 }
 
+.daily-report-editor :deep(.md-editor-preview p),
+.daily-report-editor :deep(.md-editor-preview li),
+.daily-report-editor :deep(.md-editor-preview blockquote),
+.daily-report-editor :deep(.md-editor-preview table),
+.daily-report-editor :deep(.md-editor-preview td),
+.daily-report-editor :deep(.md-editor-preview th),
+.daily-report-editor :deep(.md-editor-preview code),
 .prompt-template-editor :deep(.md-editor-preview p),
 .prompt-template-editor :deep(.md-editor-preview li),
 .prompt-template-editor :deep(.md-editor-preview blockquote),
 .prompt-template-editor :deep(.md-editor-preview table),
 .prompt-template-editor :deep(.md-editor-preview td),
 .prompt-template-editor :deep(.md-editor-preview th),
-.prompt-template-editor :deep(.md-editor-preview code) {
-  font-size: 14px !important;
+.prompt-template-editor :deep(.md-editor-preview code),
+.branch-name-editor :deep(.md-editor-preview p),
+.branch-name-editor :deep(.md-editor-preview li),
+.branch-name-editor :deep(.md-editor-preview blockquote),
+.branch-name-editor :deep(.md-editor-preview table),
+.branch-name-editor :deep(.md-editor-preview td),
+.branch-name-editor :deep(.md-editor-preview th),
+.branch-name-editor :deep(.md-editor-preview code) {
+  font-size: 13px !important;
 }
 
 .prompt-template-footer {
@@ -792,6 +841,7 @@ export default {
 .dev-environment-editor :deep(.md-editor) {
   --md-font-size: 13px;
   --md-code-font-size: 13px;
+  --md-font-family: Consolas, Avenir, Helvetica, Arial, sans-serif;
   width: 100%;
   height: 100%;
   min-height: 0;
@@ -801,7 +851,8 @@ export default {
 .dev-environment-editor :deep(.md-editor-preview-wrapper),
 .dev-environment-editor :deep(.cm-content),
 .dev-environment-editor :deep(.md-editor-preview) {
-  font-size: 14px !important;
+  font-family: Consolas, Avenir, Helvetica, Arial, sans-serif !important;
+  font-size: 13px !important;
   line-height: 1.6;
 }
 
@@ -812,7 +863,7 @@ export default {
 .dev-environment-editor :deep(.md-editor-preview td),
 .dev-environment-editor :deep(.md-editor-preview th),
 .dev-environment-editor :deep(.md-editor-preview code) {
-  font-size: 14px !important;
+  font-size: 13px !important;
 }
 
 .dev-environment-footer {
@@ -855,28 +906,44 @@ export default {
 </style>
 
 <style>
+.set-config-page .daily-report-editor .md-editor-preview,
+.set-config-page .daily-report-editor .md-editor-preview-wrapper,
+.set-config-page .daily-report-editor .md-editor-html,
 .set-config-page .prompt-template-editor .md-editor-preview,
 .set-config-page .prompt-template-editor .md-editor-preview-wrapper,
 .set-config-page .prompt-template-editor .md-editor-html,
+.set-config-page .branch-name-editor .md-editor-preview,
+.set-config-page .branch-name-editor .md-editor-preview-wrapper,
+.set-config-page .branch-name-editor .md-editor-html,
 .set-config-page .dev-environment-editor .md-editor-preview,
 .set-config-page .dev-environment-editor .md-editor-preview-wrapper,
 .set-config-page .dev-environment-editor .md-editor-html {
-  font-size: 14px !important;
+  font-family: Consolas, Avenir, Helvetica, Arial, sans-serif !important;
+  font-size: 13px !important;
   line-height: 1.6 !important;
 }
 
+.set-config-page .daily-report-editor .md-editor-preview *,
+.set-config-page .daily-report-editor .md-editor-html *,
 .set-config-page .prompt-template-editor .md-editor-preview *,
 .set-config-page .prompt-template-editor .md-editor-html *,
+.set-config-page .branch-name-editor .md-editor-preview *,
+.set-config-page .branch-name-editor .md-editor-html *,
 .set-config-page .dev-environment-editor .md-editor-preview *,
 .set-config-page .dev-environment-editor .md-editor-html * {
   font-size: inherit !important;
 }
 
+.set-config-page .daily-report-editor .cm-content,
+.set-config-page .daily-report-editor .md-editor-input,
 .set-config-page .prompt-template-editor .cm-content,
 .set-config-page .prompt-template-editor .md-editor-input,
+.set-config-page .branch-name-editor .cm-content,
+.set-config-page .branch-name-editor .md-editor-input,
 .set-config-page .dev-environment-editor .cm-content,
 .set-config-page .dev-environment-editor .md-editor-input {
-  font-size: 14px !important;
+  font-family: Consolas, Avenir, Helvetica, Arial, sans-serif !important;
+  font-size: 13px !important;
   line-height: 1.6 !important;
 }
 </style>
