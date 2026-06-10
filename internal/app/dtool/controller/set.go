@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"dev_tool/internal/pkg/p_db"
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/cast"
 	"github.com/w896736588/go-tool/gsdb"
@@ -408,13 +409,7 @@ func testRedisConn(redisConfig map[string]any) *gstask.Result {
 				Result: redisConfig[`id`],
 			}
 		}
-		gsRedis.SshBridge = gsssh.NewSshBridge(gsssh.NewSsh(&gsssh.SshConfig{
-			Name:     cast.ToString(sshConfig[`name`]),
-			Host:     cast.ToString(sshConfig[`host`]),
-			Port:     cast.ToString(sshConfig[`port`]),
-			UserName: cast.ToString(sshConfig[`username`]),
-			Password: cast.ToString(sshConfig[`password`]),
-		}))
+		gsRedis.SshBridge = p_db.NewConfiguredSshBridge(sshConfig)
 	}
 	connErr := gsRedis.CreateConn()
 	if connErr != nil {
@@ -466,21 +461,23 @@ func testDbConn(dbConfig map[string]any) *gstask.Result {
 	if dbType == `` {
 		dbType = DbTypeMysql
 	}
+	gstool.FmtPrintlnLogTime(`[Set.testDbConn] begin db_id=%s db_type=%s ssh_id=%s target=%s:%s db=%s`,
+		cast.ToString(dbConfig[`id`]), dbType, cast.ToString(dbConfig[`ssh_id`]),
+		cast.ToString(dbConfig[`host`]), cast.ToString(dbConfig[`port`]), cast.ToString(dbConfig[`dbname`]))
 	sshBridge := func() *gsssh.SshBridge {
 		if cast.ToInt(dbConfig[`ssh_id`]) == 0 {
 			return nil
 		}
 		sshConfig, sshConfigErr := common.DbMain.GetSshConfig(dbConfig[`ssh_id`])
 		if sshConfigErr != nil {
+			gstool.FmtPrintlnLogTime(`[Set.testDbConn] load ssh config failed db_id=%s ssh_id=%s err=%s`,
+				cast.ToString(dbConfig[`id`]), cast.ToString(dbConfig[`ssh_id`]), sshConfigErr.Error())
 			return nil
 		}
-		return gsssh.NewSshBridge(gsssh.NewSsh(&gsssh.SshConfig{
-			Name:     cast.ToString(sshConfig[`name`]),
-			Host:     cast.ToString(sshConfig[`host`]),
-			Port:     cast.ToString(sshConfig[`port`]),
-			UserName: cast.ToString(sshConfig[`username`]),
-			Password: cast.ToString(sshConfig[`password`]),
-		}))
+		gstool.FmtPrintlnLogTime(`[Set.testDbConn] use ssh bridge db_id=%s ssh_name=%s ssh_host=%s:%s post_connect_cmds=%q`,
+			cast.ToString(dbConfig[`id`]), cast.ToString(sshConfig[`name`]), cast.ToString(sshConfig[`host`]),
+			cast.ToString(sshConfig[`port`]), cast.ToString(sshConfig[`post_connect_cmds`]))
+		return p_db.NewConfiguredSshBridge(sshConfig)
 	}()
 	var connErr error
 	if dbType == DbTypePgsql {
@@ -511,11 +508,13 @@ func testDbConn(dbConfig map[string]any) *gstask.Result {
 		connErr = gsMysql.CreateConn()
 	}
 	if connErr != nil {
+		gstool.FmtPrintlnLogTime(`[Set.testDbConn] failed db_id=%s err=%s`, cast.ToString(dbConfig[`id`]), connErr.Error())
 		return &gstask.Result{
 			Err:    connErr,
 			Result: dbConfig[`id`],
 		}
 	}
+	gstool.FmtPrintlnLogTime(`[Set.testDbConn] success db_id=%s`, cast.ToString(dbConfig[`id`]))
 	return &gstask.Result{
 		Err:    nil,
 		Result: dbConfig[`id`],
