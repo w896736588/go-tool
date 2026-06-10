@@ -57,16 +57,61 @@
             </div>
           </div>
           <div v-if="parsedTaskDevConfigs.length > 0" class="task-workflow-header__meta">
-            <div v-for="(cfg, idx) in parsedTaskDevConfigs" :key="idx" class="task-workflow-header__dev-row">
-              <span class="task-workflow-header__dev-item">Git仓库: {{ getTaskConfigName('git', cfg.git_id) }}</span>
-              <span class="task-workflow-header__dev-sep">|</span>
-              <span class="task-workflow-header__dev-item task-workflow-header__dev-item--link" @click="openApiDevDialog(cfg)">接口集合: {{ truncateWorkflowLabel(getTaskConfigApiLabel(cfg)) }}</span>
-              <span class="task-workflow-header__dev-sep">|</span>
-              <span class="task-workflow-header__dev-item">父分支: {{ cfg.parent_branch || '-' }}</span>
-              <span class="task-workflow-header__dev-sep">|</span>
-              <span class="task-workflow-header__dev-item">分支名: <span class="task-workflow-header__branch" @click="copyText(cfg.branch_name, '分支名已复制')" :title="cfg.branch_name">{{ truncateWorkflowLabel(cfg.branch_name || '-') }}</span><el-tooltip v-if="cfg.local_dir && cfg.branch_name && branchStatusMap[cfg.local_dir + '|' + cfg.branch_name]" :content="branchStatusMap[cfg.local_dir + '|' + cfg.branch_name].matched ? '分支匹配' : '当前分支: ' + (branchStatusMap[cfg.local_dir + '|' + cfg.branch_name].current_branch || '未知')" placement="top"><span style="display: inline-flex; align-items: center; vertical-align: middle; margin-left: 4px;" :style="{ color: branchStatusMap[cfg.local_dir + '|' + cfg.branch_name].matched ? '#4caf50' : '#e53935' }"><svg v-if="branchStatusMap[cfg.local_dir + '|' + cfg.branch_name].matched" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><svg v-else viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span></el-tooltip></span>
-              <span class="task-workflow-header__dev-sep">|</span>
-              <span class="task-workflow-header__dev-item">本地目录: {{ cfg.local_dir || '-' }}<el-tooltip v-if="cfg.local_dir && localDirStatusMap[cfg.local_dir] !== undefined" :content="localDirStatusMap[cfg.local_dir] ? '目录存在' : '目录不存在'" placement="top"><span style="display: inline-flex; align-items: center; vertical-align: middle; margin-left: 4px;" :style="{ color: localDirStatusMap[cfg.local_dir] ? '#4caf50' : '#e53935' }"><svg v-if="localDirStatusMap[cfg.local_dir]" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><svg v-else viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span></el-tooltip></span>
+            <div v-for="(cfg, idx) in parsedTaskDevConfigs" :key="idx" class="task-workflow-header__dev-card">
+              <div class="task-workflow-header__field-grid">
+                <!-- Git仓库 -->
+                <div class="task-workflow-header__field">
+                  <span class="task-workflow-header__field-label">Git仓库</span>
+                  <span class="task-workflow-header__field-value">{{ getTaskConfigName('git', cfg.git_id) }}</span>
+                </div>
+                <!-- 接口集合 -->
+                <div class="task-workflow-header__field task-workflow-header__field--link task-workflow-header__field--wrap" @click="openApiDevDialog(cfg)">
+                  <span class="task-workflow-header__field-label">接口集合</span>
+                  <span class="task-workflow-header__field-value task-workflow-header__field-value--wrap">{{ getTaskConfigApiLabel(cfg) || '-' }}</span>
+                </div>
+                <!-- 父分支 -->
+                <div class="task-workflow-header__field">
+                  <span class="task-workflow-header__field-label">父分支</span>
+                  <span class="task-workflow-header__field-value">{{ cfg.parent_branch || '-' }}</span>
+                </div>
+                <!-- 分支名 -->
+                <div class="task-workflow-header__field task-workflow-header__field--wrap">
+                  <span class="task-workflow-header__field-label">分支名</span>
+                  <span class="task-workflow-header__field-value task-workflow-header__field-value--wrap">
+                    <span class="task-workflow-header__branch" @click="copyText(cfg.branch_name, '分支名已复制')" :title="cfg.branch_name">{{ cfg.branch_name || '-' }}</span>
+                    <el-tooltip v-if="cfg.local_dir && cfg.branch_name && branchStatusMap[cfg.local_dir + '|' + cfg.branch_name]" :content="branchStatusMap[cfg.local_dir + '|' + cfg.branch_name].matched ? '分支匹配' : '当前分支: ' + (branchStatusMap[cfg.local_dir + '|' + cfg.branch_name].current_branch || '未知')" placement="top">
+                      <span class="task-workflow-header__status-icon" :class="branchStatusMap[cfg.local_dir + '|' + cfg.branch_name].matched ? 'task-workflow-header__status-icon--ok' : 'task-workflow-header__status-icon--err'">
+                        <svg v-if="branchStatusMap[cfg.local_dir + '|' + cfg.branch_name].matched" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:3px"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg><svg v-if="branchStatusMap[cfg.local_dir + '|' + cfg.branch_name].matched" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                        <svg v-else viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                      </span>
+                    </el-tooltip>
+                    <!-- 远程分支状态（推送状态 + 远程工作目录分支） -->
+                    <el-tooltip v-if="showRemoteBranchWarning(cfg)" :content="getRemoteBranchStatusTooltip(cfg)" placement="top">
+                      <span class="task-workflow-header__status-icon task-workflow-header__status-icon--remote-warn" @click.stop="openRemoteBranchDialog(cfg)">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:3px"><path d="M18 10h-1.26A8 8 0 109 20h9a5 5 0 000-10z"/></svg><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                      </span>
+                    </el-tooltip>
+                    <el-tooltip v-else-if="showRemoteBranchOk(cfg)" content="远程分支已同步且工作目录分支匹配" placement="top">
+                      <span class="task-workflow-header__status-icon task-workflow-header__status-icon--ok">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:3px"><path d="M18 10h-1.26A8 8 0 109 20h9a5 5 0 000-10z"/></svg><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                      </span>
+                    </el-tooltip>
+                  </span>
+                </div>
+                <!-- 本地目录 -->
+                <div class="task-workflow-header__field">
+                  <span class="task-workflow-header__field-label">本地目录</span>
+                  <span class="task-workflow-header__field-value">
+                    {{ cfg.local_dir || '-' }}
+                    <el-tooltip v-if="cfg.local_dir && localDirStatusMap[cfg.local_dir] !== undefined" :content="localDirStatusMap[cfg.local_dir] ? '目录存在' : '目录不存在'" placement="top">
+                      <span class="task-workflow-header__status-icon" :class="localDirStatusMap[cfg.local_dir] ? 'task-workflow-header__status-icon--ok' : 'task-workflow-header__status-icon--err'">
+                        <svg v-if="localDirStatusMap[cfg.local_dir]" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                        <svg v-else viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                      </span>
+                    </el-tooltip>
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -178,9 +223,92 @@
         </template>
       </el-dialog>
 
+      <!-- 远程分支状态弹窗 -->
+      <el-dialog
+        v-model="remoteBranchDialogVisible"
+        title="远程分支检查"
+        width="700px"
+        :close-on-click-modal="true"
+        @close="closeRemoteBranchDialog"
+      >
+        <div v-loading="remoteBranchDialogLoading" class="remote-branch-dialog">
+          <div class="remote-branch-dialog__info">
+            <div class="remote-branch-dialog__row">
+              <span class="remote-branch-dialog__label">本地目录</span>
+              <span class="remote-branch-dialog__value">{{ remoteBranchDialogItem.local_dir || '-' }}</span>
+            </div>
+            <div class="remote-branch-dialog__row">
+              <span class="remote-branch-dialog__label">当前分支</span>
+              <span class="remote-branch-dialog__value">{{ remoteBranchDialogItem.current_branch || '-' }}</span>
+            </div>
+            <div class="remote-branch-dialog__row">
+              <span class="remote-branch-dialog__label">期望分支</span>
+              <span class="remote-branch-dialog__value">{{ remoteBranchDialogItem.branch_name || '-' }}</span>
+            </div>
+          </div>
+          <div class="remote-branch-dialog__status">
+            <div class="remote-branch-dialog__status-row">
+              <span class="remote-branch-dialog__status-label">推送状态</span>
+              <el-tag :type="remoteBranchDialogItem.pushed ? 'success' : 'danger'" size="small">
+                {{ remoteBranchDialogItem.pushed ? '已推送' : '未推送' }}
+              </el-tag>
+            </div>
+            <div class="remote-branch-dialog__status-row">
+              <span class="remote-branch-dialog__status-label">远程分支</span>
+              <el-tag :type="remoteBranchDialogItem.remote_exists ? 'success' : 'info'" size="small">
+                {{ remoteBranchDialogItem.remote_exists ? (remoteBranchDialogItem.remote_branch_name || '存在') : '不存在' }}
+              </el-tag>
+            </div>
+            <div class="remote-branch-dialog__status-row">
+              <span class="remote-branch-dialog__status-label">同步状态</span>
+              <span v-if="remoteBranchDialogItem.error" class="remote-branch-dialog__error">{{ remoteBranchDialogItem.error }}</span>
+              <template v-else-if="remoteBranchDialogItem.remote_exists">
+                <span style="color: #303133; font-size: 13px;">
+                  本地领先 <b>{{ remoteBranchDialogItem.local_ahead }}</b> 个提交，远程领先 <b>{{ remoteBranchDialogItem.remote_ahead }}</b> 个提交
+                </span>
+                <el-tag v-if="remoteBranchDialogItem.consistent" type="success" size="small">已同步</el-tag>
+                <el-tag v-else type="warning" size="small">未同步</el-tag>
+              </template>
+              <span v-else style="color: #909399; font-size: 13px;">—</span>
+            </div>
+            <div class="remote-branch-dialog__status-row">
+              <span class="remote-branch-dialog__status-label">远程工作目录分支</span>
+              <template v-if="remoteBranchDialogItem.remote_dir_error">
+                <span class="remote-branch-dialog__error">{{ remoteBranchDialogItem.remote_dir_error }}</span>
+                <el-tag type="danger" size="small">检测失败</el-tag>
+              </template>
+              <template v-else-if="remoteBranchDialogItem.remote_dir_branch_match !== undefined">
+                <span style="color: #303133; font-size: 13px;">{{ remoteBranchDialogItem.remote_dir_current_branch || '-' }}</span>
+                <el-tag :type="remoteBranchDialogItem.remote_dir_branch_match ? 'success' : 'warning'" size="small">
+                  {{ remoteBranchDialogItem.remote_dir_branch_match ? '一致' : '不一致' }}
+                </el-tag>
+              </template>
+              <span v-else style="color: #909399; font-size: 13px;">—</span>
+            </div>
+          </div>
+          <div v-if="remoteBranchDialogPushResult" class="remote-branch-dialog__result" :class="remoteBranchDialogPushResult.success ? 'remote-branch-dialog__result--ok' : 'remote-branch-dialog__result--err'">
+            {{ remoteBranchDialogPushResult.message }}
+          </div>
+        </div>
+        <template #footer>
+          <div class="remote-branch-dialog__footer">
+            <GitActionButton compact variant="info" @click="closeRemoteBranchDialog">关闭</GitActionButton>
+            <GitActionButton compact variant="warning" @click="refreshRemoteBranchDialog">刷新检测</GitActionButton>
+            <GitActionButton
+              compact
+              variant="success"
+              :loading="remoteBranchPushing"
+              @click="handleRemoteBranchPush"
+            >
+              推送并切换分支
+            </GitActionButton>
+          </div>
+        </template>
+      </el-dialog>
+
       <section class="task-workflow-nodes">
         <button
-          v-for="node in workflowNodes"
+          v-for="(node, idx) in workflowNodes"
           :key="node.key"
           type="button"
           class="task-workflow-node"
@@ -202,8 +330,10 @@
             <span v-else-if="getNodeStatus(node.key) === 'pending'" class="status-icon status-icon--pending"></span>
             <span v-else class="status-icon status-icon--running"><span class="spinner-ring"></span></span>
           </span>
-          <span class="task-workflow-node__label">{{ node.label }}</span>
-          <span class="task-workflow-node__desc">{{ node.desc }}</span>
+          <span class="task-workflow-node__row">
+            <span class="task-workflow-node__badge">{{ idx + 1 }}</span>
+            <span class="task-workflow-node__label">{{ node.label }}</span>
+          </span>
         </button>
       </section>
 
@@ -211,7 +341,7 @@
         <div v-if="activeNode === 'task-config'" class="task-workflow-tab">
           <div class="task-workflow-card task-workflow-config-card">
             <div class="task-workflow-card__header">
-              <div class="task-workflow-card__title">任务配置</div>
+              <div class="task-workflow-card__title">任务配置<span class="task-workflow-card__title-desc">查看当前任务的所有配置信息</span></div>
             </div>
             <div class="task-workflow-config-content">
               <div class="task-workflow-config-section">
@@ -294,7 +424,7 @@
         <div v-else-if="activeNode === 'requirement-fetch'" class="task-workflow-tab">
           <div class="task-workflow-card">
             <div class="task-workflow-card__header">
-              <div class="task-workflow-card__title">抓取 {{ requirementSourceName }} 需求</div>
+              <div class="task-workflow-card__title">抓取 {{ requirementSourceName }} 需求<span class="task-workflow-card__title-desc">自动登录和解析需求内容到知识片段，转为markdown格式供AI解析</span></div>
               <div class="task-workflow-card__switch">
                 <div class="task-workflow-inner-tabs">
                   <button
@@ -396,7 +526,7 @@
         <div v-else-if="activeNode === 'requirement'" class="task-workflow-tab">
           <div class="task-workflow-card">
             <div class="task-workflow-card__header">
-              <div class="task-workflow-card__title">需求分析</div>
+              <div class="task-workflow-card__title">需求分析<span class="task-workflow-card__title-desc">编写提示词，AI自动结合数据库和代码分析需求，形成开发文档</span></div>
               <div class="task-workflow-card__switch">
                 <div class="task-workflow-inner-tabs">
 
@@ -519,7 +649,7 @@
         <div v-else-if="activeNode === 'design'" class="task-workflow-tab">
           <div class="task-workflow-card">
             <div class="task-workflow-card__header">
-              <div class="task-workflow-card__title">开发提示词</div>
+              <div class="task-workflow-card__title">开发提示词<span class="task-workflow-card__title-desc">编写提示词，AI自动结合数据库，代码和开发文档进行开发</span></div>
               <div class="task-workflow-card__switch">
                 <GitActionButton compact :loading="promptSaving === 'design'" @click="savePrompts('design')">
                   保存提示词
@@ -573,7 +703,7 @@
         <div v-else-if="activeNode === 'api-dev'" class="task-workflow-tab">
           <div class="task-workflow-card">
             <div class="task-workflow-card__header">
-              <div class="task-workflow-card__title">接口开发生成提示词</div>
+              <div class="task-workflow-card__title">接口开发生成提示词<span class="task-workflow-card__title-desc">编写提示词，AI自动获取登录态，将所有改动接口写入接口开发中</span></div>
               <div class="task-workflow-card__switch">
                 <GitActionButton compact @click="openFragmentInDialog(workflow.api_doc_fragment_id, '接口文档')">
                   <template #icon><el-icon><Link /></el-icon></template>
@@ -634,7 +764,7 @@
         <div v-else-if="activeNode === 'code-review'" class="task-workflow-tab">
           <div class="task-workflow-card">
             <div class="task-workflow-card__header">
-              <div class="task-workflow-card__title">代码检查提示词</div>
+              <div class="task-workflow-card__title">代码检查提示词<span class="task-workflow-card__title-desc">让AI进行code review</span></div>
               <div class="task-workflow-card__switch">
                 <GitActionButton compact :loading="promptSaving === 'code_review'" @click="savePrompts('code_review')">
                   保存提示词
@@ -688,7 +818,7 @@
         <div v-else-if="activeNode === 'browser-test'" class="task-workflow-tab">
           <div class="task-workflow-card">
             <div class="task-workflow-card__header">
-              <div class="task-workflow-card__title">需求核对浏览器测试提示词</div>
+              <div class="task-workflow-card__title">需求核对浏览器测试提示词<span class="task-workflow-card__title-desc">编写提示词，AI核对浏览器测试结果是否满足需求</span></div>
               <div class="task-workflow-card__switch">
                 <GitActionButton compact :loading="promptSaving === 'browser_test'" @click="savePrompts('browser_test')">
                   保存提示词
@@ -742,7 +872,7 @@
         <div v-else class="task-workflow-tab">
           <div class="task-workflow-card">
             <div class="task-workflow-card__header">
-              <div class="task-workflow-card__title">接口自动化测试修复提示词</div>
+              <div class="task-workflow-card__title">接口自动化测试修复提示词<span class="task-workflow-card__title-desc">AI自动根据接口开发中的接口设计测试流程，自动上传代码+自动重启服务+自动修复BUG</span></div>
               <div class="task-workflow-card__switch">
                 <GitActionButton compact :loading="promptSaving === 'api_test'" @click="savePrompts('api_test')">
                   保存提示词
@@ -1103,13 +1233,13 @@ const TASK_WORKFLOW_CONFIG_MAX_CHARS = 20
 
 const WORKFLOW_NODES = [
   { key: 'task-config', label: '任务配置', desc: '查看当前任务的所有配置信息' },
-  { key: 'requirement-fetch', label: '1.抓取需求', desc: '自动登录和解析需求内容到知识片段，转为markdown格式供AI解析' },
-  { key: 'requirement', label: '2.需求分析', desc: '编写提示词，AI自动结合数据库和代码分析需求，形成开发文档' },
-  { key: 'design', label: '3.开发执行', desc: '编写提示词，AI自动结合数据库，代码和开发文档进行开发' },
-  { key: 'api-dev', label: '4.接口生成', desc: '编写提示词，AI自动获取登录态，将所有改动接口写入接口开发中' },
-  { key: 'api-test-fix', label: '5.自动化测试+修复', desc: 'AI自动根据接口开发中的接口设计测试流程，自动上传代码+自动重启服务+自动修复BUG' },
-  { key: 'code-review', label: '6.代码检查', desc: '让AI进行code review' },
-  { key: 'browser-test', label: '7.需求核对浏览器测试', desc: '编写提示词，AI核对浏览器测试结果是否满足需求' },
+  { key: 'requirement-fetch', label: '抓取需求', desc: '自动登录和解析需求内容到知识片段，转为markdown格式供AI解析' },
+  { key: 'requirement', label: '需求分析', desc: '编写提示词，AI自动结合数据库和代码分析需求，形成开发文档' },
+  { key: 'design', label: '开发执行', desc: '编写提示词，AI自动结合数据库，代码和开发文档进行开发' },
+  { key: 'api-dev', label: '接口生成', desc: '编写提示词，AI自动获取登录态，将所有改动接口写入接口开发中' },
+  { key: 'api-test-fix', label: '自动化测试+修复', desc: 'AI自动根据接口开发中的接口设计测试流程，自动上传代码+自动重启服务+自动修复BUG' },
+  { key: 'code-review', label: '代码检查', desc: '让AI进行code review' },
+  { key: 'browser-test', label: '需求核对浏览器测试', desc: '编写提示词，AI核对浏览器测试结果是否满足需求' },
 ]
 
 // markdown-it 实例，用于在"执行历史"对话框中渲染 markdown（包括表格）
@@ -1241,6 +1371,13 @@ export default {
         branch_name: '',
       },
       _branchSwitchEventSource: null,
+      // 远程分支状态检测
+      remoteBranchStatusMap: {},
+      remoteBranchDialogVisible: false,
+      remoteBranchDialogItem: {},
+      remoteBranchDialogLoading: false,
+      remoteBranchPushing: false,
+      remoteBranchDialogPushResult: null,
     }
   },
   computed: {
@@ -1465,6 +1602,7 @@ export default {
         this.applyWorkflowPayload(response.Data)
         this.checkWorkflowLocalDirExists()
         this.checkWorkflowBranchStatus()
+        this.checkWorkflowRemoteBranchStatus()
         this.activeNode = this.restoreActiveNodeCache() || this.firstRunningNodeKey
         this.loadRequirementFragment(() => {
           this.loading = false
@@ -2057,9 +2195,12 @@ export default {
     // 加载对话详情
     loadChatDetail() {
       if (!this.chatDetailId) return
+      console.log('[loadChatDetail] 开始加载对话详情 chatId=', this.chatDetailId, '当前本地状态=', this.chatDetailStatus, '_sseChatId=', this._sseChatId)
+      console.trace('[loadChatDetail] 调用栈:')
       taskWorkflowApi.TaskWorkflowChatDetail(this.chatDetailId, (res) => {
         if (res.ErrCode === 0 && res.Data) {
           const data = res.Data
+          const oldStatus = this.chatDetailStatus
           this.chatDetailPrompt = data.prompt || ''
           this.chatDetailSessionId = data.session_id || ''
           this.chatDetailStatus = data.status || ''
@@ -2069,6 +2210,7 @@ export default {
           this.chatDetailThinkingIntensity = data.thinking_intensity || ''
           this.chatDetailLastUsageSummary = data.last_usage_summary || null
           this.chatDetailCliType = data.cli_type || 'claude'
+          console.log('[loadChatDetail] 状态变化: ' + oldStatus + ' -> ' + this.chatDetailStatus + ' (来自服务端status=' + data.status + ')')
           // 同步更新左侧列表中的状态
           this.updateChatListStatus(this.chatDetailId, this.chatDetailStatus)
           // 合并历史行 + SSE 加载期间收到的新行（有则去重）
@@ -2097,7 +2239,12 @@ export default {
     // connectChatStream 创建专用 EventSource 连接以实时接收对话输出。
     // isNewChat: true 表示新对话首次启动（需后端启动 claude 进程），false 表示重连已有对话。
     connectChatStream(chatId, continuePrompt, isNewChat) {
-      if (this._sseChatId === chatId && this._chatEventSource && this._chatEventSource.readyState !== EventSource.CLOSED) return
+      console.log('[connectChatStream] chatId=', chatId, 'continuePrompt=', !!continuePrompt, 'isNewChat=', isNewChat)
+      console.trace('[connectChatStream] 调用栈:')
+      if (this._sseChatId === chatId && this._chatEventSource && this._chatEventSource.readyState !== EventSource.CLOSED) {
+        console.log('[connectChatStream] SSE已连接，跳过')
+        return
+      }
       // 关闭上一个 chat 的 SSE 连接
       if (this._chatEventSource) {
         this._chatEventSource.close()
@@ -2130,6 +2277,7 @@ export default {
       if (continuePrompt) {
         url += '&continue=1&prompt=' + encodeURIComponent(continuePrompt)
       }
+      console.log('[connectChatStream] SSE URL: ', url.substring(0, 200) + '...')
       const es = new EventSource(url)
       this._chatEventSource = es
       es.onmessage = (event) => {
@@ -2138,6 +2286,7 @@ export default {
         try {
           const obj = JSON.parse(line)
           if (obj.type === 'chat' && obj.subtype === 'completed') {
+            console.log('[connectChatStream] 收到completed事件: status=', obj.status)
             this._flushSseBatch()
             this.chatDetailSSELines.push(line)
             this._sseChatId = 0
@@ -2159,12 +2308,14 @@ export default {
         }
       }
       es.onerror = () => {
+        console.log('[connectChatStream] SSE onerror触发')
         this._flushSseBatch()
         if (this._thinkingTimer) { clearInterval(this._thinkingTimer); this._thinkingTimer = null }
         this.thinkingStreamElapsed = 0
         this.chatDetailSSERegistered = false
         es.close()
         this._chatEventSource = null
+        this._sseChatId = 0
         this._sseParseState = null
         // 如果是初始 start=1 连接失败且尚无任何输出，重试一次 start=1 连接
         // 避免 loadChatDetail 中不带 start/continue 的重连将对话错误标记为"中断"
@@ -2354,14 +2505,22 @@ export default {
     continueChat() {
       const input = this.chatContinueInput.trim()
       if (!input) return
+      console.log('[continueChat] ========== 开始继续对话 ==========')
+      console.log('[continueChat] chatId=', this.chatDetailId, 'promptLength=', input.length)
       this.chatContinueLoading = true
       taskWorkflowApi.TaskWorkflowChatContinue(this.chatDetailId, input, (res) => {
         this.chatContinueLoading = false
+        console.log('[continueChat] API返回: ErrCode=', res.ErrCode, 'ErrMsg=', res.ErrMsg)
         if (res.ErrCode === 0) {
           this.chatContinueInput = ''
           this.clearChatInputCache(this.chatDetailId)
+          console.log('[continueChat] 设置本地状态为 running')
           this.chatDetailStatus = 'running'
+          // 立即更新左侧列表状态为"执行中"，与新建对话/执行任务流程保持一致
+          this.updateChatListStatus(this.chatDetailId, 'running')
+          console.log('[continueChat] 打开SSE连接')
           this.connectChatStream(this.chatDetailId, input)
+          console.log('[continueChat] 500ms后重新加载对话详情')
           setTimeout(() => { this.loadChatDetail() }, 500)
         } else {
           this.$helperNotify.error(res.ErrMsg || '发送失败')
@@ -2811,6 +2970,8 @@ export default {
       if (normalizedChatId <= 0) return
       if (normalizedChatId === Number(this._sseChatId || 0)) return
       if (this._backgroundChatEventSources[normalizedChatId]) return
+      console.log('[startBackgroundChatStream] chatId=', normalizedChatId, '_sseChatId=', this._sseChatId)
+      console.trace('[startBackgroundChatStream] 调用栈:')
       const currentItem = this.promptChatHistoryList.find(item => Number(item.id || 0) === normalizedChatId)
       const sseHost = baseUtils.GetSseApiHost()
       const url = sseHost + '/api/task/workflow/chat/stream?chat_id=' + normalizedChatId + '&token=' + encodeURIComponent(baseUtils.GetSafeToken())
@@ -3384,6 +3545,137 @@ export default {
         this._branchSwitchEventSource = null
       }
     },
+    // 远程分支状态检测
+    getRemoteBranchStatusKey(cfg) {
+      return (cfg.local_dir || '') + '|' + (cfg.branch_name || '')
+    },
+    getRemoteBranchStatus(cfg) {
+      return this.remoteBranchStatusMap[this.getRemoteBranchStatusKey(cfg)] || null
+    },
+    getRemoteBranchStatusTooltip(cfg) {
+      const s = this.getRemoteBranchStatus(cfg)
+      if (!s) return ''
+      if (s.error) return '远程检测失败: ' + s.error
+      if (!s.remote_exists) return '远程分支不存在，点击查看详情'
+      if (!s.consistent) return '本地与远程不一致（本地领先' + (s.local_ahead || 0) + '，远程领先' + (s.remote_ahead || 0) + '），点击查看详情'
+      if (!s.pushed) return '分支未推送到远程，点击查看详情'
+      if (s.remote_dir_error) return '远程工作目录检测失败: ' + s.remote_dir_error
+      if (!s.remote_dir_branch_match) return '远程工作目录分支不一致（当前: ' + (s.remote_dir_current_branch || '未知') + '），点击查看详情'
+      return ''
+    },
+    showRemoteBranchWarning(cfg) {
+      const s = this.getRemoteBranchStatus(cfg)
+      if (!s) return false
+      if (s.error) return true
+      if (s.remote_dir_error) return true
+      return !s.remote_exists || !s.pushed || !s.consistent || !s.remote_dir_branch_match
+    },
+    showRemoteBranchOk(cfg) {
+      const s = this.getRemoteBranchStatus(cfg)
+      if (!s) return false
+      return !s.error && s.remote_exists && s.pushed && s.consistent && s.remote_dir_branch_match !== false
+    },
+    checkWorkflowRemoteBranchStatus() {
+      const items = this.getWorkflowBranchCheckItems()
+      if (items.length === 0) return
+      homeTaskApi.RemoteBranchCheck(items, (response) => {
+        if (response && response.ErrCode === 0 && response.Data) {
+          this.remoteBranchStatusMap = { ...this.remoteBranchStatusMap, ...response.Data }
+        }
+      })
+    },
+    openRemoteBranchDialog(cfg) {
+      this.remoteBranchDialogVisible = true
+      this.remoteBranchDialogPushResult = null
+      this.remoteBranchDialogLoading = true
+      this.remoteBranchDialogItem = {
+        local_dir: cfg.local_dir || '',
+        branch_name: cfg.branch_name || '',
+        git_id: Number(cfg.git_id || 0),
+      }
+      // 重新检测远程分支状态
+      const item = {
+        local_dir: cfg.local_dir || '',
+        branch_name: cfg.branch_name || '',
+        git_id: Number(cfg.git_id || 0),
+      }
+      homeTaskApi.RemoteBranchCheck([item], (response) => {
+        this.remoteBranchDialogLoading = false
+        if (response && response.ErrCode === 0 && response.Data) {
+          const key = this.getRemoteBranchStatusKey(cfg)
+          const info = response.Data[key]
+          if (info) {
+            this.remoteBranchDialogItem = { ...this.remoteBranchDialogItem, ...info }
+            this.remoteBranchStatusMap = { ...this.remoteBranchStatusMap, [key]: info }
+          }
+        } else {
+          this.remoteBranchDialogItem = { ...this.remoteBranchDialogItem, error: '检测失败' }
+        }
+      })
+    },
+    closeRemoteBranchDialog() {
+      this.remoteBranchDialogVisible = false
+      this.remoteBranchDialogPushResult = null
+    },
+    refreshRemoteBranchDialog() {
+      this.openRemoteBranchDialog({
+        local_dir: this.remoteBranchDialogItem.local_dir,
+        branch_name: this.remoteBranchDialogItem.branch_name,
+        git_id: this.remoteBranchDialogItem.git_id,
+      })
+    },
+    handleRemoteBranchPush() {
+      if (!this.remoteBranchDialogItem.local_dir || !this.remoteBranchDialogItem.branch_name) {
+        this.$helperNotify.warning('目录或分支信息不完整')
+        return
+      }
+      const item = this.remoteBranchDialogItem
+      // 如果已推送且同步，跳过推送，直接切换远程工作目录分支
+      if (item.pushed && item.consistent) {
+        this.switchRemoteBranch()
+        return
+      }
+      // 否则先推送再切换
+      this.remoteBranchPushing = true
+      this.remoteBranchDialogPushResult = null
+      homeTaskApi.RemoteBranchPush({
+        local_dir: item.local_dir,
+        branch_name: item.branch_name,
+        git_id: item.git_id,
+      }, (response) => {
+        if (response && response.ErrCode === 0) {
+          this.$helperNotify.success('远程分支推送成功')
+          // 推送成功后继续切换远程工作目录分支
+          this.switchRemoteBranch()
+        } else {
+          this.remoteBranchPushing = false
+          this.remoteBranchDialogPushResult = { success: false, message: response?.ErrMsg || response?.Msg || '推送失败' }
+          this.$helperNotify.error('远程分支推送失败')
+        }
+      })
+    },
+    switchRemoteBranch() {
+      const item = this.remoteBranchDialogItem
+      if (!item.git_id || !item.branch_name) {
+        this.remoteBranchPushing = false
+        this.$helperNotify.warning('缺少Git配置或分支名，无法切换远程分支')
+        return
+      }
+      this.remoteBranchPushing = true
+      homeTaskApi.RemoteBranchSwitch(item.git_id, item.branch_name, (response) => {
+        this.remoteBranchPushing = false
+        if (response && response.ErrCode === 0) {
+          this.remoteBranchDialogPushResult = { success: true, message: '远程工作目录分支切换成功' }
+          this.$helperNotify.success('远程工作目录分支切换成功')
+          setTimeout(() => {
+            this.refreshRemoteBranchDialog()
+          }, 1500)
+        } else {
+          this.remoteBranchDialogPushResult = { success: false, message: response?.ErrMsg || response?.Msg || '远程分支切换失败' }
+          this.$helperNotify.error('远程分支切换失败')
+        }
+      })
+    },
     appendBranchSwitchLog(text, level = 'info') {
       this.branchSwitchStreamLines.push({ text, level })
       this.$nextTick(() => {
@@ -3453,6 +3745,7 @@ export default {
             this.appendBranchSwitchLog(parsed.message || '分支切换完成', 'success')
             this.$helperNotify.success(`已切换到 ${payload.branch_name}`)
             this.checkWorkflowBranchStatus()
+            this.checkWorkflowRemoteBranchStatus()
             this.loadBranchMismatchDetail({ showDialog: true, mode: this.branchMismatchDialogMode })
           } else {
             this.appendBranchSwitchLog(parsed.message || '清理并切换分支失败', 'error')
@@ -3624,11 +3917,8 @@ export default {
 .task-workflow-header__meta {
   display: flex;
   flex-direction: column;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 6px;
-  color: #909399;
-  font-size: 13px;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .task-workflow-header__unread {
@@ -3637,26 +3927,73 @@ export default {
   font-weight: 600;
 }
 
-.task-workflow-header__dev-row {
+.task-workflow-header__dev-card {
+  background: #f9fafb;
+  border: 1px solid #e8ecf1;
+  border-radius: 8px;
+  padding: 12px 16px;
+  transition: border-color 0.2s;
+}
+
+.task-workflow-header__dev-card:hover {
+  border-color: #c8cdd5;
+}
+
+.task-workflow-header__field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px 20px;
+}
+
+.task-workflow-header__field {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 4px 0;
 }
 
-.task-workflow-header__dev-item {
+.task-workflow-header__field--link {
+  cursor: pointer;
+}
+
+.task-workflow-header__field--link .task-workflow-header__field-value {
+  color: #3a7a3a;
+  transition: color 0.2s;
+}
+
+.task-workflow-header__field--link:hover .task-workflow-header__field-value {
+  color: #2d5f2d;
+  text-decoration: underline;
+}
+
+.task-workflow-header__field-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #909399;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  user-select: none;
+}
+
+.task-workflow-header__field-value {
+  font-size: 13px;
+  color: #303133;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.task-workflow-header__dev-sep {
-  color: #dcdfe6;
-  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .task-workflow-header__branch {
   color: #3a7a3a;
   cursor: pointer;
   transition: color 0.2s;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .task-workflow-header__branch:hover {
@@ -3664,15 +4001,122 @@ export default {
   text-decoration: underline;
 }
 
-.task-workflow-header__dev-item--link {
-  color: #3a7a3a;
+.task-workflow-header__status-icon {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+
+.task-workflow-header__status-icon--ok {
+  color: #4caf50;
+}
+
+.task-workflow-header__status-icon--err {
+  color: #e53935;
+}
+
+.task-workflow-header__field--wrap {
+  grid-column: span 2;
+}
+
+.task-workflow-header__field-value--wrap {
+  white-space: normal;
+  word-break: break-all;
+  overflow: visible;
+}
+
+.task-workflow-header__status-icon--remote-warn {
+  color: #e6a23c;
   cursor: pointer;
   transition: color 0.2s;
 }
 
-.task-workflow-header__dev-item--link:hover {
+.task-workflow-header__status-icon--remote-warn:hover {
+  color: #d48806;
+}
+
+/* 远程分支检查弹窗 */
+.remote-branch-dialog__info {
+  background: #f5f7fa;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.remote-branch-dialog__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+}
+
+.remote-branch-dialog__row + .remote-branch-dialog__row {
+  border-top: 1px solid #ebeef5;
+}
+
+.remote-branch-dialog__label {
+  font-size: 13px;
+  color: #909399;
+  min-width: 80px;
+  flex-shrink: 0;
+}
+
+.remote-branch-dialog__value {
+  font-size: 13px;
+  color: #303133;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.remote-branch-dialog__status {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.remote-branch-dialog__status-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.remote-branch-dialog__status-label {
+  font-size: 13px;
+  color: #909399;
+  min-width: 80px;
+  flex-shrink: 0;
+}
+
+.remote-branch-dialog__error {
+  font-size: 13px;
+  color: #e53935;
+}
+
+.remote-branch-dialog__result {
+  padding: 12px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.remote-branch-dialog__result--ok {
+  background: #f0f9f0;
   color: #2d5f2d;
-  text-decoration: underline;
+  border: 1px solid #c8e6c9;
+}
+
+.remote-branch-dialog__result--err {
+  background: #fef0f0;
+  color: #c62828;
+  border: 1px solid #ffcdd2;
+}
+
+.remote-branch-dialog__footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .task-workflow-header__link {
@@ -3728,14 +4172,15 @@ export default {
   border: 1px solid #e8e8e0;
   border-radius: 8px;
   background: #fff;
-  min-height: 50px;
-  padding: 14px 16px;
+  min-height: 46px;
+  padding: 8px 10px;
   text-align: left;
   cursor: pointer;
   transition: all 0.2s ease;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  align-items: flex-start;
+  justify-content: center;
 }
 
 .task-workflow-node:hover {
@@ -3767,10 +4212,31 @@ export default {
 }
 
 .task-workflow-node__label {
-  font-size: 15px;
-  line-height: 1.4;
+  font-size: 13px;
+  line-height: 1.3;
   color: #303133;
   font-weight: 600;
+}
+
+.task-workflow-node__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.task-workflow-node__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #9fb39a;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  flex-shrink: 0;
 }
 
 .task-workflow-node__desc {
@@ -3922,6 +4388,16 @@ export default {
   font-size: 16px;
   font-weight: 600;
   color: #303133;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.task-workflow-card__title-desc {
+  font-size: 12px;
+  font-weight: 400;
+  color: #909399;
 }
 
 .task-workflow-card__hint {

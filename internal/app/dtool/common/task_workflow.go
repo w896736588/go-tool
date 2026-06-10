@@ -872,6 +872,7 @@ func (h *CSqlite) TaskWorkflowChatList(workflowID int) ([]map[string]any, error)
 // TaskWorkflowChatMarkRunning 标记对话为运行中（用于继续对话）。
 func (h *CSqlite) TaskWorkflowChatMarkRunning(chatID int64) error {
 	now := time.Now().Format(`2006-01-02 15:04:05`)
+	gstool.FmtPrintlnLogTime("[db-mark-running] chat_id=%d 准备将状态更新为running，时间=%s", chatID, now)
 	_, err := h.Client.QuickUpdate(agentChatTableName, map[string]any{
 		`id`: chatID,
 	}, map[string]any{
@@ -879,7 +880,21 @@ func (h *CSqlite) TaskWorkflowChatMarkRunning(chatID int64) error {
 		`status`:     taskWorkflowChatStatusRunning,
 		`updated_at`: now,
 	}).Exec()
-	return err
+	if err != nil {
+		gstool.FmtPrintlnLogTime("[db-mark-running] chat_id=%d 更新失败: %v", chatID, err)
+		return err
+	}
+	gstool.FmtPrintlnLogTime("[db-mark-running] chat_id=%d 更新成功", chatID)
+
+	// 立即验证写入是否生效
+	verifyInfo, verifyErr := h.TaskWorkflowChatInfo(chatID)
+	if verifyErr != nil {
+		gstool.FmtPrintlnLogTime("[db-mark-running] chat_id=%d 验证查询失败: %v", chatID, verifyErr)
+	} else {
+		verifyStatus := cast.ToString(verifyInfo[`status`])
+		gstool.FmtPrintlnLogTime("[db-mark-running] chat_id=%d 验证查询状态=%s", chatID, verifyStatus)
+	}
+	return nil
 }
 
 // TaskWorkflowChatMarkInterrupted 标记对话为用户主动中断。

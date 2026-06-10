@@ -45,6 +45,53 @@ var taskWorkflowURLWithQueryReg = regexp.MustCompile(`(?:https?://[^\s)]+|/api/[
 // chatCancelFuncs 存储运行中对话的 cancel 函数，key 为 chatID。
 var chatCancelFuncs sync.Map
 
+// chatSseConns 存储每个 chat_id 下的所有活跃 SSE 连接，key 为 chatID(int64)，value 为 *sync.Map[string]*gsgin.Sse。
+// 支持同一 chat_id 的多页面、继续对话等场景同时接收实时消息。
+var chatSseConns sync.Map
+
+// addChatSseConn 注册一条 SSE 连接到指定 chat_id 的连接池。
+func addChatSseConn(chatID int64, connID string, sse *gsgin.Sse) {
+	raw, _ := chatSseConns.LoadOrStore(chatID, &sync.Map{})
+	raw.(*sync.Map).Store(connID, sse)
+}
+
+// removeChatSseConn 从指定 chat_id 的连接池中移除一条 SSE 连接。
+func removeChatSseConn(chatID int64, connID string) {
+	raw, ok := chatSseConns.Load(chatID)
+	if !ok {
+		return
+	}
+	raw.(*sync.Map).Delete(connID)
+}
+
+// broadcastToChatSse 向指定 chat_id 的所有活跃 SSE 连接广播消息。
+func broadcastToChatSse(chatID int64, msg string) {
+	raw, ok := chatSseConns.Load(chatID)
+	if !ok {
+		return
+	}
+	raw.(*sync.Map).Range(func(key, value any) bool {
+		if sse, ok := value.(*gsgin.Sse); ok {
+			_ = sse.SendToChan(msg)
+		}
+		return true
+	})
+}
+
+// chatHasActiveSse 检查指定 chat_id 是否有任何活跃的 SSE 连接。
+func chatHasActiveSse(chatID int64) bool {
+	raw, ok := chatSseConns.Load(chatID)
+	if !ok {
+		return false
+	}
+	has := false
+	raw.(*sync.Map).Range(func(key, value any) bool {
+		has = true
+		return false // 发现一个即可停止迭代
+	})
+	return has
+}
+
 // TaskWorkflowCreateOrGet 查询或创建任务工作流。
 func TaskWorkflowCreateOrGet(c *gin.Context) {
 	if common.DbMain == nil || common.DbMain.Client == nil {
@@ -2456,24 +2503,46 @@ func TaskWorkflowChatStreamOpen(urlValues url.Values, stopC chan int, c *gin.Con
 		}
 	}
 
-	distributeID := define.SseTaskWorkflowChatPrefix + chatIDStr
-	sse := gsgin.SseRegister(distributeID, stopC, c)
+	// 每个 SSE 连接使用唯一 connID，支持同一 chat_id 的多页面/多连接并存
+	connID := fmt.Sprintf("%s%d_%d", define.SseTaskWorkflowChatPrefix, chatID, time.Now().UnixNano())
+	sse := gsgin.SseRegister(connID, stopC, c)
+	addChatSseConn(chatID, connID, sse)
+	gstool.FmtPrintlnLogTime("[chat-stream] chat_id=%d connID=%s 已注册到连接池", chatID, connID)
+
 	// 如果该 chatID 已有 goroutine 在运行，只注册 SSE 连接（复用已有 goroutine 的输出），不启动新命令
 	if _, running := chatCancelFuncs.Load(chatID); running {
 		gstool.FmtPrintlnLogTime("[chat-stream] chat_id=%d goroutine 已在运行，仅注册 SSE 监听", chatID)
 		return sse, nil
 	}
+
+	chatStatus := cast.ToString(chatInfo[`status`])
+
+	gstool.FmtPrintlnLogTime("[chat-stream] chat_id=%d isContinue=%v isStart=%v chatStatus=%s goroutineExists=%v",
+		chatID, isContinue, isStart, chatStatus, false)
+
 	// 非启动、非继续时，仅注册 SSE 监听（如页面刷新重连）。
 	// 若 DB 状态仍为 running 但 goroutine 不存在，说明之前异常退出，标记为中断。
 	if !isStart && !isContinue {
-		chatStatus := cast.ToString(chatInfo[`status`])
 		if chatStatus == "running" {
 			gstool.FmtPrintlnLogTime("[chat-stream] chat_id=%d goroutine 不存在且状态为 running，标记为中断", chatID)
 			_ = common.DbMain.TaskWorkflowChatMarkInterrupted(chatID)
 			taskWorkflowBroadcastChatStatus(chatID)
 		}
+		gstool.FmtPrintlnLogTime("[chat-stream] chat_id=%d 非启动非继续模式，仅注册SSE监听（状态=%s）", chatID, chatStatus)
 		return sse, nil
 	}
+
+	// start=1 或 continue=1 时，goroutine 不存在且 DB 状态不是 running，
+	// 说明对话已经完成/中断/异常（如 EventSource 自动重连），不应再次启动命令。
+	if chatStatus != "running" {
+		gstool.FmtPrintlnLogTime("[chat-stream] chat_id=%d goroutine 不存在且状态为 %s（期望running），拒绝启动新 goroutine。isContinue=%v isStart=%v",
+			chatID, chatStatus, isContinue, isStart)
+		broadcastToChatSse(chatID, buildChatCompletedEvent(chatID, chatStatus))
+		return sse, nil
+	}
+
+	gstool.FmtPrintlnLogTime("[chat-stream] chat_id=%d 状态检查通过(status=running)，准备启动goroutine，cliType=%s isContinue=%v",
+		chatID, cast.ToString(chatInfo[`cli_type`]), isContinue)
 
 	// 根据 cli_type 分发到不同的 Agent CLI 执行器
 	cliType := cast.ToString(chatInfo[`cli_type`])
@@ -2491,7 +2560,7 @@ func TaskWorkflowChatStreamOpen(urlValues url.Values, stopC chan int, c *gin.Con
 			}
 		}
 		selectedModelName := strings.TrimSpace(cast.ToString(chatInfo[`model_name`]))
-		go runCodexCommand(chatID, localDir, prompt, isContinue, sessionID, configJson, selectedModelName, sse, stopC)
+		go runCodexCommand(chatID, localDir, prompt, isContinue, sessionID, configJson, selectedModelName)
 	default:
 		// Claude Code CLI：从 settings.json 读取配置（现有逻辑不变）
 		settingsPath := cast.ToString(chatInfo[`settings_path`])
@@ -2509,7 +2578,7 @@ func TaskWorkflowChatStreamOpen(urlValues url.Values, stopC chan int, c *gin.Con
 		thinkingIntensity := cast.ToString(chatInfo[`thinking_intensity`])
 		thinkingBudget := define.ThinkingIntensityBudgetMap[thinkingIntensity]
 		thinkingEffort := define.ThinkingIntensityEffortMap[thinkingIntensity]
-		go runClaudeCommand(chatID, localDir, prompt, isContinue, sessionID, baseURL, apiKey, modelName, settingsPath, thinkingEffort, thinkingBudget, sse, stopC)
+		go runClaudeCommand(chatID, localDir, prompt, isContinue, sessionID, baseURL, apiKey, modelName, settingsPath, thinkingEffort, thinkingBudget)
 	}
 	return sse, nil
 }
@@ -2519,6 +2588,18 @@ func TaskWorkflowChatStreamClose(sse *gsgin.Sse) {
 	if sse == nil {
 		return
 	}
+	// 从 chatSseConns 中移除该连接
+	chatSseConns.Range(func(key, value any) bool {
+		conns := value.(*sync.Map)
+		conns.Range(func(connID, connVal any) bool {
+			if connVal == sse {
+				removeChatSseConn(key.(int64), connID.(string))
+				return false
+			}
+			return true
+		})
+		return true
+	})
 	sse.UnRegister()
 }
 
@@ -2667,33 +2748,64 @@ func TaskWorkflowChatContinue(c *gin.Context) {
 		gsgin.GinResponseError(c, `提示词不能为空`, nil)
 		return
 	}
+	gstool.FmtPrintlnLogTime("[chat-continue] chat_id=%d ========== 开始继续对话流程 ==========", req.ChatID)
 
 	chatInfo, err := common.DbMain.TaskWorkflowChatInfo(int64(req.ChatID))
 	if err != nil {
+		gstool.FmtPrintlnLogTime("[chat-continue] chat_id=%d 查询对话信息失败: %v", req.ChatID, err)
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
+	currentStatus := cast.ToString(chatInfo[`status`])
+	gstool.FmtPrintlnLogTime("[chat-continue] chat_id=%d 当前DB状态=%s prompt长度=%d", req.ChatID, currentStatus, len(req.Prompt))
 	sessionID := cast.ToString(chatInfo[`session_id`])
 	if sessionID == `` {
+		gstool.FmtPrintlnLogTime("[chat-continue] chat_id=%d session_id为空，拒绝继续", req.ChatID)
 		gsgin.GinResponseError(c, `对话未找到有效的 session_id`, nil)
 		return
 	}
 	localDir := cast.ToString(chatInfo[`local_dir`])
 	if localDir == `` {
+		gstool.FmtPrintlnLogTime("[chat-continue] chat_id=%d local_dir为空，拒绝继续", req.ChatID)
 		gsgin.GinResponseError(c, `对话未找到工作目录`, nil)
 		return
 	}
 
-	distributeID := define.SseTaskWorkflowChatPrefix + cast.ToString(req.ChatID)
-	if sse := gsgin.SseGetByClientId(distributeID); sse != nil {
-		gsgin.GinResponseError(c, `对话已有活跃的 SSE 连接，请刷新后重试`, nil)
+	chatID := int64(req.ChatID)
+
+	// 防御：确保旧 goroutine 已完全退出（TaskWorkflowChatStop 中的 waitGoroutineExit 可能超时未完成）
+	gstool.FmtPrintlnLogTime("[chat-continue] chat_id=%d 准备等待旧goroutine退出...", chatID)
+	waitGoroutineExit(chatID)
+	gstool.FmtPrintlnLogTime("[chat-continue] chat_id=%d 旧goroutine已退出（或超时）", chatID)
+
+	// 检查 goroutine 是否正在运行（允许多个 SSE 连接共存，但不允许并发 goroutine）
+	if _, running := chatCancelFuncs.Load(chatID); running {
+		gstool.FmtPrintlnLogTime("[chat-continue] chat_id=%d goroutine仍在运行，拒绝继续", chatID)
+		gsgin.GinResponseError(c, `对话正在执行中，请等待完成后再继续`, nil)
 		return
 	}
+	gstool.FmtPrintlnLogTime("[chat-continue] chat_id=%d 确认无活跃goroutine", chatID)
 
-	_ = common.DbMain.TaskWorkflowChatMarkRunning(int64(req.ChatID))
+	if err := common.DbMain.TaskWorkflowChatMarkRunning(chatID); err != nil {
+		gstool.FmtPrintlnLogTime("[chat-continue] chat_id=%d MarkRunning 失败: %v", chatID, err)
+		gsgin.GinResponseError(c, `更新对话状态失败: `+err.Error(), nil)
+		return
+	}
+	gstool.FmtPrintlnLogTime("[chat-continue] chat_id=%d 状态已设为 running（旧状态: %s）", chatID, currentStatus)
+
+	// 立即验证DB状态是否真正更新为running
+	verifyInfo, verifyErr := common.DbMain.TaskWorkflowChatInfo(chatID)
+	if verifyErr != nil {
+		gstool.FmtPrintlnLogTime("[chat-continue] chat_id=%d 验证查询失败: %v", chatID, verifyErr)
+	} else {
+		verifyStatus := cast.ToString(verifyInfo[`status`])
+		gstool.FmtPrintlnLogTime("[chat-continue] chat_id=%d 验证DB状态=%s (期望running)", chatID, verifyStatus)
+	}
+
 	// 通知工作流页面刷新 chat 状态计数（执行历史按钮动画和状态数量）
-	taskWorkflowBroadcastChatStatus(int64(req.ChatID))
+	taskWorkflowBroadcastChatStatus(chatID)
 
+	gstool.FmtPrintlnLogTime("[chat-continue] chat_id=%d ========== 继续对话流程完成，返回成功 ==========", chatID)
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`chat_id`: req.ChatID,
 	})
@@ -2701,6 +2813,8 @@ func TaskWorkflowChatContinue(c *gin.Context) {
 
 // TaskWorkflowChatStop 停止运行中的对话。
 // 先 context cancel 让 goroutine 正常退出，再通过 DB PID 强制杀进程兜底。
+// 修复：等待 goroutine 完全退出后再返回，避免旧 goroutine 的清理代码与新的 Continue 操作发生竞态（如旧
+// goroutine 的 error/completed 事件泄漏到新 SSE 连接、旧状态覆盖新的 MarkRunning 等）。
 func TaskWorkflowChatStop(c *gin.Context) {
 	var req _struct.TaskWorkflowChatStopRequest
 	if err := gsgin.GinPostBody(c, &req); err != nil {
@@ -2712,13 +2826,14 @@ func TaskWorkflowChatStop(c *gin.Context) {
 		return
 	}
 	chatID := int64(req.ChatID)
-	// stopEvent 先落库，确保后续历史列表与通知判断都能识别“用户主动终止”。 // Persist the manual-stop marker first so history rows and notifications can distinguish user-initiated termination.
+	// stopEvent 先落库，确保后续历史列表与通知判断都能识别"用户主动终止"。 // Persist the manual-stop marker first so history rows and notifications can distinguish user-initiated termination.
 	_ = common.DbMain.TaskWorkflowChatAppendOutputBatch(chatID, []string{
 		buildChatStopEvent(chatID, taskWorkflowChatStopReasonUserStop),
 	})
 
 	// 1. 先调 cancel 关闭 stopped 通道 + 取消 context，让 goroutine 感知用户主动停止
-	cancelVal, ok := chatCancelFuncs.LoadAndDelete(chatID)
+	//    使用 Load 而非 LoadAndDelete，让 goroutine 的 defer 自行调用 Delete
+	cancelVal, ok := chatCancelFuncs.Load(chatID)
 	if ok {
 		if cancelFn, ok := cancelVal.(func()); ok {
 			cancelFn()
@@ -2728,10 +2843,34 @@ func TaskWorkflowChatStop(c *gin.Context) {
 	// 2. 兜底：通过 DB PID 强制杀进程（避免 cancel 未生效导致进程残留）
 	killedPID := killProcessByChatID(chatID)
 
+	// 3. 等待 goroutine 完全退出后再更新状态并返回
+	//    旧 goroutine 的 defer 会在清理完成后调用 chatCancelFuncs.Delete(chatID)
+	//    必须等待旧 goroutine 彻底退出，否则其后续的 sendLine（error/completed 事件广播）
+	//    和状态更新（MarkInterrupted/MarkError）可能与新的 Continue 操作产生竞态
+	waitGoroutineExit(chatID)
+
 	_ = common.DbMain.TaskWorkflowChatMarkInterrupted(chatID)
 	gsgin.GinResponseSuccess(c, `对话已停止`, map[string]any{
 		`killed_pid`: killedPID,
 	})
+}
+
+// waitGoroutineExit 等待指定 chatID 的 goroutine 从 chatCancelFuncs 中自行移除。
+// goroutine 的 defer 会在 cleanup 完成后调用 chatCancelFuncs.Delete(chatID)。
+func waitGoroutineExit(chatID int64) {
+	const maxWait = 10 * time.Second
+	const pollInterval = 50 * time.Millisecond
+	deadline := time.Now().Add(maxWait)
+	startTime := time.Now()
+	for time.Now().Before(deadline) {
+		if _, running := chatCancelFuncs.Load(chatID); !running {
+			elapsed := time.Since(startTime)
+			gstool.FmtPrintlnLogTime("[goroutine-exit] chat_id=%d goroutine已退出，耗时=%v", chatID, elapsed)
+			return
+		}
+		time.Sleep(pollInterval)
+	}
+	gstool.FmtPrintlnLogTime("[goroutine-exit] chat_id=%d 等待 goroutine 退出超时(%v)，继续后续流程", chatID, maxWait)
 }
 
 // killProcessByChatID 从 agent_chat 表读取 pid 并强制杀进程兜底。
@@ -3294,25 +3433,16 @@ func scanZcodeProjects(zcodeDir string) ([]_struct.TaskWorkflowZcodeProjectItem,
 	return projects, nil
 }
 
-// runClaudeCommand 后台执行 claude 命令并将输出推送到专用 SSE。
-func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sessionID string, baseURL, apiKey, modelName, settingsPath, thinkingEffort string, thinkingBudget int, sse *gsgin.Sse, stopC chan int) {
-	distributeID := define.SseTaskWorkflowChatPrefix + cast.ToString(chatID)
+// runClaudeCommand 后台执行 claude 命令并通过 chatSseConns 连接池向所有活跃 SSE 连接广播输出。
+func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sessionID string, baseURL, apiKey, modelName, settingsPath, thinkingEffort string, thinkingBudget int) {
 
 	defer func() {
 		if r := recover(); r != nil {
 			gstool.FmtPrintlnLogTime("[chat-run] chat_id=%d panic: %v", chatID, r)
 			_ = common.DbMain.TaskWorkflowChatMarkError(chatID)
-			// 动态获取当前注册的 SSE，而非使用创建 goroutine 时的旧引用
-			if curSse := gsgin.SseGetByClientId(distributeID); curSse != nil {
-				_ = curSse.SendToChan(buildChatCompletedEvent(chatID, `error`))
-			}
+			broadcastToChatSse(chatID, buildChatCompletedEvent(chatID, `error`))
 			taskWorkflowBroadcastChatStatus(chatID)
 		}
-		// stopC 可能已被 SSE 框架关闭，使用 recover 防止二次 close panic
-		func() {
-			defer func() { recover() }()
-			close(stopC)
-		}()
 	}()
 
 	// DB 写入通道：将批量写 DB 与 SSE 推送解耦，避免 DB 写入阻塞 SSE 实时推送
@@ -3363,9 +3493,7 @@ func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sess
 		case dbWriteCh <- line:
 		default:
 		}
-		if curSse := gsgin.SseGetByClientId(distributeID); curSse != nil {
-			_ = curSse.SendToChan(line)
-		}
+		broadcastToChatSse(chatID, line)
 	}
 	cfg := p_claude.RunConfig{
 		Prompt:         prompt,
@@ -3425,6 +3553,11 @@ func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sess
 			var initData map[string]any
 			if err := json.Unmarshal([]byte(rawJSON), &initData); err == nil {
 				initData[`is_resume`] = isResume
+				// 为每次继续对话添加唯一时间戳，避免前端去重逻辑因同内容 system_init 行
+				// 过滤掉后续继续轮次的"继续对话"分隔气泡。
+				if isResume {
+					initData[`continue_at`] = time.Now().UnixMilli()
+				}
 				if modified, e := json.Marshal(initData); e == nil {
 					rawJSON = string(modified)
 				}
@@ -3464,11 +3597,14 @@ func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sess
 		// 区分用户主动停止与系统异常
 		select {
 		case <-stopped:
+			gstool.FmtPrintlnLogTime("[chat-run] chat_id=%d 检测到stopped信号，设置状态为interrupted", chatID)
 			_ = common.DbMain.TaskWorkflowChatMarkInterrupted(chatID)
 		default:
+			gstool.FmtPrintlnLogTime("[chat-run] chat_id=%d 异常退出，错误=%v，设置状态为error", chatID, err)
 			_ = common.DbMain.TaskWorkflowChatMarkError(chatID)
 		}
 	} else {
+		gstool.FmtPrintlnLogTime("[chat-run] chat_id=%d 正常完成，设置状态为completed", chatID)
 		_ = common.DbMain.TaskWorkflowChatMarkCompleted(chatID)
 	}
 	finalStatus := common.TaskWorkflowChatStatusCompleted
@@ -3480,7 +3616,8 @@ func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sess
 			finalStatus = common.TaskWorkflowChatStatusError
 		}
 	}
-	taskWorkflowAutoMarkChatReadIfSseConnected(chatID, distributeID)
+	gstool.FmtPrintlnLogTime("[chat-run] chat_id=%d 最终状态=%s，发送completed事件", chatID, finalStatus)
+	taskWorkflowAutoMarkChatReadIfSseConnected(chatID)
 	sendLine(buildChatCompletedEvent(chatID, finalStatus))
 	// 通知工作流页面刷新 chat 状态计数（执行历史按钮动画和状态数量）
 	taskWorkflowBroadcastChatStatus(chatID)
@@ -3488,25 +3625,18 @@ func runClaudeCommand(chatID int64, localDir, prompt string, isResume bool, sess
 	_ = lastResultText
 }
 
-// runCodexCommand 执行 Codex CLI 命令并推送流式输出到 SSE + DB。
+// runCodexCommand 执行 Codex CLI 命令并通过 chatSseConns 连接池向所有活跃 SSE 连接广播输出。
 // 与 runClaudeCommand 平级，通过 cli_type 分发调用。
-func runCodexCommand(chatID int64, localDir, prompt string, isResume bool, sessionID string, configJson string, selectedModelName string, sse *gsgin.Sse, stopC chan int) {
-	distributeID := define.SseTaskWorkflowChatPrefix + cast.ToString(chatID)
+func runCodexCommand(chatID int64, localDir, prompt string, isResume bool, sessionID string, configJson string, selectedModelName string) {
 	startTime := time.Now()
 
 	defer func() {
 		if r := recover(); r != nil {
 			gstool.FmtPrintlnLogTime("[codex-run] chat_id=%d panic: %v", chatID, r)
 			_ = common.DbMain.TaskWorkflowChatMarkError(chatID)
-			if curSse := gsgin.SseGetByClientId(distributeID); curSse != nil {
-				_ = curSse.SendToChan(buildChatCompletedEvent(chatID, `error`))
-			}
+			broadcastToChatSse(chatID, buildChatCompletedEvent(chatID, `error`))
 			taskWorkflowBroadcastChatStatus(chatID)
 		}
-		func() {
-			defer func() { recover() }()
-			close(stopC)
-		}()
 	}()
 
 	// DB 写入通道：批量写 DB 与 SSE 推送解耦
@@ -3556,9 +3686,7 @@ func runCodexCommand(chatID int64, localDir, prompt string, isResume bool, sessi
 		case dbWriteCh <- line:
 		default:
 		}
-		if curSse := gsgin.SseGetByClientId(distributeID); curSse != nil {
-			_ = curSse.SendToChan(line)
-		}
+		broadcastToChatSse(chatID, line)
 	}
 
 	// 解析 Codex 配置
@@ -3663,11 +3791,14 @@ func runCodexCommand(chatID int64, localDir, prompt string, isResume bool, sessi
 		sendLine(string(errJSON))
 		select {
 		case <-stopped:
+			gstool.FmtPrintlnLogTime("[codex-run] chat_id=%d 检测到stopped信号，设置状态为interrupted", chatID)
 			_ = common.DbMain.TaskWorkflowChatMarkInterrupted(chatID)
 		default:
+			gstool.FmtPrintlnLogTime("[codex-run] chat_id=%d 异常退出，错误=%v，设置状态为error", chatID, err)
 			_ = common.DbMain.TaskWorkflowChatMarkError(chatID)
 		}
 	} else {
+		gstool.FmtPrintlnLogTime("[codex-run] chat_id=%d 正常完成，设置状态为completed", chatID)
 		_ = common.DbMain.TaskWorkflowChatMarkCompleted(chatID)
 	}
 
@@ -3706,21 +3837,19 @@ func runCodexCommand(chatID int64, localDir, prompt string, isResume bool, sessi
 			finalStatus = common.TaskWorkflowChatStatusError
 		}
 	}
-	taskWorkflowAutoMarkChatReadIfSseConnected(chatID, distributeID)
+	taskWorkflowAutoMarkChatReadIfSseConnected(chatID)
+	gstool.FmtPrintlnLogTime("[codex-run] chat_id=%d 最终状态=%s，发送completed事件", chatID, finalStatus)
 	sendLine(buildChatCompletedEvent(chatID, finalStatus))
 	taskWorkflowBroadcastChatStatus(chatID)
 	_ = lastAgentMessageText
 }
 
-// taskWorkflowAutoMarkChatReadIfSseConnected 在命令结束时，如果专用 chat SSE 仍在线，则直接标记为已读。
-func taskWorkflowAutoMarkChatReadIfSseConnected(chatID int64, distributeID string) {
+// taskWorkflowAutoMarkChatReadIfSseConnected 在命令结束时，如果该 chat_id 下仍有活跃 SSE 连接，则直接标记为已读。
+func taskWorkflowAutoMarkChatReadIfSseConnected(chatID int64) {
 	if chatID <= 0 {
 		return
 	}
-	if strings.TrimSpace(distributeID) == `` {
-		return
-	}
-	if gsgin.SseGetByClientId(distributeID) == nil {
+	if !chatHasActiveSse(chatID) {
 		return
 	}
 	if err := common.DbMain.AgentChatMarkRead(chatID); err != nil {
@@ -3745,7 +3874,7 @@ func buildChatCompletedEvent(chatID int64, status string) string {
 }
 
 const (
-	// taskWorkflowChatStopReasonUserStop 标识用户主动点击“停止”结束对话。 // Marks that the chat was terminated explicitly by the user.
+	// taskWorkflowChatStopReasonUserStop 标识用户主动点击"停止"结束对话。 // Marks that the chat was terminated explicitly by the user.
 	taskWorkflowChatStopReasonUserStop = `user_stop`
 )
 

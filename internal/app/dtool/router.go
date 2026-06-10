@@ -280,6 +280,8 @@ func setRouter(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/Set/LocalDirBatchCheck`, controller.SetLocalDirBatchCheck)
 	tGin.GinPost(`/api/Set/LocalBranchBatchCheck`, controller.SetLocalBranchBatchCheck)
 	tGin.GinPost(`/api/Set/LocalBranchMismatchDetail`, controller.SetLocalBranchMismatchDetail)
+	tGin.GinPost(`/api/Set/RemoteBranchCheck`, controller.SetRemoteBranchCheck)
+	tGin.GinPost(`/api/Set/RemoteBranchPush`, controller.SetRemoteBranchPush)
 	tGin.GinPost(`/api/Set/OpenLocalDir`, controller.SetOpenLocalDir)
 }
 
