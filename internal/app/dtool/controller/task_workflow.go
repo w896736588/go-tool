@@ -1574,6 +1574,8 @@ func buildTaskWorkflowPlaceholderMap(c *gin.Context, homeTaskInfo map[string]any
 	}
 	// 内置占位符 {工作流程ID}，替换为工作流程任务的 ID
 	result[`{工作流程ID}`] = cast.ToString(workflowInfo[`id`])
+	// 内置占位符 {任务ID}，替换为该工作流程关联的任务ID（tbl_home_task表的id）
+	result[`{任务ID}`] = cast.ToString(homeTaskInfo[`id`])
 	// 先解析开发环境内容中的其他占位符，再将其加入映射。
 	for key, value := range result {
 		devEnvironment = strings.ReplaceAll(devEnvironment, key, value)
