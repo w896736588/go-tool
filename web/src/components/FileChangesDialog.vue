@@ -671,35 +671,22 @@ export default {
         const botLeftY = coords[9]
         const botRightY = coords[15]
         const midX = w / 2
-
-        // 顶部连线中点（从右到左）
+        // 连接区域纵向中点
         const topMidY = (topRightY + topLeftY) / 2
-        // 底部连线中点（从左到右）
         const botMidY = (botLeftY + botRightY) / 2
+        const centerY = (topMidY + botMidY) / 2
 
-        // 绘制箭头线：从右（old）到左（new）方向，在顶部连线中点
-        const arrowLine1 = document.createElementNS(svgNS, 'line')
-        arrowLine1.setAttribute('x1', String(w * 0.8))
-        arrowLine1.setAttribute('y1', String(topMidY))
-        arrowLine1.setAttribute('x2', String(w * 0.2))
-        arrowLine1.setAttribute('y2', String(topMidY))
-        arrowLine1.setAttribute('stroke', '#0366d6')
-        arrowLine1.setAttribute('stroke-width', '2')
-        arrowLine1.setAttribute('marker-end', 'url(#diff-arrow-marker)')
-        arrowLine1.setAttribute('class', 'diff-arrow')
-        svg.appendChild(arrowLine1)
-
-        // 绘制箭头线：从左（new）到右（old）方向，在底部连线中点
-        const arrowLine2 = document.createElementNS(svgNS, 'line')
-        arrowLine2.setAttribute('x1', String(w * 0.2))
-        arrowLine2.setAttribute('y1', String(botMidY))
-        arrowLine2.setAttribute('x2', String(w * 0.8))
-        arrowLine2.setAttribute('y2', String(botMidY))
-        arrowLine2.setAttribute('stroke', '#0366d6')
-        arrowLine2.setAttribute('stroke-width', '2')
-        arrowLine2.setAttribute('marker-end', 'url(#diff-arrow-marker)')
-        arrowLine2.setAttribute('class', 'diff-arrow')
-        svg.appendChild(arrowLine2)
+        // 绘制箭头线：从右（old）到左（new）方向，在连接区域中点
+        const arrowLine = document.createElementNS(svgNS, 'line')
+        arrowLine.setAttribute('x1', String(w * 0.8))
+        arrowLine.setAttribute('y1', String(centerY))
+        arrowLine.setAttribute('x2', String(w * 0.2))
+        arrowLine.setAttribute('y2', String(centerY))
+        arrowLine.setAttribute('stroke', '#0366d6')
+        arrowLine.setAttribute('stroke-width', '2')
+        arrowLine.setAttribute('marker-end', 'url(#diff-arrow-marker)')
+        arrowLine.setAttribute('class', 'diff-arrow')
+        svg.appendChild(arrowLine)
       })
     },
   },
