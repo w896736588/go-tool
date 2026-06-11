@@ -10,7 +10,7 @@ def memory_fragment_update_by_path(relative_path, content, task_id):
     通过相对路径更新知识片段内容（不会修改标题）
 
     传入的是相对于 fragments/ 的路径。
-    task_id 为必传参数，后端会校验片段是否属于该任务。
+    task_id （任务ID）为必传参数，后端会校验片段是否属于该任务。
     """
     filename = relative_path.replace("\\", "/").split("/")[-1]
     fragment_id = filename.rsplit(".", 1)[0] if "." in filename else filename
