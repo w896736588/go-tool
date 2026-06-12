@@ -26,6 +26,41 @@ def run_git(*args: str) -> str:
     return result.stdout.strip()
 
 
+def get_numstat(diff_args: list, exclude: list) -> dict:
+    """Run git diff --numstat with given args and return {filepath: (additions, deletions)}."""
+    cmd = ["git", "diff", "--numstat"] + diff_args + exclude
+    result = subprocess.run(
+        cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    stats = {}
+    if result.returncode == 0:
+        for line in result.stdout.strip().splitlines():
+            if not line.strip():
+                continue
+            parts = line.split("\t")
+            if len(parts) >= 3:
+                add_str, del_str = parts[0], parts[1]
+                filepath = "\t".join(parts[2:])
+                if add_str == "-" or del_str == "-":
+                    # 二进制文件：添加/删除都算 1
+                    stats[filepath] = (1, 1)
+                else:
+                    try:
+                        stats[filepath] = (int(add_str), int(del_str))
+                    except ValueError:
+                        stats[filepath] = (0, 0)
+    return stats
+
+
+def count_file_lines(filepath: str) -> int:
+    """Count the number of lines in a file (for untracked files)."""
+    try:
+        with open(filepath, "rb") as f:
+            return sum(1 for _ in f)
+    except Exception:
+        return 0
+
+
 def main() -> int:
     if len(sys.argv) < 2:
         print("用法: python show_branch_diff.py <基分支>", file=sys.stderr)
@@ -98,19 +133,41 @@ def main() -> int:
     if result_untracked.returncode == 0:
         untracked = set(f for f in result_untracked.stdout.strip().splitlines() if f.strip())
 
-    # 合并所有文件，标注状态
+    # 获取各分类的增删行数统计
+    committed_stats = get_numstat([merge_base, "HEAD"], exclude)
+    staged_stats = get_numstat(["--cached"], exclude)
+    modified_stats = get_numstat([], exclude)
+    untracked_stats = {}
+    for f in untracked:
+        untracked_stats[f] = (count_file_lines(f), 0)
+
+    # 合并所有文件，标注状态和行数统计
     all_files = committed | staged | modified | untracked
     for f in sorted(all_files):
         statuses = []
+        total_add = 0
+        total_del = 0
         if f in committed:
             statuses.append("Committed")
+            a, d = committed_stats.get(f, (0, 0))
+            total_add += a
+            total_del += d
         if f in staged:
             statuses.append("Staged")
+            a, d = staged_stats.get(f, (0, 0))
+            total_add += a
+            total_del += d
         if f in modified:
             statuses.append("Modified")
+            a, d = modified_stats.get(f, (0, 0))
+            total_add += a
+            total_del += d
         if f in untracked:
             statuses.append("Untracked")
-        print(f"{f}\t[{','.join(statuses)}]")
+            a, d = untracked_stats.get(f, (0, 0))
+            total_add += a
+            total_del += d
+        print(f"{f}\t[{','.join(statuses)}]\t{total_add}\t{total_del}")
 
     return 0
 

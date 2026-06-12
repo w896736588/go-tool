@@ -183,3 +183,9 @@ type TaskWorkflowFileChangesFileDiffRequest struct {
 	ParentBranch string `json:"parent_branch"`
 	FilePath     string `json:"file_path"`
 }
+
+// TaskWorkflowOpenInEditorRequest 在指定 IDE 中打开工作目录请求。
+type TaskWorkflowOpenInEditorRequest struct {
+	LocalDir   string `json:"local_dir"`
+	EditorType string `json:"editor_type"` // vscode / cursor / goland / phpstorm
+}

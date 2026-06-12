@@ -27,6 +27,8 @@
               <span class="file-changes-stat file-changes-stat--staged">{{ summary.staged || 0 }} S</span>
               <span class="file-changes-stat file-changes-stat--modified">{{ summary.modified || 0 }} M</span>
               <span class="file-changes-stat file-changes-stat--untracked">{{ summary.untracked || 0 }} U</span>
+              <span class="file-changes-stat file-changes-stat--additions">+{{ totalAdditions }}</span>
+              <span class="file-changes-stat file-changes-stat--deletions">-{{ totalDeletions }}</span>
             </template>
           </span>
         </div>
@@ -64,7 +66,7 @@
               <div
                 v-for="item in flatTreeItems"
                 :key="item.key"
-                :class="item.isDir ? 'file-changes-tree__dir' : 'file-changes-tree__file'"
+                :class="[item.isDir ? 'file-changes-tree__dir' : 'file-changes-tree__file', !item.isDir && item.path === selectedFile ? 'file-changes-tree__file--active' : '']"
                 :style="{ paddingLeft: (12 + item.depth * 16) + 'px' }"
                 @click="item.isDir ? toggleDir(item.key) : selectFile(item)"
               >
@@ -85,7 +87,8 @@
         <!-- 右侧 diff 视图 -->
         <div class="file-changes-detail__diff-panel">
           <template v-if="diffLoading">
-            <div class="file-changes-detail__diff-placeholder">
+            <div class="file-changes-detail__diff-placeholder file-changes-detail__diff-loading">
+              <i class="el-icon-loading"></i>
               <span>加载中...</span>
             </div>
           </template>
@@ -97,6 +100,14 @@
             <div class="file-changes-detail__diff-header">
               <span class="file-changes-detail__diff-file">{{ selectedFile }}</span>
               <span class="file-changes-detail__diff-badge file-changes-detail__diff-badge--binary">二进制文件</span>
+              <span v-if="selectedFileInfo" class="file-changes-detail__diff-stats">
+                <span class="file-changes-detail__diff-stat--add">+{{ selectedFileInfo.additions || 0 }}</span>
+                <span class="file-changes-detail__diff-stat--del">-{{ selectedFileInfo.deletions || 0 }}</span>
+              </span>
+              <div class="file-changes-detail__nav-btns">
+                <el-button size="small" :disabled="!hasPrevFile" @click="goToPrevFile">上一个文件</el-button>
+                <el-button size="small" :disabled="!hasNextFile" @click="goToNextFile">下一个文件</el-button>
+              </div>
             </div>
             <div class="file-changes-detail__binary-info">
               <div class="file-changes-detail__binary-icon">
@@ -108,11 +119,11 @@
                   <span class="file-changes-detail__binary-value">{{ binaryInfo.file_type || '-' }}</span>
                 </div>
                 <div class="file-changes-detail__binary-row">
-                  <span class="file-changes-detail__binary-label">旧版本大小</span>
+                  <span class="file-changes-detail__binary-label">原始版本大小</span>
                   <span class="file-changes-detail__binary-value file-changes-detail__binary-value--old">{{ formatFileSize(binaryInfo.old_size) }}</span>
                 </div>
                 <div class="file-changes-detail__binary-row">
-                  <span class="file-changes-detail__binary-label">新版本大小</span>
+                  <span class="file-changes-detail__binary-label">改后版本大小</span>
                   <span :class="sizeChangeClass">{{ formatFileSize(binaryInfo.new_size) }}</span>
                   <span v-if="sizeDiffText" :class="sizeChangeClass">({{ sizeDiffText }})</span>
                 </div>
@@ -127,20 +138,26 @@
             <div class="file-changes-detail__diff-header">
               <span class="file-changes-detail__diff-file">{{ selectedFile }}</span>
               <span class="file-changes-detail__diff-badge file-changes-detail__diff-badge--image">图片</span>
+              <span v-if="selectedFileInfo" class="file-changes-detail__diff-stats">
+                <span class="file-changes-detail__diff-stat--add">+{{ selectedFileInfo.additions || 0 }}</span>
+                <span class="file-changes-detail__diff-stat--del">-{{ selectedFileInfo.deletions || 0 }}</span>
+              </span>
+              <div class="file-changes-detail__nav-btns">
+                <el-button size="small" :disabled="!hasPrevFile" @click="goToPrevFile">上一个文件</el-button>
+                <el-button size="small" :disabled="!hasNextFile" @click="goToNextFile">下一个文件</el-button>
+              </div>
             </div>
             <div class="file-changes-detail__image-compare">
               <div class="file-changes-detail__image-pane">
-                <div class="file-changes-detail__image-title">旧版本</div>
+                <div class="file-changes-detail__image-title">原始版本</div>
                 <div class="file-changes-detail__image-box">
                   <img v-if="imageInfo.old_image" :src="'data:image/' + imageInfo.image_type + ';base64,' + imageInfo.old_image" class="file-changes-detail__image-img" />
                   <span v-else class="file-changes-detail__image-empty">(文件不存在或已删除)</span>
                 </div>
               </div>
-              <div class="file-changes-detail__image-divider">
-                <span>→</span>
-              </div>
+              <div class="file-changes-detail__image-divider"></div>
               <div class="file-changes-detail__image-pane">
-                <div class="file-changes-detail__image-title">新版本</div>
+                <div class="file-changes-detail__image-title">改后版本</div>
                 <div class="file-changes-detail__image-box">
                   <img v-if="imageInfo.new_image" :src="'data:image/' + imageInfo.image_type + ';base64,' + imageInfo.new_image" class="file-changes-detail__image-img" />
                   <span v-else class="file-changes-detail__image-empty">(文件不存在或已删除)</span>
@@ -151,6 +168,14 @@
           <template v-else-if="selectedFile">
             <div class="file-changes-detail__diff-header">
               <span class="file-changes-detail__diff-file">{{ selectedFile }}</span>
+              <span v-if="selectedFileInfo" class="file-changes-detail__diff-stats">
+                <span class="file-changes-detail__diff-stat--add">+{{ selectedFileInfo.additions || 0 }}</span>
+                <span class="file-changes-detail__diff-stat--del">-{{ selectedFileInfo.deletions || 0 }}</span>
+              </span>
+              <div class="file-changes-detail__nav-btns" v-if="selectedFile">
+                <el-button size="small" :disabled="!canPrev" @click="jumpToPrevChange">{{ prevBtnText }}</el-button>
+                <el-button size="small" :disabled="!canNext" @click="jumpToNextChange">{{ nextBtnText }}</el-button>
+              </div>
             </div>
             <div ref="diffContainer" class="file-changes-detail__diff-content"></div>
           </template>
@@ -214,6 +239,25 @@ window.diff_match_patch = DiffMatchPatch
 window.DIFF_EQUAL = DiffMatchPatch.DIFF_EQUAL
 window.DIFF_INSERT = DiffMatchPatch.DIFF_INSERT
 window.DIFF_DELETE = DiffMatchPatch.DIFF_DELETE
+
+/**
+ * patchCmPrepareSelection 为 CodeMirror 实例的 display.input.prepareSelection 方法
+ * 添加 try-catch 防护，作为兜底方案。
+ */
+function patchCmPrepareSelection(cm) {
+  if (!cm || !cm.display || !cm.display.input) return
+  const input = cm.display.input
+  if (input._prepareSelectionPatched) return
+  const origPrepare = input.prepareSelection.bind(input)
+  input.prepareSelection = function () {
+    try {
+      return origPrepare()
+    } catch (e) {
+      return { cursors: document.createDocumentFragment(), selection: document.createDocumentFragment() }
+    }
+  }
+  input._prepareSelectionPatched = true
+}
 
 // 文件扩展名 → CodeMirror mode 映射
 const EXT_MODE_MAP = {
@@ -306,6 +350,9 @@ export default {
       imageInfo: { image_type: '', old_image: '', new_image: '' },
       // 文件类型过滤器
       fileTypeFilter: {},
+      // diff 块跳转相关
+      diffChunks: [],
+      currentChunkIndex: -1,
     }
   },
   computed: {
@@ -362,6 +409,63 @@ export default {
       if (diff > 0) return 'file-changes-detail__binary-value file-changes-detail__binary-value--increased'
       if (diff < 0) return 'file-changes-detail__binary-value file-changes-detail__binary-value--decreased'
       return 'file-changes-detail__binary-value'
+    },
+    // 总增加行数
+    totalAdditions() {
+      if (this.summary && typeof this.summary.additions === 'number') return this.summary.additions
+      return this.files.reduce((sum, f) => sum + (f.additions || 0), 0)
+    },
+    // 总删除行数
+    totalDeletions() {
+      if (this.summary && typeof this.summary.deletions === 'number') return this.summary.deletions
+      return this.files.reduce((sum, f) => sum + (f.deletions || 0), 0)
+    },
+    // 当前选中文件的 additions/deletions 信息
+    selectedFileInfo() {
+      if (!this.selectedFile || !this.files || this.files.length === 0) return null
+      return this.files.find(f => f.path === this.selectedFile) || null
+    },
+    // 当前选中文件在文件列表中的索引
+    selectedFileIndex() {
+      if (!this.selectedFile || !this.filteredFiles || this.filteredFiles.length === 0) return -1
+      return this.filteredFiles.findIndex(f => f.path === this.selectedFile)
+    },
+    // 是否有上一个文件
+    hasPrevFile() {
+      return this.selectedFileIndex > 0
+    },
+    // 是否有下一个文件
+    hasNextFile() {
+      const idx = this.selectedFileIndex
+      return idx >= 0 && idx < this.filteredFiles.length - 1
+    },
+    // 是否有上一处改动（当前索引 > 0 才能往上跳）
+    hasPrevChange() {
+      return this.diffChunks.length > 0 && this.currentChunkIndex > 0
+    },
+    // 是否有下一处改动（还有未跳转的 chunk）
+    hasNextChange() {
+      return this.diffChunks.length > 0 && (this.currentChunkIndex < 0 || this.currentChunkIndex < this.diffChunks.length - 1)
+    },
+    // 上一处改动按钮是否可用
+    canPrev() {
+      return this.hasPrevChange || this.hasPrevFile
+    },
+    // 下一处改动按钮是否可用
+    canNext() {
+      return this.hasNextChange || this.hasNextFile
+    },
+    // 上一处改动按钮文案
+    prevBtnText() {
+      if (this.hasPrevChange) return '上一处改动'
+      if (this.hasPrevFile) return '查看上一个文件'
+      return '上一处改动'
+    },
+    // 下一处改动按钮文案
+    nextBtnText() {
+      if (this.hasNextChange) return '下一处改动'
+      if (this.hasNextFile) return '查看下一个文件'
+      return '下一处改动'
     },
     flatTreeItems() {
       const result = []
@@ -633,6 +737,8 @@ export default {
       this.currentDiff = ''
       this.oldContent = ''
       this.newContent = ''
+      this.diffChunks = []
+      this.currentChunkIndex = -1
       this.loadFileDiff(item)
     },
     loadFileDiff(file) {
@@ -701,12 +807,18 @@ export default {
       this.destroyMergeView()
     },
     destroyMergeView() {
+      if (this._lineHLTimer) {
+        clearTimeout(this._lineHLTimer)
+        this._lineHLTimer = null
+      }
       if (this.mergeView) {
         try {
-          this.mergeView.editor().toTextArea?.()
+          const editor = this.mergeView.editor()
+          editor?.toTextArea?.()
         } catch (e) { /* ignore */ }
         this.mergeView = null
       }
+      this._hlLines = null
       const container = this.$refs.diffContainer
       if (container) {
         container.innerHTML = ''
@@ -714,39 +826,60 @@ export default {
     },
     renderDiff() {
       this.$nextTick(() => {
-        const container = this.$refs.diffContainer
-        if (!container) return
+        // 等待浏览器完成布局（el-dialog 可能有 CSS 过渡动画）
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            const container = this.$refs.diffContainer
+            if (!container || !container.isConnected) return
+            // 容器必须可见且有尺寸，否则 CodeMirror 初始化会报错
+            if (container.offsetHeight === 0 || container.offsetWidth === 0) {
+              // 等待布局完成后重试一次
+              setTimeout(() => {
+                this.renderDiff()
+              }, 100)
+              return
+            }
 
-        this.destroyMergeView()
-        container.innerHTML = ''
+            this.destroyMergeView()
+            container.innerHTML = ''
 
-        const mode = getModeForFile(this.selectedFile)
+            const mode = getModeForFile(this.selectedFile)
 
-        if (this.diffMode === 'side-by-side') {
-          // 横向对比：使用 CodeMirror MergeView（左右双面板 + 中间连接线）
-          this.mergeView = CodeMirror.MergeView(container, {
-            value: this.newContent || '',
-            orig: this.oldContent || '',
-            lineNumbers: true,
-            mode: mode,
-            theme: 'default',
-            collapseIdentical: true,
-            revertButtons: false,
-            readOnly: true,
-            lineWrapping: false,
-            scrollbarStyle: 'native',
-          })
-          // 注入箭头到连接线上
-          this.$nextTick(() => this.addConnectArrows())
-          // 监听滚动和更新事件，重绘箭头
-          const editor = this.mergeView.editor()
-          const orig = this.mergeView.leftOriginal()
-          if (editor) editor.on('scroll', () => this.scheduleRedrawArrows())
-          if (orig) orig.on('scroll', () => this.scheduleRedrawArrows())
-        } else {
-          // 纵向对比：使用 CodeMirror 单面板 + diff 高亮
-          this.renderInlineDiff(container, mode)
-        }
+            if (this.diffMode === 'side-by-side') {
+              // 横向对比：左侧原始版本，右侧改后版本
+              // showDifferences: false 关闭 CodeMirror 内置的字级/行级标记
+              try {
+                this.mergeView = CodeMirror.MergeView(container, {
+                  value: this.newContent || '',
+                  origLeft: this.oldContent || '',
+                  lineNumbers: true,
+                  mode: mode || null,
+                  theme: 'default',
+                  collapseIdentical: false,
+                  revertButtons: false,
+                  readOnly: 'nocursor',
+                  lineWrapping: false,
+                  scrollbarStyle: 'native',
+                  showDifferences: true,
+                  // 一次性渲染全部行，避免虚拟滚动时动态创建/销毁 DOM 导致卡顿
+                  viewportMargin: Infinity,
+                })
+                // 手动应用行级背景色（只标整行，不标字级，仅初始化一次，无需滚动重绘）
+                this.$nextTick(() => {
+                  try { this.applyLineLevelHighlight() } catch (e) { /* ignore */ }
+                  // 更新 diffChunks 用于跳转，并自动定位到第一个改动点
+                  this.updateDiffChunks()
+                })
+              } catch (e) {
+                console.error('MergeView 创建失败:', e)
+                container.innerHTML = '<div style="padding:20px;color:#e53935;text-align:center;">对比视图加载失败: ' + (e.message || String(e)) + '</div>'
+              }
+            } else {
+              // 纵向对比：使用 CodeMirror 单面板 + diff 高亮
+              this.renderInlineDiff(container, mode)
+            }
+          }, 30)
+        })
       })
     },
     renderInlineDiff(container, mode) {
@@ -780,10 +913,16 @@ export default {
         value: displayText,
         lineNumbers: true,
         mode: mode,
-        readOnly: true,
+        readOnly: 'nocursor',
         lineWrapping: false,
         gutters: ['CodeMirror-linenumbers', 'diff-gutter'],
+        // 一次性渲染全部行，避免虚拟滚动时动态创建/销毁 DOM 导致卡顿
+        viewportMargin: Infinity,
       })
+      // 为编辑器的 prepareSelection 添加 try-catch 防护
+      patchCmPrepareSelection(editor)
+      // 保存内联编辑器实例，用于跳转滚动
+      this._inlineEditor = editor
 
       // 标记每行的背景色和 gutter 符号
       for (let i = 0; i < annotatedLines.length; i++) {
@@ -808,6 +947,27 @@ export default {
       }
 
       editor.setSize('100%', '100%')
+
+      // 从 annotatedLines 中提取连续的改动块行号，用于跳转
+      const inlineChunks = []
+      let chunkStartLine = -1
+      for (let i = 0; i < annotatedLines.length; i++) {
+        if (annotatedLines[i].type !== 'unchanged') {
+          if (chunkStartLine < 0) chunkStartLine = i
+        } else {
+          if (chunkStartLine >= 0) {
+            inlineChunks.push({ editLine: chunkStartLine, origLine: chunkStartLine })
+            chunkStartLine = -1
+          }
+        }
+      }
+      if (chunkStartLine >= 0) inlineChunks.push({ editLine: chunkStartLine, origLine: chunkStartLine })
+      this.diffChunks = inlineChunks
+      this.currentChunkIndex = inlineChunks.length > 0 ? 0 : -1
+      // 自动定位到第一个改动点
+      if (inlineChunks.length > 0) {
+        this.$nextTick(() => this.scrollToChunk(0))
+      }
     },
     renderDiff2Html(diffText) {
       this.destroyMergeView()
@@ -837,7 +997,7 @@ export default {
       // 使用 diff 库生成 unified diff，再用 diff2html 渲染
       try {
         const Diff = require('diff')
-        const patch = Diff.createPatch(this.selectedFile, oldText || '', newText || '', '旧版本', '新版本')
+        const patch = Diff.createPatch(this.selectedFile, oldText || '', newText || '', '原始版本', '改后版本')
         if (patch && patch.trim()) {
           this.renderDiff2Html(patch)
         } else {
@@ -850,90 +1010,141 @@ export default {
         this.diffError = '渲染 diff 失败: ' + (e.message || String(e))
       }
     },
+    // 手动应用行级背景色（只用 addLineClass，不用 markText，无波浪线）
+    // 仅在 MergeView 创建后调用一次，CodeMirror 虚拟滚动时会自动保持 lineClass
+    applyLineLevelHighlight() {
+      try {
+        const mv = this.mergeView
+        if (!mv) return
+        const editCm = mv.editor()
+        const origCm = mv.leftOriginal()
+        if (!editCm || !origCm) return
+
+        // 获取差异化块数据
+        const leftDv = mv.left
+        if (!leftDv || !leftDv.chunks || leftDv.chunks.length === 0) return
+
+        const chunks = leftDv.chunks
+
+        // 清除旧的行级背景（只清除已记录的行，避免遍历全部行）
+        if (this._hlLines) {
+          for (const i of this._hlLines.edit) {
+            editCm.removeLineClass(i, 'background', 'diff-chunk-inserted')
+          }
+          for (const i of this._hlLines.orig) {
+            origCm.removeLineClass(i, 'background', 'diff-chunk-deleted')
+          }
+        }
+        this._hlLines = { edit: [], orig: [] }
+
+        // 为每个 chunk 添加行级背景
+        for (const ch of chunks) {
+          // 原始版本（左侧）：标记被删除的行
+          if (ch.origFrom < ch.origTo) {
+            for (let i = ch.origFrom; i < ch.origTo; i++) {
+              origCm.addLineClass(i, 'background', 'diff-chunk-deleted')
+              this._hlLines.orig.push(i)
+            }
+          }
+          // 改后版本（右侧）：标记新增的行
+          if (ch.editFrom < ch.editTo) {
+            for (let i = ch.editFrom; i < ch.editTo; i++) {
+              editCm.addLineClass(i, 'background', 'diff-chunk-inserted')
+              this._hlLines.edit.push(i)
+            }
+          }
+        }
+      } catch (e) { /* ignore highlight errors */ }
+    },
     renderCurrentDiff() {
       if (this.selectedFile && (this.oldContent || this.newContent || this.currentDiff)) {
         this.renderDiff()
       }
     },
-    // 箭头重绘节流
-    scheduleRedrawArrows() {
-      if (this._arrowTimer) return
-      this._arrowTimer = setTimeout(() => {
-        this._arrowTimer = null
-        this.addConnectArrows()
-      }, 80)
-    },
-    // 在 MergeView 的 SVG 连接线上注入方向箭头
-    addConnectArrows() {
-      const container = this.$refs.diffContainer
-      if (!container) return
-      const svg = container.querySelector('.CodeMirror-merge-gap svg')
-      if (!svg) return
-
-      const svgNS = 'http://www.w3.org/2000/svg'
-      // 清除旧箭头
-      svg.querySelectorAll('.diff-arrow').forEach(el => el.remove())
-
-      // 注入 marker 定义（只需一次）
-      if (!svg.querySelector('#diff-arrow-marker')) {
-        const defs = svg.querySelector('defs') || svg.insertBefore(document.createElementNS(svgNS, 'defs'), svg.firstChild)
-        const marker = document.createElementNS(svgNS, 'marker')
-        marker.setAttribute('id', 'diff-arrow-marker')
-        marker.setAttribute('viewBox', '0 0 10 10')
-        marker.setAttribute('refX', '5')
-        marker.setAttribute('refY', '5')
-        marker.setAttribute('markerWidth', '6')
-        marker.setAttribute('markerHeight', '6')
-        marker.setAttribute('orient', 'auto-start-reverse')
-        const polygon = document.createElementNS(svgNS, 'polygon')
-        polygon.setAttribute('points', '0,0 10,5 0,10')
-        polygon.setAttribute('fill', '#0366d6')
-        marker.appendChild(polygon)
-        defs.appendChild(marker)
-      }
-
-      // 为每个连接路径添加箭头线
-      const paths = svg.querySelectorAll('path')
-      paths.forEach(path => {
-        const d = path.getAttribute('d')
-        if (!d) return
-
-        // 解析路径提取关键坐标点
-        // 路径格式：M -1 topRpx C... L (w+2) botLpx C... z
-        // 顶部连线中点和底部连线中点
-        const coords = []
-        const re = /[-+]?[\d.]+/g
-        let match
-        while ((match = re.exec(d)) !== null) {
-          coords.push(parseFloat(match[0]))
+    // updateDiffChunks 从 MergeView 的 chunks 数据中提取改动行号列表，用于跳转
+    // 提取后自动滚动到第一个改动点
+    updateDiffChunks() {
+      if (this.mergeView) {
+        try {
+          const leftDv = this.mergeView.left
+          if (leftDv && leftDv.chunks && leftDv.chunks.length > 0) {
+            this.diffChunks = leftDv.chunks.map(ch => ({
+              editLine: ch.editFrom,
+              origLine: ch.origFrom,
+            }))
+          } else {
+            this.diffChunks = []
+          }
+        } catch (e) {
+          this.diffChunks = []
         }
-        // coords: [x1, topR, cx1, cy1, cx2, cy2, x2, topL, x3, botL, cx3, cy3, cx4, cy4, x4, botR]
-        if (coords.length < 16) return
-
-        const w = coords[6] // 右侧 x (约 w+2)
-        const topRightY = coords[1]
-        const topLeftY = coords[7]
-        const botLeftY = coords[9]
-        const botRightY = coords[15]
-        const midX = w / 2
-        // 连接区域纵向中点
-        const topMidY = (topRightY + topLeftY) / 2
-        const botMidY = (botLeftY + botRightY) / 2
-        const centerY = (topMidY + botMidY) / 2
-
-        // 绘制箭头线：从右（old）到左（new）方向，在连接区域中点
-        const arrowLine = document.createElementNS(svgNS, 'line')
-        arrowLine.setAttribute('x1', String(w * 0.8))
-        arrowLine.setAttribute('y1', String(centerY))
-        arrowLine.setAttribute('x2', String(w * 0.2))
-        arrowLine.setAttribute('y2', String(centerY))
-        arrowLine.setAttribute('stroke', '#0366d6')
-        arrowLine.setAttribute('stroke-width', '2')
-        arrowLine.setAttribute('marker-end', 'url(#diff-arrow-marker)')
-        arrowLine.setAttribute('class', 'diff-arrow')
-        svg.appendChild(arrowLine)
-      })
+      } else {
+        this.diffChunks = []
+      }
+      this.currentChunkIndex = -1
+      // 自动定位到第一个改动点
+      if (this.diffChunks.length > 0) {
+        this.currentChunkIndex = 0
+        this.$nextTick(() => this.scrollToChunk(0))
+      }
     },
+    // jumpToPrevChange 跳转到上一处改动，如果已在最前面则切换上一个文件
+    jumpToPrevChange() {
+      if (this.hasPrevChange) {
+        this.currentChunkIndex--
+        this.scrollToChunk(this.currentChunkIndex)
+      } else if (this.hasPrevFile) {
+        this.goToPrevFile()
+      }
+    },
+    // jumpToNextChange 跳转到下一处改动，如果已在最后面则切换下一个文件
+    jumpToNextChange() {
+      if (this.hasNextChange) {
+        // 第一次点击或从上一个文件切过来时，从 -1 跳到 0
+        if (this.currentChunkIndex < 0) {
+          this.currentChunkIndex = 0
+        } else {
+          this.currentChunkIndex++
+        }
+        this.scrollToChunk(this.currentChunkIndex)
+      } else if (this.hasNextFile) {
+        this.goToNextFile()
+      }
+    },
+    // scrollToChunk 滚动 CodeMirror 到指定 diff 块的行号
+    scrollToChunk(index) {
+      const chunks = this.diffChunks
+      if (!chunks || index < 0 || index >= chunks.length) return
+      const chunk = chunks[index]
+      if (this.mergeView) {
+        try {
+          const editor = this.mergeView.editor()
+          const orig = this.mergeView.leftOriginal()
+          if (editor) editor.scrollIntoView({ line: chunk.editLine, ch: 0 }, 80)
+          if (orig) orig.scrollIntoView({ line: chunk.origLine, ch: 0 }, 80)
+        } catch (e) { /* ignore */ }
+      }
+      if (this._inlineEditor) {
+        try {
+          this._inlineEditor.scrollIntoView({ line: chunk.editLine, ch: 0 }, 80)
+        } catch (e) { /* ignore */ }
+      }
+    },
+    // goToNextFile 切换到文件列表中的下一个文件
+    goToNextFile() {
+      const idx = this.selectedFileIndex
+      if (idx < 0 || idx >= this.filteredFiles.length - 1) return
+      const nextFile = this.filteredFiles[idx + 1]
+      if (nextFile) this.selectFile(nextFile)
+    },
+    // goToPrevFile 切换到文件列表中的上一个文件
+    goToPrevFile() {
+      const idx = this.selectedFileIndex
+      if (idx <= 0) return
+      const prevFile = this.filteredFiles[idx - 1]
+      if (prevFile) this.selectFile(prevFile)
+    },
+
   },
 }
 </script>
@@ -1038,6 +1249,16 @@ export default {
 .file-changes-stat--untracked {
   background: #f3f4f6;
   color: #656d76;
+}
+
+.file-changes-stat--additions {
+  background: #dafbe1;
+  color: #1a7f37;
+}
+
+.file-changes-stat--deletions {
+  background: #ffebe9;
+  color: #cf222e;
 }
 
 .file-changes-detail__body {
@@ -1185,12 +1406,38 @@ export default {
   border-bottom: 1px solid #e8ecf1;
   background: #f6f8fa;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.file-changes-detail__nav-btns {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: flex;
+  gap: 4px;
 }
 
 .file-changes-detail__diff-file {
   font-size: 13px;
   font-family: monospace;
   color: #24292e;
+}
+
+.file-changes-detail__diff-stats {
+  display: inline-flex;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: monospace;
+}
+
+.file-changes-detail__diff-stat--add {
+  color: #1a7f37;
+}
+
+.file-changes-detail__diff-stat--del {
+  color: #cf222e;
 }
 
 .file-changes-detail__diff-badge {
@@ -1370,6 +1617,16 @@ export default {
   font-size: 14px;
 }
 
+.file-changes-detail__diff-loading {
+  flex-direction: column;
+  gap: 10px;
+}
+
+.file-changes-detail__diff-loading i {
+  font-size: 28px;
+  color: #409eff;
+}
+
 .file-changes-detail__diff-error {
   flex: 1;
   display: flex;
@@ -1401,15 +1658,23 @@ export default {
   height: 100%;
 }
 
-/* 改动行背景色 */
-.file-changes-detail__diff-content :deep(.CodeMirror-merge-r-deleted),
-.file-changes-detail__diff-content :deep(.CodeMirror-merge-l-deleted) {
+/* 行级改动背景 — 左面板（原始版本，标红删除行） */
+.file-changes-detail__diff-content :deep(.diff-chunk-deleted) {
   background-color: #fecdd3;
 }
 
-.file-changes-detail__diff-content :deep(.CodeMirror-merge-r-inserted),
-.file-changes-detail__diff-content :deep(.CodeMirror-merge-l-inserted) {
+/* 行级改动背景 — 右面板（改后版本，标绿新增行） */
+.file-changes-detail__diff-content :deep(.diff-chunk-inserted) {
   background-color: #bbf7d0;
+}
+
+/* 移除 MergeView markText 产生的绿色波浪下划线 */
+.file-changes-detail__diff-content :deep(.CodeMirror-merge-l-inserted),
+.file-changes-detail__diff-content :deep(.CodeMirror-merge-l-deleted),
+.file-changes-detail__diff-content :deep(.CodeMirror-merge-r-inserted),
+.file-changes-detail__diff-content :deep(.CodeMirror-merge-r-deleted) {
+  text-decoration: none !important;
+  background-image: none !important;
 }
 
 /* 中间连接线区域 */

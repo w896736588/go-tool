@@ -90,3 +90,9 @@ type HomeTaskZcodeSessionIdAppendRequest struct {
 type HomeTaskUnusedLocalDirsRequest struct {
 	ExcludeTaskID int `json:"exclude_task_id"`
 }
+
+// HomeTaskPageDataLoadRequest SSE 推送页面附加数据请求。
+type HomeTaskPageDataLoadRequest struct {
+	ClientID string `json:"client_id"`
+	TaskIDs  []int  `json:"task_ids"`
+}

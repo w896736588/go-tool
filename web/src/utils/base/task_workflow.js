@@ -168,6 +168,14 @@ function TaskWorkflowFileChangesFileDiff(localDir, parentBranch, filePath, callB
   }, callBack)
 }
 
+// TaskWorkflowOpenInEditor 在指定 IDE 中打开工作目录。
+function TaskWorkflowOpenInEditor(localDir, editorType, callBack) {
+  base.BasePost('/api/task/workflow/open-in-editor', {
+    local_dir: localDir,
+    editor_type: editorType,
+  }, callBack)
+}
+
 export default {
   TaskWorkflowBatchNodeStatus,
   TaskWorkflowCreateOrGet,
@@ -192,4 +200,5 @@ export default {
   TaskWorkflowFileChangesSummary,
   TaskWorkflowFileChangesDetail,
   TaskWorkflowFileChangesFileDiff,
+  TaskWorkflowOpenInEditor,
 }
