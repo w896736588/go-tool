@@ -4366,13 +4366,15 @@ func TaskWorkflowFileChangesFileDiff(c *gin.Context) {
 		gsgin.GinResponseError(c, `local_dir 不能为空`, nil)
 		return
 	}
-	if req.ParentBranch == `` {
-		gsgin.GinResponseError(c, `parent_branch 不能为空`, nil)
-		return
-	}
 	if req.FilePath == `` {
 		gsgin.GinResponseError(c, `file_path 不能为空`, nil)
 		return
+	}
+
+	// parentBranch 为空时使用工作区模式（对比 HEAD）
+	branchArg := req.ParentBranch
+	if branchArg == `` {
+		branchArg = `_workspace_`
 	}
 
 	workspaceRoot := os.Getenv(`WORKSPACE`)
@@ -4381,7 +4383,7 @@ func TaskWorkflowFileChangesFileDiff(c *gin.Context) {
 	}
 	scriptPath := filepath.Join(workspaceRoot, `skills`, `dtool-common`, `scripts`, `show_file_diff.py`)
 
-	cmd := exec.Command(getPythonCommand(), scriptPath, req.ParentBranch, req.FilePath)
+	cmd := exec.Command(getPythonCommand(), scriptPath, branchArg, req.FilePath)
 	cmd.Dir = req.LocalDir
 
 	var stdout, stderr strings.Builder
@@ -4398,20 +4400,44 @@ func TaskWorkflowFileChangesFileDiff(c *gin.Context) {
 		return
 	}
 
-	// 解析 Python 脚本输出的 JSON（包含 diff、old_content、new_content）
+	// 解析 Python 脚本输出的 JSON（可包含 diff/old_content/new_content 或 is_binary/is_image）
 	type fileDiffResult struct {
 		Diff       string `json:"diff"`
 		OldContent string `json:"old_content"`
 		NewContent string `json:"new_content"`
+		IsBinary   bool   `json:"is_binary"`
+		FileType   string `json:"file_type"`
+		OldSize    int64  `json:"old_size"`
+		NewSize    int64  `json:"new_size"`
+		IsImage    bool   `json:"is_image"`
+		ImageType  string `json:"image_type"`
+		OldImage   string `json:"old_image"`
+		NewImage   string `json:"new_image"`
 	}
 	var diffResult fileDiffResult
 	if jsonErr := json.Unmarshal([]byte(stdout.String()), &diffResult); jsonErr == nil {
-		gsgin.GinResponseSuccess(c, ``, map[string]any{
-			`diff`:        diffResult.Diff,
-			`old_content`: diffResult.OldContent,
-			`new_content`: diffResult.NewContent,
-			`file_path`:   req.FilePath,
-		})
+		respData := map[string]any{
+			`file_path`: req.FilePath,
+		}
+		// 二进制文件响应
+		if diffResult.IsBinary {
+			respData[`is_binary`] = true
+			respData[`file_type`] = diffResult.FileType
+			respData[`old_size`] = diffResult.OldSize
+			respData[`new_size`] = diffResult.NewSize
+		} else if diffResult.IsImage {
+			// 图片文件响应
+			respData[`is_image`] = true
+			respData[`image_type`] = diffResult.ImageType
+			respData[`old_image`] = diffResult.OldImage
+			respData[`new_image`] = diffResult.NewImage
+		} else {
+			// 文本文件响应
+			respData[`diff`] = diffResult.Diff
+			respData[`old_content`] = diffResult.OldContent
+			respData[`new_content`] = diffResult.NewContent
+		}
+		gsgin.GinResponseSuccess(c, ``, respData)
 		return
 	}
 

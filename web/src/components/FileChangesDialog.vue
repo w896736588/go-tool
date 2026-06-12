@@ -13,10 +13,17 @@
       <div class="file-changes-detail__toolbar">
         <div class="file-changes-detail__info">
           <span class="file-changes-detail__dir">{{ localDir || '-' }}</span>
-          <span class="file-changes-detail__branch">基分支: {{ parentBranch || '-' }}</span>
+          <span class="file-changes-detail__mode">
+            <el-radio-group v-model="changeMode" size="small" @change="onChangeMode">
+              <el-radio-button value="branch">对比代码</el-radio-button>
+              <el-radio-button value="workspace">工作区变更</el-radio-button>
+            </el-radio-group>
+          </span>
+          <span v-if="changeMode === 'branch'" class="file-changes-detail__branch">基分支: {{ parentBranch || '-' }}</span>
+          <span v-else class="file-changes-detail__branch">对比 HEAD</span>
           <span class="file-changes-detail__summary">
             <template v-if="summary">
-              <span class="file-changes-stat file-changes-stat--committed">{{ summary.committed || 0 }} C</span>
+              <span v-if="changeMode === 'branch'" class="file-changes-stat file-changes-stat--committed">{{ summary.committed || 0 }} C</span>
               <span class="file-changes-stat file-changes-stat--staged">{{ summary.staged || 0 }} S</span>
               <span class="file-changes-stat file-changes-stat--modified">{{ summary.modified || 0 }} M</span>
               <span class="file-changes-stat file-changes-stat--untracked">{{ summary.untracked || 0 }} U</span>
@@ -24,11 +31,28 @@
           </span>
         </div>
         <div class="file-changes-detail__actions">
-          <el-radio-group v-model="diffMode" size="small" @change="renderCurrentDiff">
+          <el-radio-group v-model="diffMode" size="small" @change="renderCurrentDiff" v-if="!isBinary && !isImage">
             <el-radio-button value="side-by-side">横向对比</el-radio-button>
             <el-radio-button value="line-by-line">纵向对比</el-radio-button>
           </el-radio-group>
         </div>
+      </div>
+      <!-- 文件类型过滤器 -->
+      <div class="file-changes-detail__filter-bar" v-if="fileTypeCategories.length > 0">
+        <span class="file-changes-detail__filter-label">文件类型:</span>
+        <template v-for="cat in fileTypeCategories" :key="cat.label">
+          <el-checkbox
+            v-for="ext in cat.extensions"
+            :key="ext"
+            :model-value="fileTypeFilter[ext] !== false"
+            :label="ext"
+            size="small"
+            @change="(val) => toggleFileType(ext, val)"
+          >
+            {{ ext }}
+          </el-checkbox>
+          <span v-if="cat !== fileTypeCategories[fileTypeCategories.length - 1]" class="file-changes-detail__filter-sep"></span>
+        </template>
       </div>
       <!-- 主体：左侧文件树 + 右侧 diff -->
       <div class="file-changes-detail__body">
@@ -62,11 +86,67 @@
         <div class="file-changes-detail__diff-panel">
           <template v-if="diffLoading">
             <div class="file-changes-detail__diff-placeholder">
-              <span>加载 diff 中...</span>
+              <span>加载中...</span>
             </div>
           </template>
           <template v-else-if="diffError">
             <div class="file-changes-detail__diff-error">{{ diffError }}</div>
+          </template>
+          <!-- 二进制文件展示 -->
+          <template v-else-if="isBinary && selectedFile">
+            <div class="file-changes-detail__diff-header">
+              <span class="file-changes-detail__diff-file">{{ selectedFile }}</span>
+              <span class="file-changes-detail__diff-badge file-changes-detail__diff-badge--binary">二进制文件</span>
+            </div>
+            <div class="file-changes-detail__binary-info">
+              <div class="file-changes-detail__binary-icon">
+                <span class="file-changes-detail__binary-ext">{{ binaryInfo.file_type || '' }}</span>
+              </div>
+              <div class="file-changes-detail__binary-meta">
+                <div class="file-changes-detail__binary-row">
+                  <span class="file-changes-detail__binary-label">文件类型</span>
+                  <span class="file-changes-detail__binary-value">{{ binaryInfo.file_type || '-' }}</span>
+                </div>
+                <div class="file-changes-detail__binary-row">
+                  <span class="file-changes-detail__binary-label">旧版本大小</span>
+                  <span class="file-changes-detail__binary-value file-changes-detail__binary-value--old">{{ formatFileSize(binaryInfo.old_size) }}</span>
+                </div>
+                <div class="file-changes-detail__binary-row">
+                  <span class="file-changes-detail__binary-label">新版本大小</span>
+                  <span :class="sizeChangeClass">{{ formatFileSize(binaryInfo.new_size) }}</span>
+                  <span v-if="sizeDiffText" :class="sizeChangeClass">({{ sizeDiffText }})</span>
+                </div>
+              </div>
+              <div class="file-changes-detail__binary-hint">
+                二进制文件不支持内容比对，仅显示文件大小变化
+              </div>
+            </div>
+          </template>
+          <!-- 图片文件展示 -->
+          <template v-else-if="isImage && selectedFile">
+            <div class="file-changes-detail__diff-header">
+              <span class="file-changes-detail__diff-file">{{ selectedFile }}</span>
+              <span class="file-changes-detail__diff-badge file-changes-detail__diff-badge--image">图片</span>
+            </div>
+            <div class="file-changes-detail__image-compare">
+              <div class="file-changes-detail__image-pane">
+                <div class="file-changes-detail__image-title">旧版本</div>
+                <div class="file-changes-detail__image-box">
+                  <img v-if="imageInfo.old_image" :src="'data:image/' + imageInfo.image_type + ';base64,' + imageInfo.old_image" class="file-changes-detail__image-img" />
+                  <span v-else class="file-changes-detail__image-empty">(文件不存在或已删除)</span>
+                </div>
+              </div>
+              <div class="file-changes-detail__image-divider">
+                <span>→</span>
+              </div>
+              <div class="file-changes-detail__image-pane">
+                <div class="file-changes-detail__image-title">新版本</div>
+                <div class="file-changes-detail__image-box">
+                  <img v-if="imageInfo.new_image" :src="'data:image/' + imageInfo.image_type + ';base64,' + imageInfo.new_image" class="file-changes-detail__image-img" />
+                  <span v-else class="file-changes-detail__image-empty">(文件不存在或已删除)</span>
+                </div>
+              </div>
+            </div>
           </template>
           <template v-else-if="selectedFile">
             <div class="file-changes-detail__diff-header">
@@ -216,13 +296,72 @@ export default {
       diffError: '',
       diffLoading: false,
       diffMode: 'side-by-side',
+      changeMode: 'workspace', // 'workspace' 工作区变更 | 'branch' 对比代码
       expandedDirs: {},
       mergeView: null,
+      // 二进制/图片文件相关
+      isBinary: false,
+      isImage: false,
+      binaryInfo: { file_type: '', old_size: 0, new_size: 0 },
+      imageInfo: { image_type: '', old_image: '', new_image: '' },
+      // 文件类型过滤器
+      fileTypeFilter: {},
     }
   },
   computed: {
+    // 当前模式下的有效基分支（工作区模式下为空）
+    effectiveParentBranch() {
+      return this.changeMode === 'branch' ? this.parentBranch : ''
+    },
     treeNodes() {
-      return this.buildTree(this.files)
+      return this.buildTree(this.filteredFiles)
+    },
+    // 所有唯一文件类型（按类别分组）
+    fileTypeCategories() {
+      const extSet = new Set()
+      for (const f of this.files) {
+        const ext = this.getFileExt(f.path || '')
+        if (ext) extSet.add(ext)
+      }
+      const catMap = {}
+      for (const ext of extSet) {
+        const cat = this.fileTypeCategory(ext)
+        if (!catMap[cat]) catMap[cat] = []
+        catMap[cat].push(ext)
+      }
+      // 排序：优先 代码、样式、图片、二进制、其他
+      const order = ['代码', '样式', '配置', '脚本', '文档', '图片', '二进制', 'SQL', '其他']
+      const result = []
+      for (const cat of order) {
+        if (catMap[cat] && catMap[cat].length > 0) {
+          result.push({ label: cat, extensions: catMap[cat].sort() })
+        }
+      }
+      return result
+    },
+    // 按文件类型过滤后的文件列表
+    filteredFiles() {
+      if (!this.files || this.files.length === 0) return []
+      const activeTypes = Object.keys(this.fileTypeFilter).filter(k => this.fileTypeFilter[k] !== false)
+      // 如果还没有初始化filter或者全部选中，返回全部
+      if (activeTypes.length === 0 || Object.keys(this.fileTypeFilter).length === 0) return this.files
+      return this.files.filter(f => {
+        const ext = this.getFileExt(f.path || '')
+        return ext && this.fileTypeFilter[ext] !== false
+      })
+    },
+    // 文件大小变化描述
+    sizeDiffText() {
+      const diff = this.binaryInfo.new_size - this.binaryInfo.old_size
+      if (diff === 0) return ''
+      const sign = diff > 0 ? '+' : ''
+      return sign + this.formatFileSize(Math.abs(diff))
+    },
+    sizeChangeClass() {
+      const diff = this.binaryInfo.new_size - this.binaryInfo.old_size
+      if (diff > 0) return 'file-changes-detail__binary-value file-changes-detail__binary-value--increased'
+      if (diff < 0) return 'file-changes-detail__binary-value file-changes-detail__binary-value--decreased'
+      return 'file-changes-detail__binary-value'
     },
     flatTreeItems() {
       const result = []
@@ -290,13 +429,90 @@ export default {
       this.newContent = ''
       this.diffError = ''
       this.diffLoading = false
+      this.changeMode = 'workspace'
       this.expandedDirs = {}
+      this.isBinary = false
+      this.isImage = false
+      this.binaryInfo = { file_type: '', old_size: 0, new_size: 0 }
+      this.imageInfo = { image_type: '', old_image: '', new_image: '' }
+      // 初始化文件类型过滤器（默认全选）
+      this.fileTypeFilter = {}
       this.loadFileList()
+    },
+    onChangeMode() {
+      // 切换模式时清空选中文件与 diff 视图，重新加载文件列表
+      this.selectedFile = ''
+      this.currentDiff = ''
+      this.oldContent = ''
+      this.newContent = ''
+      this.diffError = ''
+      this.isBinary = false
+      this.isImage = false
+      this.binaryInfo = { file_type: '', old_size: 0, new_size: 0 }
+      this.imageInfo = { image_type: '', old_image: '', new_image: '' }
+      this.destroyMergeView()
+      this.fileTypeFilter = {}
+      this.loadFileList()
+    },
+    // 在文件列表加载完成后初始化过滤器
+    initFileTypeFilter() {
+      const filter = {}
+      for (const f of this.files) {
+        const ext = this.getFileExt(f.path || '')
+        if (ext && filter[ext] === undefined) {
+          filter[ext] = true
+        }
+      }
+      this.fileTypeFilter = filter
+    },
+    toggleFileType(ext, val) {
+      this.fileTypeFilter = { ...this.fileTypeFilter, [ext]: val }
+    },
+    // 获取文件扩展名
+    getFileExt(filePath) {
+      if (!filePath) return ''
+      const name = filePath.split('/').pop() || filePath
+      const lower = name.toLowerCase()
+      // 复合扩展名
+      for (const compound of ['.tar.gz', '.tar.bz2', '.tar.xz']) {
+        if (lower.endsWith(compound)) return compound
+      }
+      const dotIdx = lower.lastIndexOf('.')
+      if (dotIdx < 0) return '(无扩展名)'
+      return lower.substring(dotIdx)
+    },
+    // 文件类型归类
+    fileTypeCategory(ext) {
+      const code = new Set(['.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx', '.vue', '.go', '.py', '.java', '.c', '.cpp', '.h', '.hpp', '.cs', '.rb', '.php', '.rs', '.swift', '.kt', '.scala', '.dart', '.lua', '.r', '.pl', '.groovy'])
+      const style = new Set(['.css', '.scss', '.less', '.sass', '.styl'])
+      const config = new Set(['.json', '.yml', '.yaml', '.toml', '.ini', '.cfg', '.conf', '.xml', '.env', '.properties'])
+      const script = new Set(['.sh', '.bash', '.zsh', '.bat', '.cmd', '.ps1', '.psm1'])
+      const doc = new Set(['.md', '.markdown', '.txt', '.rst', '.adoc'])
+      const image = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg', '.tiff', '.tif'])
+      const binary = new Set(['.exe', '.dll', '.so', '.dylib', '.bin', '.dat', '.zip', '.tar', '.gz', '.7z', '.rar', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.ttf', '.otf', '.woff', '.woff2', '.eot', '.mp3', '.mp4', '.avi', '.mov', '.mkv', '.webm', '.wav', '.flac', '.ogg', '.o', '.a', '.lib', '.class', '.jar', '.war', '.pyc', '.pyo', '.wasm', '.ico', '.cur', '.db', '.sqlite', '.sqlite3', '.node', '.lock', '.sum', '.whl', '.tgz', '.tar.gz', '.tar.bz2', '.tar.xz', '.bz2', '.xz', '.iso', '.dmg', '.pkg', '.deb', '.rpm', '.apk', '.msi'])
+      const sql = new Set(['.sql'])
+      if (code.has(ext)) return '代码'
+      if (style.has(ext)) return '样式'
+      if (config.has(ext)) return '配置'
+      if (script.has(ext)) return '脚本'
+      if (doc.has(ext)) return '文档'
+      if (image.has(ext)) return '图片'
+      if (binary.has(ext)) return '二进制'
+      if (sql.has(ext)) return 'SQL'
+      return '其他'
+    },
+    // 格式化文件大小
+    formatFileSize(bytes) {
+      if (bytes == null || isNaN(bytes)) return '-'
+      if (bytes < 1024) return bytes + ' B'
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+      if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(2) + ' MB'
+      return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
     },
     loadFileList() {
       if (!this.localDir) return
       this.loading = true
-      taskWorkflowApi.TaskWorkflowFileChangesDetail(this.localDir, this.parentBranch, (response) => {
+      taskWorkflowApi.TaskWorkflowFileChangesDetail(this.localDir, this.effectiveParentBranch, (response) => {
         this.loading = false
         if (response && response.ErrCode === 0 && response.Data) {
           if (response.Data.summary) {
@@ -304,6 +520,8 @@ export default {
           }
           if (Array.isArray(response.Data.files)) {
             this.files = response.Data.files
+            // 加载完文件列表后初始化过滤器
+            this.$nextTick(() => this.initFileTypeFilter())
           }
           if (response.Data.error) {
             this.diffError = response.Data.error
@@ -408,23 +626,48 @@ export default {
     selectFile(item) {
       this.selectedFile = item.path
       this.diffError = ''
+      this.isBinary = false
+      this.isImage = false
+      this.binaryInfo = { file_type: '', old_size: 0, new_size: 0 }
+      this.imageInfo = { image_type: '', old_image: '', new_image: '' }
+      this.currentDiff = ''
+      this.oldContent = ''
+      this.newContent = ''
       this.loadFileDiff(item)
     },
     loadFileDiff(file) {
-      if (!this.parentBranch) {
-        this.diffError = '未指定基分支，无法获取 diff。'
-        return
-      }
       this.diffLoading = true
       this.currentDiff = ''
       this.oldContent = ''
       this.newContent = ''
+      this.isBinary = false
+      this.isImage = false
       this.destroyMergeView()
-      taskWorkflowApi.TaskWorkflowFileChangesFileDiff(this.localDir, this.parentBranch, file.path, (response) => {
+      taskWorkflowApi.TaskWorkflowFileChangesFileDiff(this.localDir, this.effectiveParentBranch, file.path, (response) => {
         this.diffLoading = false
         if (response && response.ErrCode === 0 && response.Data) {
           const data = response.Data
-          // 优先使用 old_content/new_content（CodeMirror MergeView）
+          // 二进制文件
+          if (data.is_binary) {
+            this.isBinary = true
+            this.binaryInfo = {
+              file_type: data.file_type || '',
+              old_size: data.old_size || 0,
+              new_size: data.new_size || 0,
+            }
+            return
+          }
+          // 图片文件
+          if (data.is_image) {
+            this.isImage = true
+            this.imageInfo = {
+              image_type: data.image_type || 'png',
+              old_image: data.old_image || '',
+              new_image: data.new_image || '',
+            }
+            return
+          }
+          // 文本文件：优先使用 old_content/new_content（CodeMirror MergeView）
           if (data.old_content !== undefined && data.new_content !== undefined) {
             this.oldContent = data.old_content || ''
             this.newContent = data.new_content || ''
@@ -453,6 +696,8 @@ export default {
       this.currentDiff = ''
       this.oldContent = ''
       this.newContent = ''
+      this.isBinary = false
+      this.isImage = false
       this.destroyMergeView()
     },
     destroyMergeView() {
@@ -713,6 +958,34 @@ export default {
   gap: 12px;
 }
 
+/* ===== 文件类型过滤栏 ===== */
+.file-changes-detail__filter-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  padding: 6px 0 8px;
+  border-bottom: 1px solid #e8ecf1;
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+
+.file-changes-detail__filter-label {
+  font-size: 12px;
+  color: #606266;
+  font-weight: 600;
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+
+.file-changes-detail__filter-sep {
+  width: 1px;
+  height: 14px;
+  background: #dcdfe6;
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
 .file-changes-detail__info {
   display: flex;
   align-items: center;
@@ -918,6 +1191,168 @@ export default {
   font-size: 13px;
   font-family: monospace;
   color: #24292e;
+}
+
+.file-changes-detail__diff-badge {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  margin-left: 8px;
+  font-weight: 600;
+}
+
+.file-changes-detail__diff-badge--binary {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.file-changes-detail__diff-badge--image {
+  background: #d1ecf1;
+  color: #0c5460;
+}
+
+/* ===== 二进制文件信息卡片 ===== */
+.file-changes-detail__binary-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 30px;
+  overflow-y: auto;
+}
+
+.file-changes-detail__binary-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.file-changes-detail__binary-ext {
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  font-family: monospace;
+  text-transform: uppercase;
+}
+
+.file-changes-detail__binary-meta {
+  background: #f6f8fa;
+  border: 1px solid #e8ecf1;
+  border-radius: 8px;
+  padding: 16px 24px;
+  min-width: 300px;
+  margin-bottom: 16px;
+}
+
+.file-changes-detail__binary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  font-size: 13px;
+}
+
+.file-changes-detail__binary-row + .file-changes-detail__binary-row {
+  border-top: 1px solid #e8ecf1;
+}
+
+.file-changes-detail__binary-label {
+  color: #606266;
+}
+
+.file-changes-detail__binary-value {
+  font-weight: 600;
+  color: #303133;
+  font-family: monospace;
+}
+
+.file-changes-detail__binary-value--old {
+  color: #909399;
+}
+
+.file-changes-detail__binary-value--increased {
+  color: #e53935;
+}
+
+.file-changes-detail__binary-value--decreased {
+  color: #1a7f37;
+}
+
+.file-changes-detail__binary-hint {
+  font-size: 12px;
+  color: #909399;
+  text-align: center;
+}
+
+/* ===== 图片对比展示 ===== */
+.file-changes-detail__image-compare {
+  flex: 1;
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  padding: 12px;
+  overflow: auto;
+  min-height: 0;
+}
+
+.file-changes-detail__image-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid #e8ecf1;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fafbfc;
+}
+
+.file-changes-detail__image-title {
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #606266;
+  background: #f6f8fa;
+  border-bottom: 1px solid #e8ecf1;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.file-changes-detail__image-box {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  overflow: auto;
+  min-height: 100px;
+}
+
+.file-changes-detail__image-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+.file-changes-detail__image-empty {
+  color: #c0c4cc;
+  font-size: 13px;
+}
+
+.file-changes-detail__image-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 40px;
+  font-size: 20px;
+  color: #909399;
 }
 
 .file-changes-detail__diff-content {
