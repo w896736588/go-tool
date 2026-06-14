@@ -1683,7 +1683,7 @@ export default {
     connectBusinessSse() {
       sseBusiness.fetchAvailableSsePort().then(port => {
         if (!port) return
-        const clientId = sseDistribute.GetSseClientId() || ('biz_ac_' + Date.now())
+        const clientId = baseUtils.GenerateSseClientId('agent_cli')
         sseBusiness.ConnectBusinessSse('agent_cli', port, clientId)
         this.registerChatOutputSse()
       })

@@ -113,14 +113,14 @@
         <div class="detail-wrapper">
           <div class="detail-card">
             <el-form ref="form" v-loading="load.callRefresh">
-              <redisHashList ref="redisHashList" :callMoreList="callMoreList" :callRefresh="callRefresh" :star="setCacheHistory"></redisHashList>
+              <redisHashList ref="redisHashList"></redisHashList>
             </el-form>
           </div>
         </div>
       </div>
     </div>
     <!--  收藏列表-->
-    <redisStarRecord ref="redisStarRecord" :callStarListSearch="callStarListSearch"></redisStarRecord>
+    <redisStarRecord ref="redisStarRecord"></redisStarRecord>
 
     <SettingsDialog
       v-model="redisSettingsVisible"
