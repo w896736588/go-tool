@@ -222,7 +222,7 @@ export default {
       return map[this.status] || this.status || '加载中'
     },
     statusTagType() {
-      const map = { running: '', completed: 'success', interrupted: 'warning', failed: 'danger' }
+      const map = { running: 'info', completed: 'success', interrupted: 'warning', failed: 'danger' }
       return map[this.status] || 'info'
     },
   },
@@ -278,8 +278,9 @@ export default {
     connectBusinessSse(onConnected) {
       sseBusiness.fetchAvailableSsePort().then(port => {
         if (!port) return
-        const clientId = sseDistribute.GetSseClientId() || ('biz_cr_' + Date.now())
         const bizType = this.fromType === 'agent_cli' ? 'agent_cli' : 'task_workflow'
+        const ssePrefix = bizType === 'agent_cli' ? 'agent_cli_chat' : 'work_flow_chat'
+        const clientId = baseUtils.GenerateSseClientId(ssePrefix)
         sseBusiness.ConnectBusinessSse(bizType, port, clientId)
         // ConnectBusinessSse 会重置 receiveHandlers，必须在之后注册回调
         if (typeof onConnected === 'function') onConnected()

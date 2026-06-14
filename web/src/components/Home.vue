@@ -485,9 +485,13 @@ export default {
       workflowUnreadVisible: false,
       workflowUnreadTotal: 0,
       workflowUnreadMap: {},
+      _workflowUnreadSseReceived: false,
+      _workflowUnreadFallbackTimer: null,
       mainDbStorageAlertVisible: false,
       agentCliUnreadVisible: false,
       agentCliUnreadTotal: 0,
+      _agentCliUnreadSseReceived: false,
+      _agentCliUnreadFallbackTimer: null,
       sshConnections: [],
       sshConnectionsDialogVisible: false,
       sshConnectionsLoading: false,
@@ -568,9 +572,23 @@ export default {
     })
     this.ensureAsyncTaskNotificationPermission()
     this.menuName = this.$route.path || '/Dashboard'
-    window.addEventListener('resize', function () {});
-    this.loadWorkflowUnreadSummary()
-    this.loadAgentCliUnreadSummary()
+    this._resizeHandler = function () {}
+    window.addEventListener('resize', this._resizeHandler)
+    // workflow_unread_snapshot 在 SSE 连接建立时（BuildSseOpenFunc）立刻推送，
+    // 不再通过 loadWorkflowUnreadSummary 重复调用 HomeTaskList。
+    // 如果 SSE 未在 3 秒内推送快照，则回退到 API 加载。
+    this._workflowUnreadFallbackTimer = setTimeout(() => {
+      if (!this._workflowUnreadSseReceived) {
+        this.loadWorkflowUnreadSummaryFallback()
+      }
+    }, 3000)
+    // agent_cli_unread_home 由 SSE 推送（当前仅在聊天事件时推送，见下方后端优化），
+    // 此处不再立即调用 loadAgentCliUnreadSummary 避免阻塞页面加载。
+    this._agentCliUnreadFallbackTimer = setTimeout(() => {
+      if (!this._agentCliUnreadSseReceived) {
+        this.loadAgentCliUnreadSummary()
+      }
+    }, 3000)
     // 监听全局登录失效事件
     if (this.$eventBus) {
       this.$eventBus.on('safe_auth_required', this.showSafeLogin)
@@ -972,7 +990,7 @@ export default {
       if (normalizedStatus === ASYNC_TASK_STATUS_CONFIRMED) {
         return 'success'
       }
-      return ''
+      return 'info'
     },
     // hasRunningAsyncTask 判断当前是否存在执行中的异步任务，用于左下角入口动画提示。 // hasRunningAsyncTask checks whether any async task is currently running so the footer entry can animate.
     hasRunningAsyncTask() {
@@ -1146,10 +1164,20 @@ export default {
     },
     handleAgentCliUnreadUpdate(data) {
       if (!data || data.type !== 'agent_cli_unread_home') return
+      this._agentCliUnreadSseReceived = true
+      if (this._agentCliUnreadFallbackTimer) {
+        clearTimeout(this._agentCliUnreadFallbackTimer)
+        this._agentCliUnreadFallbackTimer = null
+      }
       this.setAgentCliUnreadTotal(data.agent_cli_unread)
     },
     handleWorkflowUnreadUpdate(data) {
       if (!data || data.type !== 'workflow_unread_snapshot') return
+      this._workflowUnreadSseReceived = true
+      if (this._workflowUnreadFallbackTimer) {
+        clearTimeout(this._workflowUnreadFallbackTimer)
+        this._workflowUnreadFallbackTimer = null
+      }
       this.setWorkflowUnreadSummary(data.workflow_task_badges || {}, data.workflow_menu_badge || {})
     },
     setAgentCliUnreadTotal(total) {
@@ -1187,7 +1215,9 @@ export default {
       }
       this.setWorkflowUnreadSummary(nextMap)
     },
-    loadWorkflowUnreadSummary() {
+    // loadWorkflowUnreadSummaryFallback SSE 快照未在 3 秒内送达时的回退方案
+    loadWorkflowUnreadSummaryFallback() {
+      if (this._workflowUnreadSseReceived) return
       const workflowTaskIdSet = new Set()
       let pending = 2
       const finalize = () => {
@@ -1275,10 +1305,28 @@ export default {
       clearInterval(this.sshConnectionTimer)
       this.sshConnectionTimer = null
     }
+    if (this._workflowUnreadFallbackTimer) {
+      clearTimeout(this._workflowUnreadFallbackTimer)
+      this._workflowUnreadFallbackTimer = null
+    }
+    if (this._agentCliUnreadFallbackTimer) {
+      clearTimeout(this._agentCliUnreadFallbackTimer)
+      this._agentCliUnreadFallbackTimer = null
+    }
     if (this.$eventBus) {
       this.$eventBus.off('safe_auth_required', this.showSafeLogin)
       this.$eventBus.off('main_db_storage_alert_changed', this.handleMainDbStorageAlertEvent)
     }
+    // 移除 resize 监听器
+    if (this._resizeHandler) {
+      window.removeEventListener('resize', this._resizeHandler)
+      this._resizeHandler = null
+    }
+    // 注销所有 SSE 接收回调
+    sseDistribute.UnRegisterReceive('shell_connections')
+    sseDistribute.UnRegisterReceive('async_tasks')
+    sseDistribute.UnRegisterReceive('safe_auth_required')
+    sseDistribute.UnRegisterReceive('git_pending_status')
     sseDistribute.UnRegisterReceive('agent_cli_unread_home')
     sseDistribute.UnRegisterReceive('workflow_unread_home_menu')
   },

@@ -160,7 +160,7 @@ export default {
         actionPrefix : '',
       },
       result : '',
-      socketKey : 'ai_code',
+      socketKey : base.GenerateSseClientId('ai_code'),
       loading : {
         run : false,
       },

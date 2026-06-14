@@ -125,8 +125,8 @@
 
   <!-- String类型编辑区 -->
   <el-form v-if="state.mainForm.cacheType === 'string'" class="string-editor">
-    <el-input v-if="state.editForm.strShowType === 1" v-model="state.editForm.value" rows="20" type="textarea" :style="{ height: state.scrollHeight + 'px' }" class="string-textarea"></el-input>
-    <el-input v-if="state.editForm.strShowType === 2" v-model="state.editForm.searchResult" readonly rows="20" type="textarea" :style="{ height: state.scrollHeight + 'px' }" class="string-textarea readonly"></el-input>
+    <el-input v-if="state.editForm.strShowType === 1" v-model="state.editForm.value" :rows="20" type="textarea" :style="{ height: state.scrollHeight + 'px' }" class="string-textarea"></el-input>
+    <el-input v-if="state.editForm.strShowType === 2" v-model="state.editForm.searchResult" readonly :rows="20" type="textarea" :style="{ height: state.scrollHeight + 'px' }" class="string-textarea readonly"></el-input>
     <div class="json-viewer" v-if="state.editForm.strShowType === 3">
       <pl-button class="copy-btn" link @click="CopyJson(state.editForm.searchResult)">
         <el-icon><DocumentCopy /></el-icon> 复制
@@ -153,8 +153,8 @@
         <el-input v-model="state.editForm.field" autocomplete="off" readonly></el-input>
       </el-form-item>
       <el-form-item style="margin-top: 10px">
-        <el-input v-if="state.editForm.strShowType === 1" v-model="state.editForm.value" rows="20" type="textarea"></el-input>
-        <el-input v-if="state.editForm.strShowType === 2" v-model="state.editForm.searchResult" readonly rows="20" type="textarea"></el-input>
+        <el-input v-if="state.editForm.strShowType === 1" v-model="state.editForm.value" :rows="20" type="textarea"></el-input>
+        <el-input v-if="state.editForm.strShowType === 2" v-model="state.editForm.searchResult" readonly :rows="20" type="textarea"></el-input>
         <div class="json-viewer" v-if="state.editForm.strShowType === 3">
           <pl-button class="copy-btn" link @click="CopyJson(state.editForm.searchResult)">
             <el-icon><DocumentCopy /></el-icon> 复制

@@ -2315,7 +2315,7 @@ export default {
     connectBusinessSse() {
       sseBusiness.fetchAvailableSsePort().then(port => {
         if (!port) return
-        const clientId = sseDistribute.GetSseClientId() || ('biz_tw_' + Date.now())
+        const clientId = baseUtils.GenerateSseClientId('work_flow')
         sseBusiness.ConnectBusinessSse('task_workflow', port, clientId)
         this.registerChatOutputSse()
       })
@@ -3218,7 +3218,7 @@ export default {
       if (taskStatus === TASK_STATUS_ABANDONED) {
         return 'danger'
       }
-      return ''
+      return 'info'
     },
     selectNode(key) {
       this.activeNode = key
