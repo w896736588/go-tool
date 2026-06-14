@@ -201,8 +201,8 @@ export default {
       this.loading = true
       workflowTemplateApi.WorkflowTemplateList((response) => {
         this.loading = false
-        if (response && response.code === 0 && response.data && response.data.list) {
-          this.templates = response.data.list
+        if (response && response.ErrCode === 0 && response.Data && response.Data.list) {
+          this.templates = response.Data.list
           // 设置步骤的 _key 用于展开/折叠跟踪
           this.templates.forEach(t => {
             if (t.steps) {
@@ -258,8 +258,8 @@ export default {
         description: this.editTemplateDesc.trim(),
       }, (response) => {
         this.savingTemplate = false
-        if (response && response.code === 0) {
-          const saved = response.data.template
+        if (response && response.ErrCode === 0) {
+          const saved = response.Data.template
           if (saved && saved.steps) {
             saved.steps.forEach(s => { s._key = 'step_' + s.id })
           }
@@ -283,7 +283,7 @@ export default {
           ElMessage.success('模板已保存')
           this.$emit('templates-loaded', this.templates)
         } else {
-          ElMessage.error(response.msg || '保存失败')
+          ElMessage.error(response.ErrMsg || '保存失败')
         }
       })
     },
@@ -300,7 +300,7 @@ export default {
 
     deleteTemplate(tpl) {
       workflowTemplateApi.WorkflowTemplateDelete(tpl.id, (response) => {
-        if (response && response.code === 0) {
+        if (response && response.ErrCode === 0) {
           this.templates = this.templates.filter(t => t.id !== tpl.id)
           if (this.selectedTemplateId === tpl.id) {
             this.selectedTemplateId = 0
@@ -310,7 +310,7 @@ export default {
           ElMessage.success('模板已删除')
           this.$emit('templates-loaded', this.templates)
         } else {
-          ElMessage.error(response.msg || '删除失败')
+          ElMessage.error(response.ErrMsg || '删除失败')
         }
       })
     },
@@ -350,8 +350,8 @@ export default {
         prompt_content: step.prompt_content || '',
         sort_order: step.sort_order || 0,
       }, (response) => {
-        if (response && response.code === 0 && response.data && response.data.step) {
-          const saved = response.data.step
+        if (response && response.ErrCode === 0 && response.Data && response.Data.step) {
+          const saved = response.Data.step
           saved._key = 'step_' + saved.id
           Object.assign(step, saved)
         }
@@ -367,13 +367,13 @@ export default {
         prompt_content: step.prompt_content || '',
         sort_order: step.sort_order || 0,
       }, (response) => {
-        if (response && response.code === 0 && response.data && response.data.step) {
-          const saved = response.data.step
+        if (response && response.ErrCode === 0 && response.Data && response.Data.step) {
+          const saved = response.Data.step
           saved._key = 'step_' + saved.id
           Object.assign(step, saved)
           ElMessage.success('提示词已保存')
         } else {
-          ElMessage.error(response.msg || '保存失败')
+          ElMessage.error(response.ErrMsg || '保存失败')
         }
       })
     },
@@ -395,7 +395,7 @@ export default {
 
     deleteStep(step) {
       workflowTemplateApi.WorkflowTemplateStepDelete(step.id, (response) => {
-        if (response && response.code === 0) {
+        if (response && response.ErrCode === 0) {
           this.editingSteps = this.editingSteps.filter(s => s.id !== step.id)
           if (this.expandedStepId === step._key) {
             this.expandedStepId = ''
@@ -404,7 +404,7 @@ export default {
           this.saveStepSort()
           ElMessage.success('步骤已删除')
         } else {
-          ElMessage.error(response.msg || '删除失败')
+          ElMessage.error(response.ErrMsg || '删除失败')
         }
       })
     },
