@@ -875,28 +875,21 @@ export default {
   },
   mounted() {
     this.ensureWorkflowUnreadSse()
-    this.loadHomeTaskGitRepoList()
-    this.loadHomeTaskApiCollections()
-    this.loadHomeTaskDockerList()
-    this.loadHomeTaskMysqlList()
+    this.ensureHomeTaskPageDataSse()
+    // 只加载主列表，附加数据通过 SSE 推送
     this.loadHomeTaskList(HOME_TASK_ARCHIVED_NO)
     this.loadHomeTaskList(HOME_TASK_ARCHIVED_YES)
-    this.loadHomeTaskSmartLinkList()
-    this.loadHomeTaskMemoryFolderList()
   },
   activated() {
     this.ensureWorkflowUnreadSse()
+    this.ensureHomeTaskPageDataSse()
+    // 只加载主列表，附加数据通过 SSE 推送
     this.loadHomeTaskList(HOME_TASK_ARCHIVED_NO)
     this.loadHomeTaskList(HOME_TASK_ARCHIVED_YES)
-    this.loadHomeTaskGitRepoList()
-    this.loadHomeTaskApiCollections()
-    this.loadHomeTaskDockerList()
-    this.loadHomeTaskMysqlList()
-    this.loadHomeTaskSmartLinkList()
-    this.loadHomeTaskMemoryFolderList()
   },
   beforeUnmount() {
     this.unregisterWorkflowUnreadSse()
+    this.unregisterHomeTaskPageDataSse()
   },
   methods: {
     ensureWorkflowUnreadSse() {
@@ -918,6 +911,187 @@ export default {
         return
       }
       this.homeTaskWorkflowUnreadMap = { ...(data.workflow_task_badges || {}) }
+    },
+    // ========== HomeTask 页面附加数据 SSE ==========
+    ensureHomeTaskPageDataSse() {
+      if (this._homeTaskPageDataSsePromise) return this._homeTaskPageDataSsePromise
+      this._homeTaskPageDataSsePromise = sseDistribute.InitFromLoginStatus().then((created) => {
+        if (!created || !sseDistribute.GetSseClientId()) {
+          return false
+        }
+        const pDataId = 'home_task_page_data'
+        const pDirId = 'home_task_page_data_dir_status'
+        const pBranchId = 'home_task_page_data_branch_status'
+        this._ssePageDataId = pDataId
+        this._sseDirStatusId = pDirId
+        this._sseBranchStatusId = pBranchId
+        sseDistribute.RegisterReceive(pDataId, this.handleHomeTaskPageData)
+        sseDistribute.RegisterReceive(pDirId, this.handleHomeTaskDirStatus)
+        sseDistribute.RegisterReceive(pBranchId, this.handleHomeTaskBranchStatus)
+        return true
+      })
+      return this._homeTaskPageDataSsePromise
+    },
+    unregisterHomeTaskPageDataSse() {
+      this._homeTaskPageDataSsePromise = null
+      if (this._ssePageDataId) {
+        sseDistribute.UnRegisterReceive(this._ssePageDataId)
+        this._ssePageDataId = ''
+      }
+      if (this._sseDirStatusId) {
+        sseDistribute.UnRegisterReceive(this._sseDirStatusId)
+        this._sseDirStatusId = ''
+      }
+      if (this._sseBranchStatusId) {
+        sseDistribute.UnRegisterReceive(this._sseBranchStatusId)
+        this._sseBranchStatusId = ''
+      }
+    },
+    handleHomeTaskPageData(data) {
+      if (!data) return
+      // Git 仓库列表
+      if (Array.isArray(data.git_list) && data.git_list.length > 0) {
+        const groupList = Array.isArray(data.git_group_list) ? data.git_group_list : []
+        const groupMap = {}
+        for (const g of groupList) {
+          groupMap[Number(g.id)] = g.name
+        }
+        this.homeTaskGitRepoList = data.git_list.map(repo => ({
+          ...repo,
+          git_group_name: groupMap[Number(repo.git_group_id)] || '未分组',
+        }))
+        this.homeTaskGitRepoLoading = false
+      }
+      // API 集合列表
+      if (Array.isArray(data.api_collection_list)) {
+        this.homeTaskApiCollectionList = data.api_collection_list
+        this.homeTaskApiCollectionLoading = false
+      }
+      // Docker 列表
+      if (Array.isArray(data.docker_list)) {
+        this.homeTaskDockerList = data.docker_list
+        this.homeTaskDockerLoading = false
+      }
+      // MySQL 列表
+      if (Array.isArray(data.mysql_list)) {
+        this.homeTaskMysqlList = data.mysql_list
+        this.homeTaskMysqlLoading = false
+      }
+      // SmartLink 列表
+      if (Array.isArray(data.smart_link_list)) {
+        this.homeTaskSmartLinkList = data.smart_link_list.map(item => {
+          let linkList = []
+          try { linkList = JSON.parse(item.links || '[]') } catch (e) { /* ignore */ }
+          return { ...item, linkList }
+        })
+        this.homeTaskSmartLinkLoading = false
+      }
+      // 记忆库文件夹列表
+      if (Array.isArray(data.memory_folder_list)) {
+        this.homeTaskMemoryFolderList = data.memory_folder_list
+        this.homeTaskMemoryFolderLoading = false
+      }
+      // 工作流节点状态
+      if (data.workflow_node_statuses_map && data.workflow_unread_count_map !== undefined) {
+        this.applyWorkflowCountsFromSSE(data.workflow_node_statuses_map, data.workflow_unread_count_map)
+      }
+    },
+    handleHomeTaskDirStatus(data) {
+      if (!data || !data.dir_status_map) return
+      this.homeTaskLocalDirStatusMap = { ...this.homeTaskLocalDirStatusMap, ...data.dir_status_map }
+    },
+    handleHomeTaskBranchStatus(data) {
+      if (!data || !data.branch_status_map) return
+      this.homeTaskBranchStatusMap = { ...this.homeTaskBranchStatusMap, ...data.branch_status_map }
+    },
+    applyWorkflowCountsFromSSE(nodeStatusesMap, unreadCountMap) {
+      const allTasks = [...this.homeTaskActiveList, ...this.homeTaskArchivedList]
+      const newCountMap = { ...this.homeTaskWorkflowCountMap }
+      const newUnreadMap = { ...this.homeTaskWorkflowUnreadMap }
+      for (const task of allTasks) {
+        const taskId = Number(task.id)
+        if (Number(task.use_workflow) === HOME_TASK_USE_WORKFLOW_NO) continue
+        const raw = String(nodeStatusesMap[String(taskId)] || '').trim()
+        let nodeStatuses = {}
+        if (raw) {
+          try { nodeStatuses = JSON.parse(raw) } catch (e) { /* ignore */ }
+        }
+        let completed = 0
+        let skipped = 0
+        for (const key of HOME_TASK_WORKFLOW_NODE_KEYS) {
+          const status = nodeStatuses[key] || 'pending'
+          if (status === 'skipped') skipped++
+          else if (status === 'completed') completed++
+        }
+        const total = HOME_TASK_WORKFLOW_NODE_KEYS.length
+        const nonSkipped = total - skipped
+        newCountMap[taskId] = completed + '/' + nonSkipped
+        newUnreadMap[taskId] = Math.max(0, Number(unreadCountMap[String(taskId)] || unreadCountMap[taskId] || 0))
+      }
+      this.homeTaskWorkflowCountMap = newCountMap
+      this.homeTaskWorkflowUnreadMap = newUnreadMap
+    },
+    triggerHomeTaskPageDataLoad() {
+      this.ensureHomeTaskPageDataSse().then((ready) => {
+        if (!ready) return
+        const clientId = sseDistribute.GetSseClientId()
+        if (!clientId) return
+        const taskIds = this.homeTaskActiveList.map(t => Number(t.id))
+        homeTaskApi.HomeTaskPageDataLoad(clientId, taskIds, (response) => {
+          if (!(response && response.ErrCode === 0)) {
+            console.warn('[HomeTaskSSE] 附加数据加载触发失败:', response?.ErrMsg)
+          }
+        })
+      })
+    },
+    triggerLocalDirCheck(taskList) {
+      this.ensureHomeTaskPageDataSse().then((ready) => {
+        if (!ready) return
+        const clientId = sseDistribute.GetSseClientId()
+        if (!clientId) return
+        const paths = []
+        for (const t of taskList) {
+          if (Array.isArray(t.dev_configs)) {
+            for (const cfg of t.dev_configs) {
+              const dir = String(cfg.local_dir || '').trim()
+              if (dir && !paths.includes(dir)) paths.push(dir)
+            }
+          }
+        }
+        if (paths.length === 0) return
+        homeTaskApi.HomeTaskPageDataDirCheck(clientId, paths, (response) => {
+          if (!(response && response.ErrCode === 0)) {
+            console.warn('[HomeTaskSSE] 目录检查触发失败:', response?.ErrMsg)
+          }
+        })
+      })
+    },
+    triggerBranchStatusCheck(taskList) {
+      this.ensureHomeTaskPageDataSse().then((ready) => {
+        if (!ready) return
+        const clientId = sseDistribute.GetSseClientId()
+        if (!clientId) return
+        const items = []
+        const seen = new Set()
+        for (const t of taskList) {
+          if (!Array.isArray(t.dev_configs)) continue
+          for (const cfg of t.dev_configs) {
+            const dir = String(cfg.local_dir || '').trim()
+            const branch = String(cfg.branch_name || '').trim()
+            if (!dir || !branch) continue
+            const key = dir + '|' + branch
+            if (seen.has(key)) continue
+            seen.add(key)
+            items.push({ local_dir: dir, branch_name: branch })
+          }
+        }
+        if (items.length === 0) return
+        homeTaskApi.HomeTaskPageDataBranchCheck(clientId, items, (response) => {
+          if (!(response && response.ErrCode === 0)) {
+            console.warn('[HomeTaskSSE] 分支检查触发失败:', response?.ErrMsg)
+          }
+        })
+      })
     },
     handleHomeTaskTabChange(tabName) {
       if (tabName === HOME_TASK_TAB_ACTIVE) {
@@ -950,28 +1124,20 @@ export default {
         }))
         if (isArchived === HOME_TASK_ARCHIVED_YES) {
           this.homeTaskArchivedList = taskList
+          // 归档列表也需要工作流计数，但不触发完整 SSE 推送
           this.loadHomeTaskWorkflowCounts(taskList)
         } else {
           this.homeTaskActiveList = taskList
-          this.loadHomeTaskWorkflowCounts(taskList)
         }
-        // 预加载 dev_configs 中引用的 API 文件夹（去重）
-        const devColIds = new Set()
-        for (const t of taskList) {
-          if (Array.isArray(t.dev_configs)) {
-            for (const cfg of t.dev_configs) {
-              const colId = Number(cfg.collection_id || 0)
-              if (colId > 0) devColIds.add(colId)
-            }
-          }
+
+        // 仅在活跃列表加载完成后触发 SSE 推送附加数据
+        if (isArchived === HOME_TASK_ARCHIVED_NO) {
+          this.triggerHomeTaskPageDataLoad()
+          // 批量检查本地目录是否存在 → 改为 SSE 推送
+          this.triggerLocalDirCheck(taskList)
+          // 批量检查本地目录的 Git 分支是否匹配 → 改为 SSE 推送
+          this.triggerBranchStatusCheck(taskList)
         }
-        for (const colId of devColIds) {
-          this.loadHomeTaskApiFoldersForCollection(colId)
-        }
-        // 批量检查本地目录是否存在
-        this.checkLocalDirExists(taskList)
-        // 批量检查本地目录的 Git 分支是否匹配
-        this.checkBranchStatus(taskList)
       })
     },
     refreshAllHomeTaskList() {

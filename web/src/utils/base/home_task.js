@@ -1,5 +1,28 @@
 import base from '../base'
 
+// ssePost 向 SSE 端口发送 POST 请求（SSE 客户端只在 SSE 端口的 gin 实例上注册）。
+function ssePost(uri, params, callBack) {
+  const sseHost = base.GetSseApiHost()
+  if (!sseHost) {
+    callBack({ ErrCode: -1, ErrMsg: 'SSE连接未建立' })
+    return
+  }
+  base.Globals().$axios.post(sseHost + uri, params, {
+    headers: {
+      'Content-Type': 'application/json',
+      'Token': base.GetSafeToken(),
+    }
+  }).then(response => {
+    if (response && response.data) {
+      callBack(response.data)
+    } else {
+      callBack({ ErrCode: -1, ErrMsg: '响应数据为空' })
+    }
+  }).catch(error => {
+    callBack({ ErrCode: -1, ErrMsg: error.message || '请求失败' })
+  })
+}
+
 // HomeTaskList 查询首页任务列表。
 function HomeTaskList(isArchived, callBack) {
   base.BasePost('/api/HomeTaskList', { is_archived: isArchived }, callBack)
@@ -65,6 +88,22 @@ function HomeTaskUnusedLocalDirs(excludeTaskId, callBack) {
   base.BasePost('/api/HomeTaskUnusedLocalDirs', { exclude_task_id: excludeTaskId }, callBack)
 }
 
+// HomeTaskPageDataLoad 触发后端 SSE 推送页面附加数据（Git列表/集合/Docker/MySQL/SmartLink/记忆库/工作流计数）。
+// 注意：必须 POST 到 SSE 端口，因为 SSE 客户端只在 SSE 端口的 gin 实例上注册。
+function HomeTaskPageDataLoad(clientId, taskIds, callBack) {
+  ssePost('/api/HomeTaskPageDataLoad', { client_id: clientId, task_ids: taskIds }, callBack)
+}
+
+// HomeTaskPageDataDirCheck 触发后端 SSE 推送本地目录存在性检查结果。
+function HomeTaskPageDataDirCheck(clientId, paths, callBack) {
+  ssePost('/api/HomeTaskPageDataDirCheck', { client_id: clientId, paths: paths }, callBack)
+}
+
+// HomeTaskPageDataBranchCheck 触发后端 SSE 推送分支匹配状态检查结果。
+function HomeTaskPageDataBranchCheck(clientId, items, callBack) {
+  ssePost('/api/HomeTaskPageDataBranchCheck', { client_id: clientId, items: items }, callBack)
+}
+
 // LocalBranchBatchCheck 批量检查本地目录当前 Git 分支是否与期望分支匹配。
 function LocalBranchBatchCheck(items, callBack) {
   base.BasePost('/api/Set/LocalBranchBatchCheck', { items: items }, callBack)
@@ -109,4 +148,7 @@ export default {
   RemoteBranchCheck,
   RemoteBranchPush,
   RemoteBranchSwitch,
+  HomeTaskPageDataLoad,
+  HomeTaskPageDataDirCheck,
+  HomeTaskPageDataBranchCheck,
 }

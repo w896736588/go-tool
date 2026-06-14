@@ -42,7 +42,7 @@ export default {
       const normalizedOld = normalizeLineEndings(props.oldText)
       const normalizedNew = normalizeLineEndings(props.newText)
 
-      const diff = Diff.createPatch('file.txt', normalizedOld, normalizedNew, '旧版本', '新版本')
+      const diff = Diff.createPatch('file.txt', normalizedOld, normalizedNew, '原始版本', '改后版本')
       const diffHtml = Diff2Html.html(diff, {
         drawFileList: false,
         matching: 'lines',

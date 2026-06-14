@@ -346,6 +346,10 @@ func homeTask(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/HomeTaskBranchNameGenerate`, controller.HomeTaskBranchNameGenerate)
 	tGin.GinPost(`/api/HomeTaskZcodeSessionIdAppend`, controller.HomeTaskZcodeSessionIdAppend)
 	tGin.GinPost(`/api/HomeTaskUnusedLocalDirs`, controller.HomeTaskUnusedLocalDirs)
+	// SSE 聚合推送：页面附加数据
+	tGin.GinPost(`/api/HomeTaskPageDataLoad`, controller.HomeTaskPageDataLoad)
+	tGin.GinPost(`/api/HomeTaskPageDataDirCheck`, controller.CheckAndPushLocalDirs)
+	tGin.GinPost(`/api/HomeTaskPageDataBranchCheck`, controller.CheckAndPushBranchStatus)
 }
 
 func taskWorkflow(tGin *p_gin.Gin) {
@@ -386,6 +390,7 @@ func taskWorkflow(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/task/workflow/file-changes/summary`, controller.TaskWorkflowFileChangesSummary)
 	tGin.GinPost(`/api/task/workflow/file-changes/detail`, controller.TaskWorkflowFileChangesDetail)
 	tGin.GinPost(`/api/task/workflow/file-changes/file-diff`, controller.TaskWorkflowFileChangesFileDiff)
+	tGin.GinPost(`/api/task/workflow/open-in-editor`, controller.TaskWorkflowOpenInEditor)
 }
 
 func shellOut(tGin *p_gin.Gin) {

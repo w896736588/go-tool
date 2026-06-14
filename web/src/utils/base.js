@@ -223,9 +223,8 @@ function IsBase64(str) {
 }
 
 function GenerateId(prefix) {
-    const ts = Date.now();                 // 毫秒时间戳
-    const rand = Math.floor(Math.random() * 100) + 100; // 3 位随机数
-    return prefix + `_${rand}`;
+    const rand = Math.floor(Math.random() * 100000000); // 8 位随机数字
+    return prefix + `_${String(rand).padStart(8, '0')}`;
 }
 
 //防抖函数

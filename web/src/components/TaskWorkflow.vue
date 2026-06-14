@@ -70,7 +70,7 @@
                   <span class="task-workflow-header__field-value task-workflow-header__field-value--wrap">{{ getTaskConfigApiLabel(cfg) || '-' }}</span>
                 </div>
                 <!-- 分支名 -->
-                <div class="task-workflow-header__field task-workflow-header__field--wrap">
+                <div class="task-workflow-header__field task-workflow-header__field--wrap task-workflow-header__field--branch">
                   <span class="task-workflow-header__field-label">分支名</span>
                   <span class="task-workflow-header__field-value task-workflow-header__field-value--wrap">
                     <span class="task-workflow-header__branch" @click="copyText(cfg.branch_name, '分支名已复制')" :title="cfg.branch_name">{{ cfg.branch_name || '-' }}</span>
@@ -104,6 +104,17 @@
                         <svg v-else viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                       </span>
                     </el-tooltip>
+                    <el-dropdown v-if="cfg.local_dir" trigger="click" @command="(editor) => openInEditor(cfg.local_dir, editor)" style="margin-left:6px">
+                      <span class="task-workflow-header__open-editor-btn" title="选择 IDE 打开目录">▶</span>
+                      <template #dropdown>
+                        <el-dropdown-menu>
+                          <el-dropdown-item command="vscode">VS Code</el-dropdown-item>
+                          <el-dropdown-item command="cursor">Cursor</el-dropdown-item>
+                          <el-dropdown-item command="goland">GoLand</el-dropdown-item>
+                          <el-dropdown-item command="phpstorm">PhpStorm</el-dropdown-item>
+                        </el-dropdown-menu>
+                      </template>
+                    </el-dropdown>
                   </span>
                 </div>
                 <!-- 文件变更 -->
@@ -111,7 +122,7 @@
                   <span class="task-workflow-header__field-label">文件变更</span>
                   <span class="task-workflow-header__field-value task-workflow-header__field-value--wrap">
                     <template v-if="cfg.local_dir && fileChangesMap[cfg.local_dir] && !fileChangesMap[cfg.local_dir].error">
-                      <span class="file-changes-inline">
+                      <span class="file-changes-inline file-changes-inline--clickable" title="点击查看文件变更详情" @click="openFileChangesDetail(cfg)">
                         <span class="file-changes-inline__item file-changes-inline__item--committed" :title="'已提交文件数'">{{ fileChangesMap[cfg.local_dir].summary.committed || 0 }}<small>(C)</small></span>
                         <span class="file-changes-inline__sep">/</span>
                         <span class="file-changes-inline__item file-changes-inline__item--staged" :title="'已暂存文件数'">{{ fileChangesMap[cfg.local_dir].summary.staged || 0 }}<small>(S)</small></span>
@@ -120,7 +131,6 @@
                         <span class="file-changes-inline__sep">/</span>
                         <span class="file-changes-inline__item file-changes-inline__item--untracked" :title="'未跟踪文件数'">{{ fileChangesMap[cfg.local_dir].summary.untracked || 0 }}<small>(U)</small></span>
                       </span>
-                      <GitActionButton compact variant="info" size-mode="compact-small" @click="openFileChangesDetail(cfg)">详情</GitActionButton>
                     </template>
                     <template v-else-if="cfg.local_dir && fileChangesMap[cfg.local_dir] && fileChangesMap[cfg.local_dir].error">
                       <span class="task-workflow-header__field-value--dim" :title="fileChangesMap[cfg.local_dir].error">检测失败</span>
@@ -431,7 +441,20 @@
                     <el-descriptions-item label="Docker">{{ getTaskConfigName('docker', cfg.docker_id) }}</el-descriptions-item>
                     <el-descriptions-item label="Db">{{ getTaskConfigName('mysql', cfg.mysql_id) }}</el-descriptions-item>
                     <el-descriptions-item label="接口集合"><span class="task-workflow-config-link" @click="openApiDevDialog(cfg)">{{ truncateWorkflowLabel(getTaskConfigApiLabel(cfg)) }}</span></el-descriptions-item>
-                    <el-descriptions-item label="本地目录">{{ cfg.local_dir || '-' }}</el-descriptions-item>
+                    <el-descriptions-item label="本地目录">
+                      {{ cfg.local_dir || '-' }}
+                      <el-dropdown v-if="cfg.local_dir" trigger="click" @command="(editor) => openInEditor(cfg.local_dir, editor)" style="margin-left:6px">
+                        <span class="task-workflow-config__open-editor-btn">▶ 打开方式</span>
+                        <template #dropdown>
+                          <el-dropdown-menu>
+                            <el-dropdown-item command="vscode">VS Code</el-dropdown-item>
+                            <el-dropdown-item command="cursor">Cursor</el-dropdown-item>
+                            <el-dropdown-item command="goland">GoLand</el-dropdown-item>
+                            <el-dropdown-item command="phpstorm">PhpStorm</el-dropdown-item>
+                          </el-dropdown-menu>
+                        </template>
+                      </el-dropdown>
+                    </el-descriptions-item>
                     <el-descriptions-item label="父分支">{{ cfg.parent_branch || '-' }}</el-descriptions-item>
                     <el-descriptions-item label="分支名">{{ truncateWorkflowLabel(cfg.branch_name || '-') }}</el-descriptions-item>
                     <el-descriptions-item label="规则入口">{{ cfg.rule_entry_file || '-' }}</el-descriptions-item>
@@ -3306,6 +3329,17 @@ export default {
         }
       })
     },
+    // 在指定 IDE 中打开工作目录
+    openInEditor(localDir, editorType) {
+      if (!localDir || !editorType) return
+      taskWorkflowApi.TaskWorkflowOpenInEditor(localDir, editorType, (response) => {
+        if (response && response.ErrCode === 0) {
+          this.$message.success(response.Msg || `已在 ${editorType} 中打开目录`)
+        } else {
+          this.$message.error((response && response.Msg) || `打开失败`)
+        }
+      })
+    },
     // 批量检查工作流页面中本地目录的当前 Git 分支是否与配置的分支名匹配
     checkWorkflowBranchStatus() {
       const items = this.getWorkflowBranchCheckItems()
@@ -3924,11 +3958,16 @@ export default {
 }
 
 .task-workflow-header__field--compact {
-  max-width: 150px;
+  min-width: 100px;
 }
 
 .task-workflow-header__field--link {
   cursor: pointer;
+  min-width: 350px;
+}
+
+.task-workflow-header__field--branch {
+  min-width: 400px;
 }
 
 .task-workflow-header__field--link .task-workflow-header__field-value {
@@ -4527,6 +4566,36 @@ export default {
   text-decoration: underline;
 }
 
+/* IDE 打开按钮 - header 区域 */
+.task-workflow-header__open-editor-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  background: #ecf5ff;
+  color: #409eff;
+  font-size: 10px;
+  cursor: pointer;
+  vertical-align: middle;
+  transition: background 0.2s;
+}
+.task-workflow-header__open-editor-btn:hover {
+  background: #d9ecff;
+}
+
+/* IDE 打开按钮 - config 区域 */
+.task-workflow-config__open-editor-btn {
+  color: #409eff;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.task-workflow-config__open-editor-btn:hover {
+  color: #337ecc;
+}
+
 @media (max-width: 1100px) {
   .task-workflow-nodes {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4760,6 +4829,17 @@ export default {
   white-space: nowrap;
 }
 
+.file-changes-inline--clickable {
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background-color 0.15s;
+}
+
+.file-changes-inline--clickable:hover {
+  background-color: #f0f2f5;
+}
+
 .file-changes-inline__item {
   font-weight: 700;
   font-size: 13px;
@@ -4793,6 +4873,8 @@ export default {
   margin: 0 5px;
   font-size: 11px;
 }
+
+
 
 </style>
 

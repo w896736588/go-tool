@@ -22,6 +22,7 @@ const (
 	SseChromeDevtoolsPortStatus = `chrome_devtools_port_status` //Chrome DevTools 端口占用状态变更推送
 	SseAgentCliChatOutput       = `agent_cli_chat_output`       //AgentCli 页面聊天输出分发
 	SseTaskWorkflowChatOutput   = `task_workflow_chat_output`   //TaskWorkflow 页面聊天输出分发
+	SseHomeTaskPageData         = `home_task_page_data`         //HomeTask 页面附加数据推送
 )
 
 const (
