@@ -22,6 +22,7 @@ type HomeTaskSaveRequest struct {
 	DevConfigs                 string `json:"dev_configs"`
 	UseWorkflow                int    `json:"use_workflow"`
 	WorkflowFragmentFolderName string `json:"workflow_fragment_folder_name"`
+	WorkflowTemplateID         int    `json:"workflow_template_id"`
 }
 
 // DevConfig 开发配置条目，组合了 Git 仓库、接口集合/文件夹、Docker、MySQL 配置、自定义网页。

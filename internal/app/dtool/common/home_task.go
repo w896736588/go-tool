@@ -88,7 +88,7 @@ func (h *CSqlite) HomeTaskRow(id int) (map[string]any, error) {
 }
 
 // HomeTaskSave 保存首页任务。
-func (h *CSqlite) HomeTaskSave(id int, name, taskStatus string, startTime int64, memoryFragmentID string, fetchType string, tapdUrl string, zentaoUrl string, gitID int, apiDevEnabled int, apiCollectionID int, apiDirID int, mysqlID int, gitIDsJSON string, apiDevEntriesJSON string, devConfigsJSON string, useWorkflow int) (map[string]any, error) {
+func (h *CSqlite) HomeTaskSave(id int, name, taskStatus string, startTime int64, memoryFragmentID string, fetchType string, tapdUrl string, zentaoUrl string, gitID int, apiDevEnabled int, apiCollectionID int, apiDirID int, mysqlID int, gitIDsJSON string, apiDevEntriesJSON string, devConfigsJSON string, useWorkflow int, workflowTemplateID int) (map[string]any, error) {
 	now := time.Now().Unix()
 	name = strings.TrimSpace(name)
 	taskStatus = strings.TrimSpace(taskStatus)
@@ -111,24 +111,25 @@ func (h *CSqlite) HomeTaskSave(id int, name, taskStatus string, startTime int64,
 	}
 
 	updateData := map[string]any{
-		`name`:               name,
-		`task_status`:        taskStatus,
-		`memory_fragment_id`: memoryFragmentID,
-		`start_time`:         startTime,
-		`last_operated_at`:   now,
-		`update_time`:        now,
-		`fetch_type`:         fetchType,
-		`tapd_url`:           tapdUrl,
-		`zentao_url`:         zentaoUrl,
-		`git_id`:             gitID,
-		`api_dev_enabled`:    apiDevEnabled,
-		`api_collection_id`:  apiCollectionID,
-		`api_dir_id`:         apiDirID,
-		`mysql_id`:           mysqlID,
-		`git_ids`:            gitIDsJSON,
-		`api_dev_entries`:    apiDevEntriesJSON,
-		`dev_configs`:        devConfigsJSON,
-		`use_workflow`:       useWorkflow,
+		`name`:                 name,
+		`task_status`:          taskStatus,
+		`memory_fragment_id`:   memoryFragmentID,
+		`start_time`:           startTime,
+		`last_operated_at`:     now,
+		`update_time`:          now,
+		`fetch_type`:           fetchType,
+		`tapd_url`:             tapdUrl,
+		`zentao_url`:           zentaoUrl,
+		`git_id`:               gitID,
+		`api_dev_enabled`:      apiDevEnabled,
+		`api_collection_id`:    apiCollectionID,
+		`api_dir_id`:           apiDirID,
+		`mysql_id`:             mysqlID,
+		`git_ids`:              gitIDsJSON,
+		`api_dev_entries`:      apiDevEntriesJSON,
+		`dev_configs`:          devConfigsJSON,
+		`use_workflow`:         useWorkflow,
+		`workflow_template_id`: workflowTemplateID,
 	}
 	if id <= 0 {
 		updateData[`is_archived`] = define.HomeTaskArchivedNo

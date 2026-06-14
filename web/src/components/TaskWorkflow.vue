@@ -936,7 +936,7 @@
           </div>
         </div>
 
-        <div v-else class="task-workflow-tab">
+        <div v-else-if="activeNode === 'api-test-fix' || !isCustomStepNode(activeNode)" class="task-workflow-tab">
           <div class="task-workflow-card">
             <div class="task-workflow-card__header">
               <div class="task-workflow-card__title">接口自动化测试修复提示词<span class="task-workflow-card__title-desc">AI自动根据接口开发中的接口设计测试流程，自动上传代码+自动重启服务+自动修复BUG</span></div>
@@ -981,6 +981,65 @@
             <div class="task-workflow-prompt-editor" data-prompt-type="api_test">
               <UnifiedMdEditor
                 v-model="workflow.prompt_api_test"
+                preview-theme="github"
+                :preview="true"
+                :toolbars="promptEditorToolbars"
+                height="100%"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- 自定义步骤渲染（统一交互：提示词编辑+执行+历史） -->
+        <div v-else class="task-workflow-tab">
+          <div class="task-workflow-card">
+            <div class="task-workflow-card__header">
+              <div class="task-workflow-card__title">
+                {{ getActiveNodeLabel() }}
+                <span class="task-workflow-card__title-desc">{{ getActiveNodeDesc() }}</span>
+              </div>
+              <div class="task-workflow-card__switch">
+                <GitActionButton compact :loading="promptSaving === activeNode" @click="savePrompts(activeNode)">
+                  保存提示词
+                </GitActionButton>
+                <GitActionButton compact @click="copyText(getStepPrompt(activeNode), '提示词已复制')">
+                  <template #icon><el-icon><CopyDocument /></el-icon></template>
+                  复制提示词
+                </GitActionButton>
+                <GitActionButton compact variant="success" @click="openPromptExecDialog(activeNode, getStepPrompt(activeNode))">
+                  <template #icon><el-icon><VideoPlay /></el-icon></template>
+                  执行
+                </GitActionButton>
+                <ChatHistoryButton
+                  compact
+                  variant="info"
+                  :running="getPromptChatCounts(activeNode).running > 0"
+                  :running-count="getPromptChatCounts(activeNode).running"
+                  :interrupted-count="getPromptChatCounts(activeNode).interrupted"
+                  :total-count="getPromptChatCounts(activeNode).total"
+                  :unread="hasUnreadInPromptType(activeNode)"
+                  @click="openPromptChatHistory(activeNode)"
+                >
+                  执行历史
+                </ChatHistoryButton>
+                <GitActionButton compact variant="warning" :loading="promptRestoring === activeNode" @click="restorePrompts(activeNode)">
+                  还原为默认提示词
+                </GitActionButton>
+                <div class="task-workflow-node-status-inline">
+                  <span class="task-workflow-node-status-inline__label">当前步骤状态</span>
+                  <button
+                    class="task-workflow-node-status-inline__btn"
+                    :class="'task-workflow-node-status-inline__btn--' + getNodeStatus(activeNode)"
+                    :disabled="nodeStatusSaving"
+                    @click="cycleNodeStatus(activeNode)"
+                  >{{ getNodeStatusLabel(activeNode) }}</button>
+                </div>
+              </div>
+            </div>
+            <div class="task-workflow-prompt-editor" :data-prompt-type="activeNode">
+              <UnifiedMdEditor
+                :model-value="getStepPrompt(activeNode)"
+                @update:model-value="val => setStepPrompt(activeNode, val)"
                 preview-theme="github"
                 :preview="true"
                 :toolbars="promptEditorToolbars"
@@ -1328,6 +1387,7 @@ export default {
   data() {
     return {
       workflowNodes: WORKFLOW_NODES,
+      _customStepPrompts: {}, // 自定义步骤的提示词暂存
       activeNode: 'requirement-fetch',
       loading: false,
       errorMessage: '',
@@ -1645,6 +1705,10 @@ export default {
       if (this.activeNode === 'requirement' && this.requirementActiveTab === 'design-plan-prompt') {
         promptType = 'design_plan_requirement'
       }
+      // 自定义步骤：使用 step_key 本身作为 promptType
+      if (!promptType && this.isCustomStepNode(this.activeNode)) {
+        promptType = this.activeNode
+      }
       if (promptType) {
         this.savePrompts(promptType)
       }
@@ -1660,6 +1724,7 @@ export default {
       this.requirementFetchLogs = []
       this.requirementFetchActiveTab = 'tapd-fetch'
       this.nodeStatuses = {}
+      this._customStepPrompts = {}
       this.loadWorkflowPage()
     },
     loadWorkflowPage() {
@@ -1695,6 +1760,16 @@ export default {
       const previousWorkflowId = Number(this.workflowId || 0)
       this.workflowId = Number(this.workflow.id || 0)
       this.requirementFetchConfig = data.requirement_fetch_config || this.requirementFetchConfig || {}
+      // 从模板步骤动态生成工作流节点列表
+      if (data.template_steps && data.template_steps.length > 0) {
+        this.workflowNodes = data.template_steps.map(step => ({
+          key: step.step_key,
+          label: step.name,
+          desc: '',
+          _isFixed: step.is_fixed === 1,
+          _promptContent: step.prompt_content || '',
+        }))
+      }
       this.parseNodeStatuses()
       if (this.workflowId !== previousWorkflowId) {
         this.unregisterWorkflowUnreadSse()
@@ -1985,8 +2060,12 @@ export default {
         return
       }
       this.promptSaving = promptType
-      taskWorkflowApi.TaskWorkflowPromptsSave({
+      // 使用新格式 step_key + step_prompt 保存（同时保留旧字段向后兼容）
+      const savePayload = {
         workflow_id: this.workflowId,
+        step_key: promptType,
+        step_prompt: this.getStepPrompt(promptType),
+        // 旧字段向后兼容
         prompt_requirement: this.workflow.prompt_requirement || '',
         prompt_api_dev: this.workflow.prompt_api_dev || '',
         prompt_api_test: this.workflow.prompt_api_test || '',
@@ -1995,7 +2074,8 @@ export default {
         prompt_design_plan_requirement: this.workflow.prompt_design_plan_requirement || '',
         prompt_browser_test: this.workflow.prompt_browser_test || '',
         prompt_code_review: this.workflow.prompt_code_review || '',
-      }, (response) => {
+      }
+      taskWorkflowApi.TaskWorkflowPromptsSave(savePayload, (response) => {
         this.promptSaving = ''
         if (!(response && response.ErrCode === 0)) {
           this.$helperNotify.error(response?.ErrMsg || '提示词保存失败')
@@ -2035,6 +2115,60 @@ export default {
           })
         }
       })
+    },
+    // getStepPrompt 根据 step_key 获取当前步骤的提示词内容。
+    getStepPrompt(stepKey) {
+      if (!stepKey) return ''
+      // 优先从编辑器缓存读取（setStepPrompt 写入的值）
+      if (this._customStepPrompts && this._customStepPrompts[stepKey] !== undefined) {
+        return this._customStepPrompts[stepKey] || ''
+      }
+      // 尝试从 step_prompts 读取
+      if (this.workflow.step_prompts) {
+        try {
+          const prompts = typeof this.workflow.step_prompts === 'string'
+            ? JSON.parse(this.workflow.step_prompts)
+            : this.workflow.step_prompts
+          if (prompts[stepKey] !== undefined) {
+            return prompts[stepKey] || ''
+          }
+        } catch (e) { /* ignore */ }
+      }
+      // 回退到旧的 prompt_xxx 字段
+      const legacyMap = {
+        'requirement': this.workflow.prompt_requirement,
+        'api-dev': this.workflow.prompt_api_dev,
+        'api-test-fix': this.workflow.prompt_api_test,
+        'design': this.workflow.prompt_design,
+        'plain_text_requirement': this.workflow.prompt_plain_text_requirement,
+        'design_plan_requirement': this.workflow.prompt_design_plan_requirement,
+        'browser-test': this.workflow.prompt_browser_test,
+        'code-review': this.workflow.prompt_code_review,
+      }
+      return legacyMap[stepKey] || ''
+    },
+    // setStepPrompt 设置自定义步骤的提示词值（暂存到组件实例）。
+    setStepPrompt(stepKey, value) {
+      if (!stepKey) return
+      if (!this._customStepPrompts) {
+        this._customStepPrompts = {}
+      }
+      this._customStepPrompts[stepKey] = value
+    },
+    // isCustomStepNode 判断当前激活节点是否为自定义步骤。
+    isCustomStepNode(key) {
+      const knownKeys = ['task-config', 'requirement-fetch', 'requirement', 'design', 'api-dev', 'api-test-fix', 'code-review', 'browser-test', 'issue_fix', 'plain_text_requirement', 'design_plan_requirement']
+      return key && !knownKeys.includes(key)
+    },
+    // getActiveNodeLabel 获取当前激活节点的显示名称。
+    getActiveNodeLabel() {
+      const node = this.workflowNodes.find(n => n.key === this.activeNode)
+      return node ? node.label : this.activeNode
+    },
+    // getActiveNodeDesc 获取当前激活节点的描述。
+    getActiveNodeDesc() {
+      const node = this.workflowNodes.find(n => n.key === this.activeNode)
+      return node ? (node.desc || '') : ''
     },
     copyText(text, successMessage) {
       const value = String(text || '').trim()

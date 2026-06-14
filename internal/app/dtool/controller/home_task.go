@@ -145,7 +145,7 @@ func HomeTaskSave(c *gin.Context) {
 		request.MysqlID = devConfigs[0].MysqlID
 	}
 
-	info, err := common.DbMain.HomeTaskSave(request.ID, request.Name, request.TaskStatus, request.StartTime, memoryFragmentID, fetchType, request.TapdUrl, request.ZentaoUrl, request.GitID, apiDevEnabled, apiCollectionID, apiDirID, request.MysqlID, gitIDsJSON, apiDevEntriesJSON, devConfigsJSON, useWorkflow)
+	info, err := common.DbMain.HomeTaskSave(request.ID, request.Name, request.TaskStatus, request.StartTime, memoryFragmentID, fetchType, request.TapdUrl, request.ZentaoUrl, request.GitID, apiDevEnabled, apiCollectionID, apiDirID, request.MysqlID, gitIDsJSON, apiDevEntriesJSON, devConfigsJSON, useWorkflow, request.WorkflowTemplateID)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return

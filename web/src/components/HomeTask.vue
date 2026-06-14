@@ -379,6 +379,27 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <!-- 工作流模板选择 -->
+        <el-row v-if="homeTaskForm.use_workflow === HOME_TASK_USE_WORKFLOW_YES" :gutter="12">
+          <el-col :xs="24" :sm="12" :md="12">
+            <el-form-item label="工作流模板">
+              <el-select
+                v-model="homeTaskForm.workflow_template_id"
+                placeholder="请选择工作流模板"
+                style="width: 100%"
+                :loading="homeTaskTemplateLoading"
+                @focus="loadHomeTaskTemplateList"
+              >
+                <el-option
+                  v-for="tpl in homeTaskTemplateList"
+                  :key="tpl.id"
+                  :label="tpl.name + (tpl.is_default === 1 ? ' (默认)' : '')"
+                  :value="tpl.id"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
         <el-row v-if="homeTaskUnusedLocalDirs.length > 0" :gutter="12">
           <el-col :span="24">
             <el-form-item label="可用目录">
@@ -691,6 +712,7 @@ import apiManagement from '@/utils/base/api'
 import dockerApi from '@/utils/base/compose'
 import smartLinkSetApi from '@/utils/base/smart_link_set'
 import taskWorkflowApi from '@/utils/base/task_workflow'
+import workflowTemplateApi from '@/utils/base/workflow_template'
 import sseDistribute from '@/utils/base/sse_distribute'
 import memoryFragmentApi from '@/utils/base/memory_fragment'
 import GitActionButton from "@/components/base/GitActionButton.vue"
@@ -786,6 +808,7 @@ function createHomeTaskDefaultForm() {
     zentao_url: '',
     use_workflow: HOME_TASK_USE_WORKFLOW_YES,
     workflow_fragment_folder_name: HOME_TASK_DEFAULT_WORKFLOW_FRAGMENT_FOLDER,
+    workflow_template_id: 0,
     dev_configs: [{ git_id: '', collection_id: '', dir_id: '', docker_id: '', mysql_id: '', local_dir: '', parent_branch: '', branch_name: '', rule_entry_file: '', _branchGenerating: false, smart_link_id: '', smart_link_label: '', smart_link_account: '' }],
   }
 }
@@ -846,6 +869,8 @@ export default {
       homeTaskSmartLinkLoading: false,
       homeTaskMemoryFolderList: [],
       homeTaskMemoryFolderLoading: false,
+      homeTaskTemplateList: [],
+      homeTaskTemplateLoading: false,
       homeTaskConfigTableColumns: [
         { key: 'git', label: 'Git仓库' },
         { key: 'api', label: '接口集合' },
@@ -1250,6 +1275,20 @@ export default {
         }
       })
     },
+    loadHomeTaskTemplateList() {
+      this.homeTaskTemplateLoading = true
+      workflowTemplateApi.WorkflowTemplateListBasic((response) => {
+        this.homeTaskTemplateLoading = false
+        if (response && response.code === 0 && Array.isArray(response.data)) {
+          this.homeTaskTemplateList = response.data
+          // 如果未选择模板且有列表，自动选择默认或第一个
+          if (!this.homeTaskForm.workflow_template_id && this.homeTaskTemplateList.length > 0) {
+            const defaultTpl = this.homeTaskTemplateList.find(t => t.is_default === 1)
+            this.homeTaskForm.workflow_template_id = defaultTpl ? defaultTpl.id : this.homeTaskTemplateList[0].id
+          }
+        }
+      })
+    },
     getDevConfigSmartLinkLabels(cfgIdx) {
       const cfg = this.homeTaskForm.dev_configs[cfgIdx]
       if (!cfg || !cfg.smart_link_id) return []
@@ -1359,6 +1398,7 @@ export default {
       this.loadHomeTaskSmartLinkList()
       this.loadHomeTaskMemoryFolderList()
       this.loadHomeTaskUnusedLocalDirs(0)
+      this.loadHomeTaskTemplateList()
       this.homeTaskDialogVisible = true
     },
     openHomeTaskSettingsPage() {
@@ -1454,6 +1494,7 @@ export default {
         zentao_url: task.zentao_url || '',
         use_workflow: Number(task.use_workflow ?? HOME_TASK_USE_WORKFLOW_YES) === HOME_TASK_USE_WORKFLOW_YES ? HOME_TASK_USE_WORKFLOW_YES : HOME_TASK_USE_WORKFLOW_NO,
         workflow_fragment_folder_name: String(task.workflow_fragment_folder_name || HOME_TASK_DEFAULT_WORKFLOW_FRAGMENT_FOLDER).trim() || HOME_TASK_DEFAULT_WORKFLOW_FRAGMENT_FOLDER,
+        workflow_template_id: Number(task.workflow_template_id || 0),
         dev_configs: devConfigs,
       }
       this.loadHomeTaskGitRepoList()
@@ -1470,6 +1511,7 @@ export default {
         this.loadHomeTaskApiFoldersForCollection(colId)
       }
       this.loadHomeTaskUnusedLocalDirs(Number(task.id || 0))
+      this.loadHomeTaskTemplateList()
       this.homeTaskDialogVisible = true
     },
     openHomeTaskMemoryFragment(task) {
@@ -1691,6 +1733,7 @@ export default {
         dev_configs: JSON.stringify(validConfigs),
         use_workflow: useWorkflow,
         workflow_fragment_folder_name: workflowFragmentFolderName,
+        workflow_template_id: Number(this.homeTaskForm.workflow_template_id || 0),
         api_host: base.GetApiHost() || window.location.origin,
         api_token: base.GetSafeToken(),
       }, (response) => {

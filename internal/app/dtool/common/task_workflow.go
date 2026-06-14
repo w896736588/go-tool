@@ -359,12 +359,29 @@ func (h *CSqlite) TaskWorkflowRunList(workflowID int) ([]map[string]any, error) 
 }
 
 // TaskWorkflowUpdatePrompts 更新工作流的提示词。
+// 同时写入新字段 step_prompts JSON 和旧 prompt_xxx 字段（向后兼容）。
 func (h *CSqlite) TaskWorkflowUpdatePrompts(workflowID int, promptRequirement, promptApiDev, promptApiTest, promptDesign, promptPlainTextRequirement, promptDesignPlanRequirement, promptBrowserTest, promptCodeReview string) error {
 	if workflowID <= 0 {
 		return errors.New(`工作流id不能为空`)
 	}
 	if _, err := h.TaskWorkflowInfo(workflowID); err != nil {
 		return err
+	}
+	now := time.Now().Unix()
+	// 构建 step_prompts JSON 同时写入
+	promptsMap := map[string]string{
+		`requirement`:             promptRequirement,
+		`api-dev`:                 promptApiDev,
+		`api-test-fix`:            promptApiTest,
+		`design`:                  promptDesign,
+		`plain_text_requirement`:  promptPlainTextRequirement,
+		`design_plan_requirement`: promptDesignPlanRequirement,
+		`browser-test`:            promptBrowserTest,
+		`code-review`:             promptCodeReview,
+	}
+	stepPromptsJSON := ``
+	if jsonBytes, jsonErr := marshalJSON(promptsMap); jsonErr == nil {
+		stepPromptsJSON = string(jsonBytes)
 	}
 	_, err := h.Client.QuickUpdate(`tbl_task_workflow`, map[string]any{
 		`id`: workflowID,
@@ -377,7 +394,8 @@ func (h *CSqlite) TaskWorkflowUpdatePrompts(workflowID int, promptRequirement, p
 		`prompt_design_plan_requirement`: promptDesignPlanRequirement,
 		`prompt_browser_test`:            promptBrowserTest,
 		`prompt_code_review`:             promptCodeReview,
-		`update_time`:                    time.Now().Unix(),
+		`step_prompts`:                   stepPromptsJSON,
+		`update_time`:                    now,
 	}).Exec()
 	return err
 }
@@ -1006,4 +1024,61 @@ func (h *CSqlite) TaskWorkflowClearChatSessionIDs(workflowID int, promptType str
 		`prompt_type`: promptType,
 	}).Exec()
 	return err
+}
+
+// ===================== 模板关联查询 =====================
+
+// HomeTaskWorkflowTemplateID 查询任务关联的模板ID。
+func (h *CSqlite) HomeTaskWorkflowTemplateID(homeTaskID int) (int, error) {
+	if homeTaskID <= 0 {
+		return 0, nil
+	}
+	info, err := h.HomeTaskRow(homeTaskID)
+	if err != nil {
+		return 0, err
+	}
+	if len(info) == 0 {
+		return 0, nil
+	}
+	return cast.ToInt(info[`workflow_template_id`]), nil
+}
+
+// HomeTaskWorkflowTemplateSteps 根据 homeTaskID 获取关联模板的步骤列表。
+// 如果任务未关联模板，则返回默认模板的步骤。
+func (h *CSqlite) HomeTaskWorkflowTemplateSteps(homeTaskID int) (map[string]any, []map[string]any, error) {
+	templateID, err := h.HomeTaskWorkflowTemplateID(homeTaskID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var template map[string]any
+	if templateID <= 0 {
+		// 未关联模板，使用默认模板
+		template, err = h.WorkflowTemplateDefaultInfo()
+	} else {
+		template, err = h.WorkflowTemplateInfo(templateID)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// 从 template map 中提取 steps
+	steps := make([]map[string]any, 0)
+	if rawSteps, ok := template[`steps`]; ok {
+		switch v := rawSteps.(type) {
+		case []map[string]any:
+			steps = v
+		}
+	}
+
+	return template, steps, nil
+}
+
+// marshalJSON 序列化为 JSON 字节数组。
+func marshalJSON(v any) ([]byte, error) {
+	encoded := gstool.JsonEncode(v)
+	if encoded == `` || encoded == `null` {
+		return []byte(`{}`), nil
+	}
+	return []byte(encoded), nil
 }

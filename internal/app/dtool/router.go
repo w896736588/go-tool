@@ -42,6 +42,7 @@ func InitRouter(tGin *p_gin.Gin) {
 	setMemoryFragment(tGin)
 	homeTask(tGin)
 	taskWorkflow(tGin)
+	workflowTemplate(tGin)
 	shellOut(tGin)
 	variableRouter(tGin)
 	smartLink(tGin)
@@ -391,6 +392,17 @@ func taskWorkflow(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/task/workflow/file-changes/detail`, controller.TaskWorkflowFileChangesDetail)
 	tGin.GinPost(`/api/task/workflow/file-changes/file-diff`, controller.TaskWorkflowFileChangesFileDiff)
 	tGin.GinPost(`/api/task/workflow/open-in-editor`, controller.TaskWorkflowOpenInEditor)
+}
+
+func workflowTemplate(tGin *p_gin.Gin) {
+	tGin.GinPost(`/api/workflow/template/list`, controller.WorkflowTemplateList)
+	tGin.GinPost(`/api/workflow/template/save`, controller.WorkflowTemplateSave)
+	tGin.GinPost(`/api/workflow/template/delete`, controller.WorkflowTemplateDelete)
+	tGin.GinPost(`/api/workflow/template/step/save`, controller.WorkflowTemplateStepSave)
+	tGin.GinPost(`/api/workflow/template/step/delete`, controller.WorkflowTemplateStepDelete)
+	tGin.GinPost(`/api/workflow/template/step/sort`, controller.WorkflowTemplateStepSort)
+	// 简化接口：仅返回 id+name，供下拉选择
+	tGin.GinPost(`/api/workflow/template/list-basic`, controller.WorkflowTemplateListBasic)
 }
 
 func shellOut(tGin *p_gin.Gin) {

@@ -736,9 +736,15 @@ func buildTaskWorkflowResponse(c *gin.Context, workflowInfo map[string]any) (map
 		prompts := resolveTaskWorkflowPrompts(c, homeTaskInfo, workflowInfo)
 		_ = common.DbMain.TaskWorkflowUpdatePrompts(workflowID, prompts[`requirement`], prompts[`api_dev`], prompts[`api_test`], prompts[`design`], prompts[`plain_text_requirement`], prompts[`design_plan_requirement`], prompts[`browser_test`], prompts[`code_review`])
 	}
+	// 获取关联的模板和步骤信息
+	homeTaskID := cast.ToInt(workflowInfo[`home_task_id`])
+	template, templateSteps, _ := common.DbMain.HomeTaskWorkflowTemplateSteps(homeTaskID)
+
 	return map[string]any{
 		`workflow`:                 workflowInfo,
 		`home_task`:                homeTaskInfo,
+		`template`:                 template,
+		`template_steps`:           templateSteps,
 		`requirement_fetch_config`: taskWorkflowRequirementFetchConfig(),
 	}, nil
 }
@@ -1492,6 +1498,9 @@ func taskWorkflowMergeNodeStatus(workflowID int, step, status string) (string, e
 }
 
 // TaskWorkflowPromptsSave 保存工作流提示词。
+// 支持两种模式：
+//   1. 新模式：传 step_key + step_prompt，保存到 step_prompts JSON 字段
+//   2. 旧模式：传 prompt_xxx 系列字段（向后兼容）
 func TaskWorkflowPromptsSave(c *gin.Context) {
 	if common.DbMain == nil || common.DbMain.Client == nil {
 		gsgin.GinResponseError(c, `主库未初始化`, nil)
@@ -1503,17 +1512,26 @@ func TaskWorkflowPromptsSave(c *gin.Context) {
 		gsgin.GinResponseError(c, `workflow_id不能为空`, nil)
 		return
 	}
-	err := common.DbMain.TaskWorkflowUpdatePrompts(
-		request.WorkflowID,
-		request.PromptRequirement,
-		request.PromptApiDev,
-		request.PromptApiTest,
-		request.PromptDesign,
-		request.PromptPlainTextRequirement,
-		request.PromptDesignPlanRequirement,
-		request.PromptBrowserTest,
-		request.PromptCodeReview,
-	)
+
+	var err error
+	// 新模式：使用 step_key + step_prompt
+	if request.StepKey != `` {
+		err = common.DbMain.WorkflowStepPromptsSave(request.WorkflowID, request.StepKey, request.StepPrompt)
+	} else {
+		// 旧模式：使用 prompt_xxx 字段（向后兼容）
+		err = common.DbMain.TaskWorkflowUpdatePrompts(
+			request.WorkflowID,
+			request.PromptRequirement,
+			request.PromptApiDev,
+			request.PromptApiTest,
+			request.PromptDesign,
+			request.PromptPlainTextRequirement,
+			request.PromptDesignPlanRequirement,
+			request.PromptBrowserTest,
+			request.PromptCodeReview,
+		)
+	}
+
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
@@ -1529,6 +1547,7 @@ func TaskWorkflowPromptsSave(c *gin.Context) {
 }
 
 // TaskWorkflowPromptsRestore 还原工作流提示词为默认值。
+// 优先从模板步骤的 prompt_content 还原；若模板不存在则回退到旧全局配置。
 func TaskWorkflowPromptsRestore(c *gin.Context) {
 	if common.DbMain == nil || common.DbMain.Client == nil {
 		gsgin.GinResponseError(c, `主库未初始化`, nil)
@@ -1545,26 +1564,40 @@ func TaskWorkflowPromptsRestore(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	homeTaskInfo, homeTaskErr := common.DbMain.HomeTaskRow(cast.ToInt(workflowInfo[`home_task_id`]))
-	if homeTaskErr != nil {
-		gsgin.GinResponseError(c, homeTaskErr.Error(), nil)
-		return
+
+	homeTaskID := cast.ToInt(workflowInfo[`home_task_id`])
+	_, templateSteps, templateErr := common.DbMain.HomeTaskWorkflowTemplateSteps(homeTaskID)
+
+	if templateErr != nil || len(templateSteps) == 0 {
+		// 模板不存在，回退到旧全局配置
+		homeTaskInfo, homeTaskErr := common.DbMain.HomeTaskRow(homeTaskID)
+		if homeTaskErr != nil {
+			gsgin.GinResponseError(c, homeTaskErr.Error(), nil)
+			return
+		}
+		prompts := resolveTaskWorkflowPrompts(c, homeTaskInfo, workflowInfo)
+		if updateErr := common.DbMain.TaskWorkflowUpdatePrompts(
+			request.WorkflowID,
+			prompts[`requirement`],
+			prompts[`api_dev`],
+			prompts[`api_test`],
+			prompts[`design`],
+			prompts[`plain_text_requirement`],
+			prompts[`design_plan_requirement`],
+			prompts[`browser_test`],
+			prompts[`code_review`],
+		); updateErr != nil {
+			gsgin.GinResponseError(c, updateErr.Error(), nil)
+			return
+		}
+	} else {
+		// 从模板步骤还原
+		if restoreErr := common.DbMain.WorkflowStepPromptsRestore(request.WorkflowID, templateSteps); restoreErr != nil {
+			gsgin.GinResponseError(c, restoreErr.Error(), nil)
+			return
+		}
 	}
-	prompts := resolveTaskWorkflowPrompts(c, homeTaskInfo, workflowInfo)
-	if updateErr := common.DbMain.TaskWorkflowUpdatePrompts(
-		request.WorkflowID,
-		prompts[`requirement`],
-		prompts[`api_dev`],
-		prompts[`api_test`],
-		prompts[`design`],
-		prompts[`plain_text_requirement`],
-		prompts[`design_plan_requirement`],
-		prompts[`browser_test`],
-		prompts[`code_review`],
-	); updateErr != nil {
-		gsgin.GinResponseError(c, updateErr.Error(), nil)
-		return
-	}
+
 	// 清空所有提示词类型对应的执行历史
 	allPromptTypes := []string{`plain_text_requirement`, `requirement`, `design_plan_requirement`, `design`, `api_dev`, `code_review`, `browser_test`, `api_test`}
 	for _, promptType := range allPromptTypes {

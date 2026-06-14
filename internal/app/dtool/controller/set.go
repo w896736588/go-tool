@@ -1649,54 +1649,6 @@ func SetHomeTaskConfigSave(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	homeTaskPromptDev := strings.TrimSpace(cast.ToString(dataMap[`home_task_prompt_dev`]))
-	saveHomeTaskPromptWithLog(define.HomeTaskConfigPromptDev, `需求分析设计提示词`, homeTaskPromptDev, `工作流-需求开发提示词模板`)
-	if err := common.DbMain.HomeTaskConfigSave(`需求分析设计提示词`, define.HomeTaskConfigPromptDev, homeTaskPromptDev, `工作流-需求开发提示词模板`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	homeTaskPromptApiGen := strings.TrimSpace(cast.ToString(dataMap[`home_task_prompt_api_gen`]))
-	saveHomeTaskPromptWithLog(define.HomeTaskConfigPromptApiGen, `接口生成提示词`, homeTaskPromptApiGen, `工作流-接口生成提示词模板`)
-	if err := common.DbMain.HomeTaskConfigSave(`接口生成提示词`, define.HomeTaskConfigPromptApiGen, homeTaskPromptApiGen, `工作流-接口生成提示词模板`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	homeTaskPromptApiTest := strings.TrimSpace(cast.ToString(dataMap[`home_task_prompt_api_test`]))
-	saveHomeTaskPromptWithLog(define.HomeTaskConfigPromptApiTest, `接口自动化测试提示词`, homeTaskPromptApiTest, `工作流-接口自动化测试提示词模板`)
-	if err := common.DbMain.HomeTaskConfigSave(`接口自动化测试提示词`, define.HomeTaskConfigPromptApiTest, homeTaskPromptApiTest, `工作流-接口自动化测试提示词模板`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	homeTaskPromptDesign := strings.TrimSpace(cast.ToString(dataMap[`home_task_prompt_design`]))
-	saveHomeTaskPromptWithLog(define.HomeTaskConfigPromptDesign, `开发设计提示词`, homeTaskPromptDesign, `工作流-开发设计提示词模板`)
-	if err := common.DbMain.HomeTaskConfigSave(`开发设计提示词`, define.HomeTaskConfigPromptDesign, homeTaskPromptDesign, `工作流-开发设计提示词模板`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	homeTaskPromptPlainTextRequirement := strings.TrimSpace(cast.ToString(dataMap[`home_task_prompt_plain_text_requirement`]))
-	saveHomeTaskPromptWithLog(define.HomeTaskConfigPromptPlainTextReq, `纯文本TAPD需求提示词`, homeTaskPromptPlainTextRequirement, `工作流-纯文本TAPD需求提示词模板`)
-	if err := common.DbMain.HomeTaskConfigSave(`纯文本TAPD需求提示词`, define.HomeTaskConfigPromptPlainTextReq, homeTaskPromptPlainTextRequirement, `工作流-纯文本TAPD需求提示词模板`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	homeTaskPromptBrowserTest := strings.TrimSpace(cast.ToString(dataMap[`home_task_prompt_browser_test`]))
-	saveHomeTaskPromptWithLog(define.HomeTaskConfigPromptBrowserTest, `需求核对浏览器测试提示词`, homeTaskPromptBrowserTest, `工作流-需求核对浏览器测试提示词模板`)
-	if err := common.DbMain.HomeTaskConfigSave(`需求核对浏览器测试提示词`, define.HomeTaskConfigPromptBrowserTest, homeTaskPromptBrowserTest, `工作流-需求核对浏览器测试提示词模板`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	homeTaskPromptCodeReview := strings.TrimSpace(cast.ToString(dataMap[`home_task_prompt_code_review`]))
-	saveHomeTaskPromptWithLog(define.HomeTaskConfigPromptCodeReview, `代码检查提示词`, homeTaskPromptCodeReview, `工作流-代码检查提示词模板`)
-	if err := common.DbMain.HomeTaskConfigSave(`代码检查提示词`, define.HomeTaskConfigPromptCodeReview, homeTaskPromptCodeReview, `工作流-代码检查提示词模板`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	homeTaskPromptIssueFix := strings.TrimSpace(cast.ToString(dataMap[`home_task_prompt_issue_fix`]))
-	saveHomeTaskPromptWithLog(define.HomeTaskConfigPromptIssueFix, `问题修改提示词`, homeTaskPromptIssueFix, `工作流-问题修改提示词模板`)
-	if err := common.DbMain.HomeTaskConfigSave(`问题修改提示词`, define.HomeTaskConfigPromptIssueFix, homeTaskPromptIssueFix, `工作流-问题修改提示词模板`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
 	homeTaskDevEnvironment := strings.TrimSpace(cast.ToString(dataMap[`home_task_dev_environment`]))
 	saveHomeTaskPromptWithLog(define.HomeTaskConfigDevEnvironment, `开发环境`, homeTaskDevEnvironment, `工作流-开发环境描述`)
 	if err := common.DbMain.HomeTaskConfigSave(`开发环境`, define.HomeTaskConfigDevEnvironment, homeTaskDevEnvironment, `工作流-开发环境描述`); err != nil {

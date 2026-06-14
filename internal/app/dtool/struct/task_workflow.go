@@ -39,8 +39,13 @@ type TaskWorkflowUIAssistGenerateRequest struct {
 }
 
 // TaskWorkflowPromptsSaveRequest 保存工作流提示词请求。
+// 兼容新旧两种格式：
+//   - step_prompts：新格式，JSON 对象，key=step_key，value=提示词内容
+//   - prompt_xxx：旧格式，保留用于向后兼容
 type TaskWorkflowPromptsSaveRequest struct {
 	WorkflowID                  int    `json:"workflow_id"`
+	StepKey                     string `json:"step_key"`    // 新格式：指定要保存的步骤 key
+	StepPrompt                  string `json:"step_prompt"` // 新格式：步骤提示词内容
 	PromptRequirement           string `json:"prompt_requirement"`
 	PromptApiDev                string `json:"prompt_api_dev"`
 	PromptApiTest               string `json:"prompt_api_test"`
