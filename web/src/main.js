@@ -73,9 +73,12 @@ Axios.interceptors.request.use(
 )
 Axios.interceptors.response.use((response) => {
   if (response.data.ErrCode === 1) {
-    ElMessage.error(response.data.ErrMsg)
+    // 打印接口路径和响应体，方便定位异常接口
+    console.error('[API Error] ErrCode=1', response.config.url, JSON.stringify(response.data))
+    ElMessage.error(response.data.ErrMsg || '请求失败')
   } else if (response.data.ErrCode !== 0) {
-    ElMessage.error(response.data.ErrMsg)
+    console.error('[API Error] ErrCode=' + response.data.ErrCode, response.config.url, JSON.stringify(response.data))
+    ElMessage.error(response.data.ErrMsg || '请求异常')
   }
   return response.data
 } , error => {
@@ -109,30 +112,66 @@ for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
 export const globals = app.config.globalProperties
 
 //解决不停报错 ERROR ResizeObserver loop completed with undelivered notifications.
-const debounce = (fn, delay) => {
+// 同时防止组件销毁后，防抖回调因延迟执行而访问已卸载的 DOM 元素（如 el-select 的 resetSelectionWidth 调用 getBoundingClientRect 报错）
+const debounce = (fn, delay, { onCleanup } = {}) => {
   let timer = null;
-  return function () {
+  const debouncedFn = function () {
     let context = this;
     let args = arguments;
     clearTimeout(timer);
     timer = setTimeout(function () {
+      timer = null;
       try{
+        // 检查 ResizeObserverEntry 中的 target 是否仍在 DOM 中，
+        // 防止组件销毁后（如 el-dialog destroy-on-close）回调访问已卸载元素
+        const entries = args && args[0]
+        if (entries && entries.length > 0 && typeof entries[0].target !== 'undefined') {
+          const validEntries = Array.from(entries).filter(entry => {
+            return entry && entry.target && document.contains(entry.target)
+          })
+          if (validEntries.length === 0) {
+            return  // 所有观察目标都已卸载，跳过本次回调
+          }
+        }
         fn.apply(context, args);  //会影响table自动宽度
       }catch (error){
         console.log(error)
       }
-
     }, delay);
+  };
+  // 保存清理函数引用，供 disconnect 时取消待执行的 timer
+  if (onCleanup) {
+    debouncedFn._cleanup = () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    };
   }
+  return debouncedFn;
 }
 
 const _ResizeObserver = window.ResizeObserver;
+const _roCleanupMap = new WeakMap();
+
 window.ResizeObserver = class ResizeObserver extends _ResizeObserver{
   constructor(callback) {
-    callback = debounce(callback, 100);
+    callback = debounce(callback, 100, { onCleanup: true });
     super(callback);
+    _roCleanupMap.set(this, callback._cleanup || null);
   }
 }
+
+// 重写 disconnect 原型方法：断开观察时主动清除防抖 timer，防止组件销毁后的延迟回调
+const _nativeDisconnect = _ResizeObserver.prototype.disconnect;
+window.ResizeObserver.prototype.disconnect = function () {
+  const cleanup = _roCleanupMap.get(this);
+  if (typeof cleanup === 'function') {
+    cleanup();
+    _roCleanupMap.delete(this);
+  }
+  return _nativeDisconnect.call(this);
+};
 
 import sse from '@/utils/base/sse_distribute'
 

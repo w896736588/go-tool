@@ -914,16 +914,15 @@ export default {
     },
   },
   mounted() {
+    // 仅注册 SSE 监听；数据加载由 activated() 统一处理
+    // （keep-alive 下首次挂载 mounted 和 activated 都会触发，避免重复请求）
     this.ensureWorkflowUnreadSse()
     this.ensureHomeTaskPageDataSse()
-    // 默认只加载活跃任务；归档数量通过轻量接口获取，归档数据点击 tab 时才懒加载
-    this.loadHomeTaskCounts()
-    this.loadHomeTaskList(HOME_TASK_ARCHIVED_NO)
   },
   activated() {
     this.ensureWorkflowUnreadSse()
     this.ensureHomeTaskPageDataSse()
-    // 重新加载数量和活跃列表
+    // 默认只加载活跃任务；归档数量通过轻量接口获取，归档数据点击 tab 时才懒加载
     this.loadHomeTaskCounts()
     this.loadHomeTaskList(HOME_TASK_ARCHIVED_NO)
   },
@@ -1207,6 +1206,10 @@ export default {
         // 从列表接口中直接获取 Git 仓库列表和 API 集合列表
         this.populateGitRepoListFromResponse(response.Data)
         this.populateApiCollectionListFromResponse(response.Data)
+
+        // 对当前页任务列表触发 SSE 异步检查：本地目录是否存在、分支是否匹配
+        this.triggerLocalDirCheck(taskList)
+        this.triggerBranchStatusCheck(taskList)
       }, page, pageSize)
     },
     refreshAllHomeTaskList() {
@@ -1374,8 +1377,8 @@ export default {
       this.homeTaskTemplateLoading = true
       workflowTemplateApi.WorkflowTemplateListBasic((response) => {
         this.homeTaskTemplateLoading = false
-        if (response && response.code === 0 && Array.isArray(response.data)) {
-          this.homeTaskTemplateList = response.data
+        if (response && response.ErrCode === 0 && response.Data && Array.isArray(response.Data.list)) {
+          this.homeTaskTemplateList = response.Data.list
           // 如果未选择模板且有列表，自动选择默认或第一个
           if (!this.homeTaskForm.workflow_template_id && this.homeTaskTemplateList.length > 0) {
             const defaultTpl = this.homeTaskTemplateList.find(t => t.is_default === 1)

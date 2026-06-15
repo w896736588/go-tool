@@ -2,7 +2,6 @@ package controller
 
 import (
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -226,12 +225,12 @@ func WorkflowSkillList(c *gin.Context) {
 // WorkflowTemplateListBasic 获取简单的模板列表（仅 id+name，供下拉选择）。
 func WorkflowTemplateListBasic(c *gin.Context) {
 	if common.DbMain == nil || common.DbMain.Client == nil {
-		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "主库未初始化", "data": nil})
+		gsgin.GinResponseError(c, "主库未初始化", nil)
 		return
 	}
 	templates, err := common.DbMain.WorkflowTemplateList()
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"code": 1, "msg": err.Error(), "data": nil})
+		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
 	type basicItem struct {
@@ -247,5 +246,7 @@ func WorkflowTemplateListBasic(c *gin.Context) {
 			IsDefault: cast.ToInt(t[`is_default`]),
 		})
 	}
-	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "", "data": result})
+	gsgin.GinResponseSuccess(c, "", map[string]any{
+		"list": result,
+	})
 }
