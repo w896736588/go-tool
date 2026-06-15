@@ -42,6 +42,11 @@ function WorkflowTemplateListBasic(callBack) {
   base.BasePost('/api/workflow/template/list-basic', {}, callBack)
 }
 
+// WorkflowSkillList 动态获取 skills 目录下的所有 skill 名称列表。
+function WorkflowSkillList(callBack) {
+  base.BasePost('/api/workflow/skill/list', {}, callBack)
+}
+
 export default {
   WorkflowTemplateList,
   WorkflowTemplateSave,
@@ -50,4 +55,5 @@ export default {
   WorkflowTemplateStepDelete,
   WorkflowTemplateStepSort,
   WorkflowTemplateListBasic,
+  WorkflowSkillList,
 }

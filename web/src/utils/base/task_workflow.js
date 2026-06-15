@@ -34,9 +34,10 @@ function TaskWorkflowRequirementFetch(workflowId, callBack) {
 }
 
 // TaskWorkflowApiDocReset 重置接口文档，将所有关联文件夹下的接口 Markdown 合并覆盖到知识片段中。
-function TaskWorkflowApiDocReset(workflowId, callBack) {
+function TaskWorkflowApiDocReset(workflowId, stepKey, callBack) {
   base.BasePost('/api/task/workflow/api-doc/reset', {
     workflow_id: workflowId,
+    step_key: stepKey || '',
   }, callBack)
 }
 

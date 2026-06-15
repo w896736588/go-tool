@@ -403,6 +403,8 @@ func workflowTemplate(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/workflow/template/step/sort`, controller.WorkflowTemplateStepSort)
 	// 简化接口：仅返回 id+name，供下拉选择
 	tGin.GinPost(`/api/workflow/template/list-basic`, controller.WorkflowTemplateListBasic)
+	// 动态读取 skills 目录列表
+	tGin.GinPost(`/api/workflow/skill/list`, controller.WorkflowSkillList)
 }
 
 func shellOut(tGin *p_gin.Gin) {

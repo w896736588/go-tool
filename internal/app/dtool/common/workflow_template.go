@@ -1,8 +1,12 @@
 package common
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -23,6 +27,78 @@ const (
 	workflowTemplateTable     = `tbl_workflow_template`
 	workflowTemplateStepTable = `tbl_workflow_template_step`
 )
+
+// WorkflowTemplateStepDocument 描述模板步骤中预生成的知识片段文档配置。
+type WorkflowTemplateStepDocument struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Placeholder string `json:"placeholder"`
+	Title       string `json:"title"`
+	Content     string `json:"content"`
+	IsApiDoc    bool   `json:"is_api_doc"`
+}
+
+// WorkflowTemplateStepDocumentsParse 解析步骤文档配置 JSON。
+func WorkflowTemplateStepDocumentsParse(raw string) []WorkflowTemplateStepDocument {
+	raw = strings.TrimSpace(raw)
+	if raw == `` || raw == `null` || raw == `[]` {
+		return nil
+	}
+	var docs []WorkflowTemplateStepDocument
+	if err := json.Unmarshal([]byte(raw), &docs); err != nil {
+		return nil
+	}
+	result := make([]WorkflowTemplateStepDocument, 0, len(docs))
+	for _, doc := range docs {
+		doc.ID = strings.TrimSpace(doc.ID)
+		doc.Name = strings.TrimSpace(doc.Name)
+		doc.Placeholder = strings.TrimSpace(doc.Placeholder)
+		doc.Title = strings.TrimSpace(doc.Title)
+		if doc.Name == `` {
+			continue
+		}
+		if doc.ID == `` {
+			doc.ID = workflowTemplateStepDocumentGenerateID()
+		}
+		result = append(result, doc)
+	}
+	return result
+}
+
+// workflowTemplateStepDocumentGenerateID 生成一个简短的文档唯一标识。
+func workflowTemplateStepDocumentGenerateID() string {
+	input := fmt.Sprintf(`%d-%d`, time.Now().UnixNano(), rand.Intn(900000)+100000)
+	hash := md5.Sum([]byte(input))
+	return hex.EncodeToString(hash[:])[:8]
+}
+
+// WorkflowTemplateStepDocumentsToRelativePlaceholder 根据文档占位符生成对应的文件相对路径占位符。
+// 例如：{接口文档地址} -> {接口文档地址文件相对地址}
+func WorkflowTemplateStepDocumentsToRelativePlaceholder(placeholder string) string {
+	placeholder = strings.TrimSpace(placeholder)
+	if len(placeholder) < 2 {
+		return ``
+	}
+	if !strings.HasPrefix(placeholder, `{`) || !strings.HasSuffix(placeholder, `}`) {
+		return ``
+	}
+	inner := strings.TrimSuffix(strings.TrimPrefix(placeholder, `{`), `}`)
+	return `{` + inner + `文件相对地址}`
+}
+
+// WorkflowTemplateStepDocumentsToIDPlaceholder 根据文档占位符生成对应的文档ID占位符。
+// 例如：{纯文本需求文档} -> {纯文本需求文档ID}
+func WorkflowTemplateStepDocumentsToIDPlaceholder(placeholder string) string {
+	placeholder = strings.TrimSpace(placeholder)
+	if len(placeholder) < 2 {
+		return ``
+	}
+	if !strings.HasPrefix(placeholder, `{`) || !strings.HasSuffix(placeholder, `}`) {
+		return ``
+	}
+	inner := strings.TrimSuffix(strings.TrimPrefix(placeholder, `{`), `}`)
+	return `{` + inner + `ID}`
+}
 
 // WorkflowTemplateFixedStepKeys 返回所有固定步骤的 step_key 列表。
 func WorkflowTemplateFixedStepKeys() []string {
@@ -251,7 +327,7 @@ func (h *CSqlite) workflowTemplateStepKeyExists(templateID int, stepKey string, 
 }
 
 // WorkflowTemplateStepSave 创建或更新步骤。
-func (h *CSqlite) WorkflowTemplateStepSave(id, templateID int, name, stepKey, promptContent string, sortOrder int) (int64, error) {
+func (h *CSqlite) WorkflowTemplateStepSave(id, templateID int, name, stepKey, promptContent, stepDocuments, remark string, sortOrder int) (int64, error) {
 	name = trimSpace(name)
 	if name == `` {
 		return 0, errors.New(`步骤名称不能为空`)
@@ -265,6 +341,8 @@ func (h *CSqlite) WorkflowTemplateStepSave(id, templateID int, name, stepKey, pr
 		updateData := map[string]any{
 			`name`:           name,
 			`prompt_content`: promptContent,
+			`step_documents`: stepDocuments,
+			`remark`:         remark,
 			`update_time`:    now,
 		}
 		// 非固定步骤可以修改 step_key（用于自定义步骤）
@@ -303,6 +381,8 @@ func (h *CSqlite) WorkflowTemplateStepSave(id, templateID int, name, stepKey, pr
 		`name`:           name,
 		`step_key`:       ``,
 		`prompt_content`: promptContent,
+		`step_documents`: stepDocuments,
+		`remark`:         remark,
 		`sort_order`:     sortOrder,
 		`is_fixed`:       0,
 		`create_time`:    now,

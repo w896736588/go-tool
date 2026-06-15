@@ -11,6 +11,9 @@
               <el-icon :size="18"><HomeFilled /></el-icon>
             </el-button>
           </el-tooltip>
+          <GitActionButton compact variant="primary" @click="taskConfigDialogVisible = true">
+            任务配置
+          </GitActionButton>
           <el-dropdown trigger="click" @command="handleTaskStatusChange">
             <GitActionButton compact :loading="statusUpdating">
               状态切换（{{ homeTask.task_status }}）
@@ -387,183 +390,30 @@
           <span class="task-workflow-node__row">
             <span class="task-workflow-node__badge">{{ idx + 1 }}</span>
             <span class="task-workflow-node__label">{{ node.label }}</span>
+            <el-tooltip
+              v-if="showDocumentMigrationWarning && nodeHasStepDocuments(node.key)"
+              content="步骤文档尚未生成，请点击「重置提示词」以生成"
+              placement="top"
+            >
+              <el-icon style="color: #F56C6C; margin-left: 4px; font-size: 14px;"><WarningFilled /></el-icon>
+            </el-tooltip>
           </span>
         </button>
       </section>
 
       <section class="task-workflow-content">
-        <div v-if="activeNode === 'task-config'" class="task-workflow-tab">
-          <div class="task-workflow-card task-workflow-config-card">
+        <!-- 抓取需求步骤（特殊：TAPD抓取功能） -->
+        <div v-if="activeNode === 'requirement-fetch'" class="task-workflow-card">
             <div class="task-workflow-card__header">
-              <div class="task-workflow-card__title">任务配置<span class="task-workflow-card__title-desc">查看当前任务的所有配置信息</span></div>
-            </div>
-            <div class="task-workflow-config-content">
-              <div class="task-workflow-config-section">
-                <div class="task-workflow-config-section__title">基本信息</div>
-                <el-descriptions :column="2" border size="small">
-                  <el-descriptions-item label="任务名称">{{ homeTask.name || '-' }}</el-descriptions-item>
-                  <el-descriptions-item label="任务状态">
-                    <el-tag size="small" effect="light" :type="getTaskStatusTagType(homeTask.task_status)">{{ homeTask.task_status || '-' }}</el-tag>
-                    <el-dropdown trigger="click" @command="handleTaskStatusChange" style="margin-left: 8px;">
-                      <el-button size="small" :loading="statusUpdating" text type="primary">
-                        切换状态
-                      </el-button>
-                      <template #dropdown>
-                        <el-dropdown-menu>
-                          <el-dropdown-item
-                            v-for="status in taskStatusOptions"
-                            :key="status"
-                            :command="status"
-                            :disabled="homeTask.task_status === status"
-                          >
-                            {{ status }}
-                          </el-dropdown-item>
-                        </el-dropdown-menu>
-                      </template>
-                    </el-dropdown>
-                  </el-descriptions-item>
-                  <el-descriptions-item label="开始日期">{{ homeTask.start_time_desc || '-' }}</el-descriptions-item>
-                  <el-descriptions-item label="抓取类型">{{ requirementSourceName }}</el-descriptions-item>
-                  <el-descriptions-item :label="requirementSourceName + '地址'">
-                    <a v-if="requirementSourceUrl" :href="requirementSourceUrl" target="_blank" class="task-workflow-config-link">{{ requirementSourceUrl }}</a>
-                    <span v-else>-</span>
-                  </el-descriptions-item>
-                  <el-descriptions-item label="使用工作流程">{{ Number(homeTask.use_workflow || 0) === 1 ? '是' : '否' }}</el-descriptions-item>
-                  <el-descriptions-item label="最后操作">{{ homeTask.last_operated_at_desc || '-' }}</el-descriptions-item>
-                </el-descriptions>
+              <div class="task-workflow-card__title">
+                {{ getActiveNodeLabel() }}
+                <span v-if="getActiveNodeDesc()" class="task-workflow-card__title-desc">{{ getActiveNodeDesc() }}</span>
               </div>
-              <div v-if="parsedTaskDevConfigs.length > 0" class="task-workflow-config-section">
-                <div class="task-workflow-config-section__title">开发项目配置</div>
-                <div v-for="(cfg, idx) in parsedTaskDevConfigs" :key="idx" class="task-workflow-config-dev">
-                  <div v-if="parsedTaskDevConfigs.length > 1" class="task-workflow-config-dev__index">配置 #{{ idx + 1 }}</div>
-                  <el-descriptions :column="2" border size="small">
-                    <el-descriptions-item label="Git仓库">{{ getTaskConfigName('git', cfg.git_id) }}</el-descriptions-item>
-                    <el-descriptions-item label="Docker">{{ getTaskConfigName('docker', cfg.docker_id) }}</el-descriptions-item>
-                    <el-descriptions-item label="Db">{{ getTaskConfigName('mysql', cfg.mysql_id) }}</el-descriptions-item>
-                    <el-descriptions-item label="接口集合"><span class="task-workflow-config-link" @click="openApiDevDialog(cfg)">{{ truncateWorkflowLabel(getTaskConfigApiLabel(cfg)) }}</span></el-descriptions-item>
-                    <el-descriptions-item label="本地目录">
-                      {{ cfg.local_dir || '-' }}
-                      <el-dropdown v-if="cfg.local_dir" trigger="click" @command="(editor) => openInEditor(cfg.local_dir, editor)" style="margin-left:6px">
-                        <span class="task-workflow-config__open-editor-btn">▶ 打开方式</span>
-                        <template #dropdown>
-                          <el-dropdown-menu>
-                            <el-dropdown-item command="vscode">VS Code</el-dropdown-item>
-                            <el-dropdown-item command="cursor">Cursor</el-dropdown-item>
-                            <el-dropdown-item command="goland">GoLand</el-dropdown-item>
-                            <el-dropdown-item command="phpstorm">PhpStorm</el-dropdown-item>
-                          </el-dropdown-menu>
-                        </template>
-                      </el-dropdown>
-                    </el-descriptions-item>
-                    <el-descriptions-item label="父分支">{{ cfg.parent_branch || '-' }}</el-descriptions-item>
-                    <el-descriptions-item label="分支名">{{ truncateWorkflowLabel(cfg.branch_name || '-') }}</el-descriptions-item>
-                    <el-descriptions-item label="规则入口">{{ cfg.rule_entry_file || '-' }}</el-descriptions-item>
-                    <el-descriptions-item label="自定义网页">{{ getTaskConfigName('smart_link', cfg.smart_link_id) }}</el-descriptions-item>
-                    <el-descriptions-item label="网页标签">{{ cfg.smart_link_label || '-' }}</el-descriptions-item>
-                    <el-descriptions-item label="账号">{{ cfg.smart_link_account || '-' }}</el-descriptions-item>
-                  </el-descriptions>
-                </div>
-              </div>
-            </div>
-            <div class="task-workflow-config-section">
-              <div class="task-workflow-config-section__title">关联知识片段</div>
-              <el-table :data="workflowFragments" border size="small" empty-text="暂无关联知识片段">
-                <el-table-column label="片段类型" prop="label" width="180" />
-                <el-table-column label="片段ID" prop="id" width="120">
-                  <template #default="{ row }">
-                    <span v-if="row.id">{{ row.id }}</span>
-                    <span v-else class="task-workflow-config-hint">未绑定</span>
-                  </template>
-                </el-table-column>
-                <el-table-column label="操作" width="100">
-                  <template #default="{ row }">
-                    <el-button v-if="row.id" size="small" text type="primary" @click="openFragmentInDialog(row.id, row.label)">
-                      <el-icon><Link /></el-icon>
-                      打开
-                    </el-button>
-                  </template>
-                </el-table-column>
-              </el-table>
-            </div>
-          </div>
-        </div>
-
-        <div v-else-if="activeNode === 'requirement-fetch'" class="task-workflow-tab">
-          <div class="task-workflow-card">
-            <div class="task-workflow-card__header">
-              <div class="task-workflow-card__title">抓取 {{ requirementSourceName }} 需求<span class="task-workflow-card__title-desc">自动登录和解析需求内容到知识片段，转为markdown格式供AI解析</span></div>
               <div class="task-workflow-card__switch">
-                <div class="task-workflow-inner-tabs">
-                  <button
-                    :class="['task-workflow-inner-tab', { 'task-workflow-inner-tab--active': requirementFetchActiveTab === 'tapd-fetch' }]"
-                    @click="requirementFetchActiveTab = 'tapd-fetch'"
-                  >抓取 {{ requirementSourceName }} 需求内容</button>
-                  <button
-                    :class="['task-workflow-inner-tab', { 'task-workflow-inner-tab--active': requirementFetchActiveTab === 'plain-text-prompt' }]"
-                    @click="requirementFetchActiveTab = 'plain-text-prompt'"
-                  >纯文本需求提示词</button>
-                </div>
-              </div>
-            </div>
-
-            <div v-show="requirementFetchActiveTab === 'tapd-fetch'" class="task-workflow-tapd-fetch-section">
-              <div class="task-workflow-card__switch" style="margin-bottom: 12px;">
                 <GitActionButton compact :loading="requirementFetchRunning" @click="triggerRequirementFetch(false)">
                   重新抓取
                 </GitActionButton>
                 <GitActionButton compact variant="info" @click="openFragmentInDialog(requirementFragmentId, requirementSourceName + '需求文档')" :disabled="!requirementFragmentId">
-                  <template #icon><el-icon><Link /></el-icon></template>
-                  打开知识片段
-                </GitActionButton>
-              </div>
-              <div v-if="workflow.requirement_fetch_error" class="task-workflow-card__hint task-workflow-card__hint--error">
-                最近错误：{{ workflow.requirement_fetch_error }}
-              </div>
-              <div v-if="!requirementSourceUrl" class="task-workflow-card__hint">
-                当前任务未配置 {{ requirementSourceName }} 地址，无法自动抓取。
-              </div>
-              <div class="task-workflow-fragment-view">
-                <iframe
-                  v-if="requirementShareUrl"
-                  :src="requirementShareUrl"
-                  class="task-workflow-fragment-view__iframe"
-                  title="需求知识片段预览"
-                />
-                <div v-else class="task-workflow-fragment-view__empty">
-                  知识片段分享链接生成中...
-                </div>
-              </div>
-            </div>
-
-            <div v-show="requirementFetchActiveTab === 'plain-text-prompt'" class="task-workflow-prompt-section">
-              <div class="task-workflow-card__switch" style="margin-bottom: 12px;">
-                <GitActionButton compact :loading="promptSaving === 'plain_text_requirement'" @click="savePrompts('plain_text_requirement')">
-                  保存提示词
-                </GitActionButton>
-                <GitActionButton compact @click="copyText(workflow.prompt_plain_text_requirement || '', '提示词已复制')">
-                  <template #icon><el-icon><CopyDocument /></el-icon></template>
-                  复制提示词
-                </GitActionButton>
-                <GitActionButton compact variant="success" @click="openPromptExecDialog('plain_text_requirement', workflow.prompt_plain_text_requirement || '')">
-                  <template #icon><el-icon><VideoPlay /></el-icon></template>
-                  执行
-                </GitActionButton>
-                <ChatHistoryButton
-                  compact
-                  variant="info"
-                  :running="getPromptChatCounts('plain_text_requirement').running > 0"
-                  :running-count="getPromptChatCounts('plain_text_requirement').running"
-                  :interrupted-count="getPromptChatCounts('plain_text_requirement').interrupted"
-                  :total-count="getPromptChatCounts('plain_text_requirement').total"
-                  :unread="hasUnreadInPromptType('plain_text_requirement')"
-                  @click="openPromptChatHistory('plain_text_requirement')"
-                >
-                  执行历史
-                </ChatHistoryButton>
-                <GitActionButton compact variant="warning" :loading="promptRestoring === 'plain_text_requirement'" @click="restorePrompts('plain_text_requirement')">
-                  还原为默认提示词
-                </GitActionButton>
-                <GitActionButton compact variant="info" @click="openFragmentInDialog(plainTextReqFragmentId, '纯文本需求文档')" :disabled="!plainTextReqFragmentId">
                   <template #icon><el-icon><Link /></el-icon></template>
                   打开知识片段
                 </GitActionButton>
@@ -577,435 +427,41 @@
                   >{{ getNodeStatusLabel('requirement-fetch') }}</button>
                 </div>
               </div>
-              <div class="task-workflow-prompt-editor" data-prompt-type="plain_text_requirement">
-                <UnifiedMdEditor
-                  v-model="workflow.prompt_plain_text_requirement"
-                  preview-theme="github"
-                  :preview="true"
-                  :toolbars="promptEditorToolbars"
-                  height="100%"
-                />
-              </div>
             </div>
-          </div>
-        </div>
-
-        <div v-else-if="activeNode === 'requirement'" class="task-workflow-tab">
-          <div class="task-workflow-card">
-            <div class="task-workflow-card__header">
-              <div class="task-workflow-card__title">需求分析<span class="task-workflow-card__title-desc">编写提示词，AI自动结合数据库和代码分析需求，形成开发文档</span></div>
-              <div class="task-workflow-card__switch">
-                <div class="task-workflow-inner-tabs">
-
-
-                </div>
-              </div>
+            <div v-if="workflow.requirement_fetch_error" class="task-workflow-card__hint task-workflow-card__hint--error">
+              最近错误：{{ workflow.requirement_fetch_error }}
             </div>
-
-            <div v-show="requirementActiveTab === 'requirement-prompt'" class="task-workflow-prompt-section">
-              <div class="task-workflow-card__switch" style="margin-bottom: 12px;">
-                <GitActionButton compact variant="info" @click="openFragmentInDialog(designPlanReqFragmentId, '需求设计方案文档')" :disabled="!designPlanReqFragmentId">
-                  <template #icon><el-icon><Link /></el-icon></template>
-                  需求设计方案文档
-                </GitActionButton>
-                <GitActionButton compact :loading="promptSaving === 'requirement'" @click="savePrompts('requirement')">
-                  保存提示词
-                </GitActionButton>
-                <GitActionButton compact @click="copyText(workflow.prompt_requirement || '', '提示词已复制')">
-                  <template #icon><el-icon><CopyDocument /></el-icon></template>
-                  复制提示词
-                </GitActionButton>
-                <GitActionButton compact variant="success" @click="openPromptExecDialog('requirement', workflow.prompt_requirement || '')">
-                  <template #icon><el-icon><VideoPlay /></el-icon></template>
-                  执行
-                </GitActionButton>
-                <ChatHistoryButton
-                  compact
-                  variant="info"
-                  :running="getPromptChatCounts('requirement').running > 0"
-                  :running-count="getPromptChatCounts('requirement').running"
-                  :interrupted-count="getPromptChatCounts('requirement').interrupted"
-                  :total-count="getPromptChatCounts('requirement').total"
-                  :unread="hasUnreadInPromptType('requirement')"
-                  @click="openPromptChatHistory('requirement')"
-                >
-                  执行历史
-                </ChatHistoryButton>
-                <GitActionButton compact variant="warning" :loading="promptRestoring === 'requirement'" @click="restorePrompts('requirement')">
-                  还原为默认提示词
-                </GitActionButton>
-                <div class="task-workflow-node-status-inline">
-                  <span class="task-workflow-node-status-inline__label">当前步骤状态</span>
-                  <button
-                    class="task-workflow-node-status-inline__btn"
-                    :class="'task-workflow-node-status-inline__btn--' + getNodeStatus('requirement')"
-                    :disabled="nodeStatusSaving"
-                    @click="cycleNodeStatus('requirement')"
-                  >{{ getNodeStatusLabel('requirement') }}</button>
-                </div>
-              </div>
-              <div class="task-workflow-card__hint">
-                当前片段：{{ requirementFragmentTitle }}
-              </div>
-              <div class="task-workflow-prompt-editor" data-prompt-type="requirement">
-                <UnifiedMdEditor
-                  v-model="workflow.prompt_requirement"
-                  preview-theme="github"
-                  :preview="true"
-                  :toolbars="promptEditorToolbars"
-                  height="100%"
-                />
-              </div>
+            <div v-if="!requirementSourceUrl" class="task-workflow-card__hint">
+              当前任务未配置 {{ requirementSourceName }} 地址，无法自动抓取。
             </div>
-
-            <div v-show="requirementActiveTab === 'design-plan-prompt'" class="task-workflow-prompt-section">
-              <div class="task-workflow-card__switch" style="margin-bottom: 12px;">
-                <GitActionButton compact :loading="promptSaving === 'design_plan_requirement'" @click="savePrompts('design_plan_requirement')">
-                  保存提示词
-                </GitActionButton>
-                <GitActionButton compact @click="copyText(workflow.prompt_design_plan_requirement || '', '提示词已复制')">
-                  <template #icon><el-icon><CopyDocument /></el-icon></template>
-                  复制提示词
-                </GitActionButton>
-                <GitActionButton compact variant="success" @click="openPromptExecDialog('design_plan_requirement', workflow.prompt_design_plan_requirement || '')">
-                  <template #icon><el-icon><VideoPlay /></el-icon></template>
-                  执行
-                </GitActionButton>
-                <ChatHistoryButton
-                  compact
-                  variant="info"
-                  :running="getPromptChatCounts('design_plan_requirement').running > 0"
-                  :running-count="getPromptChatCounts('design_plan_requirement').running"
-                  :interrupted-count="getPromptChatCounts('design_plan_requirement').interrupted"
-                  :total-count="getPromptChatCounts('design_plan_requirement').total"
-                  :unread="hasUnreadInPromptType('design_plan_requirement')"
-                  @click="openPromptChatHistory('design_plan_requirement')"
-                >
-                  执行历史
-                </ChatHistoryButton>
-                <GitActionButton compact variant="warning" :loading="promptRestoring === 'design_plan_requirement'" @click="restorePrompts('design_plan_requirement')">
-                  还原为默认提示词
-                </GitActionButton>
-                <GitActionButton compact variant="info" @click="openFragmentInDialog(designPlanReqFragmentId, '需求设计方案文档')" :disabled="!designPlanReqFragmentId">
-                  <template #icon><el-icon><Link /></el-icon></template>
-                  打开知识片段
-                </GitActionButton>
-                <div class="task-workflow-node-status-inline">
-                  <span class="task-workflow-node-status-inline__label">当前步骤状态</span>
-                  <button
-                    class="task-workflow-node-status-inline__btn"
-                    :class="'task-workflow-node-status-inline__btn--' + getNodeStatus('requirement')"
-                    :disabled="nodeStatusSaving"
-                    @click="cycleNodeStatus('requirement')"
-                  >{{ getNodeStatusLabel('requirement') }}</button>
-                </div>
-              </div>
-              <div class="task-workflow-prompt-editor" data-prompt-type="design_plan_requirement">
-                <UnifiedMdEditor
-                  v-model="workflow.prompt_design_plan_requirement"
-                  preview-theme="github"
-                  :preview="true"
-                  :toolbars="promptEditorToolbars"
-                  height="100%"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div v-else-if="activeNode === 'design'" class="task-workflow-tab">
-          <div class="task-workflow-card">
-            <div class="task-workflow-card__header">
-              <div class="task-workflow-card__title">开发提示词<span class="task-workflow-card__title-desc">编写提示词，AI自动结合数据库，代码和开发文档进行开发</span></div>
-              <div class="task-workflow-card__switch">
-                <GitActionButton compact :loading="promptSaving === 'design'" @click="savePrompts('design')">
-                  保存提示词
-                </GitActionButton>
-                <GitActionButton compact @click="copyText(workflow.prompt_design || '', '提示词已复制')">
-                  <template #icon><el-icon><CopyDocument /></el-icon></template>
-                  复制提示词
-                </GitActionButton>
-                <GitActionButton compact variant="success" @click="openPromptExecDialog('design', workflow.prompt_design || '')">
-                  <template #icon><el-icon><VideoPlay /></el-icon></template>
-                  执行
-                </GitActionButton>
-                <ChatHistoryButton
-                  compact
-                  variant="info"
-                  :running="getPromptChatCounts('design').running > 0"
-                  :running-count="getPromptChatCounts('design').running"
-                  :interrupted-count="getPromptChatCounts('design').interrupted"
-                  :total-count="getPromptChatCounts('design').total"
-                  :unread="hasUnreadInPromptType('design')"
-                  @click="openPromptChatHistory('design')"
-                >
-                  执行历史
-                </ChatHistoryButton>
-                <GitActionButton compact variant="warning" :loading="promptRestoring === 'design'" @click="restorePrompts('design')">
-                  还原为默认提示词
-                </GitActionButton>
-                <div class="task-workflow-node-status-inline">
-                  <span class="task-workflow-node-status-inline__label">当前步骤状态</span>
-                  <button
-                    class="task-workflow-node-status-inline__btn"
-                    :class="'task-workflow-node-status-inline__btn--' + getNodeStatus('design')"
-                    :disabled="nodeStatusSaving"
-                    @click="cycleNodeStatus('design')"
-                  >{{ getNodeStatusLabel('design') }}</button>
-                </div>
-              </div>
-            </div>
-            <div class="task-workflow-prompt-editor" data-prompt-type="design">
-              <UnifiedMdEditor
-                v-model="workflow.prompt_design"
-                preview-theme="github"
-                :preview="true"
-                :toolbars="promptEditorToolbars"
-                height="100%"
+            <div class="task-workflow-fragment-view">
+              <iframe
+                v-if="requirementShareUrl"
+                :src="requirementShareUrl"
+                class="task-workflow-fragment-view__iframe"
+                title="需求知识片段预览"
               />
-            </div>
-          </div>
-        </div>
-
-        <div v-else-if="activeNode === 'api-dev'" class="task-workflow-tab">
-          <div class="task-workflow-card">
-            <div class="task-workflow-card__header">
-              <div class="task-workflow-card__title">接口开发生成提示词<span class="task-workflow-card__title-desc">编写提示词，AI自动获取登录态，将所有改动接口写入接口开发中</span></div>
-              <div class="task-workflow-card__switch">
-                <GitActionButton compact @click="openFragmentInDialog(workflow.api_doc_fragment_id, '接口文档')">
-                  <template #icon><el-icon><Link /></el-icon></template>
-                  接口文档
-                </GitActionButton>
-                <GitActionButton compact variant="warning" :loading="apiDocResetting" @click="resetApiDoc">
-                  重置接口文档
-                </GitActionButton>
-                <GitActionButton compact :loading="promptSaving === 'api_dev'" @click="savePrompts('api_dev')">
-                  保存提示词
-                </GitActionButton>
-                <GitActionButton compact @click="copyText(workflow.prompt_api_dev || '', '提示词已复制')">
-                  <template #icon><el-icon><CopyDocument /></el-icon></template>
-                  复制提示词
-                </GitActionButton>
-                <GitActionButton compact variant="success" @click="openPromptExecDialog('api_dev', workflow.prompt_api_dev || '')">
-                  <template #icon><el-icon><VideoPlay /></el-icon></template>
-                  执行
-                </GitActionButton>
-                <ChatHistoryButton
-                  compact
-                  variant="info"
-                  :running="getPromptChatCounts('api_dev').running > 0"
-                  :running-count="getPromptChatCounts('api_dev').running"
-                  :interrupted-count="getPromptChatCounts('api_dev').interrupted"
-                  :total-count="getPromptChatCounts('api_dev').total"
-                  :unread="hasUnreadInPromptType('api_dev')"
-                  @click="openPromptChatHistory('api_dev')"
-                >
-                  执行历史
-                </ChatHistoryButton>
-                <GitActionButton compact variant="warning" :loading="promptRestoring === 'api_dev'" @click="restorePrompts('api_dev')">
-                  还原为默认提示词
-                </GitActionButton>
-                <div class="task-workflow-node-status-inline">
-                  <span class="task-workflow-node-status-inline__label">当前步骤状态</span>
-                  <button
-                    class="task-workflow-node-status-inline__btn"
-                    :class="'task-workflow-node-status-inline__btn--' + getNodeStatus('api-dev')"
-                    :disabled="nodeStatusSaving"
-                    @click="cycleNodeStatus('api-dev')"
-                  >{{ getNodeStatusLabel('api-dev') }}</button>
-                </div>
+              <div v-else class="task-workflow-fragment-view__empty">
+                知识片段分享链接生成中...
               </div>
             </div>
-            <div class="task-workflow-prompt-editor" data-prompt-type="api_dev">
-              <UnifiedMdEditor
-                v-model="workflow.prompt_api_dev"
-                preview-theme="github"
-                :preview="true"
-                :toolbars="promptEditorToolbars"
-                height="100%"
-              />
-            </div>
-          </div>
         </div>
 
-        <div v-else-if="activeNode === 'code-review'" class="task-workflow-tab">
-          <div class="task-workflow-card">
-            <div class="task-workflow-card__header">
-              <div class="task-workflow-card__title">代码检查提示词<span class="task-workflow-card__title-desc">让AI进行code review</span></div>
-              <div class="task-workflow-card__switch">
-                <GitActionButton compact :loading="promptSaving === 'code_review'" @click="savePrompts('code_review')">
-                  保存提示词
-                </GitActionButton>
-                <GitActionButton compact @click="copyText(workflow.prompt_code_review || '', '提示词已复制')">
-                  <template #icon><el-icon><CopyDocument /></el-icon></template>
-                  复制提示词
-                </GitActionButton>
-                <GitActionButton compact variant="success" @click="openPromptExecDialog('code_review', workflow.prompt_code_review || '')">
-                  <template #icon><el-icon><VideoPlay /></el-icon></template>
-                  执行
-                </GitActionButton>
-                <ChatHistoryButton
-                  compact
-                  variant="info"
-                  :running="getPromptChatCounts('code_review').running > 0"
-                  :running-count="getPromptChatCounts('code_review').running"
-                  :interrupted-count="getPromptChatCounts('code_review').interrupted"
-                  :total-count="getPromptChatCounts('code_review').total"
-                  :unread="hasUnreadInPromptType('code_review')"
-                  @click="openPromptChatHistory('code_review')"
-                >
-                  执行历史
-                </ChatHistoryButton>
-                <GitActionButton compact variant="warning" :loading="promptRestoring === 'code_review'" @click="restorePrompts('code_review')">
-                  还原为默认提示词
-                </GitActionButton>
-                <div class="task-workflow-node-status-inline">
-                  <span class="task-workflow-node-status-inline__label">当前步骤状态</span>
-                  <button
-                    class="task-workflow-node-status-inline__btn"
-                    :class="'task-workflow-node-status-inline__btn--' + getNodeStatus('code-review')"
-                    :disabled="nodeStatusSaving"
-                    @click="cycleNodeStatus('code-review')"
-                  >{{ getNodeStatusLabel('code-review') }}</button>
-                </div>
-              </div>
-            </div>
-            <div class="task-workflow-prompt-editor" data-prompt-type="code_review">
-              <UnifiedMdEditor
-                v-model="workflow.prompt_code_review"
-                preview-theme="github"
-                :preview="true"
-                :toolbars="promptEditorToolbars"
-                height="100%"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div v-else-if="activeNode === 'browser-test'" class="task-workflow-tab">
-          <div class="task-workflow-card">
-            <div class="task-workflow-card__header">
-              <div class="task-workflow-card__title">需求核对浏览器测试提示词<span class="task-workflow-card__title-desc">编写提示词，AI核对浏览器测试结果是否满足需求</span></div>
-              <div class="task-workflow-card__switch">
-                <GitActionButton compact :loading="promptSaving === 'browser_test'" @click="savePrompts('browser_test')">
-                  保存提示词
-                </GitActionButton>
-                <GitActionButton compact @click="copyText(workflow.prompt_browser_test || '', '提示词已复制')">
-                  <template #icon><el-icon><CopyDocument /></el-icon></template>
-                  复制提示词
-                </GitActionButton>
-                <GitActionButton compact variant="success" @click="openPromptExecDialog('browser_test', workflow.prompt_browser_test || '')">
-                  <template #icon><el-icon><VideoPlay /></el-icon></template>
-                  执行
-                </GitActionButton>
-                <ChatHistoryButton
-                  compact
-                  variant="info"
-                  :running="getPromptChatCounts('browser_test').running > 0"
-                  :running-count="getPromptChatCounts('browser_test').running"
-                  :interrupted-count="getPromptChatCounts('browser_test').interrupted"
-                  :total-count="getPromptChatCounts('browser_test').total"
-                  :unread="hasUnreadInPromptType('browser_test')"
-                  @click="openPromptChatHistory('browser_test')"
-                >
-                  执行历史
-                </ChatHistoryButton>
-                <GitActionButton compact variant="warning" :loading="promptRestoring === 'browser_test'" @click="restorePrompts('browser_test')">
-                  还原为默认提示词
-                </GitActionButton>
-                <div class="task-workflow-node-status-inline">
-                  <span class="task-workflow-node-status-inline__label">当前步骤状态</span>
-                  <button
-                    class="task-workflow-node-status-inline__btn"
-                    :class="'task-workflow-node-status-inline__btn--' + getNodeStatus('browser-test')"
-                    :disabled="nodeStatusSaving"
-                    @click="cycleNodeStatus('browser-test')"
-                  >{{ getNodeStatusLabel('browser-test') }}</button>
-                </div>
-              </div>
-            </div>
-            <div class="task-workflow-prompt-editor" data-prompt-type="browser_test">
-              <UnifiedMdEditor
-                v-model="workflow.prompt_browser_test"
-                preview-theme="github"
-                :preview="true"
-                :toolbars="promptEditorToolbars"
-                height="100%"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div v-else-if="activeNode === 'api-test-fix' || !isCustomStepNode(activeNode)" class="task-workflow-tab">
-          <div class="task-workflow-card">
-            <div class="task-workflow-card__header">
-              <div class="task-workflow-card__title">接口自动化测试修复提示词<span class="task-workflow-card__title-desc">AI自动根据接口开发中的接口设计测试流程，自动上传代码+自动重启服务+自动修复BUG</span></div>
-              <div class="task-workflow-card__switch">
-                <GitActionButton compact :loading="promptSaving === 'api_test'" @click="savePrompts('api_test')">
-                  保存提示词
-                </GitActionButton>
-                <GitActionButton compact @click="copyText(workflow.prompt_api_test || '', '提示词已复制')">
-                  <template #icon><el-icon><CopyDocument /></el-icon></template>
-                  复制提示词
-                </GitActionButton>
-                <GitActionButton compact variant="success" @click="openPromptExecDialog('api_test', workflow.prompt_api_test || '')">
-                  <template #icon><el-icon><VideoPlay /></el-icon></template>
-                  执行
-                </GitActionButton>
-                <ChatHistoryButton
-                  compact
-                  variant="info"
-                  :running="getPromptChatCounts('api_test').running > 0"
-                  :running-count="getPromptChatCounts('api_test').running"
-                  :interrupted-count="getPromptChatCounts('api_test').interrupted"
-                  :total-count="getPromptChatCounts('api_test').total"
-                  :unread="hasUnreadInPromptType('api_test')"
-                  @click="openPromptChatHistory('api_test')"
-                >
-                  执行历史
-                </ChatHistoryButton>
-                <GitActionButton compact variant="warning" :loading="promptRestoring === 'api_test'" @click="restorePrompts('api_test')">
-                  还原为默认提示词
-                </GitActionButton>
-                <div class="task-workflow-node-status-inline">
-                  <span class="task-workflow-node-status-inline__label">当前步骤状态</span>
-                  <button
-                    class="task-workflow-node-status-inline__btn"
-                    :class="'task-workflow-node-status-inline__btn--' + getNodeStatus('api-test-fix')"
-                    :disabled="nodeStatusSaving"
-                    @click="cycleNodeStatus('api-test-fix')"
-                  >{{ getNodeStatusLabel('api-test-fix') }}</button>
-                </div>
-              </div>
-            </div>
-            <div class="task-workflow-prompt-editor" data-prompt-type="api_test">
-              <UnifiedMdEditor
-                v-model="workflow.prompt_api_test"
-                preview-theme="github"
-                :preview="true"
-                :toolbars="promptEditorToolbars"
-                height="100%"
-              />
-            </div>
-          </div>
-        </div>
-
-        <!-- 自定义步骤渲染（统一交互：提示词编辑+执行+历史） -->
-        <div v-else class="task-workflow-tab">
-          <div class="task-workflow-card">
+        <!-- 通用步骤渲染（左侧Tab: 提示词 + 文档） -->
+        <div v-else class="task-workflow-card task-workflow-card--with-tabs">
             <div class="task-workflow-card__header">
               <div class="task-workflow-card__title">
-                {{ getActiveNodeLabel() }}
-                <span class="task-workflow-card__title-desc">{{ getActiveNodeDesc() }}</span>
+                <div class="task-workflow-node-status-inline">
+                  <span class="task-workflow-node-status-inline__label">当前步骤状态</span>
+                  <button
+                    class="task-workflow-node-status-inline__btn"
+                    :class="'task-workflow-node-status-inline__btn--' + getNodeStatus(activeNode)"
+                    :disabled="nodeStatusSaving"
+                    @click="cycleNodeStatus(activeNode)"
+                  >{{ getNodeStatusLabel(activeNode) }}</button>
+                </div>
               </div>
               <div class="task-workflow-card__switch">
-                <GitActionButton compact :loading="promptSaving === activeNode" @click="savePrompts(activeNode)">
-                  保存提示词
-                </GitActionButton>
-                <GitActionButton compact @click="copyText(getStepPrompt(activeNode), '提示词已复制')">
-                  <template #icon><el-icon><CopyDocument /></el-icon></template>
-                  复制提示词
-                </GitActionButton>
                 <GitActionButton compact variant="success" @click="openPromptExecDialog(activeNode, getStepPrompt(activeNode))">
                   <template #icon><el-icon><VideoPlay /></el-icon></template>
                   执行
@@ -1022,31 +478,217 @@
                 >
                   执行历史
                 </ChatHistoryButton>
-                <GitActionButton compact variant="warning" :loading="promptRestoring === activeNode" @click="restorePrompts(activeNode)">
+                <GitActionButton compact variant="warning" :loading="promptRestoring === activeNode" @click="restorePrompts(activeNode)" :disabled="stepActiveTab !== '__prompt__'">
                   还原为默认提示词
                 </GitActionButton>
-                <div class="task-workflow-node-status-inline">
-                  <span class="task-workflow-node-status-inline__label">当前步骤状态</span>
-                  <button
-                    class="task-workflow-node-status-inline__btn"
-                    :class="'task-workflow-node-status-inline__btn--' + getNodeStatus(activeNode)"
-                    :disabled="nodeStatusSaving"
-                    @click="cycleNodeStatus(activeNode)"
-                  >{{ getNodeStatusLabel(activeNode) }}</button>
+                <GitActionButton v-if="activeStepHasApiDoc()" compact variant="warning" :loading="apiDocResetting" @click="resetApiDoc">
+                  重置接口文档
+                </GitActionButton>
+              </div>
+            </div>
+            <!-- 左侧Tab + 右侧内容 -->
+            <div class="step-tab-layout">
+              <div class="step-tab-sidebar">
+                <button
+                  type="button"
+                  class="step-tab-btn"
+                  :class="{ 'step-tab-btn--active': stepActiveTab === '__prompt__', 'step-tab-btn--prompt': true }"
+                  @click="stepActiveTab = '__prompt__'"
+                >提示词</button>
+                <button
+                  v-for="doc in getActiveStepDocuments()"
+                  :key="doc.id || doc.name"
+                  type="button"
+                  class="step-tab-btn"
+                  :class="{ 'step-tab-btn--active': stepActiveTab === (doc.id || doc.name), 'step-tab-btn--doc': true }"
+                  :title="doc.name"
+                  @click="switchToDocTab(doc)"
+                >{{ doc.name }}</button>
+              </div>
+              <div class="step-tab-content">
+                <!-- 提示词 Tab -->
+                <div v-if="stepActiveTab === '__prompt__'" class="step-tab-panel">
+                  <div class="editor-body-toolbar editor-body-toolbar--saved">
+                    <div class="editor-body-toolbar-main">
+                      <div class="editor-body-toolbar-top">
+                        <div class="editor-body-toolbar-left">
+                          <el-input
+                            v-model="stepPromptTitle"
+                            class="title-input editor-toolbar-title-input"
+                            placeholder="输入步骤名称"
+                          />
+                        </div>
+                        <div class="editor-body-toolbar-right">
+                          <div class="editor-body-actions">
+                            <el-tooltip content="查看" placement="top">
+                              <GitActionButton
+                                variant="info"
+                                compact
+                                class="toolbar-icon-button"
+                                :class="{ 'mode-button-active': !promptEditMode }"
+                                @click="promptEditMode = false"
+                              >
+                                <el-icon><View /></el-icon>
+                              </GitActionButton>
+                            </el-tooltip>
+                            <el-tooltip content="编辑" placement="top">
+                              <GitActionButton
+                                compact
+                                class="toolbar-icon-button"
+                                :class="{ 'mode-button-active': promptEditMode }"
+                                @click="promptEditMode = true"
+                              >
+                                <el-icon><Edit /></el-icon>
+                              </GitActionButton>
+                            </el-tooltip>
+                            <el-tooltip content="复制内容" placement="top">
+                              <GitActionButton
+                                variant="info"
+                                compact
+                                class="toolbar-icon-button"
+                                @click="copyText(getStepPrompt(activeNode), '内容已复制')"
+                              >
+                                <el-icon><CopyDocument /></el-icon>
+                              </GitActionButton>
+                            </el-tooltip>
+                            <el-tooltip content="保存" placement="top">
+                              <GitActionButton
+                                compact
+                                class="toolbar-icon-button"
+                                :loading="promptSaving === activeNode"
+                                @click="savePrompts(activeNode)"
+                              >
+                                <el-icon><Check /></el-icon>
+                              </GitActionButton>
+                            </el-tooltip>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-if="promptEditMode" class="task-workflow-prompt-editor" :data-prompt-type="activeNode">
+                    <UnifiedMdEditor
+                      :model-value="getStepPrompt(activeNode)"
+                      @update:model-value="val => setStepPrompt(activeNode, val)"
+                      preview-theme="github"
+                      :preview="true"
+                      :toolbars="promptEditorToolbars"
+                      height="100%"
+                    />
+                  </div>
+                  <div v-else class="preview-body">
+                    <div class="preview-renderer">
+                      <MdPreview
+                        :model-value="getStepPrompt(activeNode)"
+                        preview-theme="github"
+                        :auto-fold-threshold="999999"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <!-- 文档 Tab -->
+                <div v-else class="step-tab-panel">
+                  <div class="editor-body-toolbar editor-body-toolbar--saved">
+                    <div class="editor-body-toolbar-main">
+                      <div class="editor-body-toolbar-top">
+                        <div class="editor-body-toolbar-left">
+                          <el-input
+                            v-model="stepDocTitle"
+                            class="title-input editor-toolbar-title-input"
+                            placeholder="输入文档名称"
+                          />
+                        </div>
+                        <div class="editor-body-toolbar-right">
+                          <div class="editor-body-actions">
+                            <el-tooltip content="查看" placement="top">
+                              <GitActionButton
+                                variant="info"
+                                compact
+                                class="toolbar-icon-button mode-button-active"
+                              >
+                                <el-icon><View /></el-icon>
+                              </GitActionButton>
+                            </el-tooltip>
+                            <el-tooltip content="编辑" placement="top">
+                              <GitActionButton
+                                compact
+                                class="toolbar-icon-button"
+                              >
+                                <el-icon><Edit /></el-icon>
+                              </GitActionButton>
+                            </el-tooltip>
+                            <el-tooltip content="复制内容" placement="top">
+                              <GitActionButton
+                                variant="info"
+                                compact
+                                class="toolbar-icon-button"
+                                @click="copyText(getActiveDocContent(), '内容已复制')"
+                                :disabled="!getActiveDocContent()"
+                              >
+                                <el-icon><CopyDocument /></el-icon>
+                              </GitActionButton>
+                            </el-tooltip>
+                            <el-tooltip content="下载ZIP" placement="top">
+                              <GitActionButton
+                                variant="info"
+                                compact
+                                class="toolbar-icon-button"
+                              >
+                                <el-icon><Download /></el-icon>
+                              </GitActionButton>
+                            </el-tooltip>
+                            <el-tooltip content="保存" placement="top">
+                              <GitActionButton
+                                compact
+                                class="toolbar-icon-button"
+                              >
+                                <el-icon><Check /></el-icon>
+                              </GitActionButton>
+                            </el-tooltip>
+                            <el-tooltip content="打开知识片段" placement="top">
+                              <GitActionButton
+                                variant="info"
+                                compact
+                                class="toolbar-icon-button"
+                                @click="openActiveDocFragment"
+                                :disabled="!getActiveDocFileId()"
+                              >
+                                <el-icon><Link /></el-icon>
+                              </GitActionButton>
+                            </el-tooltip>
+                            <el-tooltip content="搜索" placement="top">
+                              <GitActionButton
+                                variant="info"
+                                compact
+                                class="toolbar-icon-button"
+                              >
+                                <el-icon><Search /></el-icon>
+                              </GitActionButton>
+                            </el-tooltip>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-if="getActiveDocLoading()" class="step-tab-panel__loading">
+                    <el-icon class="is-loading"><Loading /></el-icon>
+                    <span>加载中...</span>
+                  </div>
+                  <div v-else-if="getActiveDocContent()" class="preview-body">
+                    <div class="preview-renderer">
+                      <MdPreview
+                        :model-value="getActiveDocContent()"
+                        preview-theme="github"
+                        :auto-fold-threshold="999999"
+                      />
+                    </div>
+                  </div>
+                  <div v-else class="step-tab-panel__empty">
+                    <el-empty description="暂无文档内容" :image-size="60" />
+                  </div>
                 </div>
               </div>
             </div>
-            <div class="task-workflow-prompt-editor" :data-prompt-type="activeNode">
-              <UnifiedMdEditor
-                :model-value="getStepPrompt(activeNode)"
-                @update:model-value="val => setStepPrompt(activeNode, val)"
-                preview-theme="github"
-                :preview="true"
-                :toolbars="promptEditorToolbars"
-                height="100%"
-              />
-            </div>
-          </div>
         </div>
       </section>
     </div>
@@ -1278,10 +920,92 @@
         </div>
       </div>
     </el-dialog>
+
+    <!-- 任务配置弹窗 -->
+    <el-dialog
+      v-model="taskConfigDialogVisible"
+      title="任务配置"
+      width="80%"
+      top="3vh"
+      destroy-on-close
+      class="task-workflow-config-dialog"
+    >
+      <div class="task-workflow-config-content">
+        <div class="task-workflow-config-section">
+          <div class="task-workflow-config-section__title">基本信息</div>
+          <el-descriptions :column="2" border size="small">
+            <el-descriptions-item label="任务名称">{{ homeTask.name || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="任务状态">
+              <el-tag size="small" effect="light" :type="getTaskStatusTagType(homeTask.task_status)">{{ homeTask.task_status || '-' }}</el-tag>
+              <el-dropdown trigger="click" @command="handleTaskStatusChange" style="margin-left: 8px;">
+                <el-button size="small" :loading="statusUpdating" text type="primary">
+                  切换状态
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item
+                      v-for="status in taskStatusOptions"
+                      :key="status"
+                      :command="status"
+                      :disabled="homeTask.task_status === status"
+                    >
+                      {{ status }}
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </el-descriptions-item>
+            <el-descriptions-item label="开始日期">{{ homeTask.start_time_desc || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="抓取类型">{{ requirementSourceName }}</el-descriptions-item>
+            <el-descriptions-item :label="requirementSourceName + '地址'">
+              <a v-if="requirementSourceUrl" :href="requirementSourceUrl" target="_blank" class="task-workflow-config-link">{{ requirementSourceUrl }}</a>
+              <span v-else>-</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="使用工作流程">{{ Number(homeTask.use_workflow || 0) === 1 ? '是' : '否' }}</el-descriptions-item>
+            <el-descriptions-item label="最后操作">{{ homeTask.last_operated_at_desc || '-' }}</el-descriptions-item>
+          </el-descriptions>
+        </div>
+        <div v-if="parsedTaskDevConfigs.length > 0" class="task-workflow-config-section">
+          <div class="task-workflow-config-section__title">开发项目配置</div>
+          <div v-for="(cfg, idx) in parsedTaskDevConfigs" :key="idx" class="task-workflow-config-dev">
+            <div v-if="parsedTaskDevConfigs.length > 1" class="task-workflow-config-dev__index">配置 #{{ idx + 1 }}</div>
+            <el-descriptions :column="2" border size="small">
+              <el-descriptions-item label="Git仓库">{{ getTaskConfigName('git', cfg.git_id) }}</el-descriptions-item>
+              <el-descriptions-item label="Docker">{{ getTaskConfigName('docker', cfg.docker_id) }}</el-descriptions-item>
+              <el-descriptions-item label="Db">{{ getTaskConfigName('mysql', cfg.mysql_id) }}</el-descriptions-item>
+              <el-descriptions-item label="接口集合"><span class="task-workflow-config-link" @click="openApiDevDialog(cfg)">{{ truncateWorkflowLabel(getTaskConfigApiLabel(cfg)) }}</span></el-descriptions-item>
+              <el-descriptions-item label="本地目录">
+                {{ cfg.local_dir || '-' }}
+                <el-dropdown v-if="cfg.local_dir" trigger="click" @command="(editor) => openInEditor(cfg.local_dir, editor)" style="margin-left:6px">
+                  <span class="task-workflow-config__open-editor-btn">▶ 打开方式</span>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item command="vscode">VS Code</el-dropdown-item>
+                      <el-dropdown-item command="cursor">Cursor</el-dropdown-item>
+                      <el-dropdown-item command="goland">GoLand</el-dropdown-item>
+                      <el-dropdown-item command="phpstorm">PhpStorm</el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+              </el-descriptions-item>
+              <el-descriptions-item label="父分支">{{ cfg.parent_branch || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="分支名">{{ truncateWorkflowLabel(cfg.branch_name || '-') }}</el-descriptions-item>
+              <el-descriptions-item label="规则入口">{{ cfg.rule_entry_file || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="自定义网页">{{ getTaskConfigName('smart_link', cfg.smart_link_id) }}</el-descriptions-item>
+              <el-descriptions-item label="网页标签">{{ cfg.smart_link_label || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="账号">{{ cfg.smart_link_account || '-' }}</el-descriptions-item>
+            </el-descriptions>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="taskConfigDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
 </template>
 
 <script>
-import { HomeFilled } from '@element-plus/icons-vue'
+import { HomeFilled, View, Edit, Check, CopyDocument, MoreFilled, RefreshLeft, Link, Download, Search } from '@element-plus/icons-vue'
 import GitActionButton from '@/components/base/GitActionButton.vue'
 import ChatHistoryButton from '@/components/shared/ChatHistoryButton.vue'
 import ChatHistoryDialog from '@/components/shared/ChatHistoryDialog.vue'
@@ -1301,6 +1025,8 @@ import apiManagement from '@/utils/base/api'
 import dockerApi from '@/utils/base/compose'
 import smartLinkSetApi from '@/utils/base/smart_link_set'
 import MarkdownIt from 'markdown-it'
+import { MdPreview } from 'md-editor-v3'
+import 'md-editor-v3/lib/style.css'
 import UnifiedMdEditor from '@/components/base/UnifiedMdEditor.vue'
 import FileChangesDialog from '@/components/FileChangesDialog.vue'
 
@@ -1359,15 +1085,9 @@ const TASK_STATUS_OPTIONS = [
 
 const TASK_WORKFLOW_CONFIG_MAX_CHARS = 20
 
+// 默认步骤节点（无模板时使用，desc 为空，由模板 remark 驱动）
 const WORKFLOW_NODES = [
-  { key: 'task-config', label: '任务配置', desc: '查看当前任务的所有配置信息' },
-  { key: 'requirement-fetch', label: '抓取需求', desc: '自动登录和解析需求内容到知识片段，转为markdown格式供AI解析' },
-  { key: 'requirement', label: '需求分析', desc: '编写提示词，AI自动结合数据库和代码分析需求，形成开发文档' },
-  { key: 'design', label: '开发执行', desc: '编写提示词，AI自动结合数据库，代码和开发文档进行开发' },
-  { key: 'api-dev', label: '接口生成', desc: '编写提示词，AI自动获取登录态，将所有改动接口写入接口开发中' },
-  { key: 'api-test-fix', label: '自动化测试+修复', desc: 'AI自动根据接口开发中的接口设计测试流程，自动上传代码+自动重启服务+自动修复BUG' },
-  { key: 'code-review', label: '代码检查', desc: '让AI进行code review' },
-  { key: 'browser-test', label: '需求核对浏览器测试', desc: '编写提示词，AI核对浏览器测试结果是否满足需求' },
+  { key: 'requirement-fetch', label: '抓取需求', desc: '' },
 ]
 
 // markdown-it 实例，用于在"执行历史"对话框中渲染 markdown（包括表格）
@@ -1377,16 +1097,26 @@ export default {
   name: 'TaskWorkflow',
   components: {
     HomeFilled,
+    View,
+    Edit,
+    Check,
+    CopyDocument,
+    MoreFilled,
+    RefreshLeft,
+    Link,
+    Download,
+    Search,
     GitActionButton,
     ChatHistoryButton,
     ChatHistoryDialog,
     UnifiedMdEditor,
     FileChangesDialog,
     TaskProgressPanel,
+    MdPreview,
   },
   data() {
     return {
-      workflowNodes: WORKFLOW_NODES,
+      workflowNodes: [...WORKFLOW_NODES],
       _customStepPrompts: {}, // 自定义步骤的提示词暂存
       activeNode: 'requirement-fetch',
       loading: false,
@@ -1405,7 +1135,6 @@ export default {
       promptRestoring: '',
       apiDocResetting: false,
       requirementFetchActiveTab: 'tapd-fetch',
-      requirementActiveTab: 'requirement-prompt',
       promptEditorToolbars: PROMPT_EDITOR_TOOLBARS,
       taskStatusOptions: TASK_STATUS_OPTIONS,
       statusUpdating: false,
@@ -1417,6 +1146,7 @@ export default {
       taskConfigApiFolderMap: {},
       nodeStatuses: {},
       nodeStatusSaving: false,
+      taskConfigDialogVisible: false,
       fragmentDialogVisible: false,
       fragmentDialogUrl: '',
       fragmentDialogTitle: '',
@@ -1514,6 +1244,16 @@ export default {
       fileChangesDetailParentBranch: '',
       fileChangesDetailInitialSummary: null,
       fileChangesDetailInitialFiles: [],
+      // 工作流文档独立表相关
+      workflowDocuments: [],
+      hasWorkflowDocuments: false,
+      _cachedTemplateSteps: [], // 缓存原始模板步骤数据（含 step_documents），供红色感叹号判断
+      // 步骤左侧Tab相关
+      stepActiveTab: '__prompt__', // 当前激活的左侧Tab，'__prompt__' 为提示词，其他为文档id/name
+      promptEditMode: true, // 提示词是否为编辑模式（false为查看模式）
+      stepDocContents: {}, // 文档内容缓存 { docKey: { content, loading, fileId } }
+      stepPromptTitle: '', // 提示词Tab标题（可编辑）
+      stepDocTitle: '', // 文档Tab标题（可编辑）
     }
   },
   computed: {
@@ -1547,25 +1287,6 @@ export default {
     requirementFragmentId() {
       return String(this.workflow.requirement_fragment_id || '').trim()
     },
-    plainTextReqFragmentId() {
-      return String(this.workflow.plain_text_requirement_fragment_id || '').trim()
-    },
-    designPlanReqFragmentId() {
-      return String(this.workflow.design_plan_requirement_fragment_id || '').trim()
-    },
-    requirementFragmentTitle() {
-      return String(this.requirementFragment.title || '').trim() || (this.requirementFragmentId ? `#${this.requirementFragmentId}` : '-')
-    },
-    devPlanFragmentId() {
-      return String(this.workflow.dev_plan_fragment_id || '').trim()
-    },
-    workflowFragments() {
-      return [
-        { label: this.requirementSourceName + '需求文档', id: this.requirementFragmentId },
-        { label: '纯文本需求文档', id: this.plainTextReqFragmentId },
-        { label: '需求设计方案文档', id: this.designPlanReqFragmentId },
-      ]
-    },
     parsedTaskDevConfigs() {
       const raw = this.homeTask.dev_configs
       if (!raw) return []
@@ -1590,7 +1311,7 @@ export default {
           return node.key
         }
       }
-      return 'task-config'
+      return 'requirement-fetch'
     },
     issueFixCombinedText() {
       const input = (this.issueFixInput || '').trim()
@@ -1612,12 +1333,34 @@ export default {
     branchMismatchMismatchedCount() {
       return this.branchMismatchDetailList.filter(item => item && !item.matched).length
     },
+    // 判断是否需要显示文档迁移红色感叹号（新表无文档记录但模板步骤有文档配置）
+    showDocumentMigrationWarning() {
+      if (this.hasWorkflowDocuments) return false
+      if (!this._cachedTemplateSteps || this._cachedTemplateSteps.length === 0) return false
+      return this._cachedTemplateSteps.some(step => {
+        if (!step.step_documents) return false
+        try {
+          const docs = typeof step.step_documents === 'string'
+            ? JSON.parse(step.step_documents) : step.step_documents
+          return Array.isArray(docs) && docs.length > 0
+        } catch { return false }
+      })
+    },
+    // 模板步骤原始数据映射（按 step_key 索引）
+    templateStepsMap() {
+      const map = {}
+      for (const step of (this._cachedTemplateSteps || [])) {
+        map[step.step_key] = step
+      }
+      return map
+    },
   },
   mounted() {
     this.loadWorkflowPage()
     this.loadTaskConfigLookupData()
     this.ensureWorkflowUnreadSse()
     this.connectBusinessSse()
+    this.registerFragmentUpdateSse()
     window.addEventListener('keydown', this.handleCtrlS, true)
   },
   activated() {
@@ -1637,6 +1380,7 @@ export default {
     this.stopFileChangesPolling()
     this.unregisterWorkflowSse()
     this.unregisterChatOutputSse()
+    this.unregisterFragmentUpdateSse()
     sseBusiness.CloseBusinessSse('task_workflow')
     this.unregisterWorkflowUnreadSse()
   },
@@ -1669,7 +1413,6 @@ export default {
       this.nodeStatuses = {}
       this.activeNode = 'requirement-fetch'
       this.requirementFetchActiveTab = 'tapd-fetch'
-      this.requirementActiveTab = 'requirement-prompt'
       this.branchMismatchDialogVisible = false
       this.branchMismatchDialogResolver = null
       this.branchMismatchDetailList = []
@@ -1682,6 +1425,13 @@ export default {
       if (this.chatDetailId) {
         this.saveChatInputCache(this.chatDetailId, newVal)
       }
+    },
+    // 步骤切换时重置Tab状态
+    activeNode(newVal) {
+      this.stepActiveTab = '__prompt__'
+      this.promptEditMode = true
+      this.stepPromptTitle = this.getActiveNodeLabel()
+      this.stepDocTitle = ''
     },
   },
   methods: {
@@ -1697,17 +1447,12 @@ export default {
         this.savePrompts(promptTypeFromEditor)
         return
       }
-      const nodeToPrompt = { requirement: 'requirement', design: 'design', 'api-dev': 'api_dev', 'api-test-fix': 'api_test', 'code-review': 'code_review', 'browser-test': 'browser_test' }
-      let promptType = nodeToPrompt[this.activeNode]
-      if (this.activeNode === 'requirement-fetch' && this.requirementFetchActiveTab === 'plain-text-prompt') {
-        promptType = 'plain_text_requirement'
-      }
-      if (this.activeNode === 'requirement' && this.requirementActiveTab === 'design-plan-prompt') {
-        promptType = 'design_plan_requirement'
-      }
-      // 自定义步骤：使用 step_key 本身作为 promptType
-      if (!promptType && this.isCustomStepNode(this.activeNode)) {
-        promptType = this.activeNode
+      const nodeToPrompt = {}
+      // 当前步骤即 promptType
+      let promptType = this.activeNode
+      if (this.activeNode === 'requirement-fetch') {
+        // 抓取需求步骤不需要 Ctrl+S 保存提示词
+        return
       }
       if (promptType) {
         this.savePrompts(promptType)
@@ -1762,15 +1507,21 @@ export default {
       this.requirementFetchConfig = data.requirement_fetch_config || this.requirementFetchConfig || {}
       // 从模板步骤动态生成工作流节点列表
       if (data.template_steps && data.template_steps.length > 0) {
-        this.workflowNodes = data.template_steps.map(step => ({
+        this._cachedTemplateSteps = data.template_steps
+        this.workflowNodes = data.template_steps
+          .filter(step => step.step_key !== 'task-config')
+          .map(step => ({
           key: step.step_key,
           label: step.name,
-          desc: '',
+          desc: step.remark || '',
           _isFixed: step.is_fixed === 1,
           _promptContent: step.prompt_content || '',
         }))
       }
       this.parseNodeStatuses()
+      // 捕获工作流文档独立表数据
+      this.workflowDocuments = data.documents || []
+      this.hasWorkflowDocuments = data.has_workflow_documents || false
       if (this.workflowId !== previousWorkflowId) {
         this.unregisterWorkflowUnreadSse()
         this.ensureWorkflowUnreadSse()
@@ -1857,21 +1608,6 @@ export default {
         this.replaceRequirementShareUrlPlaceholder()
       })
     },
-    replaceRequirementShareUrlPlaceholder() {
-      if (!this.requirementShareUrl) {
-        return
-      }
-      const placeholder = '{需求文档地址}'
-      if (this.workflow.prompt_requirement && this.workflow.prompt_requirement.includes(placeholder)) {
-        this.workflow.prompt_requirement = this.workflow.prompt_requirement.replaceAll(placeholder, this.requirementShareUrl)
-      }
-      if (this.workflow.prompt_plain_text_requirement && this.workflow.prompt_plain_text_requirement.includes(placeholder)) {
-        this.workflow.prompt_plain_text_requirement = this.workflow.prompt_plain_text_requirement.replaceAll(placeholder, this.requirementShareUrl)
-      }
-      if (this.workflow.prompt_design_plan_requirement && this.workflow.prompt_design_plan_requirement.includes(placeholder)) {
-        this.workflow.prompt_design_plan_requirement = this.workflow.prompt_design_plan_requirement.replaceAll(placeholder, this.requirementShareUrl)
-      }
-    },
     ensureWorkflowSse() {
       if (this.workflowId <= 0) {
         return
@@ -1915,6 +1651,28 @@ export default {
         }
         return
       }
+      // 提示词内容变更时更新本地提示词
+      if (data.type === 'step_prompt_change') {
+        const stepKey = String(data.step_key || '').trim()
+        const promptContent = String(data.prompt_content || '').trim()
+        if (stepKey) {
+          // 清除自定义缓存，让 getStepPrompt 从 workflow.step_prompts 重新读取
+          if (this._customStepPrompts) {
+            delete this._customStepPrompts[stepKey]
+          }
+          // 同步更新 workflow.step_prompts
+          if (this.workflow.step_prompts) {
+            try {
+              const prompts = typeof this.workflow.step_prompts === 'string'
+                ? JSON.parse(this.workflow.step_prompts) : this.workflow.step_prompts
+              prompts[stepKey] = promptContent
+              this.workflow.step_prompts = typeof this.workflow.step_prompts === 'string'
+                ? JSON.stringify(prompts) : prompts
+            } catch (e) { /* ignore */ }
+          }
+        }
+        return
+      }
       this.requirementFetchLogs.push({
         workflow_id: Number(data.workflow_id || 0),
         step: String(data.step || '').trim(),
@@ -1922,6 +1680,12 @@ export default {
         message: String(data.message || '').trim(),
         time: Number(data.time || 0),
       })
+    },
+    // 知识片段变更 SSE 回调：若变更的 fragment 正在步骤文档Tab中展示，则重新加载内容
+    handleMemoryFragmentUpdateForWorkflow(payload) {
+      const fragmentId = String(payload?.fragment_id || payload?.fragment?.id || payload?.fragment?.file_id || '').trim()
+      if (!fragmentId) return
+      this.reloadDocContentByFileId(fragmentId)
     },
     maybeAutoFetchRequirement() {
       if (this.requirementFetchAutoTriggered) {
@@ -1995,34 +1759,6 @@ export default {
       })
       window.open(routeInfo.href, '_blank')
     },
-    openPlainTextReqFragment() {
-      if (!this.plainTextReqFragmentId) {
-        this.$helperNotify.error('当前工作流未绑定纯文本需求知识片段')
-        return
-      }
-      const routeInfo = this.$router.resolve({
-        path: '/MemoryFragment',
-        query: {
-          fragment_id: this.plainTextReqFragmentId,
-          hide_menu: '1',
-        },
-      })
-      window.open(routeInfo.href, '_blank')
-    },
-    openDesignPlanReqFragment() {
-      if (!this.designPlanReqFragmentId) {
-        this.$helperNotify.error('当前工作流未绑定需求设计方案知识片段')
-        return
-      }
-      const routeInfo = this.$router.resolve({
-        path: '/MemoryFragment',
-        query: {
-          fragment_id: this.designPlanReqFragmentId,
-          hide_menu: '1',
-        },
-      })
-      window.open(routeInfo.href, '_blank')
-    },
     openFragmentById(fragmentId) {
       if (!fragmentId) return
       const routeInfo = this.$router.resolve({
@@ -2034,19 +1770,11 @@ export default {
       })
       window.open(routeInfo.href, '_blank')
     },
-    openApiDocFragment() {
-      const fragmentId = this.workflow.api_doc_fragment_id
-      if (!fragmentId) {
-        this.$message.warning('接口文档片段未初始化')
-        return
-      }
-      this.openFragmentById(fragmentId)
-    },
     resetApiDoc() {
       if (this.apiDocResetting || this.workflowId <= 0) return
       this.apiDocResetting = true
       const _this = this
-      taskWorkflowApi.TaskWorkflowApiDocReset(this.workflowId, function (res) {
+      taskWorkflowApi.TaskWorkflowApiDocReset(this.workflowId, this.activeNode, function (res) {
         _this.apiDocResetting = false
         if (res.ErrCode !== 0) {
           _this.$message.error(res.ErrMsg || '重置接口文档失败')
@@ -2060,20 +1788,10 @@ export default {
         return
       }
       this.promptSaving = promptType
-      // 使用新格式 step_key + step_prompt 保存（同时保留旧字段向后兼容）
       const savePayload = {
         workflow_id: this.workflowId,
         step_key: promptType,
         step_prompt: this.getStepPrompt(promptType),
-        // 旧字段向后兼容
-        prompt_requirement: this.workflow.prompt_requirement || '',
-        prompt_api_dev: this.workflow.prompt_api_dev || '',
-        prompt_api_test: this.workflow.prompt_api_test || '',
-        prompt_design: this.workflow.prompt_design || '',
-        prompt_plain_text_requirement: this.workflow.prompt_plain_text_requirement || '',
-        prompt_design_plan_requirement: this.workflow.prompt_design_plan_requirement || '',
-        prompt_browser_test: this.workflow.prompt_browser_test || '',
-        prompt_code_review: this.workflow.prompt_code_review || '',
       }
       taskWorkflowApi.TaskWorkflowPromptsSave(savePayload, (response) => {
         this.promptSaving = ''
@@ -2108,11 +1826,12 @@ export default {
           return
         }
         this.$helperNotify.success('提示词已还原为默认值')
+        // 清空编辑器缓存，让 getStepPrompt 从 workflow.step_prompts 重新读取
+        this._customStepPrompts = {}
         if (response.Data?.workflow) {
           this.workflow = response.Data.workflow
-          this.$nextTick(() => {
-            this.replaceRequirementShareUrlPlaceholder()
-          })
+          this.workflowDocuments = response.Data.documents || []
+          this.hasWorkflowDocuments = response.Data.has_workflow_documents || false
         }
       })
     },
@@ -2123,7 +1842,7 @@ export default {
       if (this._customStepPrompts && this._customStepPrompts[stepKey] !== undefined) {
         return this._customStepPrompts[stepKey] || ''
       }
-      // 尝试从 step_prompts 读取
+      // 从 step_prompts 读取
       if (this.workflow.step_prompts) {
         try {
           const prompts = typeof this.workflow.step_prompts === 'string'
@@ -2134,18 +1853,7 @@ export default {
           }
         } catch (e) { /* ignore */ }
       }
-      // 回退到旧的 prompt_xxx 字段
-      const legacyMap = {
-        'requirement': this.workflow.prompt_requirement,
-        'api-dev': this.workflow.prompt_api_dev,
-        'api-test-fix': this.workflow.prompt_api_test,
-        'design': this.workflow.prompt_design,
-        'plain_text_requirement': this.workflow.prompt_plain_text_requirement,
-        'design_plan_requirement': this.workflow.prompt_design_plan_requirement,
-        'browser-test': this.workflow.prompt_browser_test,
-        'code-review': this.workflow.prompt_code_review,
-      }
-      return legacyMap[stepKey] || ''
+      return ''
     },
     // setStepPrompt 设置自定义步骤的提示词值（暂存到组件实例）。
     setStepPrompt(stepKey, value) {
@@ -2157,7 +1865,7 @@ export default {
     },
     // isCustomStepNode 判断当前激活节点是否为自定义步骤。
     isCustomStepNode(key) {
-      const knownKeys = ['task-config', 'requirement-fetch', 'requirement', 'design', 'api-dev', 'api-test-fix', 'code-review', 'browser-test', 'issue_fix', 'plain_text_requirement', 'design_plan_requirement']
+      const knownKeys = ['requirement-fetch', 'requirement', 'design', 'api-dev', 'api-test-fix', 'code-review', 'browser-test', 'issue_fix', 'plain_text_requirement', 'design_plan_requirement']
       return key && !knownKeys.includes(key)
     },
     // getActiveNodeLabel 获取当前激活节点的显示名称。
@@ -2470,6 +2178,14 @@ export default {
         sseBusiness.UnRegisterBusinessReceive('task_workflow', 'task_workflow_chat_output', this._chatOutputHandler)
         this._chatOutputHandler = null
       }
+    },
+    // 注册知识片段变更 SSE，用于文档Tab内容实时更新
+    registerFragmentUpdateSse() {
+      sseDistribute.RegisterReceive('memory_fragment_updates', this.handleMemoryFragmentUpdateForWorkflow)
+    },
+    // 注销知识片段变更 SSE
+    unregisterFragmentUpdateSse() {
+      sseDistribute.UnRegisterReceive('memory_fragment_updates', this.handleMemoryFragmentUpdateForWorkflow)
     },
     _processChatSseLine(line) {
       if (!line) return
@@ -3358,6 +3074,135 @@ export default {
       this.activeNode = key
       this.saveActiveNodeCache()
     },
+    // 判断某个步骤节点是否配置了 step_documents（用于红色感叹号显示）
+    nodeHasStepDocuments(nodeKey) {
+      const stepData = this.templateStepsMap[nodeKey]
+      if (!stepData || !stepData.step_documents) return false
+      try {
+        const docs = typeof stepData.step_documents === 'string'
+          ? JSON.parse(stepData.step_documents) : stepData.step_documents
+        return Array.isArray(docs) && docs.length > 0
+      } catch { return false }
+    },
+    // 判断当前步骤是否包含 is_api_doc 文档（用于展示重置接口文档按钮）
+    activeStepHasApiDoc() {
+      const stepData = this.templateStepsMap[this.activeNode]
+      if (!stepData || !stepData.step_documents) return false
+      try {
+        const docs = typeof stepData.step_documents === 'string'
+          ? JSON.parse(stepData.step_documents) : stepData.step_documents
+        return Array.isArray(docs) && docs.some(doc => doc.is_api_doc === true)
+      } catch { return false }
+    },
+    // 获取当前步骤的文档配置列表
+    getActiveStepDocuments() {
+      const stepData = this.templateStepsMap[this.activeNode]
+      if (!stepData || !stepData.step_documents) return []
+      try {
+        const docs = typeof stepData.step_documents === 'string'
+          ? JSON.parse(stepData.step_documents) : stepData.step_documents
+        return Array.isArray(docs) ? docs : []
+      } catch { return [] }
+    },
+    // 切换到文档Tab，并加载文档内容
+    switchToDocTab(doc) {
+      const docKey = doc.id || doc.name
+      this.stepActiveTab = docKey
+      this.stepDocTitle = doc.name || ''
+      this.loadDocContentIfNeeded(doc)
+    },
+    // 按需加载文档的知识片段内容
+    loadDocContentIfNeeded(doc) {
+      const docKey = doc.id || doc.name
+      if (this.stepDocContents[docKey] && this.stepDocContents[docKey].content !== undefined) {
+        return // 已加载
+      }
+      // 查找文档对应的 file_id
+      const fileId = this.findDocFileId(doc)
+      if (!this.stepDocContents[docKey]) {
+        this.stepDocContents[docKey] = { content: '', loading: true, fileId: fileId || '' }
+      }
+      if (!fileId) {
+        this.stepDocContents[docKey].loading = false
+        this.stepDocContents[docKey].content = ''
+        return
+      }
+      this.stepDocContents[docKey].loading = true
+      this.stepDocContents = { ...this.stepDocContents }
+      MemoryFragmentApi.MemoryFragmentInfo(fileId, (response) => {
+        if (response && response.ErrCode === 0 && response.Data) {
+          this.stepDocContents[docKey] = {
+            content: response.Data.content || '',
+            loading: false,
+            fileId: fileId,
+          }
+        } else {
+          this.stepDocContents[docKey] = {
+            content: '',
+            loading: false,
+            fileId: fileId,
+          }
+        }
+        this.stepDocContents = { ...this.stepDocContents }
+      })
+    },
+    // 查找文档对应的 file_id（从 workflowDocuments 中匹配）
+    findDocFileId(doc) {
+      const docId = doc.id || ''
+      const docName = doc.name || ''
+      // 从 workflowDocuments 中查找匹配的文档记录
+      for (const wd of this.workflowDocuments) {
+        const wdDocId = String(wd.document_id || '')
+        const wdName = String(wd.document_name || '')
+        if (docId && wdDocId === docId) return String(wd.file_id || '')
+        if (docName && wdName === docName) return String(wd.file_id || '')
+      }
+      return ''
+    },
+    // 获取当前激活文档Tab的名称
+    getActiveDocName() {
+      const docs = this.getActiveStepDocuments()
+      for (const doc of docs) {
+        if ((doc.id || doc.name) === this.stepActiveTab) return doc.name || ''
+      }
+      return ''
+    },
+    // 获取当前激活文档Tab的内容
+    getActiveDocContent() {
+      const docKey = this.stepActiveTab
+      return this.stepDocContents[docKey]?.content || ''
+    },
+    // 获取当前激活文档Tab的加载状态
+    getActiveDocLoading() {
+      const docKey = this.stepActiveTab
+      return this.stepDocContents[docKey]?.loading || false
+    },
+    // 获取当前激活文档Tab的 file_id
+    getActiveDocFileId() {
+      const docKey = this.stepActiveTab
+      return this.stepDocContents[docKey]?.fileId || ''
+    },
+    // 打开当前文档对应的知识片段
+    openActiveDocFragment() {
+      const fileId = this.getActiveDocFileId()
+      if (!fileId) return
+      this.openFragmentInDialog(fileId, this.getActiveDocName())
+    },
+    // SSE推送文档内容变更时重新加载对应文档
+    reloadDocContentByFileId(fileId) {
+      if (!fileId) return
+      for (const docKey of Object.keys(this.stepDocContents)) {
+        if (this.stepDocContents[docKey]?.fileId === fileId) {
+          this.stepDocContents[docKey] = { ...this.stepDocContents[docKey], loading: true }
+          this.stepDocContents = { ...this.stepDocContents }
+          MemoryFragmentApi.MemoryFragmentInfo(fileId, (response) => {
+            const newContent = (response && response.ErrCode === 0 && response.Data) ? (response.Data.content || '') : ''
+            this.stepDocContents[docKey] = { content: newContent, loading: false, fileId: fileId }
+            this.stepDocContents = { ...this.stepDocContents }
+          })
+        }
+      }
+    },
     getActiveNodeCacheKey() {
       return ACTIVE_NODE_CACHE_PREFIX + this.taskId
     },
@@ -3368,7 +3213,9 @@ export default {
     },
     restoreActiveNodeCache() {
       if (this.taskId <= 0) return null
-      return localStorage.getItem(this.getActiveNodeCacheKey())
+      const cached = localStorage.getItem(this.getActiveNodeCacheKey())
+      if (cached === 'task-config') return null
+      return cached
     },
     truncateWorkflowLabel(label) {
       const str = String(label || '-')
@@ -4404,15 +4251,7 @@ export default {
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-}
-
-.task-workflow-tab {
-  display: flex;
-  flex-direction: column;
   gap: 12px;
-  flex: 1;
-  height: 100%;
-  min-height: 0;
 }
 
 .task-workflow-grid {
@@ -4427,7 +4266,6 @@ export default {
   background: #fafaf7;
   border: 1px solid #e8e8e0;
   flex: 1;
-  height: 100%;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -4502,6 +4340,292 @@ export default {
   scrollbar-width: thin;
   scrollbar-color: #9fb39a #edf3e8;
 }
+
+/* ===== 步骤左侧Tab布局 ===== */
+.step-tab-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  gap: 0;
+}
+
+.step-tab-sidebar {
+  width: 120px;
+  min-width: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 8px 8px 0;
+  border-right: 1px solid #e8e8e0;
+  flex-shrink: 0;
+  overflow-y: auto;
+}
+
+.step-tab-btn {
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #606266;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.15s, color 0.15s;
+  line-height: 1.4;
+  width: 100%;
+}
+
+.step-tab-btn:hover {
+  background: #f0f2e8;
+}
+
+.step-tab-btn--active {
+  background: #e8f0e0;
+  color: #3a5a2c;
+  font-weight: 600;
+}
+
+.step-tab-btn--prompt {
+  font-weight: 600;
+}
+
+.step-tab-btn--prompt.step-tab-btn--active {
+  color: #3a5a2c;
+}
+
+.step-tab-btn--doc {
+  font-weight: 400;
+  font-size: 12px;
+}
+
+.step-tab-content {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding-left: 16px;
+}
+
+.step-tab-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ===== 复用 MemoryEditor 工具栏样式 ===== */
+.step-tab-panel .editor-body-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(226, 232, 216, 0.9);
+  border-radius: 14px 14px 0 0;
+  background: #f8faf5;
+  flex-shrink: 0;
+}
+
+.step-tab-panel .editor-body-toolbar--saved {
+  background: linear-gradient(180deg, #f6faf2 0%, #edf5e7 100%);
+  border-bottom-color: rgba(196, 217, 186, 0.9);
+}
+
+.step-tab-panel .editor-body-toolbar-main {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  width: 100%;
+}
+
+.step-tab-panel .editor-body-toolbar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.step-tab-panel .editor-body-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+
+.step-tab-panel .editor-toolbar-title-input {
+  width: 100%;
+  flex: 1 1 200px;
+}
+
+.step-tab-panel .editor-body-toolbar-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.step-tab-panel .editor-body-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.step-tab-panel .editor-body-actions > .el-tooltip__trigger {
+  margin: 0;
+  padding: 0;
+}
+
+.step-tab-panel .editor-body-actions :deep(.toolbar-icon-button),
+.step-tab-panel .editor-body-actions :deep(.toolbar-icon-button.git-action-button--compact) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 !important;
+  line-height: 1;
+}
+
+.step-tab-panel .editor-body-actions :deep(.toolbar-icon-button span) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.step-tab-panel .editor-body-actions :deep(.toolbar-icon-button .el-icon) {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.step-tab-panel .editor-action-dropdown {
+  margin-left: 2px;
+}
+
+.step-tab-panel .editor-action-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(210, 219, 203, 0.95);
+  border-radius: 10px;
+  background: #ffffff;
+  color: #5d6e57;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease, background-color 0.2s ease;
+}
+
+.step-tab-panel .editor-action-trigger:hover {
+  border-color: #b9c9b1;
+  color: #3d5237;
+  background: #f7fbf2;
+}
+
+.step-tab-panel .mode-button-active {
+  position: relative;
+}
+
+.step-tab-panel .mode-button-active::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px rgba(79, 128, 79, 0.35);
+  pointer-events: none;
+}
+
+/* ===== 预览区域样式（复用 MemoryEditor） ===== */
+.step-tab-panel .preview-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 18px;
+  padding: 18px 22px;
+  background: #fff;
+}
+
+.step-tab-panel .preview-renderer {
+  flex: 1;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: #9fb39a #edf3e8;
+  padding-right: 6px;
+}
+
+.step-tab-panel .preview-renderer :deep(.md-editor-preview) {
+  font-size: 14px;
+  color: #33422f;
+  padding: 0 !important;
+}
+
+.step-tab-panel .preview-renderer :deep(.md-editor-preview-wrapper) {
+  padding: 0 !important;
+}
+
+.step-tab-panel .preview-renderer::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.step-tab-panel .preview-renderer::-webkit-scrollbar-track {
+  background: #edf3e8;
+  border-radius: 999px;
+}
+
+.step-tab-panel .preview-renderer::-webkit-scrollbar-thumb {
+  background: #9fb39a;
+  border: 2px solid #edf3e8;
+  border-radius: 999px;
+}
+
+.step-tab-panel .preview-renderer::-webkit-scrollbar-thumb:hover {
+  background: #869c82;
+}
+
+.step-tab-panel__loading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 24px;
+  color: #909399;
+  font-size: 13px;
+}
+
+.step-tab-panel__empty {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex: 1;
+  min-height: 0;
+}
+
+.task-workflow-card--with-tabs .task-workflow-prompt-editor {
+  flex: 1;
+  min-height: 0;
+}
+
 
 .task-workflow-fragment-view::-webkit-scrollbar {
   width: 10px;

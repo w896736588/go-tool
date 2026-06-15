@@ -36,6 +36,8 @@ type WorkflowTemplateStepSaveRequest struct {
 	Name          string `json:"name"`
 	StepKey       string `json:"step_key"`
 	PromptContent string `json:"prompt_content"`
+	StepDocuments string `json:"step_documents"`
+	Remark        string `json:"remark"`
 	SortOrder     int    `json:"sort_order"`
 }
 
@@ -57,6 +59,8 @@ type WorkflowTemplateStepResponse struct {
 	Name          string `json:"name"`
 	StepKey       string `json:"step_key"`
 	PromptContent string `json:"prompt_content"`
+	StepDocuments string `json:"step_documents"`
+	Remark        string `json:"remark"`
 	SortOrder     int    `json:"sort_order"`
 	IsFixed       int    `json:"is_fixed"`
 	CreateTime    int64  `json:"create_time"`

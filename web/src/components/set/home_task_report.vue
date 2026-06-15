@@ -47,23 +47,8 @@
       <div class="set-config-header">
         <h3 class="set-config-title">工作流模板管理</h3>
         <p class="set-config-desc">
-          管理多个工作流模板，每个模板包含多个步骤。左侧选择/新建模板，右侧编辑步骤和提示词。支持拖拽排序。
+          左侧选择或新建模板，右侧编辑步骤名称与提示词。固定步骤不可删除，自定义步骤支持拖拽排序。
         </p>
-      </div>
-      <div class="prompt-placeholder-bar">
-        <span class="prompt-placeholder-bar__label">内置占位符：</span>
-        <span
-          v-for="ph in promptPlaceholders"
-          :key="ph.value"
-          class="prompt-placeholder-tag"
-          @click="copyPlaceholder(ph)"
-        >
-          {{ ph.label }}
-          <el-icon class="prompt-placeholder-tag__icon"><CopyDocument /></el-icon>
-          <el-tooltip v-if="ph.tip" :content="ph.tip" placement="top">
-            <el-icon class="prompt-placeholder-tag__help"><QuestionFilled /></el-icon>
-          </el-tooltip>
-        </span>
       </div>
       <div class="set-config-table-card prompt-template-card">
         <WorkflowTemplateManager ref="templateManager" @templates-loaded="onTemplatesLoaded" />
@@ -82,11 +67,11 @@
       </div>
 
       <div class="prompt-placeholder-bar">
-        <span class="prompt-placeholder-bar__label">内置占位符：</span>
+        <span class="prompt-placeholder-bar__label">可用占位符：</span>
         <span
           v-for="ph in devEnvironmentPlaceholders"
           :key="ph.value"
-          class="prompt-placeholder-tag"
+          :class="['prompt-placeholder-tag', `prompt-placeholder-tag--${ph.group || 'builtin'}`]"
           @click="copyPlaceholder(ph)"
         >
           {{ ph.label }}
@@ -305,31 +290,9 @@ import { MdEditor } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 import { CopyDocument, QuestionFilled } from '@element-plus/icons-vue'
 import WorkflowTemplateManager from './WorkflowTemplateManager.vue'
+import workflowTemplateApi from '@/utils/base/workflow_template'
 
 const DEFAULT_HOME_TASK_DAILY_REPORT_PROMPT = '请基于当前活跃任务生成中文工作日报，按已完成、进行中、风险与阻塞三个部分总结，输出 Markdown，禁止编造未提供的信息。'
-
-const PROMPT_PLACEHOLDERS = [
-  { label: '任务名称', value: '{任务名称}', tip: '替换为当前任务的名称' },
-  { label: '需求文档地址', value: '{需求文档地址}', tip: '替换为需求知识片段的分享链接' },
-  { label: '需求文档纯文本地址', value: '{需求文档纯文本地址}', tip: '替换为纯文本需求片段的分享链接' },
-  { label: '需求文档纯文本文件相对地址', value: '{需求文档纯文本文件相对地址}', tip: '替换为纯文本需求片段文件的相对路径' },
-  { label: '需求设计方案文档地址', value: '{需求设计方案文档地址}', tip: '替换为设计方案片段的分享链接' },
-  { label: '需求设计方案文件相对地址', value: '{需求设计方案文件相对地址}', tip: '替换为设计方案片段文件的相对路径' },
-  { label: '接口开发API地址', value: '{接口开发API地址}', tip: '替换为当前服务的 API 基地址（scheme://host）' },
-  { label: '接口开发API的token', value: '{接口开发API的token}', tip: '替换为请求的 Authorization token' },
-  { label: '开发项目配置', value: '{开发项目配置}', tip: '替换为开发项目配置的 Markdown 列表' },
-  { label: '自定义网页', value: '{自定义网页}', tip: '替换为智能链接（smart_link）的名称和 ID' },
-  { label: '网页标签', value: '{网页标签}', tip: '替换为智能链接的标签（smart_link_label）' },
-  { label: '账号', value: '{账号}', tip: '替换为智能链接的账号（smart_link_account）' },
-  { label: 'dtool-api地址', value: '{dtool-api地址}', tip: '替换为 skills/dtool-api 目录的本地路径' },
-  { label: 'dtool-common地址', value: '{dtool-common地址}', tip: '替换为 skills/dtool-common 目录的本地路径' },
-  { label: 'dtool-workflow地址', value: '{dtool-workflow地址}', tip: '替换为 skills/dtool-workflow 目录的本地路径' },
-  { label: 'dtool-playwright地址', value: '{dtool-playwright地址}', tip: '替换为 skills/dtool-playwright 目录的本地路径' },
-  { label: 'dtool-notify地址', value: '{dtool-notify地址}', tip: '替换为 skills/dtool-notify 目录的本地路径' },
-  { label: '工作流程ID', value: '{工作流程ID}', tip: '替换为当前工作流程的 ID' },
-  { label: '任务ID', value: '{任务ID}', tip: '替换为当前任务的 ID' },
-  { label: '开发环境', value: '{开发环境}', tip: '替换为开发环境配置（已递归解析内部占位符）' },
-]
 
 const PROMPT_EDITOR_TOOLBARS = [
   'bold', 'italic', 'strikeThrough', 'title', 'quote',
@@ -367,8 +330,8 @@ export default {
         home_task_branch_name_prompt: '',
         home_task_branch_name_model_id: null,
       },
-      promptPlaceholders: PROMPT_PLACEHOLDERS,
       promptEditorToolbars: PROMPT_EDITOR_TOOLBARS,
+      skillList: [],
     }
   },
   computed: {
@@ -380,7 +343,18 @@ export default {
       ]
     },
     devEnvironmentPlaceholders() {
-      return PROMPT_PLACEHOLDERS.filter(ph => ph.value !== '{开发环境}')
+      const base = [
+        { label: '{接口开发API地址}', value: '{接口开发API地址}', tip: '替换为当前服务的 API 基地址（scheme://host）', group: 'builtin' },
+        { label: '{接口开发API的token}', value: '{接口开发API的token}', tip: '替换为请求的 Authorization token', group: 'builtin' },
+        { label: '{开发配置}', value: '{开发配置}', tip: '替换为开发项目配置的 Markdown 列表', group: 'builtin' },
+      ]
+      const skillPlaceholders = (this.skillList || []).map(name => ({
+        label: `{${name}地址}`,
+        value: `{${name}地址}`,
+        tip: `替换为 skills/${name} 目录的本地路径`,
+        group: 'skill',
+      }))
+      return base.concat(skillPlaceholders)
     },
     currentTapdLinkOptions() {
       return this.getSmartLinkOptions(this.form.home_task_tapd_smart_link_id)
@@ -393,6 +367,7 @@ export default {
     this.loadAiModelList()
     this.loadSmartLinkList()
     this.loadConfig()
+    this.loadSkillList()
   },
   methods: {
     buildModelLabel(item) {
@@ -548,6 +523,14 @@ export default {
       document.execCommand('copy')
       document.body.removeChild(textarea)
       this.$helperNotify.success(`已复制：${text}`)
+    },
+    // 动态加载 skills 列表
+    loadSkillList() {
+      workflowTemplateApi.WorkflowSkillList((response) => {
+        if (response && response.ErrCode === 0 && response.Data && response.Data.list) {
+          this.skillList = response.Data.list.map(item => item.name)
+        }
+      })
     },
     // 模板管理器加载完成后的回调
     onTemplatesLoaded(templates) {

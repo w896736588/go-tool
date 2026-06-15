@@ -680,6 +680,8 @@ func ensureTaskWorkflowDevPlanFragment(workflowInfo map[string]any, homeTaskInfo
 	}
 	workflowInfo[`dev_plan_fragment_id`] = fragmentFullRef
 	workflowInfo[`status`] = `dev_plan_ready`
+	// 同步到新文档表
+	syncWorkflowDocToNewTable(workflowID, common.TaskWorkflowDocTypeDevPlan, fragmentFullRef)
 	return fragmentInfo, nil
 }
 
@@ -708,6 +710,10 @@ func buildTaskWorkflowResponse(c *gin.Context, workflowInfo map[string]any) (map
 	if err != nil {
 		return nil, err
 	}
+	// 获取关联的模板和步骤信息（尽早获取，便于预生成步骤文档片段）。
+	homeTaskID := cast.ToInt(workflowInfo[`home_task_id`])
+	template, templateSteps, _ := common.DbMain.HomeTaskWorkflowTemplateSteps(homeTaskID)
+
 	workflowID := cast.ToInt(workflowInfo[`id`])
 	// 先创建关联的知识片段，确保后续提示词占位符解析时片段ID已存在。
 	if workflowID > 0 && strings.TrimSpace(cast.ToString(workflowInfo[`plain_text_requirement_fragment_id`])) == `` {
@@ -731,14 +737,61 @@ func buildTaskWorkflowResponse(c *gin.Context, workflowInfo map[string]any) (map
 			workflowInfo = updatedInfo
 		}
 	}
-	// 知识片段创建完成后，再从配置模板初始化提示词。
-	if workflowID > 0 && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_requirement`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_api_dev`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_api_test`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_design`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_plain_text_requirement`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_design_plan_requirement`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_browser_test`])) == `` && strings.TrimSpace(cast.ToString(workflowInfo[`prompt_code_review`])) == `` {
-		prompts := resolveTaskWorkflowPrompts(c, homeTaskInfo, workflowInfo)
-		_ = common.DbMain.TaskWorkflowUpdatePrompts(workflowID, prompts[`requirement`], prompts[`api_dev`], prompts[`api_test`], prompts[`design`], prompts[`plain_text_requirement`], prompts[`design_plan_requirement`], prompts[`browser_test`], prompts[`code_review`])
+	// 预生成模板步骤中配置的知识片段文档，确保所有占位符在提示词替换前可用。
+	if workflowID > 0 && len(templateSteps) > 0 {
+		ensureTaskWorkflowStepFragments(c, workflowInfo, homeTaskInfo, templateSteps)
 	}
-	// 获取关联的模板和步骤信息
-	homeTaskID := cast.ToInt(workflowInfo[`home_task_id`])
-	template, templateSteps, _ := common.DbMain.HomeTaskWorkflowTemplateSteps(homeTaskID)
+	// 知识片段创建完成后，逐个初始化缺失的提示词。
+	// 优先从模板步骤的 prompt_content 获取，回退到旧全局配置。
+	if workflowID > 0 {
+		prompts := resolveTaskWorkflowPrompts(c, homeTaskInfo, workflowInfo)
+		// 有模板步骤时，优先使用模板步骤的 prompt_content 覆盖
+		if len(templateSteps) > 0 {
+			placeholders := buildTaskWorkflowPlaceholderMap(c, homeTaskInfo, workflowInfo)
+			for _, step := range templateSteps {
+				stepKey := cast.ToString(step[`step_key`])
+				promptContent := strings.TrimSpace(cast.ToString(step[`prompt_content`]))
+				if promptContent == `` {
+					continue
+				}
+				// 将模板步骤的 prompt_content 映射到 prompts map 的 key
+				key := templateStepKeyToPromptKey(stepKey)
+				if key != `` {
+					prompts[key] = taskWorkflowResolvePlaceholders(promptContent, placeholders)
+				}
+			}
+		}
+		// 只填充当前为空的字段，保留已有的提示词内容
+		currentPrompts := map[string]string{
+			`requirement`:             strings.TrimSpace(cast.ToString(workflowInfo[`prompt_requirement`])),
+			`api_dev`:                 strings.TrimSpace(cast.ToString(workflowInfo[`prompt_api_dev`])),
+			`api_test`:                strings.TrimSpace(cast.ToString(workflowInfo[`prompt_api_test`])),
+			`design`:                  strings.TrimSpace(cast.ToString(workflowInfo[`prompt_design`])),
+			`plain_text_requirement`:  strings.TrimSpace(cast.ToString(workflowInfo[`prompt_plain_text_requirement`])),
+			`design_plan_requirement`: strings.TrimSpace(cast.ToString(workflowInfo[`prompt_design_plan_requirement`])),
+			`browser_test`:            strings.TrimSpace(cast.ToString(workflowInfo[`prompt_browser_test`])),
+			`code_review`:             strings.TrimSpace(cast.ToString(workflowInfo[`prompt_code_review`])),
+		}
+		needUpdate := false
+		for key, promptVal := range prompts {
+			if currentPrompts[key] == `` && strings.TrimSpace(promptVal) != `` {
+				currentPrompts[key] = promptVal
+				needUpdate = true
+			}
+		}
+		if needUpdate {
+			_ = common.DbMain.TaskWorkflowUpdatePrompts(workflowID, currentPrompts[`requirement`], currentPrompts[`api_dev`], currentPrompts[`api_test`], currentPrompts[`design`], currentPrompts[`plain_text_requirement`], currentPrompts[`design_plan_requirement`], currentPrompts[`browser_test`], currentPrompts[`code_review`])
+			// 从数据库刷新，确保返回给前端的数据包含已初始化的提示词
+			updatedInfo, updateErr := common.DbMain.TaskWorkflowInfo(workflowID)
+			if updateErr == nil {
+				workflowInfo = updatedInfo
+			}
+		}
+	}
+
+	// 从新文档表读取文档列表
+	workflowDocuments, _ := common.DbMain.TaskWorkflowDocumentList(workflowID)
+	hasWorkflowDocuments := common.DbMain.TaskWorkflowDocumentHasRecords(workflowID)
 
 	return map[string]any{
 		`workflow`:                 workflowInfo,
@@ -746,11 +799,32 @@ func buildTaskWorkflowResponse(c *gin.Context, workflowInfo map[string]any) (map
 		`template`:                 template,
 		`template_steps`:           templateSteps,
 		`requirement_fetch_config`: taskWorkflowRequirementFetchConfig(),
+		`documents`:                workflowDocuments,
+		`has_workflow_documents`:   hasWorkflowDocuments,
 	}, nil
 }
 
 func taskWorkflowWorkflowFragmentFolderName(workflowInfo map[string]any) string {
 	return common.TaskWorkflowFragmentFolderName(workflowInfo)
+}
+
+// syncWorkflowDocToNewTable 将工作流级文档引用同步到新文档表 tbl_task_workflow_document。
+func syncWorkflowDocToNewTable(workflowID int, docType, fragmentFullRef string) {
+	if workflowID <= 0 || docType == `` || fragmentFullRef == `` {
+		return
+	}
+	workflowInfo, err := common.DbMain.TaskWorkflowInfo(workflowID)
+	if err != nil {
+		return
+	}
+	folderName := taskWorkflowWorkflowFragmentFolderName(workflowInfo)
+	ref := common.TaskWorkflowParseFragmentRef(fragmentFullRef, folderName)
+	if ref.FileID == `` {
+		return
+	}
+	templateID, _ := common.DbMain.HomeTaskWorkflowTemplateID(cast.ToInt(workflowInfo[`home_task_id`]))
+	docName := common.TaskWorkflowDocumentTypeName(docType)
+	_ = common.DbMain.TaskWorkflowDocumentUpsert(workflowID, ``, docName, docType, templateID, 0, ref.FileID, ref.FolderName, ``)
 }
 
 func taskWorkflowMemoryDBIfConfigured() common.MemoryFragmentStore {
@@ -799,6 +873,22 @@ func taskWorkflowNormalizeFragmentRefs(workflowInfo map[string]any, memoryDB com
 			`id`: workflowID,
 		}, updateData).Exec(); err != nil {
 			return err
+		}
+	}
+	// 将工作流级文档同步到新文档表
+	if workflowID > 0 {
+		templateID, _ := common.DbMain.HomeTaskWorkflowTemplateID(cast.ToInt(workflowInfo[`home_task_id`]))
+		for _, column := range common.TaskWorkflowFragmentColumns() {
+			ref := common.TaskWorkflowParseFragmentRef(cast.ToString(workflowInfo[column]), folderName)
+			if ref.FileID == `` {
+				continue
+			}
+			docType := common.TaskWorkflowFragmentColumnDocType(column)
+			if docType == `` {
+				continue
+			}
+			docName := common.TaskWorkflowDocumentTypeName(docType)
+			_ = common.DbMain.TaskWorkflowDocumentUpsert(workflowID, ``, docName, docType, templateID, 0, ref.FileID, ref.FolderName, ``)
 		}
 	}
 	return nil
@@ -1566,15 +1656,16 @@ func TaskWorkflowPromptsRestore(c *gin.Context) {
 	}
 
 	homeTaskID := cast.ToInt(workflowInfo[`home_task_id`])
+	// 提前获取任务信息，两个分支都需要
+	homeTaskInfo, homeTaskErr := common.DbMain.HomeTaskRow(homeTaskID)
+	if homeTaskErr != nil {
+		gsgin.GinResponseError(c, homeTaskErr.Error(), nil)
+		return
+	}
 	_, templateSteps, templateErr := common.DbMain.HomeTaskWorkflowTemplateSteps(homeTaskID)
 
 	if templateErr != nil || len(templateSteps) == 0 {
 		// 模板不存在，回退到旧全局配置
-		homeTaskInfo, homeTaskErr := common.DbMain.HomeTaskRow(homeTaskID)
-		if homeTaskErr != nil {
-			gsgin.GinResponseError(c, homeTaskErr.Error(), nil)
-			return
-		}
 		prompts := resolveTaskWorkflowPrompts(c, homeTaskInfo, workflowInfo)
 		if updateErr := common.DbMain.TaskWorkflowUpdatePrompts(
 			request.WorkflowID,
@@ -1591,10 +1682,34 @@ func TaskWorkflowPromptsRestore(c *gin.Context) {
 			return
 		}
 	} else {
-		// 从模板步骤还原
-		if restoreErr := common.DbMain.WorkflowStepPromptsRestore(request.WorkflowID, templateSteps); restoreErr != nil {
+		// 从模板步骤还原，先解析占位符再写入
+		placeholders := buildTaskWorkflowPlaceholderMap(c, homeTaskInfo, workflowInfo)
+		// 复制模板步骤并解析 prompt_content 中的占位符
+		resolvedSteps := make([]map[string]any, len(templateSteps))
+		for i, step := range templateSteps {
+			stepCopy := make(map[string]any, len(step))
+			for k, v := range step {
+				stepCopy[k] = v
+			}
+			promptContent := strings.TrimSpace(cast.ToString(step[`prompt_content`]))
+			if promptContent != `` {
+				stepCopy[`prompt_content`] = taskWorkflowResolvePlaceholders(promptContent, placeholders)
+			}
+			resolvedSteps[i] = stepCopy
+		}
+		if restoreErr := common.DbMain.WorkflowStepPromptsRestore(request.WorkflowID, resolvedSteps); restoreErr != nil {
 			gsgin.GinResponseError(c, restoreErr.Error(), nil)
 			return
+		}
+	}
+
+	// 重置提示词时清空旧文档记录，并重新生成步骤文档写入新表
+	_ = common.DbMain.TaskWorkflowDocumentDeleteByWorkflow(request.WorkflowID)
+	if templateErr == nil && len(templateSteps) > 0 {
+		// 重新获取最新的工作流信息
+		refreshedInfo, refreshErr := common.DbMain.TaskWorkflowInfo(request.WorkflowID)
+		if refreshErr == nil {
+			ensureTaskWorkflowStepFragments(c, refreshedInfo, homeTaskInfo, templateSteps)
 		}
 	}
 
@@ -1608,8 +1723,12 @@ func TaskWorkflowPromptsRestore(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
+	workflowDocuments, _ := common.DbMain.TaskWorkflowDocumentList(request.WorkflowID)
+	hasWorkflowDocuments := common.DbMain.TaskWorkflowDocumentHasRecords(request.WorkflowID)
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
-		`workflow`: updatedInfo,
+		`workflow`:               updatedInfo,
+		`documents`:              workflowDocuments,
+		`has_workflow_documents`: hasWorkflowDocuments,
 	})
 }
 
@@ -1636,41 +1755,170 @@ func resolveTaskWorkflowPrompts(c *gin.Context, homeTaskInfo map[string]any, wor
 	}
 }
 
-// buildTaskWorkflowPlaceholderMap 根据任务信息构建占位符替换映射。
-func buildTaskWorkflowPlaceholderMap(c *gin.Context, homeTaskInfo map[string]any, workflowInfo map[string]any) map[string]string {
+// templateStepKeyToPromptKey 将模板步骤的 step_key 映射到 resolveTaskWorkflowPrompts 返回的 prompts map key。
+// 模板步骤使用连字符命名（如 api-dev），prompts map 使用下划线命名（如 api_dev）。
+func templateStepKeyToPromptKey(stepKey string) string {
+	switch stepKey {
+	case `api-dev`:
+		return `api_dev`
+	case `api-test-fix`:
+		return `api_test`
+	case `browser-test`:
+		return `browser_test`
+	case `code-review`:
+		return `code_review`
+	default:
+		return stepKey
+	}
+}
+
+// taskWorkflowBuildBasePlaceholderMap 构建基础占位符映射（不含步骤文档占位符）。
+func taskWorkflowBuildBasePlaceholderMap(c *gin.Context, homeTaskInfo map[string]any, workflowInfo map[string]any) map[string]string {
 	apiHost := taskWorkflowBuildAPIHost(c)
 	devEnvironment, _ := common.DbMain.HomeTaskConfigValue(define.HomeTaskConfigDevEnvironment)
 	result := map[string]string{
-		`{需求文档地址}`:             taskWorkflowBuildShareURL(c, workflowInfo, apiHost),
-		`{需求文档纯文本地址}`:          taskWorkflowBuildPlainTextShareURL(c, workflowInfo, apiHost),
-		`{需求文档纯文本文件相对地址}`:      taskWorkflowBuildPlainTextFragmentRelativePath(workflowInfo),
-		`{需求设计方案文档地址}`:         taskWorkflowBuildDesignPlanShareURL(c, workflowInfo, apiHost),
-		`{需求设计方案文件相对地址}`:       taskWorkflowBuildDesignPlanFragmentRelativePath(workflowInfo),
-		`{接口开发API地址}`:          apiHost,
-		`{接口开发API的token}`:      taskWorkflowBuildAPIToken(c),
-		`{开发项目配置}`:             taskWorkflowBuildDevConfigsMarkdown(homeTaskInfo),
-		`{开发配置}`:               taskWorkflowBuildDevConfigsMarkdown(homeTaskInfo),
-		`{dtool-api地址}`:        filepath.Join(component.EnvClient.RootPath, `skills`, `dtool-api`),
-		`{dtool-common地址}`:     filepath.Join(component.EnvClient.RootPath, `skills`, `dtool-common`),
-		`{dtool-workflow地址}`:   filepath.Join(component.EnvClient.RootPath, `skills`, `dtool-workflow`),
-		`{dtool-playwright地址}`: filepath.Join(component.EnvClient.RootPath, `skills`, `dtool-playwright`),
-		`{dtool-notify地址}`:     filepath.Join(component.EnvClient.RootPath, `skills`, `dtool-notify`),
-		`{自定义网页}`:              taskWorkflowBuildDevConfigsFieldMarkdown(homeTaskInfo, `smart_link`),
-		`{网页标签}`:               taskWorkflowBuildDevConfigsFieldMarkdown(homeTaskInfo, `smart_link_label`),
-		`{账号}`:                 taskWorkflowBuildDevConfigsFieldMarkdown(homeTaskInfo, `smart_link_account`),
+		`{需求文档地址}`:        taskWorkflowBuildShareURL(c, workflowInfo, apiHost),
+		`{需求文档纯文本地址}`:     taskWorkflowBuildPlainTextShareURL(c, workflowInfo, apiHost),
+		`{需求文档纯文本文件相对地址}`: taskWorkflowBuildPlainTextFragmentRelativePath(workflowInfo),
+		`{需求设计方案文档地址}`:    taskWorkflowBuildDesignPlanShareURL(c, workflowInfo, apiHost),
+		`{需求设计方案文件相对地址}`:  taskWorkflowBuildDesignPlanFragmentRelativePath(workflowInfo),
+		`{接口开发API地址}`:     apiHost,
+		`{接口开发API的token}`: taskWorkflowBuildAPIToken(c),
+		`{开发项目配置}`:        taskWorkflowBuildDevConfigsMarkdown(homeTaskInfo),
+		`{开发配置}`:          taskWorkflowBuildDevConfigsMarkdown(homeTaskInfo),
+		`{自定义网页}`:         taskWorkflowBuildDevConfigsFieldMarkdown(homeTaskInfo, `smart_link`),
+		`{网页标签}`:          taskWorkflowBuildDevConfigsFieldMarkdown(homeTaskInfo, `smart_link_label`),
+		`{账号}`:            taskWorkflowBuildDevConfigsFieldMarkdown(homeTaskInfo, `smart_link_account`),
 	}
+	// 内置文档 ID 占位符：{xxx地址} -> {xxx地址ID}，映射为对应片段的 file_id
+	result[`{需求文档地址ID}`] = taskWorkflowBuildFragmentFileID(workflowInfo, `requirement_fragment_id`)
+	result[`{需求文档纯文本地址ID}`] = taskWorkflowBuildFragmentFileID(workflowInfo, `plain_text_requirement_fragment_id`)
 	// 内置占位符 {任务名称}，替换为当前任务的名称
 	result[`{任务名称}`] = cast.ToString(homeTaskInfo[`name`])
 	// 内置占位符 {工作流程ID}，替换为工作流程任务的 ID
 	result[`{工作流程ID}`] = cast.ToString(workflowInfo[`id`])
 	// 内置占位符 {任务ID}，替换为该工作流程关联的任务ID（tbl_home_task表的id）
 	result[`{任务ID}`] = cast.ToString(homeTaskInfo[`id`])
+	// 动态读取 skills 目录，为每个子目录生成占位符 {xxx地址}
+	skillsDir := filepath.Join(component.EnvClient.RootPath, `skills`)
+	if skillEntries, skillErr := os.ReadDir(skillsDir); skillErr == nil {
+		for _, entry := range skillEntries {
+			if entry.IsDir() && !strings.HasPrefix(entry.Name(), `.`) {
+				result[`{`+entry.Name()+`地址}`] = filepath.Join(skillsDir, entry.Name())
+			}
+		}
+	}
 	// 先解析开发环境内容中的其他占位符，再将其加入映射。
 	for key, value := range result {
 		devEnvironment = strings.ReplaceAll(devEnvironment, key, value)
 	}
 	result[`{开发环境}`] = devEnvironment
 	return result
+}
+
+// buildTaskWorkflowPlaceholderMap 根据任务信息构建占位符替换映射，包含步骤文档占位符。
+func buildTaskWorkflowPlaceholderMap(c *gin.Context, homeTaskInfo map[string]any, workflowInfo map[string]any) map[string]string {
+	result := taskWorkflowBuildBasePlaceholderMap(c, homeTaskInfo, workflowInfo)
+	apiHost := taskWorkflowBuildAPIHost(c)
+	// 注入步骤文档占位符：{xxx地址}、{xxx文件相对地址} 与 {xxxID}
+	workflowID := cast.ToInt(workflowInfo[`id`])
+	if workflowID > 0 {
+		// 优先从新文档表读取占位符
+		documents, docErr := common.DbMain.TaskWorkflowDocumentList(workflowID)
+		if docErr == nil && len(documents) > 0 {
+			for _, doc := range documents {
+				placeholder := strings.TrimSpace(cast.ToString(doc[`placeholder`]))
+				fileID := strings.TrimSpace(cast.ToString(doc[`file_id`]))
+				if placeholder == `` || fileID == `` {
+					continue
+				}
+				result[placeholder] = taskWorkflowBuildStepFragmentShareURL(fileID, apiHost)
+				relativePlaceholder := common.WorkflowTemplateStepDocumentsToRelativePlaceholder(placeholder)
+				if relativePlaceholder != `` {
+					result[relativePlaceholder] = taskWorkflowBuildStepFragmentRelativePath(map[string]string{
+						`file_id`:     fileID,
+						`folder_name`: cast.ToString(doc[`folder_name`]),
+					})
+				}
+				idPlaceholder := common.WorkflowTemplateStepDocumentsToIDPlaceholder(placeholder)
+				if idPlaceholder != `` {
+					result[idPlaceholder] = fileID
+				}
+			}
+		} else {
+			// 新表无记录，回退到旧 step_fragment_refs
+			stepRefs := common.DbMain.TaskWorkflowStepFragmentRefsRead(workflowID)
+			for _, refs := range stepRefs {
+				for _, ref := range refs {
+					placeholder := strings.TrimSpace(ref[`placeholder`])
+					fileID := strings.TrimSpace(ref[`file_id`])
+					if placeholder == `` || fileID == `` {
+						continue
+					}
+					result[placeholder] = taskWorkflowBuildStepFragmentShareURL(fileID, apiHost)
+					relativePlaceholder := common.WorkflowTemplateStepDocumentsToRelativePlaceholder(placeholder)
+					if relativePlaceholder != `` {
+						result[relativePlaceholder] = taskWorkflowBuildStepFragmentRelativePath(ref)
+					}
+					idPlaceholder := common.WorkflowTemplateStepDocumentsToIDPlaceholder(placeholder)
+					if idPlaceholder != `` {
+						result[idPlaceholder] = fileID
+					}
+				}
+			}
+		}
+	}
+	return result
+}
+
+// taskWorkflowBuildStepFragmentShareURL 为步骤文档知识片段生成分享链接。
+func taskWorkflowBuildStepFragmentShareURL(fileID, apiHost string) string {
+	fileID = strings.TrimSpace(fileID)
+	if fileID == `` || component.MemoryRuntime == nil {
+		return ``
+	}
+	if err := component.MemoryRuntime.EnsureConfigured(); err != nil {
+		return ``
+	}
+	if _, err := component.MemoryRuntime.DB().MemoryFragmentInfo(fileID); err != nil {
+		return ``
+	}
+	shareStore := memoryFragmentShareStoreForRoot(component.MemoryRuntime.Config().Dir)
+	share, err := shareStore.Create(fileID, time.Now())
+	if err != nil {
+		return ``
+	}
+	if apiHost == `` {
+		return ``
+	}
+	shareURL, _ := url.Parse(apiHost)
+	shareURL.Path = `/share/` + url.PathEscape(share.Token)
+	return shareURL.String()
+}
+
+// taskWorkflowBuildStepFragmentRelativePath 为步骤文档知识片段构建相对于 fragments/ 目录的相对路径。
+func taskWorkflowBuildStepFragmentRelativePath(ref map[string]string) string {
+	fileID := strings.TrimSpace(ref[`file_id`])
+	if fileID == `` || component.MemoryRuntime == nil {
+		return ``
+	}
+	if err := component.MemoryRuntime.EnsureConfigured(); err != nil {
+		return ``
+	}
+	info, err := component.MemoryRuntime.DB().MemoryFragmentInfo(fileID)
+	if err != nil {
+		return ``
+	}
+	filePath := strings.TrimSpace(cast.ToString(info[`file_path`]))
+	if filePath == `` {
+		return ``
+	}
+	fragmentsDir := filepath.Join(component.MemoryRuntime.Config().Dir, `fragments`)
+	rel, err := filepath.Rel(fragmentsDir, filePath)
+	if err != nil {
+		return ``
+	}
+	return strings.ReplaceAll(rel, `\`, `/`)
 }
 
 // taskWorkflowBuildAPIHost 从请求上下文构建 API 基地址。
@@ -1706,6 +1954,12 @@ func taskWorkflowBuildAPIToken(c *gin.Context) string {
 		token = define.DtoolAPIDefaultToken
 	}
 	return token
+}
+
+// taskWorkflowBuildFragmentFileID 从工作流信息中提取指定片段引用列的 file_id。
+func taskWorkflowBuildFragmentFileID(workflowInfo map[string]any, column string) string {
+	fragmentRef := common.TaskWorkflowParseFragmentRef(cast.ToString(workflowInfo[column]), taskWorkflowWorkflowFragmentFolderName(workflowInfo))
+	return fragmentRef.FileID
 }
 
 // taskWorkflowBuildShareURL 为需求文档知识片段生成分享链接。
@@ -2217,6 +2471,8 @@ func ensureTaskWorkflowPlainTextReqFragment(workflowInfo map[string]any, homeTas
 		return
 	}
 	workflowInfo[`plain_text_requirement_fragment_id`] = fragmentFullRef
+	// 同步到新文档表
+	syncWorkflowDocToNewTable(workflowID, common.TaskWorkflowDocTypePlainTextRequirement, fragmentFullRef)
 }
 
 // taskWorkflowBuildPlainTextFragmentRelativePath 为纯文本需求知识片段构建相对于 fragments/ 目录的相对路径。
@@ -2282,6 +2538,8 @@ func ensureTaskWorkflowDesignPlanReqFragment(workflowInfo map[string]any, homeTa
 		return
 	}
 	workflowInfo[`design_plan_requirement_fragment_id`] = fragmentFullRef
+	// 同步到新文档表
+	syncWorkflowDocToNewTable(workflowID, common.TaskWorkflowDocTypeDesignPlanRequirement, fragmentFullRef)
 }
 
 // taskWorkflowBuildDesignPlanShareURL 为需求设计方案知识片段生成分享链接。
@@ -2372,9 +2630,140 @@ func ensureTaskWorkflowApiDocFragment(workflowInfo map[string]any, homeTaskInfo 
 		return
 	}
 	workflowInfo[`api_doc_fragment_id`] = fragmentFullRef
+	// 同步到新文档表
+	syncWorkflowDocToNewTable(workflowID, common.TaskWorkflowDocTypeApiDoc, fragmentFullRef)
+}
+
+// ensureTaskWorkflowStepFragments 根据模板步骤的文档配置，为工作流预生成所有步骤知识片段。
+// 注意：此函数需要先创建所有片段并保存引用，再统一替换提示词占位符，避免顺序问题导致替换不到。
+func ensureTaskWorkflowStepFragments(c *gin.Context, workflowInfo map[string]any, homeTaskInfo map[string]any, templateSteps []map[string]any) {
+	if component.MemoryRuntime == nil {
+		return
+	}
+	if err := component.MemoryRuntime.EnsureConfigured(); err != nil {
+		return
+	}
+	memoryDB := component.MemoryRuntime.DB()
+	if memoryDB == nil {
+		return
+	}
+	workflowID := cast.ToInt(workflowInfo[`id`])
+	if workflowID <= 0 {
+		return
+	}
+	folderName := taskWorkflowWorkflowFragmentFolderName(workflowInfo)
+	existingRefs := common.DbMain.TaskWorkflowStepFragmentRefsRead(workflowID)
+	basePlaceholders := taskWorkflowBuildBasePlaceholderMap(c, homeTaskInfo, workflowInfo)
+	requirementFragmentRef := common.TaskWorkflowParseFragmentRef(cast.ToString(workflowInfo[`requirement_fragment_id`]), folderName)
+	plainTextRequirementFragmentRef := common.TaskWorkflowParseFragmentRef(cast.ToString(workflowInfo[`plain_text_requirement_fragment_id`]), folderName)
+	changed := false
+	for _, step := range templateSteps {
+		stepKey := cast.ToString(step[`step_key`])
+		docs := common.WorkflowTemplateStepDocumentsParse(cast.ToString(step[`step_documents`]))
+		if len(docs) == 0 {
+			continue
+		}
+		refs, ok := existingRefs[stepKey]
+		if !ok || len(refs) != len(docs) {
+			refs = make([]map[string]string, 0, len(docs))
+			for _, doc := range docs {
+				refs = append(refs, map[string]string{
+					`placeholder`: doc.Placeholder,
+				})
+			}
+		}
+		for i, doc := range docs {
+			if i >= len(refs) {
+				refs = append(refs, map[string]string{
+					`placeholder`: doc.Placeholder,
+				})
+			}
+			ref := refs[i]
+			placeholder := strings.TrimSpace(doc.Placeholder)
+			// 抓取需求步骤的默认文档绑定到任务创建时已存在的需求知识片段，避免重复创建空片段
+			if stepKey == common.WorkflowFixedStepRequirementFetch {
+				var boundRef common.TaskWorkflowFragmentRef
+				var shouldBind bool
+				if placeholder == `{需求文档地址}` {
+					boundRef = requirementFragmentRef
+					shouldBind = boundRef.FileID != ``
+				} else if placeholder == `{需求文档纯文本地址}` {
+					boundRef = plainTextRequirementFragmentRef
+					shouldBind = boundRef.FileID != ``
+				}
+				if shouldBind {
+					if ref[`file_id`] != boundRef.FileID || ref[`folder_name`] != boundRef.FolderName || ref[`placeholder`] != placeholder {
+						ref[`file_id`] = boundRef.FileID
+						ref[`folder_name`] = boundRef.FolderName
+						ref[`placeholder`] = placeholder
+						changed = true
+					}
+					continue
+				}
+			}
+			fileID := strings.TrimSpace(ref[`file_id`])
+			if fileID != `` {
+				if _, err := memoryDB.MemoryFragmentInfo(fileID); err == nil {
+					continue
+				}
+			}
+			title := taskWorkflowResolvePlaceholders(doc.Title, basePlaceholders)
+			if strings.TrimSpace(title) == `` {
+				title = doc.Name
+			}
+			content := taskWorkflowResolvePlaceholders(doc.Content, basePlaceholders)
+			tags := []string{doc.Name}
+			fragmentInfo, err := memoryDB.MemoryFragmentSave(0, title, content, tags, folderName)
+			if err != nil {
+				continue
+			}
+			component.MemoryRuntime.ScheduleSync()
+			fragmentFileID := strings.TrimSpace(cast.ToString(fragmentInfo[`file_id`]))
+			if fragmentFileID == `` {
+				continue
+			}
+			ref[`file_id`] = fragmentFileID
+			ref[`folder_name`] = cast.ToString(fragmentInfo[`folder_name`])
+			ref[`placeholder`] = doc.Placeholder
+			changed = true
+		}
+		existingRefs[stepKey] = refs
+	}
+	if changed {
+		_ = common.DbMain.TaskWorkflowStepFragmentRefsSave(workflowID, existingRefs)
+	}
+	// 同步步骤文档引用到新文档表
+	templateID, _ := common.DbMain.HomeTaskWorkflowTemplateID(cast.ToInt(workflowInfo[`home_task_id`]))
+	for _, step := range templateSteps {
+		stepKey := cast.ToString(step[`step_key`])
+		stepID := cast.ToInt(step[`id`])
+		docs := common.WorkflowTemplateStepDocumentsParse(cast.ToString(step[`step_documents`]))
+		refs := existingRefs[stepKey]
+		for i, doc := range docs {
+			if i >= len(refs) {
+				break
+			}
+			ref := refs[i]
+			fileID := strings.TrimSpace(ref[`file_id`])
+			folderName := strings.TrimSpace(ref[`folder_name`])
+			placeholder := strings.TrimSpace(ref[`placeholder`])
+			_ = common.DbMain.TaskWorkflowDocumentUpsert(
+				workflowID,
+				doc.ID,
+				doc.Name,
+				common.TaskWorkflowDocTypeStepDocument,
+				templateID,
+				stepID,
+				fileID,
+				folderName,
+				placeholder,
+			)
+		}
+	}
 }
 
 // TaskWorkflowApiDocReset 重置接口文档，将所有关联文件夹下的接口 Markdown 合并覆盖到知识片段中。
+// 支持 step_key 参数：指定步骤 key 时，从 step_fragment_refs 中查找该步骤的 is_api_doc 文档片段并更新。
 func TaskWorkflowApiDocReset(c *gin.Context) {
 	if common.DbMain == nil || common.DbMain.Client == nil {
 		gsgin.GinResponseError(c, `主库未初始化`, nil)
@@ -2387,11 +2776,23 @@ func TaskWorkflowApiDocReset(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	fragmentRef := common.TaskWorkflowParseFragmentRef(cast.ToString(workflowInfo[`api_doc_fragment_id`]), taskWorkflowWorkflowFragmentFolderName(workflowInfo))
-	if fragmentRef.FileID == `` {
+
+	// 确定要写入的目标片段 ID
+	var fragmentFileID string
+	stepKey := strings.TrimSpace(request.StepKey)
+	if stepKey != `` {
+		// 新模式：从 step_fragment_refs 查找该步骤中 is_api_doc 文档的片段
+		fragmentFileID = taskWorkflowFindApiDocFragmentID(workflowInfo, stepKey)
+	} else {
+		// 旧模式：使用 api_doc_fragment_id
+		fragmentRef := common.TaskWorkflowParseFragmentRef(cast.ToString(workflowInfo[`api_doc_fragment_id`]), taskWorkflowWorkflowFragmentFolderName(workflowInfo))
+		fragmentFileID = fragmentRef.FileID
+	}
+	if fragmentFileID == `` {
 		gsgin.GinResponseError(c, `接口文档片段未创建`, nil)
 		return
 	}
+
 	memoryDB, ok := taskWorkflowMemoryDBOrResponse(c)
 	if !ok {
 		return
@@ -2447,7 +2848,7 @@ func TaskWorkflowApiDocReset(c *gin.Context) {
 		return
 	}
 	// 获取现有片段信息以保留标题和标签
-	fragmentInfo, err := memoryDB.MemoryFragmentInfo(fragmentRef.FileID)
+	fragmentInfo, err := memoryDB.MemoryFragmentInfo(fragmentFileID)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
@@ -2463,15 +2864,50 @@ func TaskWorkflowApiDocReset(c *gin.Context) {
 		}
 	}
 	// 覆盖写入知识片段
-	_, err = memoryDB.MemoryFragmentSave(fragmentRef.FileID, fragmentTitle, combinedMD, tags, cast.ToString(fragmentInfo[`folder_name`]))
+	_, err = memoryDB.MemoryFragmentSave(fragmentFileID, fragmentTitle, combinedMD, tags, cast.ToString(fragmentInfo[`folder_name`]))
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
 	component.MemoryRuntime.ScheduleSync()
 	gsgin.GinResponseSuccess(c, `接口文档已重置`, map[string]any{
-		`fragment_id`: fragmentRef.FileID,
+		`fragment_id`: fragmentFileID,
 	})
+}
+
+// taskWorkflowFindApiDocFragmentID 从 step_fragment_refs 和模板步骤中查找指定步骤的 is_api_doc 文档的片段 ID。
+func taskWorkflowFindApiDocFragmentID(workflowInfo map[string]any, stepKey string) string {
+	workflowID := cast.ToInt(workflowInfo[`id`])
+	if workflowID <= 0 || stepKey == `` {
+		return ``
+	}
+	// 获取模板步骤，找到 is_api_doc 文档的索引
+	homeTaskID := cast.ToInt(workflowInfo[`home_task_id`])
+	_, templateSteps, _ := common.DbMain.HomeTaskWorkflowTemplateSteps(homeTaskID)
+	var apiDocIdx int = -1
+	for _, step := range templateSteps {
+		if cast.ToString(step[`step_key`]) != stepKey {
+			continue
+		}
+		docs := common.WorkflowTemplateStepDocumentsParse(cast.ToString(step[`step_documents`]))
+		for i, doc := range docs {
+			if doc.IsApiDoc {
+				apiDocIdx = i
+				break
+			}
+		}
+		break
+	}
+	if apiDocIdx < 0 {
+		return ``
+	}
+	// 从 step_fragment_refs 中查找对应索引的片段 ID
+	refs := common.DbMain.TaskWorkflowStepFragmentRefsRead(workflowID)
+	stepRefs, ok := refs[stepKey]
+	if !ok || apiDocIdx >= len(stepRefs) {
+		return ``
+	}
+	return strings.TrimSpace(stepRefs[apiDocIdx][`file_id`])
 }
 
 // TaskWorkflowBatchNodeStatus 批量查询工作流节点状态。

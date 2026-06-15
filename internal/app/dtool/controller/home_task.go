@@ -160,6 +160,12 @@ func HomeTaskSave(c *gin.Context) {
 			gsgin.GinResponseError(c, updateErr.Error(), nil)
 			return
 		}
+		// 创建任务时即预生成所有步骤文档片段，并从模板初始化提示词占位符。
+		// 重新读取 workflowInfo 以同步 fragment_folder_name 变更。
+		updatedWorkflowInfo, infoErr := common.DbMain.TaskWorkflowInfo(cast.ToInt(workflowInfo[`id`]))
+		if infoErr == nil {
+			_, _ = buildTaskWorkflowResponse(c, updatedWorkflowInfo)
+		}
 	}
 	enrichHomeTaskListWithMemoryFragment([]map[string]any{info})
 	info[`workflow_fragment_folder_name`] = workflowFragmentFolderName

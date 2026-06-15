@@ -57,3 +57,26 @@
 .prompt-placeholder-tag__help:hover {
   color: #5a8a5a;
 }
+
+.prompt-placeholder-tag--skill {
+  color: #5b6abf;
+  background: #eef0ff;
+  border-color: #cdd1fc;
+}
+
+.prompt-placeholder-tag--skill:hover {
+  background: #dde1fc;
+  border-color: #a8b0f5;
+}
+
+.prompt-placeholder-tag--skill .prompt-placeholder-tag__icon {
+  color: #7b85d4;
+}
+
+.prompt-placeholder-tag--skill .prompt-placeholder-tag__help {
+  color: #8a92d0;
+}
+
+.prompt-placeholder-tag--skill .prompt-placeholder-tag__help:hover {
+  color: #5b6abf;
+}

@@ -7,7 +7,8 @@ type TaskWorkflowCreateOrGetRequest struct {
 
 // TaskWorkflowInfoRequest 查询任务工作流详情请求。
 type TaskWorkflowInfoRequest struct {
-	WorkflowID int `json:"workflow_id"`
+	WorkflowID int    `json:"workflow_id"`
+	StepKey    string `json:"step_key"` // 可选：指定步骤 key（用于接口文档重置等场景）
 }
 
 // TaskWorkflowDevPlanSaveRequest 保存开发执行文档请求。

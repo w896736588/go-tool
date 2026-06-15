@@ -37,7 +37,12 @@
     <div class="wf-template-manager__right" v-if="selectedTemplate">
       <div class="wf-template-manager__section-title">
         <span>模板信息</span>
-        <el-button type="primary" size="small" :loading="savingTemplate" @click="saveTemplate">保存模板</el-button>
+        <div class="wf-template-manager__section-actions">
+          <el-button size="small" @click="openPlaceholderDialog">
+            <el-icon><Document /></el-icon> 内置占位符
+          </el-button>
+          <el-button type="primary" size="small" :loading="savingTemplate" @click="saveTemplate">保存模板</el-button>
+        </div>
       </div>
       <div class="wf-template-manager__template-form">
         <el-input
@@ -77,7 +82,6 @@
           <template #item="{ element, index }">
             <div :class="['wf-template-manager__step-item', {
               'wf-template-manager__step-item--fixed': element.is_fixed === 1,
-              'wf-template-manager__step-item--expanded': expandedStepId === element._key,
             }]">
               <div class="wf-template-manager__step-header">
                 <!-- 拖拽手柄 -->
@@ -103,36 +107,41 @@
                 />
                 <div class="wf-template-manager__step-actions">
                   <el-button
+                    v-if="showStepDocumentButton(element)"
                     text
                     size="small"
-                    :type="expandedStepId === element._key ? 'warning' : 'primary'"
-                    @click="toggleStepExpand(element)"
-                    :disabled="element.is_fixed === 1 && element.step_key === 'task-config'"
+                    type="info"
+                    @click="openDocumentDialog(element)"
                   >
-                    {{ expandedStepId === element._key ? '收起' : '提示词' }}
+                    文档
+                    <el-badge v-if="(element.step_documents_list || []).length > 0" :value="element.step_documents_list.length" class="wf-template-manager__doc-badge" />
                   </el-button>
                   <el-button
-                    v-if="element.is_fixed !== 1"
+                    text
+                    size="small"
+                    type="warning"
+                    @click="openRemarkDialog(element)"
+                  >
+                    备注
+                    <el-icon v-if="element.remark" style="margin-left: 2px;"><Document /></el-icon>
+                  </el-button>
+                  <el-button
+                    text
+                    size="small"
+                    type="primary"
+                    :disabled="element.is_fixed === 1 && element.step_key === 'task-config'"
+                    @click="openPromptDialog(element)"
+                  >
+                    提示词
+                  </el-button>
+                  <el-button
                     text
                     size="small"
                     type="danger"
-                    @click="deleteStepConfirm(element)"
+                    :disabled="element.is_fixed === 1"
+                    :title="element.is_fixed === 1 ? '固定步骤，不可删除' : ''"
+                    @click.stop="deleteStepConfirm(element)"
                   >删除</el-button>
-                </div>
-              </div>
-
-              <!-- 展开的提示词编辑区 -->
-              <div v-if="expandedStepId === element._key" class="wf-template-manager__step-editor">
-                <UnifiedMdEditor
-                  v-if="element.prompt_content !== undefined"
-                  :ref="el => stepEditorRefs[element._key] = el"
-                  :model-value="element.prompt_content"
-                  :toolbars="promptEditorToolbars"
-                  class="wf-template-manager__step-md-editor"
-                  @update:model-value="val => element.prompt_content = val"
-                />
-                <div class="wf-template-manager__step-editor-actions">
-                  <el-button size="small" type="primary" @click="saveStepPrompt(element)">保存提示词</el-button>
                 </div>
               </div>
             </div>
@@ -151,11 +160,190 @@
         请从左侧选择一个模板，或新建一个模板
       </div>
     </div>
+
+    <!-- 内置占位符弹窗 -->
+    <el-dialog
+      v-model="placeholderDialogVisible"
+      title="内置占位符"
+      width="720px"
+      :close-on-click-modal="true"
+      class="wf-placeholder-dialog"
+    >
+      <div class="wf-placeholder-list">
+        <div
+          v-for="ph in displayPlaceholders"
+          :key="ph.value"
+          class="wf-placeholder-item"
+          @click="copyPlaceholder(ph)"
+        >
+          <div class="wf-placeholder-item__content">
+            <div class="wf-placeholder-item__row">
+              <span class="wf-placeholder-item__label">{{ ph.label }}</span>
+              <code class="wf-placeholder-item__value">{{ ph.value }}</code>
+            </div>
+            <div v-if="ph.tip" class="wf-placeholder-item__tip">{{ ph.tip }}</div>
+          </div>
+          <el-icon class="wf-placeholder-item__copy"><CopyDocument /></el-icon>
+        </div>
+      </div>
+    </el-dialog>
+
+    <!-- 提示词编辑弹窗 -->
+    <el-dialog
+      v-model="promptDialogVisible"
+      :title="`编辑提示词 - ${editingStep ? editingStep.name : ''}`"
+      width="80%"
+      :close-on-click-modal="true"
+      class="wf-prompt-dialog"
+    >
+      <div v-if="editingStep && isRequirementFetchStep(editingStep)" class="wf-prompt-dialog__tip">
+        抓取需求为固定步骤，提示词由系统维护，不可手动编辑。
+      </div>
+      <!-- 内置占位符快速复制区域 -->
+      <div v-if="promptDialogPlaceholders.length > 0" class="wf-prompt-dialog__placeholders">
+        <span class="wf-prompt-dialog__placeholders-label">可用占位符：</span>
+        <code
+          v-for="ph in promptDialogPlaceholders"
+          :key="ph.value"
+          :class="['wf-prompt-dialog__placeholder-tag', `wf-prompt-dialog__placeholder-tag--${ph.group}`]"
+          @click="copyPlaceholder(ph)"
+        >{{ ph.value }}</code>
+      </div>
+      <UnifiedMdEditor
+        v-if="editingStep"
+        v-model="dialogPromptContent"
+        :toolbars="promptEditorToolbars"
+        class="wf-prompt-dialog__editor"
+        :disabled="editingStep && isRequirementFetchStep(editingStep)"
+      />
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="promptDialogVisible = false">取消</el-button>
+          <el-button
+            type="primary"
+            :disabled="!editingStep || isRequirementFetchStep(editingStep)"
+            @click="saveDialogPrompt"
+          >
+            保存提示词
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
+
+    <!-- 步骤文档配置弹窗 -->
+    <el-dialog
+      v-model="documentDialogVisible"
+      :title="`配置步骤文档 - ${editingStep ? editingStep.name : ''}`"
+      width="720px"
+      :close-on-click-modal="true"
+      class="wf-document-dialog"
+    >
+      <div v-if="editingStep" class="wf-document-dialog__content">
+        <div class="wf-document-dialog__tip">
+          为当前步骤预生成若干知识片段文档，创建任务时会自动创建这些片段，并生成对应的占位符供提示词使用。
+        </div>
+        <div
+          v-for="(doc, index) in editingStepDocuments"
+          :key="index"
+          class="wf-document-item"
+        >
+          <div class="wf-document-item__header">
+            <span class="wf-document-item__index">文档 {{ index + 1 }}</span>
+            <div class="wf-document-item__header-right">
+              <div class="wf-document-item__api-doc-switch">
+                <span class="wf-document-item__api-doc-label">接口文档</span>
+                <el-switch v-model="doc.is_api_doc" size="small" />
+              </div>
+              <el-button text size="small" type="danger" @click="removeStepDocument(index)">删除</el-button>
+            </div>
+          </div>
+          <div class="wf-document-item__body">
+            <el-input
+              v-model="doc.name"
+              placeholder="文档名称（必填，如：接口文档）"
+              size="small"
+              class="wf-document-item__input"
+              maxlength="50"
+              show-word-limit
+            />
+            <div class="wf-document-item__input wf-document-item__placeholder">
+              <span class="wf-document-item__placeholder-label">占位符</span>
+              <el-input
+                v-model="doc.placeholder"
+                placeholder="请手动填写占位符，如：{接口文档地址}"
+                size="small"
+                class="wf-document-item__placeholder-input"
+              />
+            </div>
+            <el-input
+              v-model="doc.title"
+              placeholder="片段标题（选填，支持 {任务名称} 等占位符）"
+              size="small"
+              class="wf-document-item__input"
+            />
+            <el-input
+              v-model="doc.content"
+              type="textarea"
+              :rows="4"
+              placeholder="默认内容（选填，支持占位符，创建任务时会写入片段）"
+              size="small"
+              class="wf-document-item__input"
+            />
+            <div class="wf-document-item__preview">
+              <code>{{ doc.placeholder || '未设置占位符' }}</code>
+              <span v-if="doc.placeholder">创建任务后可替换为文档分享链接</span>
+              <el-tag v-if="doc.is_api_doc" type="success" size="small" effect="plain">接口文档</el-tag>
+            </div>
+          </div>
+        </div>
+        <div class="wf-document-dialog__actions">
+          <el-button type="primary" size="small" @click="addStepDocument">
+            <el-icon><Plus /></el-icon> 添加文档
+          </el-button>
+        </div>
+      </div>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="documentDialogVisible = false">取消</el-button>
+          <el-button type="primary" :disabled="!editingStep" @click="saveStepDocuments">
+            保存文档配置
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
+
+    <!-- 步骤备注编辑弹窗 -->
+    <el-dialog
+      v-model="remarkDialogVisible"
+      :title="`编辑备注 - ${editingStep ? editingStep.name : ''}`"
+      width="500px"
+      :close-on-click-modal="true"
+      class="wf-remark-dialog"
+    >
+      <div v-if="editingStep">
+        <el-input
+          v-model="dialogRemarkContent"
+          type="textarea"
+          :rows="6"
+          placeholder="请输入步骤备注（选填）"
+          maxlength="500"
+          show-word-limit
+        />
+      </div>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="remarkDialogVisible = false">取消</el-button>
+          <el-button type="primary" :disabled="!editingStep" @click="saveDialogRemark">
+            保存备注
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script>
-import { Plus, Lock } from '@element-plus/icons-vue'
+import { Plus, Lock, CopyDocument, Document } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import draggable from 'vuedraggable'
 import UnifiedMdEditor from '@/components/base/UnifiedMdEditor.vue'
@@ -168,15 +356,76 @@ const PROMPT_EDITOR_TOOLBARS = [
   'bold', 'underline', 'italic', '-', 'strikeThrough', 'title', 'sub', 'sup', 'quote', 'unorderedList', 'orderedList', '-', 'codeRow', 'code', 'link', 'image', 'table',
 ]
 
+// 抓取需求步骤默认文档占位符：指向创建任务时自动保存的需求知识片段
+const REQUIREMENT_FETCH_DEFAULT_DOC_PLACEHOLDER = '{需求文档地址}'
+
+// 内置占位符列表（不包含 skills 和步骤文档占位符，这两类会动态生成）
+const PROMPT_PLACEHOLDERS = [
+  { label: '任务名称', value: '{任务名称}', tip: '替换为当前任务的名称' },
+  { label: '需求文档地址', value: '{需求文档地址}', tip: '替换为需求知识片段的分享链接' },
+  { label: '需求文档地址ID', value: '{需求文档地址ID}', tip: '替换为需求知识片段的 file_id' },
+  { label: '需求文档纯文本地址', value: '{需求文档纯文本地址}', tip: '替换为纯文本需求片段的分享链接' },
+  { label: '需求文档纯文本地址ID', value: '{需求文档纯文本地址ID}', tip: '替换为纯文本需求片段的 file_id' },
+  { label: '接口开发API地址', value: '{接口开发API地址}', tip: '替换为当前服务的 API 基地址（scheme://host）' },
+  { label: '接口开发API的token', value: '{接口开发API的token}', tip: '替换为请求的 Authorization token' },
+  { label: '开发项目配置', value: '{开发项目配置}', tip: '替换为开发项目配置的 Markdown 列表' },
+  { label: '自定义网页', value: '{自定义网页}', tip: '替换为智能链接（smart_link）的名称和 ID' },
+  { label: '网页标签', value: '{网页标签}', tip: '替换为智能链接的标签（smart_link_label）' },
+  { label: '账号', value: '{账号}', tip: '替换为智能链接的账号（smart_link_account）' },
+  { label: '工作流程ID', value: '{工作流程ID}', tip: '替换为当前工作流程的 ID' },
+  { label: '任务ID', value: '{任务ID}', tip: '替换为当前任务的 ID' },
+  { label: '开发环境', value: '{开发环境}', tip: '替换为开发环境配置（已递归解析内部占位符）' },
+]
+
 export default {
   name: 'WorkflowTemplateManager',
   components: {
     Plus,
     Lock,
+    CopyDocument,
+    Document,
     draggable,
     UnifiedMdEditor,
   },
   emits: ['templates-loaded'],
+  computed: {
+    displayPlaceholders() {
+      const docs = []
+      ;(this.editingSteps || []).forEach(step => {
+        (step.step_documents_list || []).forEach(doc => {
+          if (doc.placeholder) {
+            docs.push({
+              label: `${step.name} - ${doc.name}`,
+              value: doc.placeholder,
+              tip: '创建任务后替换为对应知识片段的分享链接',
+              group: 'document',
+            })
+            // 生成文档ID占位符
+            const inner = doc.placeholder.replace(/^\{|\}$/g, '')
+            const idPlaceholder = `{${inner}ID}`
+            docs.push({
+              label: `${step.name} - ${doc.name}（ID）`,
+              value: idPlaceholder,
+              tip: '创建任务后替换为对应知识片段的 file_id',
+              group: 'document',
+            })
+          }
+        })
+      })
+      // 动态生成 skills 占位符
+      const skillPlaceholders = (this.skillList || []).map(name => ({
+        label: `${name}地址`,
+        value: `{${name}地址}`,
+        tip: `替换为 skills/${name} 目录的本地路径`,
+        group: 'skill',
+      }))
+      return this.promptPlaceholders.map(p => ({ ...p, group: 'builtin' })).concat(docs).concat(skillPlaceholders)
+    },
+    // 当前编辑步骤的所有可用占位符（提示词弹窗顶部展示）
+    promptDialogPlaceholders() {
+      return this.displayPlaceholders
+    },
+  },
   data() {
     return {
       templates: [],
@@ -185,17 +434,66 @@ export default {
       editTemplateName: '',
       editTemplateDesc: '',
       editingSteps: [],
-      expandedStepId: '',
       savingTemplate: false,
       loading: false,
+      placeholderDialogVisible: false,
+      promptDialogVisible: false,
+      editingStep: null,
+      dialogPromptContent: '',
+      documentDialogVisible: false,
+      editingStepDocuments: [],
+      remarkDialogVisible: false,
+      dialogRemarkContent: '',
       promptEditorToolbars: PROMPT_EDITOR_TOOLBARS,
-      stepEditorRefs: {},
+      promptPlaceholders: PROMPT_PLACEHOLDERS,
+      skillList: [],
     }
   },
   mounted() {
     this.loadTemplates()
+    this.loadSkillList()
   },
   methods: {
+    // ===== 内置占位符弹窗 =====
+    openPlaceholderDialog() {
+      this.placeholderDialogVisible = true
+    },
+    closePlaceholderDialog() {
+      this.placeholderDialogVisible = false
+    },
+    copyPlaceholder(placeholder) {
+      const text = placeholder.value
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+          ElMessage.success(`已复制：${text}`)
+        }).catch(() => {
+          this.fallbackCopy(text)
+        })
+      } else {
+        this.fallbackCopy(text)
+      }
+    },
+    fallbackCopy(text) {
+      const textarea = document.createElement('textarea')
+      textarea.value = text
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+      ElMessage.success(`已复制：${text}`)
+    },
+
+    // ===== Skills 列表加载 =====
+    loadSkillList() {
+      workflowTemplateApi.WorkflowSkillList((response) => {
+        if (response && response.ErrCode === 0 && response.Data && response.Data.list) {
+          this.skillList = response.Data.list.map(item => item.name)
+        }
+      })
+    },
+
     // ===== 模板数据加载 =====
     loadTemplates() {
       this.loading = true
@@ -226,11 +524,14 @@ export default {
       this.selectedTemplate = tpl
       this.editTemplateName = tpl.name
       this.editTemplateDesc = tpl.description || ''
-      this.editingSteps = (tpl.steps || []).map(s => ({
-        ...s,
-        _key: 'step_' + (s.id || ++stepIdCounter),
-      }))
-      this.expandedStepId = ''
+      this.editingSteps = (tpl.steps || []).map(s => {
+        const step = {
+          ...s,
+          _key: 'step_' + (s.id || ++stepIdCounter),
+        }
+        step.step_documents_list = this.parseStepDocuments(s.step_documents)
+        return step
+      })
     },
 
     // ===== 模板 CRUD =====
@@ -276,10 +577,14 @@ export default {
           }
           this.selectedTemplateId = saved.id
           this.selectedTemplate = saved
-          this.editingSteps = (saved.steps || []).map(s => ({
-            ...s,
-            _key: 'step_' + s.id,
-          }))
+          this.editingSteps = (saved.steps || []).map(s => {
+            const step = {
+              ...s,
+              _key: 'step_' + s.id,
+            }
+            step.step_documents_list = this.parseStepDocuments(s.step_documents)
+            return step
+          })
           ElMessage.success('模板已保存')
           this.$emit('templates-loaded', this.templates)
         } else {
@@ -332,11 +637,196 @@ export default {
         _key: 'step_new_' + (++stepIdCounter),
       }
       this.editingSteps.push(newStep)
-      this.expandedStepId = newStep._key
     },
 
-    toggleStepExpand(step) {
-      this.expandedStepId = this.expandedStepId === step._key ? '' : step._key
+    openPromptDialog(step) {
+      this.editingStep = step
+      this.dialogPromptContent = step.prompt_content || ''
+      this.promptDialogVisible = true
+    },
+    closePromptDialog() {
+      this.editingStep = null
+      this.dialogPromptContent = ''
+      this.promptDialogVisible = false
+    },
+    isRequirementFetchStep(step) {
+      return step && step.step_key === 'requirement-fetch'
+    },
+    saveDialogPrompt() {
+      if (!this.editingStep) return
+      this.editingStep.prompt_content = this.dialogPromptContent
+      this.saveStepPrompt(this.editingStep, () => {
+        this.promptDialogVisible = false
+      })
+    },
+
+    // ===== 步骤文档配置 =====
+    showStepDocumentButton(step) {
+      // 仅任务配置固定步骤不显示文档配置按钮；抓取需求允许配置默认需求文档
+      if (!step) return false
+      return step.step_key !== 'task-config'
+    },
+    createRequirementFetchDefaultDocument() {
+      return {
+        id: this.generateStepDocumentId(),
+        name: '需求文档',
+        placeholder: REQUIREMENT_FETCH_DEFAULT_DOC_PLACEHOLDER,
+        title: '',
+        content: '',
+        is_api_doc: false,
+      }
+    },
+    parseStepDocuments(raw) {
+      if (!raw) return []
+      try {
+        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+        if (!Array.isArray(parsed)) return []
+        return parsed.map(doc => {
+          const id = String(doc.id || '').trim() || this.generateStepDocumentId()
+          return {
+            id,
+            name: String(doc.name || '').trim(),
+            placeholder: String(doc.placeholder || '').trim(),
+            title: String(doc.title || '').trim(),
+            content: String(doc.content || '').trim(),
+            is_api_doc: !!doc.is_api_doc,
+          }
+        }).filter(doc => doc.name)
+      } catch (e) {
+        return []
+      }
+    },
+    stringifyStepDocuments(docs) {
+      if (!Array.isArray(docs) || docs.length === 0) return ''
+      const list = docs.map(doc => {
+        const id = String(doc.id || '').trim() || this.generateStepDocumentId()
+        return {
+          id,
+          name: String(doc.name || '').trim(),
+          placeholder: String(doc.placeholder || '').trim(),
+          title: String(doc.title || '').trim(),
+          content: String(doc.content || '').trim(),
+          is_api_doc: !!doc.is_api_doc,
+        }
+      }).filter(doc => doc.name)
+      return list.length > 0 ? JSON.stringify(list) : ''
+    },
+    generateStepDocumentId() {
+      return 'doc_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 4)
+    },
+    generateStepDocumentPlaceholder(id) {
+      return `{文档_${id}_地址}`
+    },
+    openDocumentDialog(step) {
+      this.editingStep = step
+      this.editingStepDocuments = (step.step_documents_list || []).map(doc => ({ ...doc }))
+      if (this.editingStepDocuments.length === 0) {
+        if (this.isRequirementFetchStep(step)) {
+          this.editingStepDocuments.push(this.createRequirementFetchDefaultDocument())
+        } else {
+          this.editingStepDocuments.push(this.createEmptyStepDocument())
+        }
+      }
+      this.documentDialogVisible = true
+    },
+    closeDocumentDialog() {
+      this.editingStep = null
+      this.editingStepDocuments = []
+      this.documentDialogVisible = false
+    },
+    createEmptyStepDocument() {
+      const id = this.generateStepDocumentId()
+      return {
+        id,
+        name: '',
+        placeholder: '',
+        title: '',
+        content: '',
+        is_api_doc: false,
+      }
+    },
+    addStepDocument() {
+      this.editingStepDocuments.push(this.createEmptyStepDocument())
+    },
+    removeStepDocument(index) {
+      this.editingStepDocuments.splice(index, 1)
+      if (this.editingStepDocuments.length === 0) {
+        this.editingStepDocuments.push(this.createEmptyStepDocument())
+      }
+    },
+    validateStepDocuments() {
+      for (let i = 0; i < this.editingStepDocuments.length; i++) {
+        const doc = this.editingStepDocuments[i]
+        const name = String(doc.name || '').trim()
+        if (!name) {
+          ElMessage.warning(`文档 ${i + 1} 的名称不能为空`)
+          return false
+        }
+      }
+      // 校验占位符在同一模板内是否重复
+      const currentPlaceholders = new Map()
+      for (let i = 0; i < this.editingStepDocuments.length; i++) {
+        const ph = String(this.editingStepDocuments[i].placeholder || '').trim()
+        if (!ph) continue
+        if (currentPlaceholders.has(ph)) {
+          ElMessage.warning(`文档占位符 ${ph} 在当前步骤内重复（文档 ${currentPlaceholders.get(ph)} 与 文档 ${i + 1}）`)
+          return false
+        }
+        currentPlaceholders.set(ph, i + 1)
+      }
+      // 跨步骤校验
+      for (const step of this.editingSteps) {
+        if (step === this.editingStep) continue
+        const stepDocs = step.step_documents_list || []
+        for (const doc of stepDocs) {
+          const otherPh = String(doc.placeholder || '').trim()
+          if (!otherPh) continue
+          if (currentPlaceholders.has(otherPh)) {
+            ElMessage.warning(`文档占位符 ${otherPh} 与步骤"${step.name}"中的文档"${doc.name}"重复`)
+            return false
+          }
+        }
+      }
+      return true
+    },
+    saveStepDocuments() {
+      if (!this.editingStep) return
+      if (!this.validateStepDocuments()) return
+      this.editingStepDocuments.forEach(doc => {
+        if (!String(doc.id || '').trim()) {
+          doc.id = this.generateStepDocumentId()
+        }
+      })
+      this.editingStepDocuments = this.editingStepDocuments.filter(doc => String(doc.name || '').trim())
+      this.editingStep.step_documents = this.stringifyStepDocuments(this.editingStepDocuments)
+      this.editingStep.step_documents_list = this.parseStepDocuments(this.editingStep.step_documents)
+      this.saveStepSilentWithDocuments(this.editingStep, () => {
+        this.documentDialogVisible = false
+      })
+    },
+    saveStepSilentWithDocuments(step, callback) {
+      if (!step.name || !step.name.trim()) return
+      workflowTemplateApi.WorkflowTemplateStepSave({
+        id: step.id || 0,
+        template_id: this.selectedTemplateId,
+        name: step.name.trim(),
+        step_key: step.step_key || '',
+        prompt_content: step.prompt_content || '',
+        step_documents: step.step_documents || '',
+        remark: step.remark || '',
+        sort_order: step.sort_order || 0,
+      }, (response) => {
+        if (response && response.ErrCode === 0 && response.Data && response.Data.step) {
+          const saved = response.Data.step
+          saved._key = 'step_' + saved.id
+          saved.step_documents_list = this.parseStepDocuments(saved.step_documents)
+          Object.assign(step, saved)
+          ElMessage.success('文档配置已保存')
+          if (callback) callback()
+        } else {
+          ElMessage.error(response.ErrMsg || '保存失败')
+        }
+      })
     },
 
     saveStepSilent(step) {
@@ -348,23 +838,28 @@ export default {
         name: step.name.trim(),
         step_key: step.step_key || '',
         prompt_content: step.prompt_content || '',
+        step_documents: step.step_documents || '',
+        remark: step.remark || '',
         sort_order: step.sort_order || 0,
       }, (response) => {
         if (response && response.ErrCode === 0 && response.Data && response.Data.step) {
           const saved = response.Data.step
           saved._key = 'step_' + saved.id
+          saved.step_documents_list = this.parseStepDocuments(saved.step_documents)
           Object.assign(step, saved)
         }
       })
     },
 
-    saveStepPrompt(step) {
+    saveStepPrompt(step, callback) {
       workflowTemplateApi.WorkflowTemplateStepSave({
         id: step.id || 0,
         template_id: this.selectedTemplateId,
         name: step.name.trim(),
         step_key: step.step_key || '',
         prompt_content: step.prompt_content || '',
+        step_documents: step.step_documents || '',
+        remark: step.remark || '',
         sort_order: step.sort_order || 0,
       }, (response) => {
         if (response && response.ErrCode === 0 && response.Data && response.Data.step) {
@@ -372,6 +867,7 @@ export default {
           saved._key = 'step_' + saved.id
           Object.assign(step, saved)
           ElMessage.success('提示词已保存')
+          if (callback) callback()
         } else {
           ElMessage.error(response.ErrMsg || '保存失败')
         }
@@ -397,9 +893,6 @@ export default {
       workflowTemplateApi.WorkflowTemplateStepDelete(step.id, (response) => {
         if (response && response.ErrCode === 0) {
           this.editingSteps = this.editingSteps.filter(s => s.id !== step.id)
-          if (this.expandedStepId === step._key) {
-            this.expandedStepId = ''
-          }
           // 重新排序
           this.saveStepSort()
           ElMessage.success('步骤已删除')
@@ -423,7 +916,21 @@ export default {
         stepIds = this.editingSteps.map(s => s.id).filter(id => id > 0)
       }
       if (stepIds.length === 0) return
-      workflowTemplateApi.WorkflowTemplateStepSort(this.selectedTemplateId, stepIds)
+      workflowTemplateApi.WorkflowTemplateStepSort(this.selectedTemplateId, stepIds, () => {})
+    },
+
+    // ===== 步骤备注编辑 =====
+    openRemarkDialog(step) {
+      this.editingStep = step
+      this.dialogRemarkContent = step.remark || ''
+      this.remarkDialogVisible = true
+    },
+    saveDialogRemark() {
+      if (!this.editingStep) return
+      this.editingStep.remark = this.dialogRemarkContent
+      this.saveStepSilent(this.editingStep)
+      this.remarkDialogVisible = false
+      ElMessage.success('备注已保存')
     },
   },
 }
@@ -555,10 +1062,6 @@ export default {
   opacity: 0.85;
 }
 
-.wf-template-manager__step-item--expanded {
-  border-color: #67c23a;
-}
-
 .wf-template-manager__step-ghost {
   opacity: 0.4;
   background: rgba(103, 194, 58, 0.1);
@@ -633,5 +1136,285 @@ export default {
   align-items: center;
   justify-content: center;
   flex: 1;
+}
+
+/* 标题右侧按钮组 */
+.wf-template-manager__section-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 内置占位符弹窗 */
+.wf-placeholder-dialog :deep(.el-dialog__body) {
+  padding-top: 8px;
+}
+
+.wf-placeholder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.wf-placeholder-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.wf-placeholder-item:hover {
+  background: #f8faf4;
+  border-color: #b8d4b0;
+}
+
+.wf-placeholder-item__content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.wf-placeholder-item__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.wf-placeholder-item__label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+  min-width: 120px;
+  flex-shrink: 0;
+}
+
+.wf-placeholder-item__value {
+  font-size: 13px;
+  color: #3d6b3d;
+  background: #eef4ec;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: Consolas, Avenir, Helvetica, Arial, sans-serif;
+}
+
+.wf-placeholder-item__tip {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.wf-placeholder-item__copy {
+  color: var(--el-text-color-placeholder);
+  font-size: 14px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  transition: color 0.2s ease;
+}
+
+.wf-placeholder-item:hover .wf-placeholder-item__copy {
+  color: #5a8a5a;
+}
+
+.wf-prompt-dialog__tip {
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+/* 提示词弹窗占位符区域 */
+.wf-prompt-dialog__placeholders {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: var(--el-fill-color-light);
+  border-radius: 8px;
+  line-height: 1.8;
+}
+
+.wf-prompt-dialog__placeholders-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--el-text-color-secondary);
+  margin-right: 4px;
+}
+
+.wf-prompt-dialog__editor {
+  height: calc(100vh - 360px);
+  min-height: 320px;
+}
+
+.wf-prompt-dialog__placeholder-tag {
+  display: inline-block;
+  margin-right: 6px;
+  margin-top: 4px;
+  color: #3d6b3d;
+  background: #eef4ec;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: Consolas, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.wf-prompt-dialog__placeholder-tag:hover {
+  background: #dfebd9;
+}
+
+.wf-prompt-dialog__placeholder-tag--document {
+  color: #8b5e3c;
+  background: #fdf6ec;
+}
+
+.wf-prompt-dialog__placeholder-tag--document:hover {
+  background: #f5e6d0;
+}
+
+.wf-prompt-dialog__placeholder-tag--skill {
+  color: #5b6abf;
+  background: #eef0ff;
+}
+
+.wf-prompt-dialog__placeholder-tag--skill:hover {
+  background: #dde1fc;
+}
+
+/* 步骤文档角标 */
+.wf-template-manager__doc-badge {
+  margin-left: 4px;
+}
+
+.wf-template-manager__doc-badge :deep(.el-badge__content) {
+  height: 14px;
+  line-height: 14px;
+  padding: 0 4px;
+  font-size: 10px;
+}
+
+/* 步骤文档配置弹窗 */
+.wf-document-dialog :deep(.el-dialog__body) {
+  padding-top: 8px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.wf-document-dialog__tip {
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  line-height: 1.6;
+}
+
+.wf-document-item {
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+.wf-document-item__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--el-fill-color-light);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.wf-document-item__header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.wf-document-item__api-doc-switch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wf-document-item__api-doc-label {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.wf-document-item__index {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+}
+
+.wf-document-item__body {
+  padding: 12px;
+}
+
+.wf-document-item__input {
+  margin-bottom: 10px;
+}
+
+.wf-document-item__placeholder {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  background: var(--el-fill-color-light);
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.wf-document-item__placeholder-label {
+  color: var(--el-text-color-secondary);
+  flex-shrink: 0;
+}
+
+.wf-document-item__placeholder code {
+  color: #3d6b3d;
+  background: #eef4ec;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: Consolas, Avenir, Helvetica, Arial, sans-serif;
+}
+
+.wf-document-item__placeholder-input {
+  flex: 1;
+}
+
+.wf-document-item__preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  background: var(--el-fill-color-light);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.wf-document-item__preview code {
+  color: #3d6b3d;
+  background: #eef4ec;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: Consolas, Avenir, Helvetica, Arial, sans-serif;
+}
+
+.wf-document-dialog__actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 4px;
+}
+
+/* 步骤备注弹窗 */
+.wf-remark-dialog :deep(.el-dialog__body) {
+  padding-top: 12px;
 }
 </style>
