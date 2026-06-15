@@ -48,8 +48,11 @@ type ApiDevEntry struct {
 }
 
 // HomeTaskListRequest 查询首页任务列表请求。
+// Page/PageSize 非必传：不传或传0则不分页返回全量；传入时分页查询并返回 total 字段。
 type HomeTaskListRequest struct {
 	IsArchived int `json:"is_archived"`
+	Page       int `json:"page"`      // 页码，从1开始
+	PageSize   int `json:"page_size"` // 每页条数
 }
 
 // HomeTaskArchiveToggleRequest 切换首页任务归档状态请求。

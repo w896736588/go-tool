@@ -133,6 +133,20 @@
   background: #fafcf8;
 }
 
+/* 归档列表底部分页器 */
+.home-task-pagination {
+  display: flex;
+  justify-content: center;
+  padding: 16px 0 4px;
+}
+
+.home-task-loading-more,
+.home-task-no-more {
+  font-size: 13px;
+  color: #909399;
+  padding: 12px 0;
+}
+
 .home-task-card {
   position: relative;
   padding: 16px 18px;

@@ -32,6 +32,15 @@ order by id desc`
 select id,name,task_status,memory_fragment_id,is_archived,start_time,last_operated_at,create_time,update_time,fetch_type,tapd_url,zentao_url,git_id,api_dev_enabled,api_collection_id,api_dir_id,git_ids,api_dev_entries,mysql_id,dev_configs,use_workflow
 from tbl_home_task
 order by id desc`
+	// homeTaskListPaginationQuerySQL 用于分页查询任务列表（LIMIT+OFFSET 由调用方追加）。
+	homeTaskListPaginationQuerySQL = `
+select id,name,task_status,memory_fragment_id,is_archived,start_time,last_operated_at,create_time,update_time,fetch_type,tapd_url,zentao_url,git_id,api_dev_enabled,api_collection_id,api_dir_id,git_ids,api_dev_entries,mysql_id,dev_configs,use_workflow
+from tbl_home_task
+where is_archived = ?
+order by id desc
+limit ? offset ?`
+	// homeTaskCountSQL 用于统计各归档状态的任务数量。
+	homeTaskCountSQL = `select is_archived, count(1) as cnt from tbl_home_task group by is_archived`
 	// homeTaskListTodayUpdatedQuerySQL 用于查询今天变更过的任务，供工作日报使用。
 	homeTaskListTodayUpdatedQuerySQL = `
 select id,name,task_status,memory_fragment_id,is_archived,start_time,last_operated_at,create_time,update_time,fetch_type,tapd_url,zentao_url,git_id,api_dev_enabled,api_collection_id,api_dir_id,git_ids,api_dev_entries,mysql_id,dev_configs,use_workflow
@@ -45,9 +54,14 @@ order by id desc`
 )
 
 // HomeTaskList 查询首页任务列表。
+// isArchived: 0=未归档, 1=已归档, -1=全部。
 func (h *CSqlite) HomeTaskList(isArchived int) ([]map[string]any, error) {
 	if !isValidHomeTaskArchived(isArchived) {
 		return nil, errors.New(`归档状态不合法`)
+	}
+	// 全量查询：不走 where 条件过滤，直接查所有。
+	if isArchived == define.HomeTaskArchivedAll {
+		return h.HomeTaskListAll()
 	}
 	list, err := h.Client.QueryBySql(homeTaskListQuerySQL, isArchived).All()
 	if err != nil {
@@ -55,6 +69,66 @@ func (h *CSqlite) HomeTaskList(isArchived int) ([]map[string]any, error) {
 	}
 	h.fillHomeTaskTimeDescList(list)
 	return list, nil
+}
+
+// HomeTaskListAll 查询所有首页任务（含已归档和未归档）。
+func (h *CSqlite) HomeTaskListAll() ([]map[string]any, error) {
+	list, err := h.Client.QueryBySql(homeTaskListAllQuerySQL).All()
+	if err != nil {
+		return nil, err
+	}
+	h.fillHomeTaskTimeDescList(list)
+	return list, nil
+}
+
+// HomeTaskCount 返回活跃和归档任务的数量（activeCount=未归档, archivedCount=已归档）。
+func (h *CSqlite) HomeTaskCount() (activeCount int, archivedCount int, err error) {
+	rows, err := h.Client.QueryBySql(homeTaskCountSQL).All()
+	if err != nil {
+		return 0, 0, err
+	}
+	for _, row := range rows {
+		isArchived := cast.ToInt(row[`is_archived`])
+		cnt := cast.ToInt(row[`cnt`])
+		if isArchived == define.HomeTaskArchivedNo {
+			activeCount = cnt
+		} else if isArchived == define.HomeTaskArchivedYes {
+			archivedCount = cnt
+		}
+	}
+	return activeCount, archivedCount, nil
+}
+
+// HomeTaskListPaginated 分页查询首页任务列表，返回任务列表和总数。
+func (h *CSqlite) HomeTaskListPaginated(isArchived, page, pageSize int) (list []map[string]any, total int, err error) {
+	if !isValidHomeTaskArchived(isArchived) {
+		return nil, 0, errors.New(`归档状态不合法`)
+	}
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	// 先查总数
+	countRows, err := h.Client.QueryBySql(homeTaskCountSQL).All()
+	if err != nil {
+		return nil, 0, err
+	}
+	for _, row := range countRows {
+		if cast.ToInt(row[`is_archived`]) == isArchived {
+			total = cast.ToInt(row[`cnt`])
+			break
+		}
+	}
+	// 再查分页数据
+	offset := (page - 1) * pageSize
+	list, err = h.Client.QueryBySql(homeTaskListPaginationQuerySQL, isArchived, pageSize, offset).All()
+	if err != nil {
+		return nil, 0, err
+	}
+	h.fillHomeTaskTimeDescList(list)
+	return list, total, nil
 }
 
 // HomeTaskListTodayUpdated 查询今天变更过的任务列表（包含已归档和未归档），用于工作日报。
@@ -284,9 +358,9 @@ func isValidHomeTaskStatus(taskStatus string) bool {
 	return false
 }
 
-// isValidHomeTaskArchived 校验首页任务归档值是否合法。
+// isValidHomeTaskArchived 校验首页任务归档值是否合法（含全量查询模式）。
 func isValidHomeTaskArchived(isArchived int) bool {
-	return isArchived == define.HomeTaskArchivedNo || isArchived == define.HomeTaskArchivedYes
+	return isArchived == define.HomeTaskArchivedNo || isArchived == define.HomeTaskArchivedYes || isArchived == define.HomeTaskArchivedAll
 }
 
 // fragmentRefTypeWorkflow 表示引用来源为工作流程任务。

@@ -5,6 +5,8 @@ const (
 	HomeTaskArchivedNo = 0
 	// HomeTaskArchivedYes 表示任务已归档。
 	HomeTaskArchivedYes = 1
+	// HomeTaskArchivedAll 表示查询所有任务（含已归档和未归档）。
+	HomeTaskArchivedAll = -1
 )
 
 const (

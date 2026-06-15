@@ -24,11 +24,20 @@ const (
 )
 
 // HomeTaskList 查询首页任务列表，同时返回 Git 仓库列表和 API 集合列表。
+// 支持分页：传入 page 和 page_size 时分页返回，同时返回 total 字段。
 func HomeTaskList(c *gin.Context) {
 	request := _struct.HomeTaskListRequest{}
 	_ = gsgin.GinPostBody(c, &request)
 
-	list, err := common.DbMain.HomeTaskList(request.IsArchived)
+	var list []map[string]any
+	var total int
+	var err error
+	if request.Page > 0 && request.PageSize > 0 {
+		// 分页查询
+		list, total, err = common.DbMain.HomeTaskListPaginated(request.IsArchived, request.Page, request.PageSize)
+	} else {
+		list, err = common.DbMain.HomeTaskList(request.IsArchived)
+	}
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
@@ -41,7 +50,25 @@ func HomeTaskList(c *gin.Context) {
 		`git_list`:            queryGitList(),
 		`api_collection_list`: queryApiCollectionList(),
 	}
+	if request.Page > 0 && request.PageSize > 0 {
+		result[`total`] = total
+		result[`page`] = request.Page
+		result[`page_size`] = request.PageSize
+	}
 	gsgin.GinResponseSuccess(c, ``, result)
+}
+
+// HomeTaskCount 返回活跃和归档任务的数量。
+func HomeTaskCount(c *gin.Context) {
+	activeCount, archivedCount, err := common.DbMain.HomeTaskCount()
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`active_count`:   activeCount,
+		`archived_count`: archivedCount,
+	})
 }
 
 // queryGitGroupList 查询 Git 分组列表。

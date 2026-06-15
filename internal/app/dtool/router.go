@@ -337,6 +337,7 @@ func setMemoryFragment(tGin *p_gin.Gin) {
 
 func homeTask(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/HomeTaskList`, controller.HomeTaskList)
+	tGin.GinPost(`/api/HomeTaskCount`, controller.HomeTaskCount)
 	tGin.GinPost(`/api/HomeTaskInfo`, controller.HomeTaskInfo)
 	tGin.GinPost(`/api/HomeTaskSave`, controller.HomeTaskSave)
 	tGin.GinPost(`/api/HomeTaskArchiveToggle`, controller.HomeTaskArchiveToggle)

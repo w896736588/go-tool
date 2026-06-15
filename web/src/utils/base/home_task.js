@@ -23,9 +23,19 @@ function ssePost(uri, params, callBack) {
   })
 }
 
-// HomeTaskList 查询首页任务列表。
-function HomeTaskList(isArchived, callBack) {
-  base.BasePost('/api/HomeTaskList', { is_archived: isArchived }, callBack)
+// HomeTaskList 查询首页任务列表。支持分页参数 page/page_size。
+function HomeTaskList(isArchived, callBack, page = 0, pageSize = 0) {
+  const params = { is_archived: isArchived }
+  if (page > 0 && pageSize > 0) {
+    params.page = page
+    params.page_size = pageSize
+  }
+  base.BasePost('/api/HomeTaskList', params, callBack)
+}
+
+// HomeTaskCount 获取活跃和归档任务的数量。
+function HomeTaskCount(callBack) {
+  base.BasePost('/api/HomeTaskCount', {}, callBack)
 }
 
 // HomeTaskSave 保存首页任务。
@@ -131,6 +141,7 @@ function RemoteBranchSwitch(gitId, branchName, callBack) {
 
 export default {
   HomeTaskList,
+  HomeTaskCount,
   HomeTaskSave,
   HomeTaskArchiveToggle,
   HomeTaskStatusQuickUpdate,

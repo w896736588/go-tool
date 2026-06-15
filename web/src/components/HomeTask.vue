@@ -155,9 +155,9 @@
             </div>
           </div>
         </el-tab-pane>
-        <el-tab-pane :label="'归档 (' + homeTaskArchivedList.length + ')'" :name="HOME_TASK_TAB_ARCHIVED">
-          <div v-loading="homeTaskLoadingArchived" class="home-task-list">
-            <div v-if="homeTaskArchivedList.length === 0" class="home-task-empty">
+        <el-tab-pane :label="'归档 (' + homeTaskArchivedTotal + ')'" :name="HOME_TASK_TAB_ARCHIVED">
+          <div v-loading="homeTaskLoadingArchived" class="home-task-list" ref="archivedListRef" @scroll="handleArchivedScroll">
+            <div v-if="homeTaskArchivedList.length === 0 && !homeTaskLoadingArchived" class="home-task-empty">
               当前没有归档任务
             </div>
             <div
@@ -295,6 +295,14 @@
                 </div>
               </div>
                           </div>
+          </div>
+          <div v-if="homeTaskArchivedTotal > homeTaskArchivedPageSize" class="home-task-pagination">
+            <div v-if="homeTaskArchivedLoadingMore" class="home-task-loading-more">
+              <i class="el-icon-loading" style="margin-right:6px"></i>加载中...
+            </div>
+            <div v-else-if="homeTaskArchivedNoMore" class="home-task-no-more">
+              已加载全部 {{ homeTaskArchivedTotal }} 条归档任务
+            </div>
           </div>
         </el-tab-pane>
       </el-tabs>
@@ -721,6 +729,7 @@ const HOME_TASK_TAB_ACTIVE = 'active'
 const HOME_TASK_TAB_ARCHIVED = 'archived'
 const HOME_TASK_ARCHIVED_NO = 0
 const HOME_TASK_ARCHIVED_YES = 1
+const HOME_TASK_ARCHIVED_ALL = -1
 const HOME_TASK_STATUS_TODO = '待开始'
 const HOME_TASK_STATUS_DEVELOPING = '开发中'
 const HOME_TASK_STATUS_DEV_COMPLETED = '开发完'
@@ -844,6 +853,12 @@ export default {
       homeTaskOperatingType: '',
       homeTaskActiveList: [],
       homeTaskArchivedList: [],
+      homeTaskArchivedTotal: 0,
+      homeTaskArchivedPage: 1,
+      homeTaskArchivedPageSize: 20,
+      homeTaskArchivedLoaded: false,
+      homeTaskArchivedLoadingMore: false,
+      homeTaskArchivedNoMore: false,
       homeTaskStatusOptions: HOME_TASK_STATUS_OPTIONS,
       homeTaskForm: createHomeTaskDefaultForm(),
       homeTaskExpandedFragments: {},
@@ -901,16 +916,16 @@ export default {
   mounted() {
     this.ensureWorkflowUnreadSse()
     this.ensureHomeTaskPageDataSse()
-    // 只加载主列表，附加数据通过 SSE 推送
+    // 默认只加载活跃任务；归档数量通过轻量接口获取，归档数据点击 tab 时才懒加载
+    this.loadHomeTaskCounts()
     this.loadHomeTaskList(HOME_TASK_ARCHIVED_NO)
-    this.loadHomeTaskList(HOME_TASK_ARCHIVED_YES)
   },
   activated() {
     this.ensureWorkflowUnreadSse()
     this.ensureHomeTaskPageDataSse()
-    // 只加载主列表，附加数据通过 SSE 推送
+    // 重新加载数量和活跃列表
+    this.loadHomeTaskCounts()
     this.loadHomeTaskList(HOME_TASK_ARCHIVED_NO)
-    this.loadHomeTaskList(HOME_TASK_ARCHIVED_YES)
   },
   beforeUnmount() {
     this.unregisterWorkflowUnreadSse()
@@ -1123,25 +1138,39 @@ export default {
       })
     },
     handleHomeTaskTabChange(tabName) {
-      if (tabName === HOME_TASK_TAB_ACTIVE) {
-        this.loadHomeTaskList(HOME_TASK_ARCHIVED_NO)
-        return
+      // 切换到归档 tab 时，首次懒加载归档数据
+      if (tabName === HOME_TASK_TAB_ARCHIVED && !this.homeTaskArchivedLoaded) {
+        this.loadHomeTaskList(HOME_TASK_ARCHIVED_YES, 1, this.homeTaskArchivedPageSize)
       }
-      this.loadHomeTaskList(HOME_TASK_ARCHIVED_YES)
     },
-    loadHomeTaskList(isArchived) {
-      if (isArchived === HOME_TASK_ARCHIVED_YES) {
+    loadHomeTaskList(isArchived, page = 0, pageSize = 0) {
+      const isAllMode = isArchived === HOME_TASK_ARCHIVED_ALL
+      const isArchivedTab = isArchived === HOME_TASK_ARCHIVED_YES
+      const isPagination = page > 0 && pageSize > 0
+
+      // 归档首页显示全页 loading，翻页时显示底部加载提示
+      const isArchivedFirstPage = isArchivedTab && (!isPagination || page <= 1)
+      if (isArchivedFirstPage) {
         this.homeTaskLoadingArchived = true
+      } else if (isArchived === HOME_TASK_ARCHIVED_NO) {
+        this.homeTaskLoadingActive = true
       } else {
         this.homeTaskLoadingActive = true
+        this.homeTaskLoadingArchived = true
       }
       homeTaskApi.HomeTaskList(isArchived, (response) => {
-        if (isArchived === HOME_TASK_ARCHIVED_YES) {
+        if (isArchivedFirstPage) {
           this.homeTaskLoadingArchived = false
+        } else if (isArchived === HOME_TASK_ARCHIVED_NO) {
+          this.homeTaskLoadingActive = false
         } else {
           this.homeTaskLoadingActive = false
+          this.homeTaskLoadingArchived = false
         }
         if (!(response && response.ErrCode === 0)) {
+          this.homeTaskLoadingActive = false
+          this.homeTaskLoadingArchived = false
+          this.homeTaskArchivedLoadingMore = false
           this.$helperNotify.error(response?.ErrMsg || '任务列表加载失败')
           return
         }
@@ -1151,22 +1180,67 @@ export default {
           api_dev_entries: safeParseJSON(t.api_dev_entries, []),
           dev_configs: safeParseJSON(t.dev_configs, []),
         }))
-        if (isArchived === HOME_TASK_ARCHIVED_YES) {
-          this.homeTaskArchivedList = taskList
-          // 归档列表也需要工作流计数
+        if (isAllMode) {
+          this.homeTaskActiveList = taskList.filter(t => t.is_archived === HOME_TASK_ARCHIVED_NO)
+          this.homeTaskArchivedList = taskList.filter(t => t.is_archived === HOME_TASK_ARCHIVED_YES)
+          this.loadHomeTaskWorkflowCounts(this.homeTaskActiveList)
+          this.loadHomeTaskWorkflowCounts(this.homeTaskArchivedList)
+        } else if (isArchivedTab) {
+          // 归档：分页时首页替换、后续页追加；非分页直接替换
+          if (isPagination && page > 1) {
+            this.homeTaskArchivedList = [...this.homeTaskArchivedList, ...taskList]
+          } else {
+            this.homeTaskArchivedList = taskList
+          }
+          this.homeTaskArchivedTotal = isPagination ? (response.Data?.total || taskList.length) : taskList.length
+          this.homeTaskArchivedPage = isPagination ? (response.Data?.page || page) : 1
+          this.homeTaskArchivedLoaded = true
+          this.homeTaskArchivedLoadingMore = false
+          // 判断是否已加载全部
+          this.homeTaskArchivedNoMore = this.homeTaskArchivedList.length >= this.homeTaskArchivedTotal
           this.loadHomeTaskWorkflowCounts(taskList)
         } else {
+          // 活跃任务：全量加载（任务数少，无需分页）
           this.homeTaskActiveList = taskList
         }
 
         // 从列表接口中直接获取 Git 仓库列表和 API 集合列表
         this.populateGitRepoListFromResponse(response.Data)
         this.populateApiCollectionListFromResponse(response.Data)
-      })
+      }, page, pageSize)
     },
     refreshAllHomeTaskList() {
+      // 刷新时重置归档懒加载状态，并重新拉取数量和活跃列表
+      this.homeTaskArchivedLoaded = false
+      this.homeTaskArchivedPage = 1
+      this.homeTaskArchivedNoMore = false
+      this.homeTaskArchivedLoadingMore = false
+      this.loadHomeTaskCounts()
       this.loadHomeTaskList(HOME_TASK_ARCHIVED_NO)
-      this.loadHomeTaskList(HOME_TASK_ARCHIVED_YES)
+      // 如果当前正在查看归档 tab，也需要刷新归档列表
+      if (this.homeTaskActiveTab === HOME_TASK_TAB_ARCHIVED) {
+        this.loadHomeTaskList(HOME_TASK_ARCHIVED_YES, 1, this.homeTaskArchivedPageSize)
+      }
+    },
+    // loadHomeTaskCounts 获取活跃和归档任务数量，用于 tab 标签显示。
+    loadHomeTaskCounts() {
+      homeTaskApi.HomeTaskCount((response) => {
+        if (!(response && response.ErrCode === 0 && response.Data)) return
+        this.homeTaskArchivedTotal = response.Data.archived_count || 0
+      })
+    },
+    // handleArchivedScroll 归档列表滚动监听，接近底部时自动加载下一页。
+    handleArchivedScroll() {
+      if (this.homeTaskArchivedLoadingMore || this.homeTaskArchivedNoMore) return
+      const el = this.$refs.archivedListRef
+      if (!el) return
+      const distanceToBottom = el.scrollHeight - el.clientHeight - el.scrollTop
+      if (distanceToBottom < 80) {
+        this.homeTaskArchivedLoadingMore = true
+        const nextPage = this.homeTaskArchivedPage + 1
+        this.homeTaskArchivedPage = nextPage
+        this.loadHomeTaskList(HOME_TASK_ARCHIVED_YES, nextPage, this.homeTaskArchivedPageSize)
+      }
     },
     resetHomeTaskForm() {
       this.homeTaskForm = createHomeTaskDefaultForm()
