@@ -3928,7 +3928,7 @@ export default {
 
 .task-workflow-header__field-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(120px, auto));
   gap: 10px 20px;
 }
 
@@ -3941,16 +3941,15 @@ export default {
 }
 
 .task-workflow-header__field--compact {
-  min-width: 100px;
+  /* 紧凑模式：按内容宽度自适应，不再设置固定 min-width */
 }
 
 .task-workflow-header__field--link {
   cursor: pointer;
-  min-width: 350px;
 }
 
 .task-workflow-header__field--branch {
-  min-width: 400px;
+  /* 分支名列：内容自适应，不再设置固定 min-width */
 }
 
 .task-workflow-header__field--link .task-workflow-header__field-value {
