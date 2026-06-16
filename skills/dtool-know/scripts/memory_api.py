@@ -2,6 +2,9 @@
 # -*- coding: utf-8 -*-
 """dtool 知识片段相关接口示例"""
 
+import os, sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../dtool-common/scripts'))
+
 from api_common import call_api
 
 
@@ -12,9 +15,6 @@ def memory_fragment_update_by_path(relative_path, content, task_id):
     传入的是相对于 fragments/ 的路径。
     task_id （任务ID）为必传参数，后端会校验片段是否属于该任务。
     """
-    filename = relative_path.replace("\\", "/").split("/")[-1]
-    fragment_id = filename.rsplit(".", 1)[0] if "." in filename else filename
-
     result = call_api("/api/MemoryFragmentSaveByPath", {
         "task_id": int(task_id),
         "relative_path": relative_path,

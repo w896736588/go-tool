@@ -2,6 +2,9 @@
 # -*- coding: utf-8 -*-
 """dtool Git 相关接口示例"""
 
+import os, sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../dtool-common/scripts'))
+
 from api_common import call_api
 
 
