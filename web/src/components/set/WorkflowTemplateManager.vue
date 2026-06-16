@@ -787,9 +787,6 @@ export default {
     },
     removeStepDocument(index) {
       this.editingStepDocuments.splice(index, 1)
-      if (this.editingStepDocuments.length === 0) {
-        this.editingStepDocuments.push(this.createEmptyStepDocument())
-      }
     },
     validateStepDocuments() {
       for (let i = 0; i < this.editingStepDocuments.length; i++) {
@@ -1123,7 +1120,7 @@ export default {
   display: flex;
   gap: 16px;
   height: 100%;
-  min-height: 500px;
+  min-height: 0;
 }
 
 /* 左侧模板列表 */

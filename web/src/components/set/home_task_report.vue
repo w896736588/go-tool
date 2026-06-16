@@ -50,7 +50,7 @@
           左侧选择或新建模板，右侧编辑步骤名称与提示词。固定步骤不可删除，自定义步骤支持拖拽排序。
         </p>
       </div>
-      <div class="set-config-table-card prompt-template-card">
+      <div class="prompt-template-card">
         <WorkflowTemplateManager ref="templateManager" @templates-loaded="onTemplatesLoaded" />
       </div>
     </div>
@@ -587,6 +587,7 @@ export default {
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
 }
 
 .prompt-template-card .el-tabs {

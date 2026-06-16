@@ -1,8 +1,10 @@
 -- 创建新表 smart_link，将老表 tbl_smart_link 中 links JSON 展开为独立行
 -- 将老表的 name 作为分组名自动创建 tbl_group
--- Create new smart_link table with links JSON fields flattened into top-level columns
+-- 实际的数据迁移（links JSON 展开）由 SmartLinkMigrateOldData Go 函数完成，
+-- 因为纯 Go SQLite 实现的 json_each 支持不稳定。
+-- Create new smart_link table, data migration handled by Go function SmartLinkMigrateOldData
 
-CREATE TABLE "smart_link"
+CREATE TABLE IF NOT EXISTS "smart_link"
 (
     "id"                    INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     "label"                 TEXT    NOT NULL DEFAULT '',
@@ -39,52 +41,3 @@ WHERE old.status = 1
   AND old.name IS NOT NULL
   AND old.name != ''
 GROUP BY old.name;
-
--- 从老表 tbl_smart_link 展开 links JSON 迁移数据
--- Migrate data by expanding links JSON, join with newly created groups
-INSERT INTO smart_link (
-    label, link, smart_link_group_id, account_list,
-    browser_auth_username, browser_auth_password, cookie, headers,
-    open_num, open_type, process, weight, combine_type, status, value,
-    create_time, update_time, download_finds, auto_close_second, channel,
-    show_cookies, process_id, filter_uris
-)
-SELECT
-    json_extract(link.value, '$.label'),
-    json_extract(link.value, '$.link'),
-    COALESCE(
-        (SELECT g.id FROM tbl_group g WHERE g.name = old.name AND g.type = 4 LIMIT 1),
-        old.smart_link_group_id,
-        0
-    ),
-    json_extract(link.value, '$.account_list'),
-    COALESCE(json_extract(link.value, '$.browser_auth_username'), ''),
-    COALESCE(json_extract(link.value, '$.browser_auth_password'), ''),
-    COALESCE(json_extract(link.value, '$.cookie'), ''),
-    COALESCE(json_extract(link.value, '$.headers'), ''),
-    old.open_num,
-    old.open_type,
-    old.process,
-    old.weight,
-    old.combine_type,
-    old.status,
-    old.value,
-    old.create_time,
-    old.update_time,
-    old.download_finds,
-    old.auto_close_second,
-    old.channel,
-    old.show_cookies,
-    COALESCE(NULLIF(json_extract(link.value, '$.process_id'), 0), old.process_id, 0),
-    old.filter_uris
-FROM tbl_smart_link AS old,
-     json_each(old.links) AS link
-WHERE old.status = 1
-  AND json_extract(link.value, '$.label') IS NOT NULL
-  AND json_extract(link.value, '$.label') != ''
-  AND NOT EXISTS (
-      SELECT 1 FROM smart_link existing
-      WHERE existing.link = json_extract(link.value, '$.link')
-        AND existing.label = json_extract(link.value, '$.label')
-        AND existing.status = 1
-  );

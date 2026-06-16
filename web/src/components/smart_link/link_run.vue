@@ -303,6 +303,10 @@ export default {
       for (const gid of Object.keys(groups)) {
         if (Number(gid) !== 0) result.push(groups[gid])
       }
+      // 未分组(smart_link_group_id=0)的链接追加在最后
+      if (groups[0]) {
+        result.push(groups[0])
+      }
       return result
     },
   },
@@ -353,7 +357,10 @@ export default {
           const parts = [`${data.group_count || 0} 个分组`]
           if (data.process_fixed_count > 0) parts.push(`${data.process_fixed_count} 条执行逻辑已修复`)
           if (data.group_fixed_count > 0) parts.push(`${data.group_fixed_count} 条分组已修复`)
-          parts.push(`共 ${data.total_links || 0} 链接`)
+          parts.push(`共 ${data.total_links || 0} 条链接`)
+          parts.push(`新增 ${data.migrated_count || 0} 条`)
+          if (data.skipped_count > 0) parts.push(`跳过 ${data.skipped_count} 条`)
+          if (data.failed_count > 0) parts.push(`失败 ${data.failed_count} 条`)
           ElMessage.success(`迁移完成：${parts.join('，')}`)
           this.GetConfigList()
         } else {

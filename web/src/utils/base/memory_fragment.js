@@ -39,6 +39,16 @@ function MemoryFragmentSave(id, title, content, tags, folderName, callBack) {
   }, callBack)
 }
 
+// MemoryFragmentCreate 创建新的知识片段。
+// folderName 为文件夹标识名称（如 "fragments"），传空字符串则自动归属默认文件夹。
+function MemoryFragmentCreate(folderName, title, content, callBack) {
+  base.BasePost('/api/MemoryFragmentCreate', {
+    folder_name: folderName || '',
+    title: title,
+    content: content,
+  }, callBack)
+}
+
 // MemoryFragmentSaveById 通过片段ID更新知识片段（含工作流归属校验）。
 function MemoryFragmentSaveById(workflowId, id, content, callBack) {
   base.BasePost('/api/MemoryFragmentSaveById', {
@@ -219,7 +229,8 @@ export default {
   MemoryFragmentList,
   MemoryFragmentInfo,
   MemoryFragmentSave,
-    MemoryFragmentSaveById,
+  MemoryFragmentCreate,
+  MemoryFragmentSaveById,
   MemoryFragmentDelete,
   MemoryFragmentTrashList,
   MemoryFragmentRestore,

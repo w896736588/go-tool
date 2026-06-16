@@ -173,7 +173,7 @@ func SmartLinkMigrateOldData(c *gin.Context) {
 	}
 
 	// 批量修复已迁移但 smart_link_group_id 为 0 的记录
-	// 遍历每个分组，将该分组下所有链接 label 对应的记录更新 group_id
+	// 使用 link + label 精确匹配，避免不同分组中同名 label 被误更新
 	groupFixedCount := 0
 	for groupName, groupId := range nameToGroupId {
 		if groupId == 0 {
@@ -200,6 +200,7 @@ func SmartLinkMigrateOldData(c *gin.Context) {
 	migratedCount := 0
 	skippedCount := 0
 	processFixedCount := 0
+	failedCount := 0 // 记录创建失败的链接数
 
 	for _, old := range oldList {
 		linksStr := cast.ToString(old[`links`])
@@ -224,7 +225,7 @@ func SmartLinkMigrateOldData(c *gin.Context) {
 				continue
 			}
 
-			// process_id 优先取链接条目内的，若为空则回退到父级记录
+			// process_id 优先取链接条目内的，若为 0 则回退到父级记录
 			processId := cast.ToInt(link[`process_id`])
 			if processId == 0 {
 				processId = cast.ToInt(old[`process_id`])
@@ -237,19 +238,47 @@ func SmartLinkMigrateOldData(c *gin.Context) {
 				`status`: define.SmartLinkStatusNormal,
 			}).One()
 			if existErr == nil && len(exist) > 0 {
-				// 已存在，但 process_id 可能之前未正确迁移（为 0），尝试修复
+				// 已存在，但 process_id 或 smart_link_group_id 可能之前未正确迁移，尝试修复
+				needFix := false
+				updateData := make(map[string]any)
+
 				if cast.ToInt(exist[`process_id`]) == 0 && processId > 0 {
+					updateData[`process_id`] = processId
+					needFix = true
+				}
+				if cast.ToInt(exist[`smart_link_group_id`]) == 0 && groupId > 0 {
+					updateData[`smart_link_group_id`] = groupId
+					needFix = true
+				}
+
+				if needFix {
 					_, fixErr := common.DbMain.Client.QuickUpdate(`smart_link`, map[string]any{
-						`id`: exist[`id`],
-					}, map[string]any{
-						`process_id`: processId,
-					}).Exec()
+						`link`:   linkUrl,
+						`label`:  linkLabel,
+						`status`: define.SmartLinkStatusNormal,
+					}, updateData).Exec()
 					if fixErr == nil {
-						processFixedCount++
+						if cast.ToInt(updateData[`process_id`]) > 0 {
+							processFixedCount++
+						}
+						if cast.ToInt(updateData[`smart_link_group_id`]) > 0 {
+							groupFixedCount++
+						}
 					}
 				}
 				skippedCount++
 				continue
+			}
+
+			// 确保 headers 字段为文本格式（JSON 中 {} 会被解析为 map，需要转为字符串）
+			headersStr := cast.ToString(link[`headers`])
+			if headersStr == `` {
+				// 如果字段存在但转换后为空，尝试重新 JSON 编码
+				if headersVal, ok := link[`headers`]; ok && headersVal != nil {
+					if headersMap, isMap := headersVal.(map[string]any); isMap && len(headersMap) > 0 {
+						headersStr = gstool.JsonEncode(headersMap)
+					}
+				}
 			}
 
 			_, createErr := common.DbMain.Client.QuickCreate(`smart_link`, map[string]any{
@@ -260,7 +289,7 @@ func SmartLinkMigrateOldData(c *gin.Context) {
 				`browser_auth_username`: cast.ToString(link[`browser_auth_username`]),
 				`browser_auth_password`: cast.ToString(link[`browser_auth_password`]),
 				`cookie`:                cast.ToString(link[`cookie`]),
-				`headers`:               cast.ToString(link[`headers`]),
+				`headers`:               headersStr,
 				`open_num`:              old[`open_num`],
 				`open_type`:             old[`open_type`],
 				`process`:               old[`process`],
@@ -278,8 +307,10 @@ func SmartLinkMigrateOldData(c *gin.Context) {
 				`filter_uris`:           old[`filter_uris`],
 			}).Exec()
 			if createErr != nil {
-				gsgin.GinResponseError(c, `迁移失败: `+createErr.Error(), nil)
-				return
+				// 单个链接创建失败不中断整体迁移，记录日志并继续
+				gstool.FmtPrintlnLogTime(`SmartLinkMigrateOldData 链接迁移失败 label=%s link=%s err=%s`, linkLabel, linkUrl, createErr.Error())
+				failedCount++
+				continue
 			}
 			migratedCount++
 		}
@@ -289,6 +320,7 @@ func SmartLinkMigrateOldData(c *gin.Context) {
 		`total_links`:         totalLinks,
 		`migrated_count`:      migratedCount,
 		`skipped_count`:       skippedCount,
+		`failed_count`:        failedCount,
 		`group_count`:         len(nameToGroupId),
 		`group_fixed_count`:   groupFixedCount,
 		`process_fixed_count`: processFixedCount,

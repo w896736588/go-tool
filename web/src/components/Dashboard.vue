@@ -253,6 +253,7 @@ export default {
     const dynamicDataCache = ref({}) // 动态数据缓存
     const activeDynamicType = ref('') // 当前激活的动态列表类型（避免异步回调串台覆盖）
     const isLoadingDynamic = ref(false) // 是否正在加载动态数据
+    const loadingDynamicTypes = ref({}) // 正在加载中的动态类型集合，防止重复请求
     const currentInputValue = ref('')
     const commandHistory = ref([]) // 命令历史记录
     const commandHistoryIndex = ref(0) // 命令历史游标（指向"下一条"位置）
@@ -1741,11 +1742,17 @@ export default {
         refreshCommandDropdownVisibility()
         return
       }
+
+      // 防止同一动态类型重复请求：正在加载中时跳过，避免 keystroke 触发多次 API 调用
+      if (loadingDynamicTypes.value[type]) {
+        return
+      }
       
       // 开始异步加载前先清空旧候选，避免展示上一次命令的残留选项。
       currentChildren.value = []
       activeCommandIndex.value = 0
       isLoadingDynamic.value = true
+      loadingDynamicTypes.value[type] = true
       refreshCommandDropdownVisibility()
       
       switch (type) {
@@ -1930,6 +1937,7 @@ export default {
     const loadGitProjectList = () => {
       git.GitConfigList({}, (response) => {
         isLoadingDynamic.value = false
+        delete loadingDynamicTypes.value['gitProjectList']
         if (response.ErrCode === 0) {
           const groupMap = {}
           if (Array.isArray(response.Data.git_group_list)) {
@@ -1975,6 +1983,7 @@ export default {
     const loadGitGroupList = () => {
       git.GitConfigList({}, (response) => {
         isLoadingDynamic.value = false
+        delete loadingDynamicTypes.value['gitGroupList']
         if (response.ErrCode === 0) {
           const gitGroupList = Array.isArray(response.Data.git_group_list) ? response.Data.git_group_list : []
           const list = gitGroupList.map(item => ({
@@ -2000,6 +2009,7 @@ export default {
         dynamicDataCache.value['gitRemoteBranchList'] = []
         currentChildren.value = []
         isLoadingDynamic.value = false
+        delete loadingDynamicTypes.value['gitRemoteBranchList']
         refreshCommandDropdownVisibility()
         return
       }
@@ -2009,11 +2019,13 @@ export default {
         dynamicDataCache.value['gitRemoteBranchList'] = []
         currentChildren.value = []
         isLoadingDynamic.value = false
+        delete loadingDynamicTypes.value['gitRemoteBranchList']
         refreshCommandDropdownVisibility()
         return
       }
       git.GitRemoteBranchList({ ...projectCmd.data }, (response) => {
         isLoadingDynamic.value = false
+        delete loadingDynamicTypes.value['gitRemoteBranchList']
         if (!(response && response.ErrCode === 0)) {
           dynamicDataCache.value['gitRemoteBranchList'] = []
           if (activeDynamicType.value === 'gitRemoteBranchList') {
@@ -2068,6 +2080,7 @@ export default {
     const loadSupervisorEnvList = () => {
       supervisor.SupervisorConfigList({}, (response) => {
         isLoadingDynamic.value = false
+        delete loadingDynamicTypes.value['supervisorEnvList']
         if (response.ErrCode === 0) {
           const list = response.Data.supervisor_list.map(item => ({
             command: item.name,
@@ -2094,6 +2107,7 @@ export default {
         dynamicDataCache.value['supervisorProcessList'] = []
         currentChildren.value = []
         isLoadingDynamic.value = false
+        delete loadingDynamicTypes.value['supervisorProcessList']
         refreshCommandDropdownVisibility()
         return
       }
@@ -2108,10 +2122,12 @@ export default {
         forceRefresh: false,
         onSuccess: (list) => {
           isLoadingDynamic.value = false
+          delete loadingDynamicTypes.value['supervisorProcessList']
           applySupervisorProcessListResult(list)
         },
         onError: (response) => {
           isLoadingDynamic.value = false
+          delete loadingDynamicTypes.value['supervisorProcessList']
           if (!(response && response.ErrCode === 0)) {
             dynamicDataCache.value['supervisorProcessList'] = []
             currentChildren.value = []
@@ -2143,20 +2159,30 @@ export default {
     const loadLinkList = () => {
       smartLinkSet.SmartLinkItemList((response) => {
         isLoadingDynamic.value = false
+        delete loadingDynamicTypes.value['linkList']
+        delete loadingDynamicTypes.value['linkConfigList']
+        delete loadingDynamicTypes.value['linkEnvList']
         if (!(response && response.ErrCode === 0)) {
           dynamicDataCache.value['linkList'] = []
           currentChildren.value = []
           refreshCommandDropdownVisibility()
           return
         }
+        // 构建分组 ID -> 分组名称 映射
+        const groupMap = {}
+        const groupList = Array.isArray(response.Data?.group_list) ? response.Data.group_list : []
+        groupList.forEach(g => {
+          groupMap[g.id] = normalizeCommandPart(g.name) || `分组${g.id}`
+        })
         const smartLinkList = Array.isArray(response.Data?.smart_link_list) ? response.Data.smart_link_list : []
         const list = smartLinkList.map(item => {
           const label = normalizeCommandPart(item.label) || `链接#${item.id || ''}`
+          const groupName = groupMap[item.smart_link_group_id] || '未分组'
           return {
             command: label,
             name: label,
-            aliases: [String(item.id || ''), normalizeCommandPart(item.link)].filter(Boolean),
-            desc: `ID:${item.id || '-'} | ${normalizeCommandPart(item.link) || '未配置链接地址'}`,
+            aliases: [String(item.id || '')].filter(Boolean),
+            desc: groupName,
             id: item.id,
             dynamicChildren: hasConfiguredLinkAccounts(item) ? 'linkAccountList' : undefined,
             data: {
@@ -2188,6 +2214,7 @@ export default {
       dynamicDataCache.value['linkAccountList'] = list
       currentChildren.value = list
       isLoadingDynamic.value = false
+      delete loadingDynamicTypes.value['linkAccountList']
       reparseForPendingHistoryExecution('linkAccountList')
       refreshCommandDropdownVisibility()
     }
@@ -2196,6 +2223,7 @@ export default {
     const loadScriptList = () => {
       variableSet.VariableList((response) => {
         isLoadingDynamic.value = false
+        delete loadingDynamicTypes.value['scriptList']
         if (!(response && response.ErrCode === 0)) {
           dynamicDataCache.value['scriptList'] = []
           currentChildren.value = []
@@ -2229,6 +2257,7 @@ export default {
         dynamicDataCache.value['scriptOptionList'] = []
         currentChildren.value = []
         isLoadingDynamic.value = false
+        delete loadingDynamicTypes.value['scriptOptionList']
         refreshCommandDropdownVisibility()
         return
       }
@@ -2250,6 +2279,7 @@ export default {
       dynamicDataCache.value['scriptOptionList'] = list
       currentChildren.value = list
       isLoadingDynamic.value = false
+      delete loadingDynamicTypes.value['scriptOptionList']
       reparseForPendingHistoryExecution('scriptOptionList')
       refreshCommandDropdownVisibility()
     }
@@ -2287,6 +2317,7 @@ export default {
       dynamicDataCache.value['historyList'] = list
       currentChildren.value = list
       isLoadingDynamic.value = false
+      delete loadingDynamicTypes.value['historyList']
       refreshCommandDropdownVisibility()
     }
 
