@@ -399,8 +399,8 @@
       </section>
 
       <section class="task-workflow-content">
-        <!-- 抓取需求步骤（无模板时的特殊UI：TAPD抓取功能） -->
-        <template v-if="activeNode === 'requirement-fetch' && !hasTemplate">
+        <!-- 抓取需求步骤（固定显示知识片段，无提示词） -->
+        <template v-if="activeNode === 'requirement-fetch'">
             <div class="task-workflow-card__header">
               <div class="task-workflow-card__title">
                 {{ getActiveNodeLabel() }}
@@ -773,9 +773,8 @@
                     <el-icon class="is-loading"><Loading /></el-icon>
                     <span>加载中...</span>
                   </div>
-                  <div v-else-if="getActiveDocContent()">
-                    <!-- 编辑模式 -->
-                    <div v-if="docEditMode" class="task-workflow-doc-editor">
+                  <!-- 编辑模式 -->
+                  <div v-else-if="getActiveDocContent() && docEditMode" class="task-workflow-doc-editor">
                       <UnifiedMdEditor
                         :model-value="getActiveDocContent()"
                         @update:model-value="val => setActiveDocContent(val)"
@@ -784,9 +783,9 @@
                         :toolbars="promptEditorToolbars"
                         height="100%"
                       />
-                    </div>
-                    <!-- 查看模式 -->
-                    <div v-else class="preview-body" :class="{ 'preview-body--with-outline': docTocItems.length > 0 }">
+                  </div>
+                  <!-- 查看模式 -->
+                  <div v-else-if="getActiveDocContent()" class="preview-body" :class="{ 'preview-body--with-outline': docTocItems.length > 0 }">
                       <div ref="docPreviewBody" class="preview-renderer" @scroll="handleDocPreviewScroll">
                         <MdPreview
                           :model-value="getActiveDocContent()"
@@ -814,7 +813,6 @@
                           </button>
                         </div>
                       </aside>
-                    </div>
                   </div>
                   <div v-else class="step-tab-panel__empty">
                     <el-empty description="暂无文档内容" :image-size="60" />
@@ -1634,8 +1632,8 @@ export default {
       const nodeToPrompt = {}
       // 当前步骤即 promptType
       let promptType = this.activeNode
-      if (this.activeNode === 'requirement-fetch' && !this.hasTemplate) {
-        // 无模板时抓取需求步骤不需要 Ctrl+S 保存提示词
+      if (this.activeNode === 'requirement-fetch') {
+        // 抓取需求步骤固定显示知识片段，无提示词，不需要 Ctrl+S 保存
         return
       }
       if (promptType) {
@@ -5811,7 +5809,8 @@ export default {
 
 /* 文档编辑模式下的编辑器容器 */
 .task-workflow-doc-editor {
-  height: 100%;
+  flex: 1;
+  min-height: 0;
 }
 
 </style>

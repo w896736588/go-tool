@@ -119,7 +119,8 @@
                     text
                     size="small"
                     type="primary"
-                    :disabled="element.is_fixed === 1 && element.step_key === 'task-config'"
+                    :disabled="element.step_key === 'task-config' || element.step_key === 'requirement-fetch'"
+                    :title="element.step_key === 'requirement-fetch' ? '抓取需求为固定步骤，提示词由系统维护' : ''"
                     @click="openPromptDialog(element)"
                   >
                     提示词

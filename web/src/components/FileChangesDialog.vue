@@ -857,7 +857,7 @@ export default {
                   theme: 'default',
                   collapseIdentical: false,
                   revertButtons: false,
-                  readOnly: 'nocursor',
+                  readOnly: true,
                   lineWrapping: false,
                   scrollbarStyle: 'native',
                   showDifferences: true,
@@ -913,7 +913,7 @@ export default {
         value: displayText,
         lineNumbers: true,
         mode: mode,
-        readOnly: 'nocursor',
+        readOnly: true,
         lineWrapping: false,
         gutters: ['CodeMirror-linenumbers', 'diff-gutter'],
         // 一次性渲染全部行，避免虚拟滚动时动态创建/销毁 DOM 导致卡顿

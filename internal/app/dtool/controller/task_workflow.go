@@ -4790,7 +4790,7 @@ func taskWorkflowFileChangesFromBranchDiff(localDir, parentBranch string, result
 	if workspaceRoot == `` {
 		workspaceRoot = getDefaultWorkspaceRoot()
 	}
-	scriptPath := filepath.Join(workspaceRoot, `skills`, `dtool-common`, `scripts`, `show_branch_diff.py`)
+	scriptPath := filepath.Join(workspaceRoot, `skills`, `dtool-git`, `scripts`, `show_branch_diff.py`)
 
 	cmd := exec.Command(getPythonCommand(), scriptPath, parentBranch)
 	cmd.Dir = localDir
@@ -4982,7 +4982,7 @@ func TaskWorkflowFileChangesFileDiff(c *gin.Context) {
 	if workspaceRoot == `` {
 		workspaceRoot = getDefaultWorkspaceRoot()
 	}
-	scriptPath := filepath.Join(workspaceRoot, `skills`, `dtool-common`, `scripts`, `show_file_diff.py`)
+	scriptPath := filepath.Join(workspaceRoot, `skills`, `dtool-git`, `scripts`, `show_file_diff.py`)
 
 	cmd := exec.Command(getPythonCommand(), scriptPath, branchArg, req.FilePath)
 	cmd.Dir = req.LocalDir

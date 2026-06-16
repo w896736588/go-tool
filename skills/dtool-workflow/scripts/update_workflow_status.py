@@ -8,6 +8,12 @@
 step 值说明：
     - step 由工作流模板动态定义，后端会校验合法性
     - 自定义步骤格式: custom_{id} (如 custom_10)
+
+status 值说明（固定值）：
+    - pending    → 待执行
+    - running    → 执行中
+    - completed  → 已完成
+    - skipped    → 已跳过
 """
 
 import os
@@ -25,7 +31,7 @@ def update_workflow_status(base_url, token, workflow_id, step, status):
         token: 认证令牌
         workflow_id: 工作流程 ID
         step: 步骤 key（由工作流模板定义，自定义步骤 custom_{id} 均支持）
-        status: 状态值（后端校验合法性，无需前端校验）
+        status: 状态值，固定为 pending / running / completed / skipped 之一
     """
     # 同步全局配置
     import api_common

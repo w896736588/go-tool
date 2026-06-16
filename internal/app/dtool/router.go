@@ -312,7 +312,7 @@ func setMemoryFragment(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/MemoryFragmentList`, controller.MemoryFragmentList)
 	tGin.GinPost(`/api/MemoryFragmentInfo`, controller.MemoryFragmentInfo)
 	tGin.GinPost(`/api/MemoryFragmentSave`, controller.MemoryFragmentSave)
-	tGin.GinPost(`/api/MemoryFragmentSaveByPath`, controller.MemoryFragmentSaveByPath)
+	tGin.GinPost(`/api/MemoryFragmentSaveById`, controller.MemoryFragmentSaveById)
 	tGin.GinPost(`/api/MemoryFragmentDelete`, controller.MemoryFragmentDelete)
 	tGin.GinPost(`/api/MemoryFragmentTrashList`, controller.MemoryFragmentTrashList)
 	tGin.GinPost(`/api/MemoryFragmentRestore`, controller.MemoryFragmentRestore)

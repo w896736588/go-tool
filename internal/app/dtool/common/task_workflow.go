@@ -121,6 +121,24 @@ func TaskWorkflowNormalizeFragmentRef(raw, fallbackFolderName string) string {
 	return TaskWorkflowParseFragmentRef(raw, fallbackFolderName).FullRef
 }
 
+// TaskWorkflowContainsFragmentID 检查指定知识片段是否属于指定工作流。
+// 查询 tbl_task_workflow_document 表，检查是否存在 workflowID 与 fragmentID 匹配的记录。
+func (h *CSqlite) TaskWorkflowContainsFragmentID(workflowID int, fragmentID string) (bool, error) {
+	if workflowID <= 0 || strings.TrimSpace(fragmentID) == `` {
+		return false, nil
+	}
+	fragmentID = strings.TrimSpace(fragmentID)
+
+	docRecords, err := h.Client.QuickQuery(taskWorkflowDocumentTable, `id`, map[string]any{
+		`workflow_id`: workflowID,
+		`file_id`:     fragmentID,
+	}).All()
+	if err != nil {
+		return false, err
+	}
+	return len(docRecords) > 0, nil
+}
+
 // TaskWorkflowFragmentColumns 返回所有 workflow 片段引用列名。
 func TaskWorkflowFragmentColumns() []string {
 	return append([]string(nil), taskWorkflowFragmentColumns...)

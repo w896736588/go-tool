@@ -8,16 +8,16 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '../
 from api_common import call_api
 
 
-def memory_fragment_update_by_path(relative_path, content, task_id):
+def memory_fragment_update_by_id(id, content, workflow_id):
     """
-    通过相对路径更新知识片段内容（不会修改标题）
+    通过片段ID更新知识片段内容（不会修改标题）
 
-    传入的是相对于 fragments/ 的路径。
-    task_id （任务ID）为必传参数，后端会校验片段是否属于该任务。
+    id 为知识片段的唯一标识。
+    workflow_id （工作流ID）为必传参数，后端会校验片段是否属于该工作流。
     """
-    result = call_api("/api/MemoryFragmentSaveByPath", {
-        "task_id": int(task_id),
-        "relative_path": relative_path,
+    result = call_api("/api/MemoryFragmentSaveById", {
+        "workflow_id": int(workflow_id),
+        "id": id,
         "content": content,
     })
 
@@ -31,7 +31,8 @@ def memory_fragment_update_by_path(relative_path, content, task_id):
 
 if __name__ == "__main__":
     print("=== dtool 知识片段 API 示例 ===\n")
-    # memory_fragment_update_by_path(
-    #     "2026/05/uuid.md",
+    # memory_fragment_update_by_id(
+    #     "uuid-string",
     #     "## 更新后的内容\n\n新的正文...",
+    #     1,
     # )
