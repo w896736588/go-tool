@@ -1160,6 +1160,7 @@ import mysqlSetApi from '@/utils/base/mysql_set'
 import apiManagement from '@/utils/base/api'
 import dockerApi from '@/utils/base/compose'
 import smartLinkSetApi from '@/utils/base/smart_link_set'
+import set from '@/utils/base/git_set'
 import MarkdownIt from 'markdown-it'
 import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
@@ -1274,6 +1275,7 @@ export default {
       promptRestoring: '',
       apiDocResetting: false,
       requirementFetchActiveTab: 'tapd-fetch',
+      requirementFetchConfigs: [],
       promptEditorToolbars: PROMPT_EDITOR_TOOLBARS,
       taskStatusOptions: TASK_STATUS_OPTIONS,
       statusUpdating: false,
@@ -1419,9 +1421,11 @@ export default {
       return Number(this.$route.params.taskId || 0)
     },
     requirementSourceType() {
-      return String(this.homeTask.fetch_type || 'tapd').toLowerCase() === 'zentao' ? 'zentao' : 'tapd'
+      return String(this.homeTask.fetch_type || 'tapd').toLowerCase()
     },
     requirementSourceName() {
+      const cfg = this.getFetchConfigByType(this.requirementSourceType)
+      if (cfg) return cfg.name
       return this.requirementSourceType === 'zentao' ? '禅道' : 'TAPD'
     },
     requirementSourceUrl() {
@@ -1699,6 +1703,8 @@ export default {
       const previousWorkflowId = Number(this.workflowId || 0)
       this.workflowId = Number(this.workflow.id || 0)
       this.requirementFetchConfig = data.requirement_fetch_config || this.requirementFetchConfig || {}
+      // 加载需求抓取配置列表（用于显示自定义名称）
+      this.loadRequirementFetchConfigs()
       // 从模板步骤动态生成工作流节点列表
       if (data.template_steps && data.template_steps.length > 0) {
         this._cachedTemplateSteps = data.template_steps
@@ -1906,6 +1912,21 @@ export default {
       }
       this.requirementFetchAutoTriggered = true
       this.triggerRequirementFetch(true)
+    },
+    // 根据 fetch_type 查找对应的需求抓取配置
+    getFetchConfigByType(type) {
+      if (!type) return null
+      return this.requirementFetchConfigs.find(c => c.type === type) || null
+    },
+    // 加载需求抓取配置列表
+    loadRequirementFetchConfigs() {
+      if (this.requirementFetchConfigs.length > 0) return
+      set.HomeTaskConfigGet((response) => {
+        if (response && response.ErrCode === 0 && response.Data) {
+          const configs = response.Data.home_task_requirement_fetch_configs
+          this.requirementFetchConfigs = Array.isArray(configs) ? [...configs] : []
+        }
+      })
     },
     triggerRequirementFetch(isAuto) {
       if (this.workflowId <= 0 || this.requirementFetchRunning) {

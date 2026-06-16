@@ -12,6 +12,8 @@ const (
 	HomeTaskConfigZentaoLinkLabel    = `home_task_zentao_link_label`
 	HomeTaskConfigZentaoCssSelector  = `home_task_zentao_css_selector`
 	HomeTaskConfigZentaoWaitSeconds  = `home_task_zentao_wait_seconds`
+	// HomeTaskConfigRequirementFetchConfigs 需求抓取自定义配置列表（JSON数组），替代旧独立 key。
+	HomeTaskConfigRequirementFetchConfigs = `home_task_requirement_fetch_configs`
 	// Deprecated: home_task_prompt_dev 已迁移到工作流模板系统，请使用模板管理。
 	HomeTaskConfigPromptDev = `home_task_prompt_dev`
 	// Deprecated: home_task_prompt_api_gen 已迁移到工作流模板系统，请使用模板管理。
@@ -35,4 +37,23 @@ const (
 	HomeTaskConfigPromptIssueFix = `home_task_prompt_issue_fix`
 
 	DtoolAPIDefaultToken = `Test432` // 接口开发API的token默认值，避免占位符替换结果为空
+
+	// 需求抓取配置类型——内置类型名称，新建任务默认 fetch_type 为 tapd。
+	RequirementFetchTypeTapd   = `tapd`
+	RequirementFetchTypeZentao = `zentao`
 )
+
+// RequirementFetchConfig 需求抓取配置条目（可自定义扩展）。
+type RequirementFetchConfig struct {
+	Name        string `json:"name"`          // 显示名称，如"TAPD"、"禅道"、"飞书需求"
+	Type        string `json:"type"`          // 唯一标识，内置: tapd/zentao，自定义: 自动生成UUID
+	SmartLinkID int    `json:"smart_link_id"` // 自定义网页ID
+	LinkLabel   string `json:"link_label"`    // 网页链接label
+	CssSelector string `json:"css_selector"`  // CSS选择器
+	WaitSeconds int    `json:"wait_seconds"`  // 抓取前等待秒数
+}
+
+// IsBuiltin 判断是否为内置类型（tapd/zentao）。
+func (c RequirementFetchConfig) IsBuiltin() bool {
+	return c.Type == RequirementFetchTypeTapd || c.Type == RequirementFetchTypeZentao
+}

@@ -97,7 +97,7 @@
       </div>
     </div>
 
-    <!-- 需求抓取配置 -->
+    <!-- 需求抓取配置（自定义模式） -->
     <div v-show="activeTab === 'requirement-fetch'">
       <div class="set-config-header">
         <h3 class="set-config-title">需求抓取配置</h3>
@@ -107,116 +107,86 @@
       </div>
 
       <div class="set-config-table-card">
-        <el-tabs v-model="activeRequirementFetchTab">
-          <el-tab-pane label="TAPD 抓取配置" name="tapd">
-            <el-form label-width="120px" class="memory-config-form">
-              <el-form-item label="自定义网页">
-                <el-select
-                  v-model="form.home_task_tapd_smart_link_id"
-                  clearable
-                  filterable
-                  style="width: 100%;"
-                  placeholder="请选择自定义网页"
-                  @change="onRequirementSmartLinkChange('tapd')"
-                >
-                  <el-option
-                    v-for="item in smartLinkList"
-                    :key="item.id"
-                    :label="item.name"
-                    :value="item.id"
-                  />
-                </el-select>
-              </el-form-item>
-              <el-form-item label="网页链接">
-                <el-select
-                  v-model="form.home_task_tapd_link_label"
-                  clearable
-                  filterable
-                  style="width: 100%;"
-                  placeholder="请选择具体链接"
-                >
-                  <el-option
-                    v-for="(link, idx) in currentTapdLinkOptions"
-                    :key="idx"
-                    :label="link.label"
-                    :value="link.label"
-                  />
-                </el-select>
-              </el-form-item>
-              <el-form-item label="CSS选择器">
-                <el-input
-                  v-model="form.home_task_tapd_css_selector"
-                  placeholder="如 .content-wrapper 或 #main"
-                />
-              </el-form-item>
-              <el-form-item label="抓取前等待秒数">
-                <el-input-number
-                  v-model="form.home_task_tapd_wait_seconds"
-                  :min="1"
-                  :max="30"
-                />
-              </el-form-item>
-              <el-form-item>
-                <pl-button type="primary" @click="saveRequirementFetchConfig">保存 TAPD 抓取配置</pl-button>
-              </el-form-item>
-            </el-form>
-          </el-tab-pane>
-
-          <el-tab-pane label="禅道 抓取配置" name="zentao">
-            <el-form label-width="120px" class="memory-config-form">
-              <el-form-item label="自定义网页">
-                <el-select
-                  v-model="form.home_task_zentao_smart_link_id"
-                  clearable
-                  filterable
-                  style="width: 100%;"
-                  placeholder="请选择自定义网页"
-                  @change="onRequirementSmartLinkChange('zentao')"
-                >
-                  <el-option
-                    v-for="item in smartLinkList"
-                    :key="item.id"
-                    :label="item.name"
-                    :value="item.id"
-                  />
-                </el-select>
-              </el-form-item>
-              <el-form-item label="网页链接">
-                <el-select
-                  v-model="form.home_task_zentao_link_label"
-                  clearable
-                  filterable
-                  style="width: 100%;"
-                  placeholder="请选择具体链接"
-                >
-                  <el-option
-                    v-for="(link, idx) in currentZentaoLinkOptions"
-                    :key="idx"
-                    :label="link.label"
-                    :value="link.label"
-                  />
-                </el-select>
-              </el-form-item>
-              <el-form-item label="CSS选择器">
-                <el-input
-                  v-model="form.home_task_zentao_css_selector"
-                  placeholder="如 .content-wrapper 或 #main"
-                />
-              </el-form-item>
-              <el-form-item label="抓取前等待秒数">
-                <el-input-number
-                  v-model="form.home_task_zentao_wait_seconds"
-                  :min="1"
-                  :max="30"
-                />
-              </el-form-item>
-              <el-form-item>
-                <pl-button type="primary" @click="saveRequirementFetchConfig">保存禅道抓取配置</pl-button>
-              </el-form-item>
-            </el-form>
-          </el-tab-pane>
-        </el-tabs>
+        <div class="fetch-config-toolbar">
+          <pl-button type="primary" size="small" @click="openFetchConfigDialog(null)">+ 添加配置</pl-button>
+        </div>
+        <el-table :data="requirementFetchConfigs" border style="width: 100%; margin-top: 12px;">
+          <el-table-column prop="name" label="名称" min-width="120" />
+          <el-table-column label="自定义网页" min-width="140">
+            <template #default="scope">
+              {{ getSmartLinkNameById(scope.row.smart_link_id) || '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="link_label" label="网页链接" min-width="140" />
+          <el-table-column prop="css_selector" label="CSS选择器" min-width="140" />
+          <el-table-column prop="wait_seconds" label="等待秒数" width="100" align="center" />
+          <el-table-column label="操作" width="140" align="center" fixed="right">
+            <template #default="scope">
+              <pl-button size="small" @click="openFetchConfigDialog(scope.row)">编辑</pl-button>
+              <pl-button size="small" @click="deleteRequirementFetchConfig(scope.$index)">删除</pl-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <div v-if="requirementFetchConfigs.length === 0" class="fetch-config-empty">
+          暂无抓取配置，点击"添加配置"创建
+        </div>
       </div>
+
+      <!-- 编辑/新增配置弹窗 -->
+      <el-dialog
+        v-model="fetchConfigDialogVisible"
+        :title="isFetchConfigEdit ? '编辑抓取配置' : '添加抓取配置'"
+        width="560px"
+        destroy-on-close
+      >
+        <el-form label-width="110px">
+          <el-form-item label="配置名称" required>
+            <el-input v-model="fetchConfigForm.name" placeholder="如：TAPD、禅道、飞书需求" maxlength="50" />
+          </el-form-item>
+          <el-form-item label="自定义网页" required>
+            <el-select
+              v-model="fetchConfigForm.smart_link_id"
+              clearable
+              filterable
+              style="width: 100%;"
+              placeholder="请选择自定义网页"
+            >
+              <el-option
+                v-for="item in smartLinkList"
+                :key="item.id"
+                :label="item.name"
+                :value="item.id"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="网页链接" required>
+            <el-select
+              v-model="fetchConfigForm.link_label"
+              clearable
+              filterable
+              style="width: 100%;"
+              placeholder="请选择具体链接"
+            >
+              <el-option
+                v-for="(link, idx) in currentFetchConfigLinkOptions"
+                :key="idx"
+                :label="link.label"
+                :value="link.label"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="CSS选择器" required>
+            <el-input v-model="fetchConfigForm.css_selector" placeholder="如 .content-wrapper 或 #main" />
+          </el-form-item>
+          <el-form-item label="抓取前等待秒数">
+            <el-input-number v-model="fetchConfigForm.wait_seconds" :min="1" :max="30" />
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <pl-button @click="fetchConfigDialogVisible = false">取消</pl-button>
+          <pl-button type="primary" @click="confirmFetchConfig">确定</pl-button>
+        </template>
+      </el-dialog>
     </div>
 
     <!-- 分支名生成提示词 -->
@@ -313,28 +283,27 @@ export default {
     return {
       aiModelList: [],
       smartLinkList: [],
-      activeRequirementFetchTab: 'tapd',
       form: {
         home_task_daily_report_model_id: null,
         home_task_daily_report_prompt: DEFAULT_HOME_TASK_DAILY_REPORT_PROMPT,
         home_task_fragment_prompt: '',
-        home_task_tapd_smart_link_id: null,
-        home_task_tapd_link_label: '',
-        home_task_tapd_css_selector: '',
-        home_task_tapd_wait_seconds: 5,
-        home_task_zentao_smart_link_id: null,
-        home_task_zentao_link_label: '',
-        home_task_zentao_css_selector: '',
-        home_task_zentao_wait_seconds: 5,
         home_task_dev_environment: '',
         home_task_branch_name_prompt: '',
         home_task_branch_name_model_id: null,
       },
+      // 需求抓取自定配置
+      requirementFetchConfigs: [],
+      fetchConfigDialogVisible: false,
+      fetchConfigForm: this.createEmptyFetchConfigForm(),
+      editingFetchConfigIndex: -1,
       promptEditorToolbars: PROMPT_EDITOR_TOOLBARS,
       skillList: [],
     }
   },
   computed: {
+    isFetchConfigEdit() {
+      return this.editingFetchConfigIndex >= 0
+    },
     branchNamePlaceholders() {
       return [
         { label: '需求名', value: '{需求名}', tip: '替换为任务名称' },
@@ -356,11 +325,8 @@ export default {
       }))
       return base.concat(skillPlaceholders)
     },
-    currentTapdLinkOptions() {
-      return this.getSmartLinkOptions(this.form.home_task_tapd_smart_link_id)
-    },
-    currentZentaoLinkOptions() {
-      return this.getSmartLinkOptions(this.form.home_task_zentao_smart_link_id)
+    currentFetchConfigLinkOptions() {
+      return this.getSmartLinkOptions(this.fetchConfigForm.smart_link_id)
     },
   },
   mounted() {
@@ -384,13 +350,6 @@ export default {
       } catch {
         return []
       }
-    },
-    onRequirementSmartLinkChange(type) {
-      if (type === 'zentao') {
-        this.form.home_task_zentao_link_label = ''
-        return
-      }
-      this.form.home_task_tapd_link_label = ''
     },
     loadAiModelList() {
       AiSetApi.AiModelList({ model_type: 'llm' }, (response) => {
@@ -416,21 +375,18 @@ export default {
         this.form.home_task_daily_report_model_id = response.Data.home_task_daily_report_model_id || null
         this.form.home_task_daily_report_prompt = response.Data.home_task_daily_report_prompt || DEFAULT_HOME_TASK_DAILY_REPORT_PROMPT
         this.form.home_task_fragment_prompt = response.Data.home_task_fragment_prompt || ''
-        this.form.home_task_tapd_smart_link_id = response.Data.home_task_tapd_smart_link_id || null
-        this.form.home_task_tapd_link_label = response.Data.home_task_tapd_link_label || ''
-        this.form.home_task_tapd_css_selector = response.Data.home_task_tapd_css_selector || ''
-        this.form.home_task_tapd_wait_seconds = response.Data.home_task_tapd_wait_seconds || 5
-        this.form.home_task_zentao_smart_link_id = response.Data.home_task_zentao_smart_link_id || null
-        this.form.home_task_zentao_link_label = response.Data.home_task_zentao_link_label || ''
-        this.form.home_task_zentao_css_selector = response.Data.home_task_zentao_css_selector || ''
-        this.form.home_task_zentao_wait_seconds = response.Data.home_task_zentao_wait_seconds || 5
         this.form.home_task_dev_environment = response.Data.home_task_dev_environment || ''
         this.form.home_task_branch_name_prompt = response.Data.home_task_branch_name_prompt || ''
         this.form.home_task_branch_name_model_id = response.Data.home_task_branch_name_model_id || null
+        // 加载需求抓取自定配置列表
+        const configs = response.Data.home_task_requirement_fetch_configs
+        this.requirementFetchConfigs = Array.isArray(configs) ? [...configs] : []
       })
     },
     saveConfig() {
       const payload = this.buildFullPayload()
+      // 附带当前的抓取配置列表，防止被覆盖为空
+      payload.home_task_requirement_fetch_configs = JSON.stringify(this.requirementFetchConfigs)
       set.HomeTaskConfigSave(payload, (response) => {
         if (response.ErrCode === 0) {
           this.$helperNotify.success('配置已保存')
@@ -438,8 +394,84 @@ export default {
         }
       })
     },
+    // ===== 需求抓取自定配置管理 =====
+
+    createEmptyFetchConfigForm() {
+      return {
+        name: '',
+        type: '',
+        smart_link_id: null,
+        link_label: '',
+        css_selector: '',
+        wait_seconds: 5,
+      }
+    },
+    generateFetchConfigType() {
+      return 'custom_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8)
+    },
+    openFetchConfigDialog(row) {
+      this.fetchConfigForm = this.createEmptyFetchConfigForm()
+      this.editingFetchConfigIndex = -1
+      if (row) {
+        // 编辑模式：找到现有配置索引并回填
+        const idx = this.requirementFetchConfigs.indexOf(row)
+        if (idx >= 0) {
+          this.editingFetchConfigIndex = idx
+          this.fetchConfigForm = { ...row }
+        }
+      }
+      this.fetchConfigDialogVisible = true
+    },
+    confirmFetchConfig() {
+      const cfg = this.fetchConfigForm
+      if (!cfg.name || !cfg.name.trim()) {
+        this.$helperNotify.error('请输入配置名称')
+        return
+      }
+      if (!cfg.smart_link_id) {
+        this.$helperNotify.error('请选择自定义网页')
+        return
+      }
+      if (!cfg.link_label || !cfg.link_label.trim()) {
+        this.$helperNotify.error('请选择网页链接')
+        return
+      }
+      if (!cfg.css_selector || !cfg.css_selector.trim()) {
+        this.$helperNotify.error('请输入CSS选择器')
+        return
+      }
+      cfg.name = cfg.name.trim()
+      cfg.link_label = cfg.link_label.trim()
+      cfg.css_selector = cfg.css_selector.trim()
+      if (!cfg.type) {
+        cfg.type = this.generateFetchConfigType()
+      }
+      if (cfg.wait_seconds <= 0) {
+        cfg.wait_seconds = 5
+      }
+      if (this.editingFetchConfigIndex >= 0) {
+        this.requirementFetchConfigs[this.editingFetchConfigIndex] = cfg
+      } else {
+        this.requirementFetchConfigs.push(cfg)
+      }
+      this.fetchConfigDialogVisible = false
+      // 弹窗确定后直接保存
+      this.saveRequirementFetchConfig()
+    },
+    deleteRequirementFetchConfig(index) {
+      this.requirementFetchConfigs.splice(index, 1)
+      // 删除后直接保存
+      this.saveRequirementFetchConfig()
+    },
+    getSmartLinkNameById(id) {
+      if (!id) return ''
+      const item = this.smartLinkList.find(s => s.id === id)
+      return item ? item.name : ''
+    },
     saveRequirementFetchConfig() {
       const payload = this.buildFullPayload()
+      // 附带自定义配置列表
+      payload.home_task_requirement_fetch_configs = JSON.stringify(this.requirementFetchConfigs)
       set.HomeTaskConfigSave(payload, (response) => {
         if (response.ErrCode === 0) {
           this.$helperNotify.success('需求抓取配置已保存')
@@ -449,6 +481,7 @@ export default {
     },
     savePromptConfig() {
       const payload = this.buildFullPayload()
+      payload.home_task_requirement_fetch_configs = JSON.stringify(this.requirementFetchConfigs)
       set.HomeTaskConfigSave(payload, (response) => {
         if (response.ErrCode === 0) {
           this.$helperNotify.success('提示词模板配置已保存')
@@ -458,6 +491,7 @@ export default {
     },
     saveDevEnvironmentConfig() {
       const payload = this.buildFullPayload()
+      payload.home_task_requirement_fetch_configs = JSON.stringify(this.requirementFetchConfigs)
       set.HomeTaskConfigSave(payload, (response) => {
         if (response.ErrCode === 0) {
           this.$helperNotify.success('开发环境配置已保存')
@@ -467,6 +501,7 @@ export default {
     },
     saveBranchNameConfig() {
       const payload = this.buildFullPayload()
+      payload.home_task_requirement_fetch_configs = JSON.stringify(this.requirementFetchConfigs)
       set.HomeTaskConfigSave(payload, (response) => {
         if (response.ErrCode === 0) {
           this.$helperNotify.success('分支名生成提示词已保存')
@@ -479,26 +514,9 @@ export default {
         home_task_daily_report_model_id: this.form.home_task_daily_report_model_id,
         home_task_daily_report_prompt: this.form.home_task_daily_report_prompt,
         home_task_fragment_prompt: this.form.home_task_fragment_prompt,
-        home_task_prompt_dev: this.form.home_task_prompt_dev,
-        home_task_prompt_api_gen: this.form.home_task_prompt_api_gen,
-        home_task_prompt_api_test: this.form.home_task_prompt_api_test,
-        home_task_prompt_browser_test: this.form.home_task_prompt_browser_test,
-        home_task_prompt_code_review: this.form.home_task_prompt_code_review,
-        home_task_prompt_design: this.form.home_task_prompt_design,
-        home_task_tapd_smart_link_id: this.form.home_task_tapd_smart_link_id,
-        home_task_tapd_link_label: this.form.home_task_tapd_link_label,
-        home_task_tapd_css_selector: this.form.home_task_tapd_css_selector,
-        home_task_tapd_wait_seconds: this.form.home_task_tapd_wait_seconds,
-        home_task_zentao_smart_link_id: this.form.home_task_zentao_smart_link_id,
-        home_task_zentao_link_label: this.form.home_task_zentao_link_label,
-        home_task_zentao_css_selector: this.form.home_task_zentao_css_selector,
-        home_task_zentao_wait_seconds: this.form.home_task_zentao_wait_seconds,
         home_task_dev_environment: this.form.home_task_dev_environment,
         home_task_branch_name_prompt: this.form.home_task_branch_name_prompt,
         home_task_branch_name_model_id: this.form.home_task_branch_name_model_id,
-        home_task_prompt_plain_text_requirement: this.form.home_task_prompt_plain_text_requirement,
-        home_task_prompt_design_plan_requirement: this.form.home_task_prompt_design_plan_requirement,
-        home_task_prompt_issue_fix: this.form.home_task_prompt_issue_fix,
       }
     },
     copyPlaceholder(placeholder) {

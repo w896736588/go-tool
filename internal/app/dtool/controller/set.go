@@ -5,6 +5,7 @@ import (
 	"dev_tool/internal/app/dtool/common"
 	"dev_tool/internal/app/dtool/component"
 	"dev_tool/internal/app/dtool/define"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -1238,6 +1239,119 @@ func memoryConfigValue(key string) (string, error) {
 	return value, nil
 }
 
+// loadRequirementFetchConfigs 加载需求抓取配置列表。
+// 优先从 JSON 数组 key 读取；若不存在则从旧独立 key 构造内置配置（兼容老数据）。
+func loadRequirementFetchConfigs() []define.RequirementFetchConfig {
+	jsonStr, jsonErr := homeTaskConfigValue(define.HomeTaskConfigRequirementFetchConfigs)
+	if jsonErr == nil && strings.TrimSpace(jsonStr) != `` {
+		var configs []define.RequirementFetchConfig
+		if err := json.Unmarshal([]byte(jsonStr), &configs); err == nil && len(configs) > 0 {
+			return configs
+		}
+	}
+	// 回退：从旧独立 key 构造 TAPD + 禅道默认配置
+	defaults := make([]define.RequirementFetchConfig, 0, 2)
+	if tapdSmartLink, err := homeTaskConfigValue(define.HomeTaskConfigTapdSmartLinkID); err == nil {
+		tapdLabel, _ := homeTaskConfigValue(define.HomeTaskConfigTapdLinkLabel)
+		tapdCss, _ := homeTaskConfigValue(define.HomeTaskConfigTapdCssSelector)
+		tapdWait, _ := homeTaskConfigValue(define.HomeTaskConfigTapdWaitSeconds)
+		defaults = append(defaults, define.RequirementFetchConfig{
+			Name:        `TAPD`,
+			Type:        define.RequirementFetchTypeTapd,
+			SmartLinkID: cast.ToInt(tapdSmartLink),
+			LinkLabel:   tapdLabel,
+			CssSelector: tapdCss,
+			WaitSeconds: cast.ToInt(tapdWait),
+		})
+	}
+	if zentaoSmartLink, err := homeTaskConfigValue(define.HomeTaskConfigZentaoSmartLinkID); err == nil {
+		zentaoLabel, _ := homeTaskConfigValue(define.HomeTaskConfigZentaoLinkLabel)
+		zentaoCss, _ := homeTaskConfigValue(define.HomeTaskConfigZentaoCssSelector)
+		zentaoWait, _ := homeTaskConfigValue(define.HomeTaskConfigZentaoWaitSeconds)
+		defaults = append(defaults, define.RequirementFetchConfig{
+			Name:        `禅道`,
+			Type:        define.RequirementFetchTypeZentao,
+			SmartLinkID: cast.ToInt(zentaoSmartLink),
+			LinkLabel:   zentaoLabel,
+			CssSelector: zentaoCss,
+			WaitSeconds: cast.ToInt(zentaoWait),
+		})
+	}
+	return defaults
+}
+
+// saveRequirementFetchConfigs 将需求抓取配置列表序列化存储。
+func saveRequirementFetchConfigs(dataMap map[string]any) {
+	configsRaw := dataMap[`home_task_requirement_fetch_configs`]
+	if configsRaw == nil {
+		return
+	}
+	var configs []define.RequirementFetchConfig
+	switch v := configsRaw.(type) {
+	case string:
+		if err := json.Unmarshal([]byte(v), &configs); err != nil {
+			return
+		}
+	case []any:
+		configs = parseFetchConfigsFromAny(v)
+	default:
+		// 尝试 JSON 序列化后再反序列化
+		raw, err := json.Marshal(configsRaw)
+		if err != nil {
+			return
+		}
+		if json.Unmarshal(raw, &configs) != nil {
+			return
+		}
+	}
+	if len(configs) == 0 {
+		return
+	}
+	jsonBytes, err := json.Marshal(configs)
+	if err != nil {
+		return
+	}
+	_ = common.DbMain.HomeTaskConfigSave(`需求抓取自定义配置`, define.HomeTaskConfigRequirementFetchConfigs, string(jsonBytes), `需求抓取自定义配置列表（JSON）`)
+}
+
+// parseFetchConfigsFromAny 将 []any 解析为 []RequirementFetchConfig。
+func parseFetchConfigsFromAny(items []any) []define.RequirementFetchConfig {
+	result := make([]define.RequirementFetchConfig, 0, len(items))
+	for _, item := range items {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		cfg := define.RequirementFetchConfig{
+			Name:        strings.TrimSpace(cast.ToString(m[`name`])),
+			Type:        strings.TrimSpace(cast.ToString(m[`type`])),
+			SmartLinkID: cast.ToInt(m[`smart_link_id`]),
+			LinkLabel:   strings.TrimSpace(cast.ToString(m[`link_label`])),
+			CssSelector: strings.TrimSpace(cast.ToString(m[`css_selector`])),
+			WaitSeconds: cast.ToInt(m[`wait_seconds`]),
+		}
+		if cfg.Type == `` || cfg.Name == `` {
+			continue
+		}
+		if cfg.WaitSeconds <= 0 {
+			cfg.WaitSeconds = defaultSmartLinkScrapeWaitSeconds
+		}
+		result = append(result, cfg)
+	}
+	return result
+}
+
+// findRequirementFetchConfig 根据 fetch_type 查找对应的抓取配置。
+func findRequirementFetchConfig(fetchType string) (define.RequirementFetchConfig, bool) {
+	configs := loadRequirementFetchConfigs()
+	for _, c := range configs {
+		if c.Type == fetchType {
+			return c, true
+		}
+	}
+	return define.RequirementFetchConfig{}, false
+}
+
 func SetAccountList(c *gin.Context) {
 	allAccount, allAccountErr := common.DbMain.Client.QuickQuery(`tbl_account`, `*`, nil).All()
 	if allAccountErr != nil {
@@ -1522,6 +1636,8 @@ func SetHomeTaskConfigGet(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
+	// 加载需求抓取自定义配置列表（优先JSON数组，回退到旧独立key）
+	fetchConfigs := loadRequirementFetchConfigs()
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
 		`home_task_daily_report_prompt`:           dailyReportPrompt,
 		`home_task_daily_report_model_id`:         cast.ToInt(dailyReportModelID),
@@ -1534,6 +1650,7 @@ func SetHomeTaskConfigGet(c *gin.Context) {
 		`home_task_zentao_link_label`:             zentaoLinkLabel,
 		`home_task_zentao_css_selector`:           zentaoCssSelector,
 		`home_task_zentao_wait_seconds`:           cast.ToInt(zentaoWaitSeconds),
+		`home_task_requirement_fetch_configs`:     fetchConfigs,
 		`home_task_prompt_dev`:                    promptDev,
 		`home_task_prompt_api_gen`:                promptApiGen,
 		`home_task_prompt_api_test`:               promptApiTest,
@@ -1609,45 +1726,48 @@ func SetHomeTaskConfigSave(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
-	homeTaskTapdSmartLinkID := cast.ToString(cast.ToInt(dataMap[`home_task_tapd_smart_link_id`]))
-	if err := common.DbMain.HomeTaskConfigSave(`TAPD自定义网页ID`, define.HomeTaskConfigTapdSmartLinkID, homeTaskTapdSmartLinkID, `TAPD登录页所选自定义网页ID`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	homeTaskTapdLinkLabel := strings.TrimSpace(cast.ToString(dataMap[`home_task_tapd_link_label`]))
-	if err := common.DbMain.HomeTaskConfigSave(`TAPD链接标签`, define.HomeTaskConfigTapdLinkLabel, homeTaskTapdLinkLabel, `TAPD登录页所选链接的label`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	homeTaskTapdCssSelector := strings.TrimSpace(cast.ToString(dataMap[`home_task_tapd_css_selector`]))
-	if err := common.DbMain.HomeTaskConfigSave(`TAPD抓取CSS选择器`, define.HomeTaskConfigTapdCssSelector, homeTaskTapdCssSelector, `TAPD网页抓取区域CSS选择器`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	homeTaskTapdWaitSeconds := cast.ToString(cast.ToInt(dataMap[`home_task_tapd_wait_seconds`]))
-	if err := common.DbMain.HomeTaskConfigSave(`TAPD抓取等待秒数`, define.HomeTaskConfigTapdWaitSeconds, homeTaskTapdWaitSeconds, `TAPD网页抓取前等待秒数`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	homeTaskZentaoSmartLinkID := cast.ToString(cast.ToInt(dataMap[`home_task_zentao_smart_link_id`]))
-	if err := common.DbMain.HomeTaskConfigSave(`禅道自定义网页ID`, define.HomeTaskConfigZentaoSmartLinkID, homeTaskZentaoSmartLinkID, `禅道登录页所选自定义网页ID`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	homeTaskZentaoLinkLabel := strings.TrimSpace(cast.ToString(dataMap[`home_task_zentao_link_label`]))
-	if err := common.DbMain.HomeTaskConfigSave(`禅道链接标签`, define.HomeTaskConfigZentaoLinkLabel, homeTaskZentaoLinkLabel, `禅道登录页所选链接的label`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	homeTaskZentaoCssSelector := strings.TrimSpace(cast.ToString(dataMap[`home_task_zentao_css_selector`]))
-	if err := common.DbMain.HomeTaskConfigSave(`禅道抓取CSS选择器`, define.HomeTaskConfigZentaoCssSelector, homeTaskZentaoCssSelector, `禅道网页抓取区域CSS选择器`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
-	}
-	homeTaskZentaoWaitSeconds := cast.ToString(cast.ToInt(dataMap[`home_task_zentao_wait_seconds`]))
-	if err := common.DbMain.HomeTaskConfigSave(`禅道抓取等待秒数`, define.HomeTaskConfigZentaoWaitSeconds, homeTaskZentaoWaitSeconds, `禅道网页抓取前等待秒数`); err != nil {
-		gsgin.GinResponseError(c, err.Error(), nil)
-		return
+	// 旧 TAPD/禅道配置：仅当请求中未包含新格式自定义配置时才保存（防止老字段被清零）
+	if _, hasFetchConfigs := dataMap[`home_task_requirement_fetch_configs`]; !hasFetchConfigs {
+		homeTaskTapdSmartLinkID := cast.ToString(cast.ToInt(dataMap[`home_task_tapd_smart_link_id`]))
+		if err := common.DbMain.HomeTaskConfigSave(`TAPD自定义网页ID`, define.HomeTaskConfigTapdSmartLinkID, homeTaskTapdSmartLinkID, `TAPD登录页所选自定义网页ID`); err != nil {
+			gsgin.GinResponseError(c, err.Error(), nil)
+			return
+		}
+		homeTaskTapdLinkLabel := strings.TrimSpace(cast.ToString(dataMap[`home_task_tapd_link_label`]))
+		if err := common.DbMain.HomeTaskConfigSave(`TAPD链接标签`, define.HomeTaskConfigTapdLinkLabel, homeTaskTapdLinkLabel, `TAPD登录页所选链接的label`); err != nil {
+			gsgin.GinResponseError(c, err.Error(), nil)
+			return
+		}
+		homeTaskTapdCssSelector := strings.TrimSpace(cast.ToString(dataMap[`home_task_tapd_css_selector`]))
+		if err := common.DbMain.HomeTaskConfigSave(`TAPD抓取CSS选择器`, define.HomeTaskConfigTapdCssSelector, homeTaskTapdCssSelector, `TAPD网页抓取区域CSS选择器`); err != nil {
+			gsgin.GinResponseError(c, err.Error(), nil)
+			return
+		}
+		homeTaskTapdWaitSeconds := cast.ToString(cast.ToInt(dataMap[`home_task_tapd_wait_seconds`]))
+		if err := common.DbMain.HomeTaskConfigSave(`TAPD抓取等待秒数`, define.HomeTaskConfigTapdWaitSeconds, homeTaskTapdWaitSeconds, `TAPD网页抓取前等待秒数`); err != nil {
+			gsgin.GinResponseError(c, err.Error(), nil)
+			return
+		}
+		homeTaskZentaoSmartLinkID := cast.ToString(cast.ToInt(dataMap[`home_task_zentao_smart_link_id`]))
+		if err := common.DbMain.HomeTaskConfigSave(`禅道自定义网页ID`, define.HomeTaskConfigZentaoSmartLinkID, homeTaskZentaoSmartLinkID, `禅道登录页所选自定义网页ID`); err != nil {
+			gsgin.GinResponseError(c, err.Error(), nil)
+			return
+		}
+		homeTaskZentaoLinkLabel := strings.TrimSpace(cast.ToString(dataMap[`home_task_zentao_link_label`]))
+		if err := common.DbMain.HomeTaskConfigSave(`禅道链接标签`, define.HomeTaskConfigZentaoLinkLabel, homeTaskZentaoLinkLabel, `禅道登录页所选链接的label`); err != nil {
+			gsgin.GinResponseError(c, err.Error(), nil)
+			return
+		}
+		homeTaskZentaoCssSelector := strings.TrimSpace(cast.ToString(dataMap[`home_task_zentao_css_selector`]))
+		if err := common.DbMain.HomeTaskConfigSave(`禅道抓取CSS选择器`, define.HomeTaskConfigZentaoCssSelector, homeTaskZentaoCssSelector, `禅道网页抓取区域CSS选择器`); err != nil {
+			gsgin.GinResponseError(c, err.Error(), nil)
+			return
+		}
+		homeTaskZentaoWaitSeconds := cast.ToString(cast.ToInt(dataMap[`home_task_zentao_wait_seconds`]))
+		if err := common.DbMain.HomeTaskConfigSave(`禅道抓取等待秒数`, define.HomeTaskConfigZentaoWaitSeconds, homeTaskZentaoWaitSeconds, `禅道网页抓取前等待秒数`); err != nil {
+			gsgin.GinResponseError(c, err.Error(), nil)
+			return
+		}
 	}
 	homeTaskDevEnvironment := strings.TrimSpace(cast.ToString(dataMap[`home_task_dev_environment`]))
 	saveHomeTaskPromptWithLog(define.HomeTaskConfigDevEnvironment, `开发环境`, homeTaskDevEnvironment, `工作流-开发环境描述`)
@@ -1666,6 +1786,10 @@ func SetHomeTaskConfigSave(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
+
+	// 保存需求抓取自定义配置列表
+	saveRequirementFetchConfigs(dataMap)
+
 	gsgin.GinResponseSuccess(c, ``, nil)
 }
 

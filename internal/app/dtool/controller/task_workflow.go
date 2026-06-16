@@ -2333,6 +2333,23 @@ func taskWorkflowRequirementFetchConfig() map[string]any {
 }
 
 func taskWorkflowRequirementFetchConfigByType(fetchType string) map[string]any {
+	// 优先从自定义配置列表查找
+	if cfg, found := findRequirementFetchConfig(fetchType); found {
+		config := map[string]any{
+			`smart_link_id`: cfg.SmartLinkID,
+			`label`:         cfg.LinkLabel,
+			`css_selector`:  cfg.CssSelector,
+			`wait_seconds`:  cfg.WaitSeconds,
+			`fetch_type`:    cfg.Type,
+			`source_name`:   cfg.Name,
+			`configured`:    true,
+		}
+		if config[`wait_seconds`].(int) <= 0 {
+			config[`wait_seconds`] = defaultSmartLinkScrapeWaitSeconds
+		}
+		return config
+	}
+	// 回退旧独立key
 	smartLinkIDKey, linkLabelKey, cssSelectorKey, waitSecondsKey := requirementFetchConfigKeys(fetchType)
 	smartLinkIDStr, smartLinkErr := homeTaskConfigValue(smartLinkIDKey)
 	label, labelErr := homeTaskConfigValue(linkLabelKey)

@@ -400,22 +400,20 @@
           <el-col :span="24">
             <el-form-item label="抓取类型">
               <el-select v-model="homeTaskForm.fetch_type" style="width: 100%">
-                <el-option label="TAPD" :value="HOME_TASK_FETCH_TYPE_TAPD" />
-                <el-option label="禅道" :value="HOME_TASK_FETCH_TYPE_ZENTAO" />
+                <el-option
+                  v-for="cfg in requirementFetchConfigs"
+                  :key="cfg.type"
+                  :label="cfg.name"
+                  :value="cfg.type"
+                />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="24">
-            <el-form-item :label="homeTaskForm.fetch_type === HOME_TASK_FETCH_TYPE_ZENTAO ? '禅道地址' : 'TAPD地址'">
+            <el-form-item :label="fetchTypeLabel">
               <el-input
-                v-if="homeTaskForm.fetch_type === HOME_TASK_FETCH_TYPE_ZENTAO"
-                v-model="homeTaskForm.zentao_url"
-                placeholder="例如：https://zentao.example.com/story-view-123.html"
-              />
-              <el-input
-                v-else
-                v-model="homeTaskForm.tapd_url"
-                placeholder="例如：https://www.tapd.cn/123456"
+                v-model="homeTaskForm.requirement_url"
+                :placeholder="'例如：' + (getFetchConfigByType(homeTaskForm.fetch_type) ? getFetchConfigByType(homeTaskForm.fetch_type).link_label : '')"
               />
             </el-form-item>
           </el-col>
@@ -823,6 +821,7 @@ import taskWorkflowApi from '@/utils/base/task_workflow'
 import workflowTemplateApi from '@/utils/base/workflow_template'
 import sseDistribute from '@/utils/base/sse_distribute'
 import memoryFragmentApi from '@/utils/base/memory_fragment'
+import set from '@/utils/base/git_set'
 import GitActionButton from "@/components/base/GitActionButton.vue"
 
 const HOME_TASK_TAB_ACTIVE = 'active'
@@ -915,8 +914,7 @@ function createHomeTaskDefaultForm() {
     start_date: getTodayDateText(),
     created_date: getTodayDateText(),
     fetch_type: HOME_TASK_FETCH_TYPE_TAPD,
-    tapd_url: '',
-    zentao_url: '',
+    requirement_url: '',
     use_workflow: HOME_TASK_USE_WORKFLOW_YES,
     workflow_fragment_folder_name: HOME_TASK_DEFAULT_WORKFLOW_FRAGMENT_FOLDER,
     workflow_template_id: 0,
@@ -947,6 +945,7 @@ export default {
       HOME_TASK_FETCH_TYPE_TAPD,
       HOME_TASK_FETCH_TYPE_ZENTAO,
       HOME_TASK_DEFAULT_WORKFLOW_FRAGMENT_FOLDER,
+      requirementFetchConfigs: [],
       selectedStatus: HOME_TASK_SELECTED_ACTIVE,
       homeTaskDialogVisible: false,
       homeTaskLoadingActive: false,
@@ -1041,6 +1040,10 @@ export default {
     },
     isArchivedMode() {
       return this.selectedStatus === HOME_TASK_SELECTED_ARCHIVED
+    },
+    fetchTypeLabel() {
+      const cfg = this.getFetchConfigByType(this.homeTaskForm.fetch_type)
+      return cfg ? cfg.name + '地址' : '需求地址'
     },
     filteredTaskList() {
       if (this.selectedStatus === HOME_TASK_SELECTED_ACTIVE) {
@@ -1634,7 +1637,22 @@ export default {
       this.loadHomeTaskMemoryFolderList()
       this.loadHomeTaskUnusedLocalDirs(0)
       this.loadHomeTaskTemplateList()
+      this.loadRequirementFetchConfigs()
       this.homeTaskDialogVisible = true
+    },
+    // 加载需求抓取配置列表（用于 fetch_type 下拉选项）
+    loadRequirementFetchConfigs() {
+      set.HomeTaskConfigGet((response) => {
+        if (response && response.ErrCode === 0 && response.Data) {
+          const configs = response.Data.home_task_requirement_fetch_configs
+          this.requirementFetchConfigs = Array.isArray(configs) ? [...configs] : []
+        }
+      })
+    },
+    // 根据 fetch_type 查找配置
+    getFetchConfigByType(type) {
+      if (!type) return null
+      return this.requirementFetchConfigs.find(c => c.type === type) || null
     },
     openHomeTaskSettingsPage() {
       const routeInfo = this.$router.resolve({ path: '/HomeTaskSetting' })
@@ -1724,14 +1742,14 @@ export default {
         task_status: task.task_status || HOME_TASK_STATUS_TODO,
         start_date: task.start_time_desc || getTodayDateText(),
         created_date: (task.create_time_desc || '').split(' ')[0] || '',
-        fetch_type: String(task.fetch_type || HOME_TASK_FETCH_TYPE_TAPD).toLowerCase() === HOME_TASK_FETCH_TYPE_ZENTAO ? HOME_TASK_FETCH_TYPE_ZENTAO : HOME_TASK_FETCH_TYPE_TAPD,
-        tapd_url: task.tapd_url || '',
-        zentao_url: task.zentao_url || '',
+        fetch_type: String(task.fetch_type || HOME_TASK_FETCH_TYPE_TAPD),
+        requirement_url: String(task.fetch_type || '') === HOME_TASK_FETCH_TYPE_ZENTAO ? (task.zentao_url || '') : (task.tapd_url || ''),
         use_workflow: Number(task.use_workflow ?? HOME_TASK_USE_WORKFLOW_YES) === HOME_TASK_USE_WORKFLOW_YES ? HOME_TASK_USE_WORKFLOW_YES : HOME_TASK_USE_WORKFLOW_NO,
         workflow_fragment_folder_name: String(task.workflow_fragment_folder_name || HOME_TASK_DEFAULT_WORKFLOW_FRAGMENT_FOLDER).trim() || HOME_TASK_DEFAULT_WORKFLOW_FRAGMENT_FOLDER,
         workflow_template_id: Number(task.workflow_template_id || 0),
         dev_configs: devConfigs,
       }
+      this.loadRequirementFetchConfigs()
       this.loadHomeTaskMysqlList()
       this.loadHomeTaskDockerList()
       this.loadHomeTaskSmartLinkList()
@@ -1919,9 +1937,10 @@ export default {
       }
       const taskName = String(this.homeTaskForm.name || '').trim()
       const fetchType = String(this.homeTaskForm.fetch_type || HOME_TASK_FETCH_TYPE_TAPD).trim()
-      const tapdUrl = String(this.homeTaskForm.tapd_url || '').trim()
-      const zentaoUrl = String(this.homeTaskForm.zentao_url || '').trim()
-      const requirementUrl = fetchType === HOME_TASK_FETCH_TYPE_ZENTAO ? zentaoUrl : tapdUrl
+      const requirementUrl = String(this.homeTaskForm.requirement_url || '').trim()
+      // 兼容后端：tapd 和 zentao 仍使用独立字段；自定义类型统一走 tapd_url
+      const tapdUrl = (fetchType === HOME_TASK_FETCH_TYPE_ZENTAO) ? '' : requirementUrl
+      const zentaoUrl = (fetchType === HOME_TASK_FETCH_TYPE_ZENTAO) ? requirementUrl : ''
       if (!taskName) {
         this.$helperNotify.error('任务名称不能为空')
         return
@@ -1997,7 +2016,9 @@ export default {
       return String(task?.tapd_url || '').trim()
     },
     getHomeTaskRequirementLabel(task) {
-      const fetchType = String(task?.fetch_type || HOME_TASK_FETCH_TYPE_TAPD).toLowerCase()
+      const fetchType = String(task?.fetch_type || HOME_TASK_FETCH_TYPE_TAPD)
+      const cfg = this.getFetchConfigByType(fetchType)
+      if (cfg) return cfg.name + '需求'
       return fetchType === HOME_TASK_FETCH_TYPE_ZENTAO ? '禅道需求' : 'TAPD需求'
     },
     isHomeTaskBusy(taskId, operateType = '') {
