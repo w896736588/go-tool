@@ -267,6 +267,40 @@ func MemoryFragmentSave(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, ``, info)
 }
 
+// MemoryFragmentCreate 创建新的知识片段。
+// folder_name 为文件夹标识名称（如 "fragments"），传入空字符串则自动归属默认文件夹。
+// title 为知识片段标题，content 为 Markdown 格式内容。
+func MemoryFragmentCreate(c *gin.Context) {
+	memoryDB, ok := memoryDBOrResponse(c)
+	if !ok {
+		return
+	}
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+
+	folderName := strings.TrimSpace(cast.ToString(dataMap[`folder_name`]))
+	title := strings.TrimSpace(cast.ToString(dataMap[`title`]))
+	content := cast.ToString(dataMap[`content`])
+
+	if title == `` {
+		gsgin.GinResponseError(c, `片段标题不能为空`, nil)
+		return
+	}
+	if strings.TrimSpace(content) == `` {
+		gsgin.GinResponseError(c, `片段内容不能为空`, nil)
+		return
+	}
+
+	info, err := memoryDB.MemoryFragmentSave(``, title, content, nil, folderName)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	component.MemoryRuntime.ScheduleSync()
+	broadcastMemoryFragmentUpsert(info)
+	gsgin.GinResponseSuccess(c, ``, info)
+}
+
 // MemoryFragmentSaveById 通过片段ID更新知识片段，要求传入 workflow_id 并校验片段是否归属于该工作流。
 func MemoryFragmentSaveById(c *gin.Context) {
 	memoryDB, ok := memoryDBOrResponse(c)
