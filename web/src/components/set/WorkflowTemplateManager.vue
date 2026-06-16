@@ -4,10 +4,22 @@
     <div class="wf-template-manager__left">
       <div class="wf-template-manager__section-title">
         <span>模板列表</span>
-        <el-button type="primary" size="small" @click="addTemplate">
-          <el-icon><Plus /></el-icon> 新建
-        </el-button>
+        <div class="wf-template-manager__section-actions">
+          <el-button size="small" @click="triggerImportTemplate">
+            <el-icon><Upload /></el-icon> 导入
+          </el-button>
+          <el-button type="primary" size="small" @click="addTemplate">
+            <el-icon><Plus /></el-icon> 新建
+          </el-button>
+        </div>
       </div>
+      <input
+        ref="importFileInput"
+        type="file"
+        accept=".json"
+        style="display: none;"
+        @change="handleImportFile"
+      />
       <div class="wf-template-manager__template-list">
         <div
           v-for="tpl in templates"
@@ -23,8 +35,10 @@
             <el-tag v-if="tpl.is_default === 1" size="small" type="success" effect="plain">默认</el-tag>
           </div>
           <div class="wf-template-manager__template-desc">{{ tpl.description || '无描述' }}</div>
-          <div class="wf-template-manager__template-actions" v-if="tpl.is_default !== 1">
-            <el-button text size="small" type="danger" @click.stop="deleteTemplateConfirm(tpl)">删除</el-button>
+          <div class="wf-template-manager__template-actions">
+            <el-button text size="small" type="primary" @click.stop="openTemplateEditDialog(tpl)">编辑</el-button>
+            <el-button text size="small" type="success" @click.stop="exportTemplate(tpl)">导出</el-button>
+            <el-button v-if="tpl.is_default !== 1" text size="small" type="danger" @click.stop="deleteTemplateConfirm(tpl)">删除</el-button>
           </div>
         </div>
         <div v-if="templates.length === 0" class="wf-template-manager__empty">
@@ -36,39 +50,15 @@
     <!-- 右侧步骤编辑区域 -->
     <div class="wf-template-manager__right" v-if="selectedTemplate">
       <div class="wf-template-manager__section-title">
-        <span>模板信息</span>
+        <span>步骤列表（拖拽排序）</span>
         <div class="wf-template-manager__section-actions">
           <el-button size="small" @click="openPlaceholderDialog">
             <el-icon><Document /></el-icon> 内置占位符
           </el-button>
-          <el-button type="primary" size="small" :loading="savingTemplate" @click="saveTemplate">保存模板</el-button>
+          <el-button type="success" size="small" @click="addStep">
+            <el-icon><Plus /></el-icon> 添加步骤
+          </el-button>
         </div>
-      </div>
-      <div class="wf-template-manager__template-form">
-        <el-input
-          v-model="editTemplateName"
-          placeholder="模板名称（必填）"
-          maxlength="50"
-          show-word-limit
-          class="wf-template-manager__form-item"
-        />
-        <el-input
-          v-model="editTemplateDesc"
-          placeholder="模板描述（选填）"
-          maxlength="200"
-          show-word-limit
-          type="textarea"
-          :rows="2"
-          class="wf-template-manager__form-item"
-        />
-      </div>
-
-      <!-- 步骤列表 -->
-      <div class="wf-template-manager__section-title" style="margin-top: 16px;">
-        <span>步骤列表（拖拽排序）</span>
-        <el-button type="success" size="small" @click="addStep">
-          <el-icon><Plus /></el-icon> 添加步骤
-        </el-button>
       </div>
 
       <div class="wf-template-manager__step-list" ref="stepListRef">
@@ -160,6 +150,44 @@
         请从左侧选择一个模板，或新建一个模板
       </div>
     </div>
+
+    <!-- 模板信息编辑弹窗 -->
+    <el-dialog
+      v-model="templateEditDialogVisible"
+      title="编辑模板信息"
+      width="500px"
+      :close-on-click-modal="true"
+      class="wf-template-edit-dialog"
+    >
+      <div v-if="editingTemplate">
+        <el-form label-width="80px">
+          <el-form-item label="模板名称">
+            <el-input
+              v-model="dialogTemplateName"
+              placeholder="模板名称（必填）"
+              maxlength="50"
+              show-word-limit
+            />
+          </el-form-item>
+          <el-form-item label="模板备注">
+            <el-input
+              v-model="dialogTemplateDesc"
+              placeholder="模板备注（选填）"
+              maxlength="200"
+              show-word-limit
+              type="textarea"
+              :rows="4"
+            />
+          </el-form-item>
+        </el-form>
+      </div>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="templateEditDialogVisible = false">取消</el-button>
+          <el-button type="primary" :loading="savingTemplate" @click="saveTemplateFromDialog">保存</el-button>
+        </span>
+      </template>
+    </el-dialog>
 
     <!-- 内置占位符弹窗 -->
     <el-dialog
@@ -343,7 +371,7 @@
 </template>
 
 <script>
-import { Plus, Lock, CopyDocument, Document } from '@element-plus/icons-vue'
+import { Plus, Lock, CopyDocument, Document, Upload } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import draggable from 'vuedraggable'
 import UnifiedMdEditor from '@/components/base/UnifiedMdEditor.vue'
@@ -385,6 +413,7 @@ export default {
     Lock,
     CopyDocument,
     Document,
+    Upload,
     draggable,
     UnifiedMdEditor,
   },
@@ -448,6 +477,13 @@ export default {
       promptEditorToolbars: PROMPT_EDITOR_TOOLBARS,
       promptPlaceholders: PROMPT_PLACEHOLDERS,
       skillList: [],
+      // 模板信息编辑弹窗
+      templateEditDialogVisible: false,
+      editingTemplate: null,
+      dialogTemplateName: '',
+      dialogTemplateDesc: '',
+      // 导入
+      importingTemplate: false,
     }
   },
   mounted() {
@@ -539,13 +575,12 @@ export default {
     addTemplate() {
       const newTpl = {
         id: 0,
-        name: '新模板',
+        name: '',
         description: '',
         is_default: 0,
         steps: [],
       }
-      this.templates.push(newTpl)
-      this.selectTemplate(newTpl)
+      this.openTemplateEditDialog(newTpl)
     },
 
     saveTemplate() {
@@ -933,6 +968,151 @@ export default {
       this.remarkDialogVisible = false
       ElMessage.success('备注已保存')
     },
+
+    // ===== 模板信息编辑弹窗 =====
+    openTemplateEditDialog(tpl) {
+      this.editingTemplate = tpl
+      this.dialogTemplateName = tpl.name || ''
+      this.dialogTemplateDesc = tpl.description || ''
+      this.templateEditDialogVisible = true
+    },
+    saveTemplateFromDialog() {
+      if (!this.dialogTemplateName || !this.dialogTemplateName.trim()) {
+        ElMessage.warning('请填写模板名称')
+        return
+      }
+      if (!this.editingTemplate) return
+      this.savingTemplate = true
+      const templateId = this.editingTemplate.id || 0
+      workflowTemplateApi.WorkflowTemplateSave({
+        id: templateId,
+        name: this.dialogTemplateName.trim(),
+        description: this.dialogTemplateDesc.trim(),
+      }, (response) => {
+        this.savingTemplate = false
+        if (response && response.ErrCode === 0) {
+          const saved = response.Data.template
+          if (saved && saved.steps) {
+            saved.steps.forEach(s => { s._key = 'step_' + s.id })
+          }
+          // 更新列表中的模板
+          const idx = this.templates.findIndex(t => t.id === templateId)
+          if (idx >= 0) {
+            this.templates[idx] = saved
+          } else {
+            // 新增模板，添加到列表
+            this.templates.push(saved)
+          }
+          this.selectedTemplateId = saved.id
+          this.selectedTemplate = saved
+          this.editTemplateName = saved.name
+          this.editTemplateDesc = saved.description || ''
+          this.editingSteps = (saved.steps || []).map(s => {
+            const step = {
+              ...s,
+              _key: 'step_' + s.id,
+            }
+            step.step_documents_list = this.parseStepDocuments(s.step_documents)
+            return step
+          })
+          this.templateEditDialogVisible = false
+          ElMessage.success('模板信息已保存')
+          this.$emit('templates-loaded', this.templates)
+        } else {
+          ElMessage.error(response.ErrMsg || '保存失败')
+        }
+      })
+    },
+
+    // ===== 导出模板 =====
+    exportTemplate(tpl) {
+      const exportData = {
+        name: tpl.name || '',
+        description: tpl.description || '',
+        steps: (tpl.steps || []).map(s => ({
+          name: s.name || '',
+          step_key: s.step_key || '',
+          prompt_content: s.prompt_content || '',
+          step_documents: s.step_documents || '',
+          remark: s.remark || '',
+          is_fixed: s.is_fixed || 0,
+          sort_order: s.sort_order || 0,
+        })),
+      }
+      const jsonStr = JSON.stringify(exportData, null, 2)
+      const blob = new Blob([jsonStr], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `workflow_template_${(tpl.name || 'template').replace(/[^\w\u4e00-\u9fa5]/g, '_')}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      ElMessage.success('模板已导出')
+    },
+
+    // ===== 导入模板 =====
+    triggerImportTemplate() {
+      if (this.$refs.importFileInput) {
+        this.$refs.importFileInput.value = ''
+        this.$refs.importFileInput.click()
+      }
+    },
+    handleImportFile(event) {
+      const file = event.target.files && event.target.files[0]
+      if (!file) return
+      if (this.importingTemplate) return
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        try {
+          const data = JSON.parse(e.target.result)
+          if (!data.name || typeof data.name !== 'string' || !data.name.trim()) {
+            ElMessage.error('导入失败：模板名称不能为空')
+            return
+          }
+          if (!Array.isArray(data.steps)) {
+            ElMessage.error('导入失败：缺少步骤列表')
+            return
+          }
+          this.doImportTemplate(data)
+        } catch (err) {
+          ElMessage.error('导入失败：JSON 格式无效')
+        }
+      }
+      reader.readAsText(file)
+    },
+    doImportTemplate(data) {
+      this.importingTemplate = true
+      const importData = {
+        name: data.name.trim(),
+        description: (data.description || '').trim(),
+        steps: (data.steps || []).map(s => ({
+          name: (s.name || '').trim(),
+          step_key: s.step_key || '',
+          prompt_content: s.prompt_content || '',
+          step_documents: s.step_documents || '',
+          remark: s.remark || '',
+          is_fixed: s.is_fixed || 0,
+          sort_order: s.sort_order || 0,
+        })).filter(s => s.name),
+      }
+      workflowTemplateApi.WorkflowTemplateImport(importData, (response) => {
+        this.importingTemplate = false
+        if (response && response.ErrCode === 0) {
+          const saved = response.Data.template
+          if (saved && saved.steps) {
+            saved.steps.forEach(s => { s._key = 'step_' + s.id })
+          }
+          this.templates.push(saved)
+          this.selectTemplate(saved)
+          ElMessage.success('模板导入成功')
+          this.$emit('templates-loaded', this.templates)
+        } else {
+          ElMessage.error(response.ErrMsg || '导入失败')
+        }
+      })
+    },
   },
 }
 </script>
@@ -1018,6 +1198,9 @@ export default {
 .wf-template-manager__template-actions {
   margin-top: 6px;
   text-align: right;
+  display: flex;
+  gap: 0;
+  justify-content: flex-end;
 }
 
 /* 右侧步骤编辑区域 */
@@ -1029,15 +1212,6 @@ export default {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-
-.wf-template-manager__template-form {
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
-}
-
-.wf-template-manager__form-item {
-  margin-bottom: 8px;
 }
 
 .wf-template-manager__step-list {
@@ -1416,6 +1590,11 @@ export default {
 
 /* 步骤备注弹窗 */
 .wf-remark-dialog :deep(.el-dialog__body) {
+  padding-top: 12px;
+}
+
+/* 模板信息编辑弹窗 */
+.wf-template-edit-dialog :deep(.el-dialog__body) {
   padding-top: 12px;
 }
 </style>

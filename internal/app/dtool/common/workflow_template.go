@@ -223,6 +223,77 @@ func (h *CSqlite) WorkflowTemplateSave(id int, name, description string) (int64,
 	return newID, nil
 }
 
+// WorkflowTemplateImport 导入模板（创建模板 + 批量创建步骤，跳过自动添加固定步骤）。
+func (h *CSqlite) WorkflowTemplateImport(name, description string, steps []WorkflowTemplateImportStepData) (int64, error) {
+	name = trimSpace(name)
+	if name == `` {
+		return 0, errors.New(`模板名称不能为空`)
+	}
+	now := time.Now().Unix()
+	// 创建模板（不添加固定步骤）
+	newID, err := h.Client.QuickCreate(workflowTemplateTable, map[string]any{
+		`name`:        name,
+		`description`: description,
+		`is_default`:  0,
+		`sort_order`:  0,
+		`create_time`: now,
+		`update_time`: now,
+	}).Exec()
+	if err != nil {
+		return 0, err
+	}
+	templateID := cast.ToInt(newID)
+	// 批量创建步骤
+	for i, step := range steps {
+		stepName := trimSpace(step.Name)
+		if stepName == `` {
+			continue
+		}
+		isFixed := step.IsFixed
+		stepKey := step.StepKey
+		if isFixed == 0 && stepKey == `` {
+			// 自定义步骤在创建后再设置 step_key
+		}
+		stepNewID, createErr := h.Client.QuickCreate(workflowTemplateStepTable, map[string]any{
+			`template_id`:    templateID,
+			`name`:           stepName,
+			`step_key`:       stepKey,
+			`prompt_content`: step.PromptContent,
+			`step_documents`: step.StepDocuments,
+			`remark`:         step.Remark,
+			`sort_order`:     step.SortOrder,
+			`is_fixed`:       isFixed,
+			`create_time`:    now,
+			`update_time`:    now,
+		}).Exec()
+		if createErr != nil {
+			return 0, createErr
+		}
+		// 自定义步骤需要更新 step_key 为 custom_{id}
+		if isFixed == 0 && stepKey == `` {
+			actualStepKey := workflowCustomStepKeyPrefix + cast.ToString(stepNewID)
+			_, _ = h.Client.QuickUpdate(workflowTemplateStepTable, map[string]any{
+				`id`: stepNewID,
+			}, map[string]any{
+				`step_key`: actualStepKey,
+			}).Exec()
+		}
+		_ = i
+	}
+	return newID, nil
+}
+
+// WorkflowTemplateImportStepData 导入模板步骤数据。
+type WorkflowTemplateImportStepData struct {
+	Name          string
+	StepKey       string
+	PromptContent string
+	StepDocuments string
+	Remark        string
+	IsFixed       int
+	SortOrder     int
+}
+
 // WorkflowTemplateDelete 删除模板（检查是否有关联任务）。
 func (h *CSqlite) WorkflowTemplateDelete(templateID int) error {
 	if templateID <= 0 {

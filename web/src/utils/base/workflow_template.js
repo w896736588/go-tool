@@ -47,6 +47,11 @@ function WorkflowSkillList(callBack) {
   base.BasePost('/api/workflow/skill/list', {}, callBack)
 }
 
+// WorkflowTemplateImport 导入工作流程模板（含步骤）。
+function WorkflowTemplateImport(data, callBack) {
+  base.BasePost('/api/workflow/template/import', data, callBack)
+}
+
 export default {
   WorkflowTemplateList,
   WorkflowTemplateSave,
@@ -56,4 +61,5 @@ export default {
   WorkflowTemplateStepSort,
   WorkflowTemplateListBasic,
   WorkflowSkillList,
+  WorkflowTemplateImport,
 }

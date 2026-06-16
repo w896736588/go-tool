@@ -222,6 +222,46 @@ func WorkflowSkillList(c *gin.Context) {
 	})
 }
 
+// WorkflowTemplateImport 导入工作流程模板（含步骤）。
+func WorkflowTemplateImport(c *gin.Context) {
+	if common.DbMain == nil || common.DbMain.Client == nil {
+		gsgin.GinResponseError(c, `主库未初始化`, nil)
+		return
+	}
+	request := _struct.WorkflowTemplateImportRequest{}
+	_ = gsgin.GinPostBody(c, &request)
+	if request.Name == `` {
+		gsgin.GinResponseError(c, `模板名称不能为空`, nil)
+		return
+	}
+	// 转换步骤数据
+	steps := make([]common.WorkflowTemplateImportStepData, 0, len(request.Steps))
+	for _, s := range request.Steps {
+		steps = append(steps, common.WorkflowTemplateImportStepData{
+			Name:          s.Name,
+			StepKey:       s.StepKey,
+			PromptContent: s.PromptContent,
+			StepDocuments: s.StepDocuments,
+			Remark:        s.Remark,
+			IsFixed:       s.IsFixed,
+			SortOrder:     s.SortOrder,
+		})
+	}
+	templateID, err := common.DbMain.WorkflowTemplateImport(request.Name, request.Description, steps)
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	template, infoErr := common.DbMain.WorkflowTemplateInfo(cast.ToInt(templateID))
+	if infoErr != nil {
+		gsgin.GinResponseError(c, infoErr.Error(), nil)
+		return
+	}
+	gsgin.GinResponseSuccess(c, ``, map[string]any{
+		`template`: template,
+	})
+}
+
 // WorkflowTemplateListBasic 获取简单的模板列表（仅 id+name，供下拉选择）。
 func WorkflowTemplateListBasic(c *gin.Context) {
 	if common.DbMain == nil || common.DbMain.Client == nil {

@@ -399,6 +399,7 @@ func workflowTemplate(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/workflow/template/list`, controller.WorkflowTemplateList)
 	tGin.GinPost(`/api/workflow/template/save`, controller.WorkflowTemplateSave)
 	tGin.GinPost(`/api/workflow/template/delete`, controller.WorkflowTemplateDelete)
+	tGin.GinPost(`/api/workflow/template/import`, controller.WorkflowTemplateImport)
 	tGin.GinPost(`/api/workflow/template/step/save`, controller.WorkflowTemplateStepSave)
 	tGin.GinPost(`/api/workflow/template/step/delete`, controller.WorkflowTemplateStepDelete)
 	tGin.GinPost(`/api/workflow/template/step/sort`, controller.WorkflowTemplateStepSort)

@@ -52,6 +52,24 @@ type WorkflowTemplateStepSortRequest struct {
 	StepIDs    []int `json:"step_ids"`
 }
 
+// WorkflowTemplateImportRequest 导入工作流程模板请求。
+type WorkflowTemplateImportRequest struct {
+	Name        string                       `json:"name"`
+	Description string                       `json:"description"`
+	Steps       []WorkflowTemplateImportStep `json:"steps"`
+}
+
+// WorkflowTemplateImportStep 导入模板中的步骤数据。
+type WorkflowTemplateImportStep struct {
+	Name          string `json:"name"`
+	StepKey       string `json:"step_key"`
+	PromptContent string `json:"prompt_content"`
+	StepDocuments string `json:"step_documents"`
+	Remark        string `json:"remark"`
+	IsFixed       int    `json:"is_fixed"`
+	SortOrder     int    `json:"sort_order"`
+}
+
 // WorkflowTemplateStepResponse 模板步骤响应。
 type WorkflowTemplateStepResponse struct {
 	ID            int    `json:"id"`
