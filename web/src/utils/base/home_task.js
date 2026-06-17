@@ -23,9 +23,19 @@ function ssePost(uri, params, callBack) {
   })
 }
 
-// HomeTaskList 查询首页任务列表。
-function HomeTaskList(isArchived, callBack) {
-  base.BasePost('/api/HomeTaskList', { is_archived: isArchived }, callBack)
+// HomeTaskList 查询首页任务列表。支持分页参数 page/page_size。
+function HomeTaskList(isArchived, callBack, page = 0, pageSize = 0) {
+  const params = { is_archived: isArchived }
+  if (page > 0 && pageSize > 0) {
+    params.page = page
+    params.page_size = pageSize
+  }
+  base.BasePost('/api/HomeTaskList', params, callBack)
+}
+
+// HomeTaskCount 获取活跃和归档任务的数量。
+function HomeTaskCount(callBack) {
+  base.BasePost('/api/HomeTaskCount', {}, callBack)
 }
 
 // HomeTaskSave 保存首页任务。
@@ -104,6 +114,26 @@ function HomeTaskPageDataBranchCheck(clientId, items, callBack) {
   ssePost('/api/HomeTaskPageDataBranchCheck', { client_id: clientId, items: items }, callBack)
 }
 
+// TaskStatusList 查询所有任务状态。
+function TaskStatusList(callBack) {
+  base.BasePost('/api/TaskStatusList', {}, callBack)
+}
+
+// TaskStatusSave 新增或编辑任务状态。
+function TaskStatusSave(data, callBack) {
+  base.BasePost('/api/TaskStatusSave', data, callBack)
+}
+
+// TaskStatusDelete 删除任务状态。
+function TaskStatusDelete(id, callBack) {
+  base.BasePost('/api/TaskStatusDelete', { id: id }, callBack)
+}
+
+// TaskStatusSort 更新任务状态排序。
+function TaskStatusSort(ids, callBack) {
+  base.BasePost('/api/TaskStatusSort', { ids: ids }, callBack)
+}
+
 // LocalBranchBatchCheck 批量检查本地目录当前 Git 分支是否与期望分支匹配。
 function LocalBranchBatchCheck(items, callBack) {
   base.BasePost('/api/Set/LocalBranchBatchCheck', { items: items }, callBack)
@@ -131,6 +161,7 @@ function RemoteBranchSwitch(gitId, branchName, callBack) {
 
 export default {
   HomeTaskList,
+  HomeTaskCount,
   HomeTaskSave,
   HomeTaskArchiveToggle,
   HomeTaskStatusQuickUpdate,
@@ -151,4 +182,8 @@ export default {
   HomeTaskPageDataLoad,
   HomeTaskPageDataDirCheck,
   HomeTaskPageDataBranchCheck,
+  TaskStatusList,
+  TaskStatusSave,
+  TaskStatusDelete,
+  TaskStatusSort,
 }

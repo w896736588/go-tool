@@ -23,19 +23,93 @@ const (
 	homeTaskApiDevEnabled  = 1
 )
 
-// HomeTaskList 查询首页任务列表。
+// HomeTaskList 查询首页任务列表，同时返回 Git 仓库列表和 API 集合列表。
+// 支持分页：传入 page 和 page_size 时分页返回，同时返回 total 字段。
 func HomeTaskList(c *gin.Context) {
 	request := _struct.HomeTaskListRequest{}
 	_ = gsgin.GinPostBody(c, &request)
-	list, err := common.DbMain.HomeTaskList(request.IsArchived)
+
+	var list []map[string]any
+	var total int
+	var err error
+	if request.Page > 0 && request.PageSize > 0 {
+		// 分页查询
+		list, total, err = common.DbMain.HomeTaskListPaginated(request.IsArchived, request.Page, request.PageSize)
+	} else {
+		list, err = common.DbMain.HomeTaskList(request.IsArchived)
+	}
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
 	enrichHomeTaskListWithMemoryFragment(list)
+
+	result := map[string]any{
+		`task_list`:           list,
+		`git_group_list`:      queryGitGroupList(),
+		`git_list`:            queryGitList(),
+		`api_collection_list`: queryApiCollectionList(),
+	}
+	if request.Page > 0 && request.PageSize > 0 {
+		result[`total`] = total
+		result[`page`] = request.Page
+		result[`page_size`] = request.PageSize
+	}
+	gsgin.GinResponseSuccess(c, ``, result)
+}
+
+// HomeTaskCount 返回活跃和归档任务的数量。
+func HomeTaskCount(c *gin.Context) {
+	activeCount, archivedCount, err := common.DbMain.HomeTaskCount()
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
 	gsgin.GinResponseSuccess(c, ``, map[string]any{
-		`task_list`: list,
+		`active_count`:   activeCount,
+		`archived_count`: archivedCount,
 	})
+}
+
+// queryGitGroupList 查询 Git 分组列表。
+func queryGitGroupList() []map[string]any {
+	list, _ := common.DbMain.Client.QuickQuery(`tbl_group`, `*`, map[string]any{
+		`type`: define.GroupTypeGit,
+	}).All()
+	for k := range list {
+		list[k][`id`] = cast.ToString(list[k][`id`])
+	}
+	return list
+}
+
+// queryGitList 查询 Git 仓库列表。
+func queryGitList() []map[string]any {
+	list, _ := common.DbMain.Client.QuickQuery(`tbl_git`, `*`, nil).All()
+	for k := range list {
+		list[k][`id`] = cast.ToString(list[k][`id`])
+		list[k][`git_group_id`] = cast.ToString(list[k][`git_group_id`])
+	}
+	return list
+}
+
+// queryApiCollectionList 查询 API 集合基础列表。
+func queryApiCollectionList() []map[string]any {
+	list, _ := common.DbMain.Client.QueryBySql(`
+select c.id,
+       c.name,
+       c.create_time,
+       c.update_time,
+       count(d.id) as child_count
+from tbl_api_collection c
+left join tbl_api_dir d on d.collection_id = c.id and d.archived = 0
+group by c.id, c.name, c.create_time, c.update_time
+order by c.id asc`).All()
+	result := make([]map[string]any, 0, len(list))
+	for _, row := range list {
+		row[`id`] = cast.ToString(row[`id`])
+		result = append(result, row)
+	}
+	return result
 }
 
 // HomeTaskSave 保存首页任务。
@@ -145,7 +219,7 @@ func HomeTaskSave(c *gin.Context) {
 		request.MysqlID = devConfigs[0].MysqlID
 	}
 
-	info, err := common.DbMain.HomeTaskSave(request.ID, request.Name, request.TaskStatus, request.StartTime, memoryFragmentID, fetchType, request.TapdUrl, request.ZentaoUrl, request.GitID, apiDevEnabled, apiCollectionID, apiDirID, request.MysqlID, gitIDsJSON, apiDevEntriesJSON, devConfigsJSON, useWorkflow)
+	info, err := common.DbMain.HomeTaskSave(request.ID, request.Name, request.TaskStatus, request.StartTime, memoryFragmentID, fetchType, request.TapdUrl, request.ZentaoUrl, request.GitID, apiDevEnabled, apiCollectionID, apiDirID, request.MysqlID, gitIDsJSON, apiDevEntriesJSON, devConfigsJSON, useWorkflow, request.WorkflowTemplateID)
 	if err != nil {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
@@ -159,6 +233,12 @@ func HomeTaskSave(c *gin.Context) {
 		if updateErr := common.DbMain.TaskWorkflowUpdateFragmentFolderName(cast.ToInt(workflowInfo[`id`]), workflowFragmentFolderName); updateErr != nil {
 			gsgin.GinResponseError(c, updateErr.Error(), nil)
 			return
+		}
+		// 创建任务时即预生成所有步骤文档片段，并从模板初始化提示词占位符。
+		// 重新读取 workflowInfo 以同步 fragment_folder_name 变更。
+		updatedWorkflowInfo, infoErr := common.DbMain.TaskWorkflowInfo(cast.ToInt(workflowInfo[`id`]))
+		if infoErr == nil {
+			_, _ = buildTaskWorkflowResponse(c, updatedWorkflowInfo)
 		}
 	}
 	enrichHomeTaskListWithMemoryFragment([]map[string]any{info})

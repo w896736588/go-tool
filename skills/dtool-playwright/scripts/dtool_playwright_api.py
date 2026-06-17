@@ -1,25 +1,18 @@
 import json
-from urllib import error, request
+import os
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../dtool-common/scripts'))
 
-
-def _post_json(base_url: str, token: str, path: str, payload: dict):
-    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    req = request.Request(
-        url=f"{base_url}{path}",
-        data=body,
-        headers={
-            "Content-Type": "application/json; charset=utf-8",
-            "Token": token,
-        },
-        method="POST",
-    )
-    with request.urlopen(req, timeout=60) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+from api_common import BASE_URL, TOKEN, call_api
 
 
 def browser_profile_open(base_url: str, token: str, smart_link_id: int, label: str,
                          account: str = "", open_type: int = 0,
                          reuse_if_open: bool = True, enable_mcp: bool = False):
+    # 同步全局配置，使 call_api 使用正确的地址和令牌
+    import api_common
+    api_common.BASE_URL = base_url
+    api_common.TOKEN = token
     payload = {
         "smart_link_id": smart_link_id,
         "label": label,
@@ -28,7 +21,7 @@ def browser_profile_open(base_url: str, token: str, smart_link_id: int, label: s
         "reuse_if_open": reuse_if_open,
         "enable_mcp": enable_mcp,
     }
-    return _post_json(base_url, token, "/api/ai/browser/session/open", payload)
+    return call_api("/api/ai/browser/session/open", payload)
 
 
 def extract_user_data_dir(open_result: dict) -> str:
@@ -139,7 +132,5 @@ if __name__ == "__main__":
                 print("\npython_playwright_snippet:")
                 print(build_python_playwright_snippet(user_data_dir, goto_url, executable_path))
 
-    except error.HTTPError as exc:
-        print(f"HTTP {exc.code} 失败: {exc.read().decode('utf-8', errors='replace')}")
     except Exception as exc:
         print(f"请求失败: {exc}")

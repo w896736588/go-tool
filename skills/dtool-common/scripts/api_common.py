@@ -6,7 +6,6 @@ dtool 通用 API 基础封装
 使用前请先向用户确认以下信息，替换下方占位值：
   - base_url: dtool 服务地址（如 http://192.168.1.100:17170）
   - token: 认证令牌
-  - mysql_id: 数据库配置 ID（支持 MySQL 和 Pgsql）
 """
 
 import json
@@ -14,7 +13,6 @@ from urllib import error, request
 
 BASE_URL = "http://localhost:17170"  # TODO: 替换为用户提供的地址
 TOKEN = ""  # TODO: 替换为用户提供的 Token
-MYSQL_ID = ""  # TODO: 替换为用户提供的数据库配置 ID（支持 MySQL 和 Pgsql）
 
 
 def call_api(path, payload):

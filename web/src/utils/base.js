@@ -89,6 +89,7 @@ function handleResponse(response) {
 
 // 处理错误，检查登录失效错误码
 function handleError(error, callBack) {
+    const cb = typeof callBack === 'function' ? callBack : null
     if (error.response && error.response.data) {
         const errCode = error.response.data.ErrCode
         const errMsg = error.response.data.ErrMsg || ''
@@ -101,13 +102,13 @@ function handleError(error, callBack) {
             }
             // 登录失效时调用回调，但将错误消息置空，避免显示错误通知
             // 40103（密码版本不匹配）通常是修改密码后触发，直接弹窗不显示错误
-            callBack({...error.response.data, ErrMsg: '', __loginRequired: true})
+            if (cb) cb({...error.response.data, ErrMsg: '', __loginRequired: true})
             return
         }
-        callBack(error.response.data)
+        if (cb) cb(error.response.data)
         return
     }
-    callBack({ErrCode: -1, ErrMsg: error.message || '请求失败'})
+    if (cb) cb({ErrCode: -1, ErrMsg: error.message || '请求失败'})
 }
 
 //POST请求
@@ -227,6 +228,11 @@ function GenerateId(prefix) {
     return prefix + `_${String(rand).padStart(8, '0')}`;
 }
 
+function GenerateSseClientId(prefix) {
+    const rand = Math.floor(Math.random() * 100000000); // 8 位随机数字
+    return prefix + `_${String(rand).padStart(8, '0')}`;
+}
+
 //防抖函数
 function Debounce(fn, delay = 500) {
     let t = null;
@@ -291,6 +297,7 @@ export default {
     GetDivHeight2,
     IsBase64,
     GenerateId,
+    GenerateSseClientId,
     Debounce,
     DisableSaveShortcut,
     UploadFile,

@@ -32,6 +32,15 @@ order by id desc`
 select id,name,task_status,memory_fragment_id,is_archived,start_time,last_operated_at,create_time,update_time,fetch_type,tapd_url,zentao_url,git_id,api_dev_enabled,api_collection_id,api_dir_id,git_ids,api_dev_entries,mysql_id,dev_configs,use_workflow
 from tbl_home_task
 order by id desc`
+	// homeTaskListPaginationQuerySQL 用于分页查询任务列表（LIMIT+OFFSET 由调用方追加）。
+	homeTaskListPaginationQuerySQL = `
+select id,name,task_status,memory_fragment_id,is_archived,start_time,last_operated_at,create_time,update_time,fetch_type,tapd_url,zentao_url,git_id,api_dev_enabled,api_collection_id,api_dir_id,git_ids,api_dev_entries,mysql_id,dev_configs,use_workflow
+from tbl_home_task
+where is_archived = ?
+order by id desc
+limit ? offset ?`
+	// homeTaskCountSQL 用于统计各归档状态的任务数量。
+	homeTaskCountSQL = `select is_archived, count(1) as cnt from tbl_home_task group by is_archived`
 	// homeTaskListTodayUpdatedQuerySQL 用于查询今天变更过的任务，供工作日报使用。
 	homeTaskListTodayUpdatedQuerySQL = `
 select id,name,task_status,memory_fragment_id,is_archived,start_time,last_operated_at,create_time,update_time,fetch_type,tapd_url,zentao_url,git_id,api_dev_enabled,api_collection_id,api_dir_id,git_ids,api_dev_entries,mysql_id,dev_configs,use_workflow
@@ -45,9 +54,14 @@ order by id desc`
 )
 
 // HomeTaskList 查询首页任务列表。
+// isArchived: 0=未归档, 1=已归档, -1=全部。
 func (h *CSqlite) HomeTaskList(isArchived int) ([]map[string]any, error) {
 	if !isValidHomeTaskArchived(isArchived) {
 		return nil, errors.New(`归档状态不合法`)
+	}
+	// 全量查询：不走 where 条件过滤，直接查所有。
+	if isArchived == define.HomeTaskArchivedAll {
+		return h.HomeTaskListAll()
 	}
 	list, err := h.Client.QueryBySql(homeTaskListQuerySQL, isArchived).All()
 	if err != nil {
@@ -55,6 +69,66 @@ func (h *CSqlite) HomeTaskList(isArchived int) ([]map[string]any, error) {
 	}
 	h.fillHomeTaskTimeDescList(list)
 	return list, nil
+}
+
+// HomeTaskListAll 查询所有首页任务（含已归档和未归档）。
+func (h *CSqlite) HomeTaskListAll() ([]map[string]any, error) {
+	list, err := h.Client.QueryBySql(homeTaskListAllQuerySQL).All()
+	if err != nil {
+		return nil, err
+	}
+	h.fillHomeTaskTimeDescList(list)
+	return list, nil
+}
+
+// HomeTaskCount 返回活跃和归档任务的数量（activeCount=未归档, archivedCount=已归档）。
+func (h *CSqlite) HomeTaskCount() (activeCount int, archivedCount int, err error) {
+	rows, err := h.Client.QueryBySql(homeTaskCountSQL).All()
+	if err != nil {
+		return 0, 0, err
+	}
+	for _, row := range rows {
+		isArchived := cast.ToInt(row[`is_archived`])
+		cnt := cast.ToInt(row[`cnt`])
+		if isArchived == define.HomeTaskArchivedNo {
+			activeCount = cnt
+		} else if isArchived == define.HomeTaskArchivedYes {
+			archivedCount = cnt
+		}
+	}
+	return activeCount, archivedCount, nil
+}
+
+// HomeTaskListPaginated 分页查询首页任务列表，返回任务列表和总数。
+func (h *CSqlite) HomeTaskListPaginated(isArchived, page, pageSize int) (list []map[string]any, total int, err error) {
+	if !isValidHomeTaskArchived(isArchived) {
+		return nil, 0, errors.New(`归档状态不合法`)
+	}
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	// 先查总数
+	countRows, err := h.Client.QueryBySql(homeTaskCountSQL).All()
+	if err != nil {
+		return nil, 0, err
+	}
+	for _, row := range countRows {
+		if cast.ToInt(row[`is_archived`]) == isArchived {
+			total = cast.ToInt(row[`cnt`])
+			break
+		}
+	}
+	// 再查分页数据
+	offset := (page - 1) * pageSize
+	list, err = h.Client.QueryBySql(homeTaskListPaginationQuerySQL, isArchived, pageSize, offset).All()
+	if err != nil {
+		return nil, 0, err
+	}
+	h.fillHomeTaskTimeDescList(list)
+	return list, total, nil
 }
 
 // HomeTaskListTodayUpdated 查询今天变更过的任务列表（包含已归档和未归档），用于工作日报。
@@ -88,7 +162,7 @@ func (h *CSqlite) HomeTaskRow(id int) (map[string]any, error) {
 }
 
 // HomeTaskSave 保存首页任务。
-func (h *CSqlite) HomeTaskSave(id int, name, taskStatus string, startTime int64, memoryFragmentID string, fetchType string, tapdUrl string, zentaoUrl string, gitID int, apiDevEnabled int, apiCollectionID int, apiDirID int, mysqlID int, gitIDsJSON string, apiDevEntriesJSON string, devConfigsJSON string, useWorkflow int) (map[string]any, error) {
+func (h *CSqlite) HomeTaskSave(id int, name, taskStatus string, startTime int64, memoryFragmentID string, fetchType string, tapdUrl string, zentaoUrl string, gitID int, apiDevEnabled int, apiCollectionID int, apiDirID int, mysqlID int, gitIDsJSON string, apiDevEntriesJSON string, devConfigsJSON string, useWorkflow int, workflowTemplateID int) (map[string]any, error) {
 	now := time.Now().Unix()
 	name = strings.TrimSpace(name)
 	taskStatus = strings.TrimSpace(taskStatus)
@@ -111,24 +185,25 @@ func (h *CSqlite) HomeTaskSave(id int, name, taskStatus string, startTime int64,
 	}
 
 	updateData := map[string]any{
-		`name`:               name,
-		`task_status`:        taskStatus,
-		`memory_fragment_id`: memoryFragmentID,
-		`start_time`:         startTime,
-		`last_operated_at`:   now,
-		`update_time`:        now,
-		`fetch_type`:         fetchType,
-		`tapd_url`:           tapdUrl,
-		`zentao_url`:         zentaoUrl,
-		`git_id`:             gitID,
-		`api_dev_enabled`:    apiDevEnabled,
-		`api_collection_id`:  apiCollectionID,
-		`api_dir_id`:         apiDirID,
-		`mysql_id`:           mysqlID,
-		`git_ids`:            gitIDsJSON,
-		`api_dev_entries`:    apiDevEntriesJSON,
-		`dev_configs`:        devConfigsJSON,
-		`use_workflow`:       useWorkflow,
+		`name`:                 name,
+		`task_status`:          taskStatus,
+		`memory_fragment_id`:   memoryFragmentID,
+		`start_time`:           startTime,
+		`last_operated_at`:     now,
+		`update_time`:          now,
+		`fetch_type`:           fetchType,
+		`tapd_url`:             tapdUrl,
+		`zentao_url`:           zentaoUrl,
+		`git_id`:               gitID,
+		`api_dev_enabled`:      apiDevEnabled,
+		`api_collection_id`:    apiCollectionID,
+		`api_dir_id`:           apiDirID,
+		`mysql_id`:             mysqlID,
+		`git_ids`:              gitIDsJSON,
+		`api_dev_entries`:      apiDevEntriesJSON,
+		`dev_configs`:          devConfigsJSON,
+		`use_workflow`:         useWorkflow,
+		`workflow_template_id`: workflowTemplateID,
 	}
 	if id <= 0 {
 		updateData[`is_archived`] = define.HomeTaskArchivedNo
@@ -273,9 +348,13 @@ func normalizeHomeTaskStartTime(startTime int64) int64 {
 	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).Unix()
 }
 
-// isValidHomeTaskStatus 校验首页任务状态是否合法。
+// isValidHomeTaskStatus 校验首页任务状态是否合法（从数据库动态读取）。
 func isValidHomeTaskStatus(taskStatus string) bool {
-	for _, item := range define.HomeTaskStatusList {
+	names, err := DbMain.TaskStatusNames()
+	if err != nil {
+		return false
+	}
+	for _, item := range names {
 		if item == taskStatus {
 			return true
 		}
@@ -283,9 +362,9 @@ func isValidHomeTaskStatus(taskStatus string) bool {
 	return false
 }
 
-// isValidHomeTaskArchived 校验首页任务归档值是否合法。
+// isValidHomeTaskArchived 校验首页任务归档值是否合法（含全量查询模式）。
 func isValidHomeTaskArchived(isArchived int) bool {
-	return isArchived == define.HomeTaskArchivedNo || isArchived == define.HomeTaskArchivedYes
+	return isArchived == define.HomeTaskArchivedNo || isArchived == define.HomeTaskArchivedYes || isArchived == define.HomeTaskArchivedAll
 }
 
 // fragmentRefTypeWorkflow 表示引用来源为工作流程任务。
@@ -401,6 +480,89 @@ func (h *CSqlite) HomeTaskFragmentReferences(fragmentIDs []string) (map[string][
 	}
 
 	return result, nil
+}
+
+// TaskStatusList 查询所有任务状态，按 sort_order 升序排列。
+func (h *CSqlite) TaskStatusList() ([]map[string]any, error) {
+	return h.Client.QuickQuery(`tbl_task_status`, `*`, nil).Order(`sort_order asc, id asc`).All()
+}
+
+// TaskStatusSave 新增或编辑任务状态。
+func (h *CSqlite) TaskStatusSave(id int, name string, sortOrder int) ([]map[string]any, error) {
+	name = strings.TrimSpace(name)
+	if name == `` {
+		return nil, errors.New(`状态名称不能为空`)
+	}
+	now := time.Now().Unix()
+	if id > 0 {
+		// 编辑
+		_, err := h.Client.QuickUpdate(`tbl_task_status`, map[string]any{
+			`id`: id,
+		}, map[string]any{
+			`name`:        name,
+			`sort_order`:  sortOrder,
+			`update_time`: now,
+		}).Exec()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// 新增
+		_, err := h.Client.QuickCreate(`tbl_task_status`, map[string]any{
+			`name`:        name,
+			`sort_order`:  sortOrder,
+			`create_time`: now,
+			`update_time`: now,
+		}).Exec()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return h.TaskStatusList()
+}
+
+// TaskStatusDelete 删除任务状态。
+func (h *CSqlite) TaskStatusDelete(id int) error {
+	if id <= 0 {
+		return errors.New(`状态id不能为空`)
+	}
+	_, err := h.Client.QuickDelete(`tbl_task_status`, map[string]any{
+		`id`: id,
+	}).Exec()
+	return err
+}
+
+// TaskStatusSort 批量更新任务状态排序。
+func (h *CSqlite) TaskStatusSort(ids []int) error {
+	if len(ids) == 0 {
+		return errors.New(`排序列表不能为空`)
+	}
+	now := time.Now().Unix()
+	for i, id := range ids {
+		_, err := h.Client.QuickUpdate(`tbl_task_status`, map[string]any{
+			`id`: id,
+		}, map[string]any{
+			`sort_order`:  i,
+			`update_time`: now,
+		}).Exec()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// TaskStatusNames 获取所有任务状态名称列表（用于校验）。
+func (h *CSqlite) TaskStatusNames() ([]string, error) {
+	list, err := h.TaskStatusList()
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(list))
+	for _, item := range list {
+		names = append(names, cast.ToString(item[`name`]))
+	}
+	return names, nil
 }
 
 // HomeTaskContainsFragmentID 检查指定知识片段是否属于指定任务。

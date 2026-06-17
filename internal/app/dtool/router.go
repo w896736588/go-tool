@@ -41,7 +41,9 @@ func InitRouter(tGin *p_gin.Gin) {
 	setMarkdown(tGin)
 	setMemoryFragment(tGin)
 	homeTask(tGin)
+	taskStatus(tGin)
 	taskWorkflow(tGin)
+	workflowTemplate(tGin)
 	shellOut(tGin)
 	variableRouter(tGin)
 	smartLink(tGin)
@@ -311,7 +313,8 @@ func setMemoryFragment(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/MemoryFragmentList`, controller.MemoryFragmentList)
 	tGin.GinPost(`/api/MemoryFragmentInfo`, controller.MemoryFragmentInfo)
 	tGin.GinPost(`/api/MemoryFragmentSave`, controller.MemoryFragmentSave)
-	tGin.GinPost(`/api/MemoryFragmentSaveByPath`, controller.MemoryFragmentSaveByPath)
+	tGin.GinPost(`/api/MemoryFragmentCreate`, controller.MemoryFragmentCreate)
+	tGin.GinPost(`/api/MemoryFragmentSaveById`, controller.MemoryFragmentSaveById)
 	tGin.GinPost(`/api/MemoryFragmentDelete`, controller.MemoryFragmentDelete)
 	tGin.GinPost(`/api/MemoryFragmentTrashList`, controller.MemoryFragmentTrashList)
 	tGin.GinPost(`/api/MemoryFragmentRestore`, controller.MemoryFragmentRestore)
@@ -336,6 +339,7 @@ func setMemoryFragment(tGin *p_gin.Gin) {
 
 func homeTask(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/HomeTaskList`, controller.HomeTaskList)
+	tGin.GinPost(`/api/HomeTaskCount`, controller.HomeTaskCount)
 	tGin.GinPost(`/api/HomeTaskInfo`, controller.HomeTaskInfo)
 	tGin.GinPost(`/api/HomeTaskSave`, controller.HomeTaskSave)
 	tGin.GinPost(`/api/HomeTaskArchiveToggle`, controller.HomeTaskArchiveToggle)
@@ -350,6 +354,14 @@ func homeTask(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/HomeTaskPageDataLoad`, controller.HomeTaskPageDataLoad)
 	tGin.GinPost(`/api/HomeTaskPageDataDirCheck`, controller.CheckAndPushLocalDirs)
 	tGin.GinPost(`/api/HomeTaskPageDataBranchCheck`, controller.CheckAndPushBranchStatus)
+}
+
+// taskStatus 任务状态管理路由
+func taskStatus(tGin *p_gin.Gin) {
+	tGin.GinPost(`/api/TaskStatusList`, controller.TaskStatusList)
+	tGin.GinPost(`/api/TaskStatusSave`, controller.TaskStatusSave)
+	tGin.GinPost(`/api/TaskStatusDelete`, controller.TaskStatusDelete)
+	tGin.GinPost(`/api/TaskStatusSort`, controller.TaskStatusSort)
 }
 
 func taskWorkflow(tGin *p_gin.Gin) {
@@ -393,6 +405,20 @@ func taskWorkflow(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/task/workflow/open-in-editor`, controller.TaskWorkflowOpenInEditor)
 }
 
+func workflowTemplate(tGin *p_gin.Gin) {
+	tGin.GinPost(`/api/workflow/template/list`, controller.WorkflowTemplateList)
+	tGin.GinPost(`/api/workflow/template/save`, controller.WorkflowTemplateSave)
+	tGin.GinPost(`/api/workflow/template/delete`, controller.WorkflowTemplateDelete)
+	tGin.GinPost(`/api/workflow/template/import`, controller.WorkflowTemplateImport)
+	tGin.GinPost(`/api/workflow/template/step/save`, controller.WorkflowTemplateStepSave)
+	tGin.GinPost(`/api/workflow/template/step/delete`, controller.WorkflowTemplateStepDelete)
+	tGin.GinPost(`/api/workflow/template/step/sort`, controller.WorkflowTemplateStepSort)
+	// 简化接口：仅返回 id+name，供下拉选择
+	tGin.GinPost(`/api/workflow/template/list-basic`, controller.WorkflowTemplateListBasic)
+	// 动态读取 skills 目录列表
+	tGin.GinPost(`/api/workflow/skill/list`, controller.WorkflowSkillList)
+}
+
 func shellOut(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/shellOut`, controller.ShellOut)
 	tGin.GinPost(`/api/shellOutSetSeeId`, controller.ShellOutSetSeeId)
@@ -427,10 +453,17 @@ func variableRouter(tGin *p_gin.Gin) {
 func smartLink(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/ai/browser/session/open`, controller.AIBrowserSessionOpen)
 	tGin.GinPost(`/api/ai/browser/session/capture-headers`, controller.AIBrowserSessionCaptureHeaders)
+	// 老表 tbl_smart_link 接口（保留用于工作流配置等历史引用）
 	tGin.GinPost(`/api/SmartLinkList`, controller.SmartLinkList)
 	tGin.GinPost(`/api/SmartLinkAdd`, controller.SmartLinkAdd)
 	tGin.GinPost(`/api/SmartLinkDel`, controller.SmartLinkDelete)
 	tGin.GinPost(`/api/SmartLinkInfo`, controller.SmartLinkInfo)
+	// 新表 smart_link 接口
+	tGin.GinPost(`/api/SmartLinkItemList`, controller.SmartLinkItemList)
+	tGin.GinPost(`/api/SmartLinkItemAdd`, controller.SmartLinkItemAdd)
+	tGin.GinPost(`/api/SmartLinkItemDelete`, controller.SmartLinkItemDelete)
+	tGin.GinPost(`/api/SmartLinkItemInfo`, controller.SmartLinkItemInfo)
+	tGin.GinPost(`/api/SmartLinkMigrateOldData`, controller.SmartLinkMigrateOldData)
 	tGin.GinPost(`/api/SmartLinkRun`, controller.SmartLinkRunPlaywright)
 	tGin.GinPost(`/api/SmartLinkRunList`, controller.SmartLinkRunPlaywrightList)
 	//tGin.GinPost(`/api/SmartLinkForward`, controller.SmartLinkPlaywrightForward)
@@ -547,6 +580,8 @@ func apiUse(tGin *p_gin.Gin) {
 	})
 	// SSE 可用端口查询接口（所有 gin 实例均可访问）
 	tGin.GinPost(`/api/SseAvailablePort`, controller.SseAvailablePort)
+	// SSE 所有活跃连接详情接口
+	tGin.GinPost(`/api/SseConnectionDetails`, controller.SseConnectionDetails)
 	// 判断当前 gin 实例是否是 SSE 端口，仅 SSE 端口才注册 /sse 路由
 	if controller.IsSsePort(tGin.Port) {
 		openFunc := controller.BuildSseOpenFunc(tGin.Port)

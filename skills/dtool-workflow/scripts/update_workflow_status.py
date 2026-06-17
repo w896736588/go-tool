@@ -4,39 +4,23 @@
 用法:
     from update_workflow_status import update_workflow_status
     update_workflow_status(base_url='http://localhost:17170', token='temptoken', workflow_id=69, step='requirement', status='running')
+
+step 值说明：
+    - step 由工作流模板动态定义，后端会校验合法性
+    - 自定义步骤格式: custom_{id} (如 custom_10)
+
+status 值说明（固定值）：
+    - pending    → 待执行
+    - running    → 执行中
+    - completed  → 已完成
+    - skipped    → 已跳过
 """
 
-import json
-import urllib.request
-import urllib.error
+import os
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../dtool-common/scripts'))
 
-VALID_STEPS = {
-    "requirement",
-    "design",
-    "api-dev",
-    "api-test-fix",
-    "code-review",
-    "browser-test",
-}
-
-VALID_STATUSES = {"pending", "running", "completed"}
-
-
-def _post(base_url, token, path, data):
-    url = base_url.rstrip("/") + path
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(data, ensure_ascii=False).encode("utf-8"),
-        headers={"Content-Type": "application/json; charset=utf-8", "Token": token},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        raise RuntimeError(f"HTTP {e.code}: {e.read().decode('utf-8', errors='replace')}")
-    except urllib.error.URLError as e:
-        raise RuntimeError(f"请求失败: {e.reason}")
+from api_common import call_api
 
 
 def update_workflow_status(base_url, token, workflow_id, step, status):
@@ -46,18 +30,19 @@ def update_workflow_status(base_url, token, workflow_id, step, status):
         base_url: dtool 服务地址
         token: 认证令牌
         workflow_id: 工作流程 ID
-        step: 步骤 key（requirement/design/api-dev/api-test-fix/code-review/browser-test）
-        status: 状态值（pending/running/completed）
+        step: 步骤 key（由工作流模板定义，自定义步骤 custom_{id} 均支持）
+        status: 状态值，固定为 pending / running / completed / skipped 之一
     """
-    if step not in VALID_STEPS:
-        raise ValueError(f"无效步骤 '{step}'，合法值: {', '.join(sorted(VALID_STEPS))}")
-    if status not in VALID_STATUSES:
-        raise ValueError(f"无效状态 '{status}'，合法值: {', '.join(sorted(VALID_STATUSES))}")
+    # 同步全局配置
+    import api_common
+    api_common.BASE_URL = base_url
+    api_common.TOKEN = token
 
-    resp = _post(base_url, token, "/api/task/workflow/node-status/update", {
+    result = call_api("/api/task/workflow/node-status/update", {
         "workflow_id": workflow_id,
         "step": step,
         "status": status,
     })
-    if resp.get("ErrCode") != 0:
-        raise RuntimeError(resp.get("ErrMsg", "更新节点状态失败"))
+    if result.get("code") != 0:
+        raise RuntimeError(result.get("msg", "更新节点状态失败"))
+    return result

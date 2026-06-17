@@ -474,37 +474,54 @@ func buildAsyncHomeTaskRequirementScrapeResultWithLog(fetchType string, sourceUR
 	if logStep != nil {
 		logStep("读取配置", "开始读取 "+sourceName+" 抓取配置")
 	}
-	smartLinkIDKey, linkLabelKey, cssSelectorKey, waitSecondsKey := requirementFetchConfigKeys(fetchType)
-	smartLinkIDStr, err := homeTaskConfigValue(smartLinkIDKey)
-	if err != nil {
-		return nil, fmt.Errorf("读取 %s 自定义网页配置失败: %w", sourceName, err)
-	}
-	smartLinkID := cast.ToInt(smartLinkIDStr)
-	if smartLinkID <= 0 {
-		return nil, fmt.Errorf("%s 自定义网页未配置", sourceName)
+
+	// 优先从自定义配置列表查找，兼容旧独立key
+	cfg, found := findRequirementFetchConfig(fetchType)
+	var smartLinkID int
+	var linkLabel, cssSelector string
+	var waitSeconds int
+	if found {
+		// 使用自定义配置
+		smartLinkID = cfg.SmartLinkID
+		linkLabel = cfg.LinkLabel
+		cssSelector = cfg.CssSelector
+		waitSeconds = cfg.WaitSeconds
+		sourceName = cfg.Name // 使用自定义名称
+	} else {
+		// 回退旧独立key
+		smartLinkIDKey, linkLabelKey, cssSelectorKey, waitSecondsKey := requirementFetchConfigKeys(fetchType)
+		smartLinkIDStr, err := homeTaskConfigValue(smartLinkIDKey)
+		if err != nil {
+			return nil, fmt.Errorf("读取 %s 自定义网页配置失败: %w", sourceName, err)
+		}
+		smartLinkID = cast.ToInt(smartLinkIDStr)
+		if smartLinkID <= 0 {
+			return nil, fmt.Errorf("%s 自定义网页未配置", sourceName)
+		}
+
+		linkLabel, err = homeTaskConfigValue(linkLabelKey)
+		if err != nil {
+			return nil, fmt.Errorf("读取 %s 链接标签配置失败: %w", sourceName, err)
+		}
+		if strings.TrimSpace(linkLabel) == "" {
+			return nil, fmt.Errorf("%s 链接标签未配置", sourceName)
+		}
+
+		cssSelector, err = homeTaskConfigValue(cssSelectorKey)
+		if err != nil {
+			return nil, fmt.Errorf("读取 %s CSS 选择器配置失败: %w", sourceName, err)
+		}
+		if strings.TrimSpace(cssSelector) == "" {
+			return nil, fmt.Errorf("%s CSS 选择器未配置", sourceName)
+		}
+
+		waitSecondsStr, err := homeTaskConfigValue(waitSecondsKey)
+		if err != nil {
+			return nil, fmt.Errorf("读取 %s 等待秒数配置失败: %w", sourceName, err)
+		}
+		waitSeconds = cast.ToInt(waitSecondsStr)
 	}
 
-	linkLabel, err := homeTaskConfigValue(linkLabelKey)
-	if err != nil {
-		return nil, fmt.Errorf("读取 %s 链接标签配置失败: %w", sourceName, err)
-	}
-	if strings.TrimSpace(linkLabel) == "" {
-		return nil, fmt.Errorf("%s 链接标签未配置", sourceName)
-	}
-
-	cssSelector, err := homeTaskConfigValue(cssSelectorKey)
-	if err != nil {
-		return nil, fmt.Errorf("读取 %s CSS 选择器配置失败: %w", sourceName, err)
-	}
-	if strings.TrimSpace(cssSelector) == "" {
-		return nil, fmt.Errorf("%s CSS 选择器未配置", sourceName)
-	}
-
-	waitSecondsStr, err := homeTaskConfigValue(waitSecondsKey)
-	if err != nil {
-		return nil, fmt.Errorf("读取 %s 等待秒数配置失败: %w", sourceName, err)
-	}
-	waitSeconds := cast.ToInt(waitSecondsStr)
 	if waitSeconds <= 0 {
 		waitSeconds = defaultSmartLinkScrapeWaitSeconds
 	}
@@ -543,6 +560,10 @@ func requirementFetchConfigKeys(fetchType string) (string, string, string, strin
 }
 
 func requirementFetchSourceName(fetchType string) string {
+	// 优先从自定义配置列表查找名称
+	if cfg, found := findRequirementFetchConfig(fetchType); found {
+		return cfg.Name
+	}
 	if strings.TrimSpace(strings.ToLower(fetchType)) == `zentao` {
 		return `禅道`
 	}

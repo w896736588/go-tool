@@ -39,11 +39,21 @@ function MemoryFragmentSave(id, title, content, tags, folderName, callBack) {
   }, callBack)
 }
 
-// MemoryFragmentSaveByPath 通过相对路径更新知识片段（含任务归属校验）。
-function MemoryFragmentSaveByPath(taskId, relativePath, content, callBack) {
-  base.BasePost('/api/MemoryFragmentSaveByPath', {
-    task_id: taskId,
-    relative_path: relativePath,
+// MemoryFragmentCreate 创建新的知识片段。
+// folderName 为文件夹标识名称（如 "fragments"），传空字符串则自动归属默认文件夹。
+function MemoryFragmentCreate(folderName, title, content, callBack) {
+  base.BasePost('/api/MemoryFragmentCreate', {
+    folder_name: folderName || '',
+    title: title,
+    content: content,
+  }, callBack)
+}
+
+// MemoryFragmentSaveById 通过片段ID更新知识片段（含工作流归属校验）。
+function MemoryFragmentSaveById(workflowId, id, content, callBack) {
+  base.BasePost('/api/MemoryFragmentSaveById', {
+    workflow_id: workflowId,
+    id: id,
     content: content,
   }, callBack)
 }
@@ -219,7 +229,8 @@ export default {
   MemoryFragmentList,
   MemoryFragmentInfo,
   MemoryFragmentSave,
-  MemoryFragmentSaveByPath,
+  MemoryFragmentCreate,
+  MemoryFragmentSaveById,
   MemoryFragmentDelete,
   MemoryFragmentTrashList,
   MemoryFragmentRestore,

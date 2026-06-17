@@ -2,7 +2,12 @@
 # -*- coding: utf-8 -*-
 """dtool 数据库相关接口示例"""
 
-from api_common import MYSQL_ID, TOKEN, call_api
+import os, sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../dtool-common/scripts'))
+
+from api_common import TOKEN, call_api
+
+MYSQL_ID = ""  # TODO: 替换为用户提供的数据库配置 ID（支持 MySQL 和 Pgsql）
 
 
 def mysql_tables():

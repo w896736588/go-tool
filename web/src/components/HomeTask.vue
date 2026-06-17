@@ -21,19 +21,91 @@
       </div>
     </div>
 
-    <div class="home-task-tabs-bar">
-      <el-tabs v-model="homeTaskActiveTab" class="home-task-tabs" @tab-change="handleHomeTaskTabChange">
-        <el-tab-pane :label="'活跃中 (' + homeTaskActiveList.length + ')'" :name="HOME_TASK_TAB_ACTIVE">
-          <div v-loading="homeTaskLoadingActive" class="home-task-list">
-            <div v-if="homeTaskActiveList.length === 0" class="home-task-empty">
-              当前没有未归档任务
-            </div>
-            <div
-              v-for="task in homeTaskActiveList"
-              :key="task.id"
-              class="home-task-card"
-              :class="{ 'edit-success': !!homeTaskEditFeedbackMap[task.id] }"
+    <div class="home-task-body">
+      <!-- 左侧状态管理面板 -->
+      <div class="home-task-status-panel">
+        <div class="home-task-status-panel__header">
+          <span class="home-task-status-panel__title">任务状态管理</span>
+          <el-button size="small" type="primary" text @click="openAddTaskStatusDialog">
+            + 新增
+          </el-button>
+        </div>
+        <div class="home-task-status-panel__list">
+          <!-- 固定项：活跃中 -->
+          <div
+            class="home-task-status-item"
+            :class="{ 'home-task-status-item--active': selectedStatus === HOME_TASK_SELECTED_ACTIVE }"
+            @click="handleStatusClick(HOME_TASK_SELECTED_ACTIVE)"
+          >
+            <span class="home-task-status-item__name">活跃中</span>
+            <span class="home-task-status-item__count">{{ homeTaskActiveList.length }}</span>
+            <span class="home-task-status-item__more" style="visibility:hidden;pointer-events:none;"></span>
+          </div>
+          <!-- 动态状态列表 -->
+          <div
+            v-for="(status, idx) in taskStatusList"
+            :key="status.id"
+            class="home-task-status-item"
+            :class="{ 'home-task-status-item--active': selectedStatus === status.name }"
+            @click="handleStatusClick(status.name)"
+          >
+            <span class="home-task-status-item__name">{{ status.name }}</span>
+            <span class="home-task-status-item__count">{{ taskStatusCountMap[status.name] || 0 }}</span>
+            <el-popover
+              placement="right-start"
+              :width="120"
+              trigger="click"
             >
+              <template #reference>
+                <span class="home-task-status-item__more" @click.stop>
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+                </span>
+              </template>
+              <div class="home-task-status-popover">
+                <div class="home-task-status-popover__item" @click.stop="openEditTaskStatusDialog(status)">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                  <span>编辑</span>
+                </div>
+                <div class="home-task-status-popover__item" :class="{ 'home-task-status-popover__item--disabled': idx === 0 }" @click.stop="idx > 0 && moveTaskStatusUp(idx)">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+                  <span>上移</span>
+                </div>
+                <div class="home-task-status-popover__item" :class="{ 'home-task-status-popover__item--disabled': idx === taskStatusList.length - 1 }" @click.stop="idx < taskStatusList.length - 1 && moveTaskStatusDown(idx)">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                  <span>下移</span>
+                </div>
+                <div class="home-task-status-popover__item home-task-status-popover__item--danger" @click.stop="deleteTaskStatus(status)">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                  <span>删除</span>
+                </div>
+              </div>
+            </el-popover>
+          </div>
+          <!-- 固定项：已归档 -->
+          <div
+            class="home-task-status-item home-task-status-item--archived"
+            :class="{ 'home-task-status-item--active': selectedStatus === HOME_TASK_SELECTED_ARCHIVED }"
+            @click="handleStatusClick(HOME_TASK_SELECTED_ARCHIVED)"
+          >
+            <span class="home-task-status-item__name">已归档</span>
+            <span class="home-task-status-item__count">{{ homeTaskArchivedTotal }}</span>
+            <span class="home-task-status-item__more" style="visibility:hidden;pointer-events:none;"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右侧任务列表 -->
+      <!-- 活跃中 / 按状态筛选 -->
+      <div v-loading="homeTaskLoadingActive" class="home-task-content">
+        <div v-if="filteredTaskList.length === 0" class="home-task-empty">
+          {{ selectedStatus === HOME_TASK_SELECTED_ACTIVE ? '当前没有未归档任务' : '当前没有"' + selectedStatus + '"状态的任务' }}
+        </div>
+        <div
+          v-for="task in filteredTaskList"
+          :key="task.id"
+          class="home-task-card"
+          :class="{ 'edit-success': !!homeTaskEditFeedbackMap[task.id] }"
+        >
               <div class="home-task-card__header">
                 <div>
                   <div class="home-task-card__title">
@@ -153,19 +225,18 @@
                 </div>
               </div>
             </div>
-          </div>
-        </el-tab-pane>
-        <el-tab-pane :label="'归档 (' + homeTaskArchivedList.length + ')'" :name="HOME_TASK_TAB_ARCHIVED">
-          <div v-loading="homeTaskLoadingArchived" class="home-task-list">
-            <div v-if="homeTaskArchivedList.length === 0" class="home-task-empty">
-              当前没有归档任务
-            </div>
-            <div
-              v-for="task in homeTaskArchivedList"
-              :key="task.id"
-              class="home-task-card home-task-card--archived"
-              :class="{ 'edit-success': !!homeTaskEditFeedbackMap[task.id] }"
-            >
+      </div>
+      <!-- 已归档任务列表 -->
+      <div v-if="isArchivedMode" v-loading="homeTaskLoadingArchived" class="home-task-content" ref="archivedListRef" @scroll="handleArchivedScroll">
+        <div v-if="homeTaskArchivedList.length === 0 && !homeTaskLoadingArchived" class="home-task-empty">
+          当前没有归档任务
+        </div>
+        <div
+          v-for="task in homeTaskArchivedList"
+          :key="task.id"
+          class="home-task-card home-task-card--archived"
+          :class="{ 'edit-success': !!homeTaskEditFeedbackMap[task.id] }"
+        >
               <div class="home-task-card__header">
                 <div>
                   <div class="home-task-card__title">
@@ -295,10 +366,15 @@
                 </div>
               </div>
                           </div>
-          </div>
-        </el-tab-pane>
-      </el-tabs>
-    </div>
+      </div>
+      <div v-if="homeTaskArchivedTotal > homeTaskArchivedPageSize" class="home-task-pagination">
+        <div v-if="homeTaskArchivedLoadingMore" class="home-task-loading-more">
+          <i class="el-icon-loading" style="margin-right:6px"></i>加载中...
+        </div>
+        <div v-else-if="homeTaskArchivedNoMore" class="home-task-no-more">
+          已加载全部 {{ homeTaskArchivedTotal }} 条归档任务
+        </div>
+      </div>
 
     <el-dialog
       v-model="homeTaskDialogVisible"
@@ -324,22 +400,20 @@
           <el-col :span="24">
             <el-form-item label="抓取类型">
               <el-select v-model="homeTaskForm.fetch_type" style="width: 100%">
-                <el-option label="TAPD" :value="HOME_TASK_FETCH_TYPE_TAPD" />
-                <el-option label="禅道" :value="HOME_TASK_FETCH_TYPE_ZENTAO" />
+                <el-option
+                  v-for="cfg in requirementFetchConfigs"
+                  :key="cfg.type"
+                  :label="cfg.name"
+                  :value="cfg.type"
+                />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="24">
-            <el-form-item :label="homeTaskForm.fetch_type === HOME_TASK_FETCH_TYPE_ZENTAO ? '禅道地址' : 'TAPD地址'">
+            <el-form-item :label="fetchTypeLabel">
               <el-input
-                v-if="homeTaskForm.fetch_type === HOME_TASK_FETCH_TYPE_ZENTAO"
-                v-model="homeTaskForm.zentao_url"
-                placeholder="例如：https://zentao.example.com/story-view-123.html"
-              />
-              <el-input
-                v-else
-                v-model="homeTaskForm.tapd_url"
-                placeholder="例如：https://www.tapd.cn/123456"
+                v-model="homeTaskForm.requirement_url"
+                :placeholder="'例如：' + (getFetchConfigByType(homeTaskForm.fetch_type) ? getFetchConfigByType(homeTaskForm.fetch_type).link_label : '')"
               />
             </el-form-item>
           </el-col>
@@ -376,6 +450,27 @@
                 inactive-text="否"
                 style="--el-switch-on-color: #3a7a3a; --el-color-primary: #3a7a3a"
               />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <!-- 工作流模板选择 -->
+        <el-row v-if="homeTaskForm.use_workflow === HOME_TASK_USE_WORKFLOW_YES" :gutter="12">
+          <el-col :xs="24" :sm="12" :md="12">
+            <el-form-item label="工作流模板">
+              <el-select
+                v-model="homeTaskForm.workflow_template_id"
+                placeholder="请选择工作流模板"
+                style="width: 100%"
+                :loading="homeTaskTemplateLoading"
+                @focus="loadHomeTaskTemplateList"
+              >
+                <el-option
+                  v-for="tpl in homeTaskTemplateList"
+                  :key="tpl.id"
+                  :label="tpl.name + (tpl.is_default === 1 ? ' (默认)' : '')"
+                  :value="tpl.id"
+                />
+              </el-select>
             </el-form-item>
           </el-col>
         </el-row>
@@ -679,6 +774,38 @@
       </template>
     </el-dialog>
 
+    <!-- 状态编辑弹窗 -->
+    <el-dialog
+      v-model="taskStatusDialogVisible"
+      :title="taskStatusDialogTitle"
+      width="420px"
+      top="25vh"
+      destroy-on-close
+    >
+      <el-form label-width="72px" @submit.prevent>
+        <el-form-item label="状态名称">
+          <el-input
+            v-model="taskStatusForm.name"
+            maxlength="50"
+            placeholder="例如：待开始"
+            @keyup.enter="saveTaskStatus"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <div class="home-task-dialog__footer">
+          <GitActionButton compact variant="info" @click="taskStatusDialogVisible = false">
+            取消
+          </GitActionButton>
+          <GitActionButton compact :loading="taskStatusSaving" @click="saveTaskStatus">
+            保存
+          </GitActionButton>
+        </div>
+      </template>
+    </el-dialog>
+
+    </div><!-- /home-task-body -->
+
   </div>
 </template>
 
@@ -691,14 +818,19 @@ import apiManagement from '@/utils/base/api'
 import dockerApi from '@/utils/base/compose'
 import smartLinkSetApi from '@/utils/base/smart_link_set'
 import taskWorkflowApi from '@/utils/base/task_workflow'
+import workflowTemplateApi from '@/utils/base/workflow_template'
 import sseDistribute from '@/utils/base/sse_distribute'
 import memoryFragmentApi from '@/utils/base/memory_fragment'
+import set from '@/utils/base/git_set'
 import GitActionButton from "@/components/base/GitActionButton.vue"
 
 const HOME_TASK_TAB_ACTIVE = 'active'
 const HOME_TASK_TAB_ARCHIVED = 'archived'
+const HOME_TASK_SELECTED_ACTIVE = 'active'
+const HOME_TASK_SELECTED_ARCHIVED = 'archived'
 const HOME_TASK_ARCHIVED_NO = 0
 const HOME_TASK_ARCHIVED_YES = 1
+const HOME_TASK_ARCHIVED_ALL = -1
 const HOME_TASK_STATUS_TODO = '待开始'
 const HOME_TASK_STATUS_DEVELOPING = '开发中'
 const HOME_TASK_STATUS_DEV_COMPLETED = '开发完'
@@ -782,10 +914,10 @@ function createHomeTaskDefaultForm() {
     start_date: getTodayDateText(),
     created_date: getTodayDateText(),
     fetch_type: HOME_TASK_FETCH_TYPE_TAPD,
-    tapd_url: '',
-    zentao_url: '',
+    requirement_url: '',
     use_workflow: HOME_TASK_USE_WORKFLOW_YES,
     workflow_fragment_folder_name: HOME_TASK_DEFAULT_WORKFLOW_FRAGMENT_FOLDER,
+    workflow_template_id: 0,
     dev_configs: [{ git_id: '', collection_id: '', dir_id: '', docker_id: '', mysql_id: '', local_dir: '', parent_branch: '', branch_name: '', rule_entry_file: '', _branchGenerating: false, smart_link_id: '', smart_link_label: '', smart_link_account: '' }],
   }
 }
@@ -795,6 +927,8 @@ export default {
     return {
       HOME_TASK_TAB_ACTIVE,
       HOME_TASK_TAB_ARCHIVED,
+      HOME_TASK_SELECTED_ACTIVE,
+      HOME_TASK_SELECTED_ARCHIVED,
       HOME_TASK_ARCHIVED_NO,
       HOME_TASK_ARCHIVED_YES,
       HOME_TASK_OPERATE_STATUS,
@@ -811,7 +945,8 @@ export default {
       HOME_TASK_FETCH_TYPE_TAPD,
       HOME_TASK_FETCH_TYPE_ZENTAO,
       HOME_TASK_DEFAULT_WORKFLOW_FRAGMENT_FOLDER,
-      homeTaskActiveTab: HOME_TASK_TAB_ACTIVE,
+      requirementFetchConfigs: [],
+      selectedStatus: HOME_TASK_SELECTED_ACTIVE,
       homeTaskDialogVisible: false,
       homeTaskLoadingActive: false,
       homeTaskLoadingArchived: false,
@@ -821,7 +956,12 @@ export default {
       homeTaskOperatingType: '',
       homeTaskActiveList: [],
       homeTaskArchivedList: [],
-      homeTaskStatusOptions: HOME_TASK_STATUS_OPTIONS,
+      homeTaskArchivedTotal: 0,
+      homeTaskArchivedPage: 1,
+      homeTaskArchivedPageSize: 20,
+      homeTaskArchivedLoaded: false,
+      homeTaskArchivedLoadingMore: false,
+      homeTaskArchivedNoMore: false,
       homeTaskForm: createHomeTaskDefaultForm(),
       homeTaskExpandedFragments: {},
       homeTaskEditFeedbackMap: {},
@@ -846,6 +986,8 @@ export default {
       homeTaskSmartLinkLoading: false,
       homeTaskMemoryFolderList: [],
       homeTaskMemoryFolderLoading: false,
+      homeTaskTemplateList: [],
+      homeTaskTemplateLoading: false,
       homeTaskConfigTableColumns: [
         { key: 'git', label: 'Git仓库' },
         { key: 'api', label: '接口集合' },
@@ -853,11 +995,35 @@ export default {
         { key: 'branch_name', label: '分支名' },
         { key: 'local_dir', label: '本地目录' },
       ],
+      // 任务状态管理
+      taskStatusList: [],
+      taskStatusLoading: false,
+      taskStatusDialogVisible: false,
+      taskStatusSaving: false,
+      taskStatusForm: { id: 0, name: '' },
     }
   },
   computed: {
     homeTaskDialogTitle() {
       return this.homeTaskForm.id > 0 ? '编辑任务' : '新增任务'
+    },
+    homeTaskStatusOptions() {
+      if (this.taskStatusList.length > 0) {
+        return this.taskStatusList.map(s => s.name)
+      }
+      // 兜底：使用默认选项
+      return HOME_TASK_STATUS_OPTIONS
+    },
+    taskStatusDialogTitle() {
+      return this.taskStatusForm.id > 0 ? '编辑状态' : '新增状态'
+    },
+    taskStatusCountMap() {
+      const map = {}
+      for (const task of this.homeTaskActiveList) {
+        const s = task.task_status || ''
+        map[s] = (map[s] || 0) + 1
+      }
+      return map
     },
     homeTaskGitRepoGroupedOptions() {
       const groupMap = {}
@@ -872,20 +1038,33 @@ export default {
       }
       return groupOrder.map(name => ({ label: name, options: groupMap[name] }))
     },
+    isArchivedMode() {
+      return this.selectedStatus === HOME_TASK_SELECTED_ARCHIVED
+    },
+    fetchTypeLabel() {
+      const cfg = this.getFetchConfigByType(this.homeTaskForm.fetch_type)
+      return cfg ? cfg.name + '地址' : '需求地址'
+    },
+    filteredTaskList() {
+      if (this.selectedStatus === HOME_TASK_SELECTED_ACTIVE) {
+        return this.homeTaskActiveList
+      }
+      return this.homeTaskActiveList.filter(t => t.task_status === this.selectedStatus)
+    },
   },
   mounted() {
+    // 仅注册 SSE 监听；数据加载由 activated() 统一处理
+    // （keep-alive 下首次挂载 mounted 和 activated 都会触发，避免重复请求）
     this.ensureWorkflowUnreadSse()
     this.ensureHomeTaskPageDataSse()
-    // 只加载主列表，附加数据通过 SSE 推送
-    this.loadHomeTaskList(HOME_TASK_ARCHIVED_NO)
-    this.loadHomeTaskList(HOME_TASK_ARCHIVED_YES)
   },
   activated() {
     this.ensureWorkflowUnreadSse()
     this.ensureHomeTaskPageDataSse()
-    // 只加载主列表，附加数据通过 SSE 推送
+    // 默认只加载活跃任务；归档数量通过轻量接口获取，归档数据点击 tab 时才懒加载
+    this.loadHomeTaskCounts()
     this.loadHomeTaskList(HOME_TASK_ARCHIVED_NO)
-    this.loadHomeTaskList(HOME_TASK_ARCHIVED_YES)
+    this.loadTaskStatusList()
   },
   beforeUnmount() {
     this.unregisterWorkflowUnreadSse()
@@ -919,16 +1098,20 @@ export default {
         if (!created || !sseDistribute.GetSseClientId()) {
           return false
         }
-        const pDataId = 'home_task_page_data'
-        const pDirId = 'home_task_page_data_dir_status'
-        const pBranchId = 'home_task_page_data_branch_status'
-        this._ssePageDataId = pDataId
-        this._sseDirStatusId = pDirId
-        this._sseBranchStatusId = pBranchId
-        sseDistribute.RegisterReceive(pDataId, this.handleHomeTaskPageData)
-        sseDistribute.RegisterReceive(pDirId, this.handleHomeTaskDirStatus)
-        sseDistribute.RegisterReceive(pBranchId, this.handleHomeTaskBranchStatus)
-        return true
+        // 等待 SSE 连接真正建立（onopen 事件触发），避免 POST 请求先于 SSE 握手到达后端
+        return sseDistribute.WaitForOpen().then((opened) => {
+          if (!opened) return false
+          const pDataId = 'home_task_page_data'
+          const pDirId = 'home_task_page_data_dir_status'
+          const pBranchId = 'home_task_page_data_branch_status'
+          this._ssePageDataId = pDataId
+          this._sseDirStatusId = pDirId
+          this._sseBranchStatusId = pBranchId
+          sseDistribute.RegisterReceive(pDataId, this.handleHomeTaskPageData)
+          sseDistribute.RegisterReceive(pDirId, this.handleHomeTaskDirStatus)
+          sseDistribute.RegisterReceive(pBranchId, this.handleHomeTaskBranchStatus)
+          return true
+        })
       })
       return this._homeTaskPageDataSsePromise
     },
@@ -1093,26 +1276,42 @@ export default {
         })
       })
     },
-    handleHomeTaskTabChange(tabName) {
-      if (tabName === HOME_TASK_TAB_ACTIVE) {
-        this.loadHomeTaskList(HOME_TASK_ARCHIVED_NO)
-        return
+    handleStatusClick(statusKey) {
+      if (this.selectedStatus === statusKey) return
+      this.selectedStatus = statusKey
+      // 切换到归档时，首次懒加载归档数据
+      if (statusKey === HOME_TASK_SELECTED_ARCHIVED && !this.homeTaskArchivedLoaded) {
+        this.loadHomeTaskList(HOME_TASK_ARCHIVED_YES, 1, this.homeTaskArchivedPageSize)
       }
-      this.loadHomeTaskList(HOME_TASK_ARCHIVED_YES)
     },
-    loadHomeTaskList(isArchived) {
-      if (isArchived === HOME_TASK_ARCHIVED_YES) {
+    loadHomeTaskList(isArchived, page = 0, pageSize = 0) {
+      const isAllMode = isArchived === HOME_TASK_ARCHIVED_ALL
+      const isArchivedTab = isArchived === HOME_TASK_ARCHIVED_YES
+      const isPagination = page > 0 && pageSize > 0
+
+      // 归档首页显示全页 loading，翻页时显示底部加载提示
+      const isArchivedFirstPage = isArchivedTab && (!isPagination || page <= 1)
+      if (isArchivedFirstPage) {
         this.homeTaskLoadingArchived = true
+      } else if (isArchived === HOME_TASK_ARCHIVED_NO) {
+        this.homeTaskLoadingActive = true
       } else {
         this.homeTaskLoadingActive = true
+        this.homeTaskLoadingArchived = true
       }
       homeTaskApi.HomeTaskList(isArchived, (response) => {
-        if (isArchived === HOME_TASK_ARCHIVED_YES) {
+        if (isArchivedFirstPage) {
           this.homeTaskLoadingArchived = false
+        } else if (isArchived === HOME_TASK_ARCHIVED_NO) {
+          this.homeTaskLoadingActive = false
         } else {
           this.homeTaskLoadingActive = false
+          this.homeTaskLoadingArchived = false
         }
         if (!(response && response.ErrCode === 0)) {
+          this.homeTaskLoadingActive = false
+          this.homeTaskLoadingArchived = false
+          this.homeTaskArchivedLoadingMore = false
           this.$helperNotify.error(response?.ErrMsg || '任务列表加载失败')
           return
         }
@@ -1122,30 +1321,96 @@ export default {
           api_dev_entries: safeParseJSON(t.api_dev_entries, []),
           dev_configs: safeParseJSON(t.dev_configs, []),
         }))
-        if (isArchived === HOME_TASK_ARCHIVED_YES) {
-          this.homeTaskArchivedList = taskList
-          // 归档列表也需要工作流计数，但不触发完整 SSE 推送
+        if (isAllMode) {
+          this.homeTaskActiveList = taskList.filter(t => t.is_archived === HOME_TASK_ARCHIVED_NO)
+          this.homeTaskArchivedList = taskList.filter(t => t.is_archived === HOME_TASK_ARCHIVED_YES)
+          this.loadHomeTaskWorkflowCounts(this.homeTaskActiveList)
+          this.loadHomeTaskWorkflowCounts(this.homeTaskArchivedList)
+        } else if (isArchivedTab) {
+          // 归档：分页时首页替换、后续页追加；非分页直接替换
+          if (isPagination && page > 1) {
+            this.homeTaskArchivedList = [...this.homeTaskArchivedList, ...taskList]
+          } else {
+            this.homeTaskArchivedList = taskList
+          }
+          this.homeTaskArchivedTotal = isPagination ? (response.Data?.total || taskList.length) : taskList.length
+          this.homeTaskArchivedPage = isPagination ? (response.Data?.page || page) : 1
+          this.homeTaskArchivedLoaded = true
+          this.homeTaskArchivedLoadingMore = false
+          // 判断是否已加载全部
+          this.homeTaskArchivedNoMore = this.homeTaskArchivedList.length >= this.homeTaskArchivedTotal
           this.loadHomeTaskWorkflowCounts(taskList)
         } else {
+          // 活跃任务：全量加载（任务数少，无需分页）
           this.homeTaskActiveList = taskList
         }
 
-        // 仅在活跃列表加载完成后触发 SSE 推送附加数据
-        if (isArchived === HOME_TASK_ARCHIVED_NO) {
-          this.triggerHomeTaskPageDataLoad()
-          // 批量检查本地目录是否存在 → 改为 SSE 推送
-          this.triggerLocalDirCheck(taskList)
-          // 批量检查本地目录的 Git 分支是否匹配 → 改为 SSE 推送
-          this.triggerBranchStatusCheck(taskList)
-        }
-      })
+        // 从列表接口中直接获取 Git 仓库列表和 API 集合列表
+        this.populateGitRepoListFromResponse(response.Data)
+        this.populateApiCollectionListFromResponse(response.Data)
+
+        // 对当前页任务列表触发 SSE 异步检查：本地目录是否存在、分支是否匹配
+        this.triggerLocalDirCheck(taskList)
+        this.triggerBranchStatusCheck(taskList)
+      }, page, pageSize)
     },
     refreshAllHomeTaskList() {
+      // 刷新时重置归档懒加载状态，并重新拉取数量和活跃列表
+      this.homeTaskArchivedLoaded = false
+      this.homeTaskArchivedPage = 1
+      this.homeTaskArchivedNoMore = false
+      this.homeTaskArchivedLoadingMore = false
+      this.loadHomeTaskCounts()
       this.loadHomeTaskList(HOME_TASK_ARCHIVED_NO)
-      this.loadHomeTaskList(HOME_TASK_ARCHIVED_YES)
+      // 如果当前正在查看归档，也需要刷新归档列表
+      if (this.selectedStatus === HOME_TASK_SELECTED_ARCHIVED) {
+        this.loadHomeTaskList(HOME_TASK_ARCHIVED_YES, 1, this.homeTaskArchivedPageSize)
+      }
+    },
+    // loadHomeTaskCounts 获取活跃和归档任务数量，用于 tab 标签显示。
+    loadHomeTaskCounts() {
+      homeTaskApi.HomeTaskCount((response) => {
+        if (!(response && response.ErrCode === 0 && response.Data)) return
+        this.homeTaskArchivedTotal = response.Data.archived_count || 0
+      })
+    },
+    // handleArchivedScroll 归档列表滚动监听，接近底部时自动加载下一页。
+    handleArchivedScroll() {
+      if (this.homeTaskArchivedLoadingMore || this.homeTaskArchivedNoMore) return
+      const el = this.$refs.archivedListRef
+      if (!el) return
+      const distanceToBottom = el.scrollHeight - el.clientHeight - el.scrollTop
+      if (distanceToBottom < 80) {
+        this.homeTaskArchivedLoadingMore = true
+        const nextPage = this.homeTaskArchivedPage + 1
+        this.homeTaskArchivedPage = nextPage
+        this.loadHomeTaskList(HOME_TASK_ARCHIVED_YES, nextPage, this.homeTaskArchivedPageSize)
+      }
     },
     resetHomeTaskForm() {
       this.homeTaskForm = createHomeTaskDefaultForm()
+    },
+    populateGitRepoListFromResponse(data) {
+      if (!data) return
+      const gitList = Array.isArray(data.git_list) ? data.git_list : []
+      const groupList = Array.isArray(data.git_group_list) ? data.git_group_list : []
+      if (gitList.length === 0) return
+      const groupMap = {}
+      for (const g of groupList) {
+        groupMap[Number(g.id)] = g.name
+      }
+      this.homeTaskGitRepoList = gitList.map(repo => ({
+        ...repo,
+        git_group_name: groupMap[Number(repo.git_group_id)] || '未分组',
+      }))
+      this.homeTaskGitRepoLoading = false
+    },
+    populateApiCollectionListFromResponse(data) {
+      if (!data) return
+      const list = Array.isArray(data.api_collection_list) ? data.api_collection_list : []
+      if (list.length === 0) return
+      this.homeTaskApiCollectionList = list
+      this.homeTaskApiCollectionLoading = false
     },
     loadHomeTaskGitRepoList() {
       this.homeTaskGitRepoLoading = true
@@ -1247,6 +1512,20 @@ export default {
         const exists = this.homeTaskMemoryFolderList.some(item => item.folder_name === this.homeTaskForm.workflow_fragment_folder_name)
         if (!exists) {
           this.homeTaskForm.workflow_fragment_folder_name = HOME_TASK_DEFAULT_WORKFLOW_FRAGMENT_FOLDER
+        }
+      })
+    },
+    loadHomeTaskTemplateList() {
+      this.homeTaskTemplateLoading = true
+      workflowTemplateApi.WorkflowTemplateListBasic((response) => {
+        this.homeTaskTemplateLoading = false
+        if (response && response.ErrCode === 0 && response.Data && Array.isArray(response.Data.list)) {
+          this.homeTaskTemplateList = response.Data.list
+          // 如果未选择模板且有列表，自动选择默认或第一个
+          if (!this.homeTaskForm.workflow_template_id && this.homeTaskTemplateList.length > 0) {
+            const defaultTpl = this.homeTaskTemplateList.find(t => t.is_default === 1)
+            this.homeTaskForm.workflow_template_id = defaultTpl ? defaultTpl.id : this.homeTaskTemplateList[0].id
+          }
         }
       })
     },
@@ -1352,14 +1631,28 @@ export default {
     },
     openCreateHomeTaskDialog() {
       this.resetHomeTaskForm()
-      this.loadHomeTaskGitRepoList()
-      this.loadHomeTaskApiCollections()
       this.loadHomeTaskMysqlList()
       this.loadHomeTaskDockerList()
       this.loadHomeTaskSmartLinkList()
       this.loadHomeTaskMemoryFolderList()
       this.loadHomeTaskUnusedLocalDirs(0)
+      this.loadHomeTaskTemplateList()
+      this.loadRequirementFetchConfigs()
       this.homeTaskDialogVisible = true
+    },
+    // 加载需求抓取配置列表（用于 fetch_type 下拉选项）
+    loadRequirementFetchConfigs() {
+      set.HomeTaskConfigGet((response) => {
+        if (response && response.ErrCode === 0 && response.Data) {
+          const configs = response.Data.home_task_requirement_fetch_configs
+          this.requirementFetchConfigs = Array.isArray(configs) ? [...configs] : []
+        }
+      })
+    },
+    // 根据 fetch_type 查找配置
+    getFetchConfigByType(type) {
+      if (!type) return null
+      return this.requirementFetchConfigs.find(c => c.type === type) || null
     },
     openHomeTaskSettingsPage() {
       const routeInfo = this.$router.resolve({ path: '/HomeTaskSetting' })
@@ -1449,15 +1742,14 @@ export default {
         task_status: task.task_status || HOME_TASK_STATUS_TODO,
         start_date: task.start_time_desc || getTodayDateText(),
         created_date: (task.create_time_desc || '').split(' ')[0] || '',
-        fetch_type: String(task.fetch_type || HOME_TASK_FETCH_TYPE_TAPD).toLowerCase() === HOME_TASK_FETCH_TYPE_ZENTAO ? HOME_TASK_FETCH_TYPE_ZENTAO : HOME_TASK_FETCH_TYPE_TAPD,
-        tapd_url: task.tapd_url || '',
-        zentao_url: task.zentao_url || '',
+        fetch_type: String(task.fetch_type || HOME_TASK_FETCH_TYPE_TAPD),
+        requirement_url: String(task.fetch_type || '') === HOME_TASK_FETCH_TYPE_ZENTAO ? (task.zentao_url || '') : (task.tapd_url || ''),
         use_workflow: Number(task.use_workflow ?? HOME_TASK_USE_WORKFLOW_YES) === HOME_TASK_USE_WORKFLOW_YES ? HOME_TASK_USE_WORKFLOW_YES : HOME_TASK_USE_WORKFLOW_NO,
         workflow_fragment_folder_name: String(task.workflow_fragment_folder_name || HOME_TASK_DEFAULT_WORKFLOW_FRAGMENT_FOLDER).trim() || HOME_TASK_DEFAULT_WORKFLOW_FRAGMENT_FOLDER,
+        workflow_template_id: Number(task.workflow_template_id || 0),
         dev_configs: devConfigs,
       }
-      this.loadHomeTaskGitRepoList()
-      this.loadHomeTaskApiCollections()
+      this.loadRequirementFetchConfigs()
       this.loadHomeTaskMysqlList()
       this.loadHomeTaskDockerList()
       this.loadHomeTaskSmartLinkList()
@@ -1470,6 +1762,7 @@ export default {
         this.loadHomeTaskApiFoldersForCollection(colId)
       }
       this.loadHomeTaskUnusedLocalDirs(Number(task.id || 0))
+      this.loadHomeTaskTemplateList()
       this.homeTaskDialogVisible = true
     },
     openHomeTaskMemoryFragment(task) {
@@ -1519,7 +1812,7 @@ export default {
     },
     getHomeTaskDevConfigTags(task) {
       const DEV_CONFIG_TAG_TYPE_GIT = 'success'
-      const DEV_CONFIG_TAG_TYPE_API = ''
+      const DEV_CONFIG_TAG_TYPE_API = 'info'
       const DEV_CONFIG_TAG_TYPE_DOCKER = 'info'
       const DEV_CONFIG_TAG_TYPE_DB = 'warning'
       const DEV_CONFIG_TAG_TYPE_DIR = 'danger'
@@ -1576,7 +1869,7 @@ export default {
           group.push({ type: 'local_dir', label: dirPath, fullPath: dirPath, tagType: DEV_CONFIG_TAG_TYPE_DIR })
         }
         if (String(cfg.parent_branch || '').trim() !== '') {
-          group.push({ type: 'parent_branch', label: '分支: ' + String(cfg.parent_branch).trim(), tagType: '' })
+          group.push({ type: 'parent_branch', label: '分支: ' + String(cfg.parent_branch).trim(), tagType: 'info' })
         }
         if (String(cfg.branch_name || '').trim() !== '') {
           group.push({ type: 'branch_name', label: String(cfg.branch_name).trim(), tagType: 'success', localDir: String(cfg.local_dir || '').trim() })
@@ -1584,7 +1877,7 @@ export default {
         if (Number(cfg.smart_link_id || 0) > 0) {
           const sl = this.homeTaskSmartLinkList.find(s => Number(s.id) === Number(cfg.smart_link_id))
           if (sl) {
-            group.push({ type: 'smart_link', label: sl.name, id: Number(cfg.smart_link_id), tagType: '' })
+            group.push({ type: 'smart_link', label: sl.name, id: Number(cfg.smart_link_id), tagType: 'info' })
           }
         }
         if (String(cfg.smart_link_label || '').trim() !== '') {
@@ -1644,9 +1937,10 @@ export default {
       }
       const taskName = String(this.homeTaskForm.name || '').trim()
       const fetchType = String(this.homeTaskForm.fetch_type || HOME_TASK_FETCH_TYPE_TAPD).trim()
-      const tapdUrl = String(this.homeTaskForm.tapd_url || '').trim()
-      const zentaoUrl = String(this.homeTaskForm.zentao_url || '').trim()
-      const requirementUrl = fetchType === HOME_TASK_FETCH_TYPE_ZENTAO ? zentaoUrl : tapdUrl
+      const requirementUrl = String(this.homeTaskForm.requirement_url || '').trim()
+      // 兼容后端：tapd 和 zentao 仍使用独立字段；自定义类型统一走 tapd_url
+      const tapdUrl = (fetchType === HOME_TASK_FETCH_TYPE_ZENTAO) ? '' : requirementUrl
+      const zentaoUrl = (fetchType === HOME_TASK_FETCH_TYPE_ZENTAO) ? requirementUrl : ''
       if (!taskName) {
         this.$helperNotify.error('任务名称不能为空')
         return
@@ -1691,6 +1985,7 @@ export default {
         dev_configs: JSON.stringify(validConfigs),
         use_workflow: useWorkflow,
         workflow_fragment_folder_name: workflowFragmentFolderName,
+        workflow_template_id: Number(this.homeTaskForm.workflow_template_id || 0),
         api_host: base.GetApiHost() || window.location.origin,
         api_token: base.GetSafeToken(),
       }, (response) => {
@@ -1721,7 +2016,9 @@ export default {
       return String(task?.tapd_url || '').trim()
     },
     getHomeTaskRequirementLabel(task) {
-      const fetchType = String(task?.fetch_type || HOME_TASK_FETCH_TYPE_TAPD).toLowerCase()
+      const fetchType = String(task?.fetch_type || HOME_TASK_FETCH_TYPE_TAPD)
+      const cfg = this.getFetchConfigByType(fetchType)
+      if (cfg) return cfg.name + '需求'
       return fetchType === HOME_TASK_FETCH_TYPE_ZENTAO ? '禅道需求' : 'TAPD需求'
     },
     isHomeTaskBusy(taskId, operateType = '') {
@@ -2033,6 +2330,88 @@ export default {
     copyUnusedLocalDir(dir) {
       navigator.clipboard.writeText(dir).then(() => {
         this.$message.success('已复制')
+      })
+    },
+    // ========== 任务状态管理 ==========
+    loadTaskStatusList() {
+      homeTaskApi.TaskStatusList((response) => {
+        if (response && response.ErrCode === 0 && response.Data) {
+          this.taskStatusList = Array.isArray(response.Data.list) ? response.Data.list : []
+        }
+      })
+    },
+    openAddTaskStatusDialog() {
+      this.taskStatusForm = { id: 0, name: '' }
+      this.taskStatusDialogVisible = true
+    },
+    openEditTaskStatusDialog(status) {
+      this.taskStatusForm = { id: status.id, name: status.name }
+      this.taskStatusDialogVisible = true
+    },
+    saveTaskStatus() {
+      const name = (this.taskStatusForm.name || '').trim()
+      if (!name) {
+        this.$message.warning('状态名称不能为空')
+        return
+      }
+      const sortOrder = this.taskStatusForm.id > 0
+        ? undefined
+        : this.taskStatusList.length
+      this.taskStatusSaving = true
+      homeTaskApi.TaskStatusSave({
+        id: this.taskStatusForm.id,
+        name: name,
+        sort_order: sortOrder,
+      }, (response) => {
+        this.taskStatusSaving = false
+        if (response && response.ErrCode === 0 && response.Data) {
+          this.taskStatusList = Array.isArray(response.Data.list) ? response.Data.list : []
+          this.taskStatusDialogVisible = false
+          this.$message.success(this.taskStatusForm.id > 0 ? '状态已更新' : '状态已添加')
+        } else {
+          this.$message.error(response?.ErrMsg || '保存失败')
+        }
+      })
+    },
+    deleteTaskStatus(status) {
+      this.$confirm(`确定要删除状态"${status.name}"吗？`, '确认删除', {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }).then(() => {
+        homeTaskApi.TaskStatusDelete(status.id, (response) => {
+          if (response && response.ErrCode === 0 && response.Data) {
+            this.taskStatusList = Array.isArray(response.Data.list) ? response.Data.list : []
+            this.$message.success('状态已删除')
+          } else {
+            this.$message.error(response?.ErrMsg || '删除失败')
+          }
+        })
+      }).catch(() => {})
+    },
+    moveTaskStatusUp(idx) {
+      if (idx <= 0) return
+      const ids = this.taskStatusList.map(s => s.id)
+      const tmp = ids[idx]
+      ids[idx] = ids[idx - 1]
+      ids[idx - 1] = tmp
+      this.saveTaskStatusSort(ids)
+    },
+    moveTaskStatusDown(idx) {
+      if (idx >= this.taskStatusList.length - 1) return
+      const ids = this.taskStatusList.map(s => s.id)
+      const tmp = ids[idx]
+      ids[idx] = ids[idx + 1]
+      ids[idx + 1] = tmp
+      this.saveTaskStatusSort(ids)
+    },
+    saveTaskStatusSort(ids) {
+      homeTaskApi.TaskStatusSort(ids, (response) => {
+        if (response && response.ErrCode === 0 && response.Data) {
+          this.taskStatusList = Array.isArray(response.Data.list) ? response.Data.list : []
+        } else {
+          this.$message.error(response?.ErrMsg || '排序失败')
+        }
       })
     },
   },

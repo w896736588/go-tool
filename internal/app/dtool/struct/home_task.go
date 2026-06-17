@@ -22,6 +22,7 @@ type HomeTaskSaveRequest struct {
 	DevConfigs                 string `json:"dev_configs"`
 	UseWorkflow                int    `json:"use_workflow"`
 	WorkflowFragmentFolderName string `json:"workflow_fragment_folder_name"`
+	WorkflowTemplateID         int    `json:"workflow_template_id"`
 }
 
 // DevConfig 开发配置条目，组合了 Git 仓库、接口集合/文件夹、Docker、MySQL 配置、自定义网页。
@@ -47,8 +48,11 @@ type ApiDevEntry struct {
 }
 
 // HomeTaskListRequest 查询首页任务列表请求。
+// Page/PageSize 非必传：不传或传0则不分页返回全量；传入时分页查询并返回 total 字段。
 type HomeTaskListRequest struct {
 	IsArchived int `json:"is_archived"`
+	Page       int `json:"page"`      // 页码，从1开始
+	PageSize   int `json:"page_size"` // 每页条数
 }
 
 // HomeTaskArchiveToggleRequest 切换首页任务归档状态请求。

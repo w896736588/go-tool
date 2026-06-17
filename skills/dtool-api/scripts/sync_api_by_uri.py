@@ -57,8 +57,19 @@ def normalize_uri(uri: str) -> str:
     return value.lower()
 
 
+def _normalize_response(result: Dict[str, Any]) -> Dict[str, Any]:
+    """将后端返回的 ErrCode/ErrMsg/Data 统一映射为 code/msg/data。"""
+    if "ErrCode" in result:
+        result["code"] = result.get("ErrCode")
+    if "ErrMsg" in result:
+        result["msg"] = result.get("ErrMsg")
+    if "Data" in result:
+        result["data"] = result.get("Data")
+    return result
+
+
 def post_json(base_url: str, token: str, path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-    """发送 JSON POST 请求并返回响应 JSON。"""
+    """发送 JSON POST 请求并返回归一化后的响应 JSON。"""
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     req = request.Request(
         url=f"{base_url}{path}",
@@ -69,7 +80,7 @@ def post_json(base_url: str, token: str, path: str, payload: Dict[str, Any]) -> 
     try:
         with request.urlopen(req, timeout=30) as resp:
             data = resp.read().decode("utf-8")
-            return json.loads(data)
+            return _normalize_response(json.loads(data))
     except error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"HTTP {exc.code} {path} 失败: {detail}") from exc

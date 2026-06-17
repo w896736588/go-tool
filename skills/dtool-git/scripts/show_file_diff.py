@@ -253,50 +253,53 @@ def main() -> int:
     diff_content = ""
 
     if is_workspace_mode:
-        # 工作区模式：获取工作区与暂存区变更
+        # 工作区模式：合并暂存区 + 工作区变更
+        parts = []
         # 1) 暂存区改动（已 git add 未 commit）
         result = subprocess.run(
             ["git", "diff", "--cached", "--", normalized_path],
             capture_output=True, text=True, encoding="utf-8", errors="replace",
         )
         if result.returncode == 0 and result.stdout and result.stdout.strip():
-            diff_content = result.stdout
+            parts.append(result.stdout)
 
         # 2) 工作区改动（未 git add）
-        if not diff_content:
-            result = subprocess.run(
-                ["git", "diff", "--", normalized_path],
-                capture_output=True, text=True, encoding="utf-8", errors="replace",
-            )
-            if result.returncode == 0 and result.stdout and result.stdout.strip():
-                diff_content = result.stdout
+        result = subprocess.run(
+            ["git", "diff", "--", normalized_path],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+        )
+        if result.returncode == 0 and result.stdout and result.stdout.strip():
+            parts.append(result.stdout)
+
+        diff_content = "\n".join(parts)
     else:
-        # 对比代码模式：获取所有变更（merge_base vs HEAD + staged + workspace）
+        # 对比代码模式：合并已提交 + 暂存区 + 工作区变更
+        parts = []
         # 1) 已提交的改动（merge_base vs HEAD）
         result = subprocess.run(
             ["git", "diff", old_ref, "HEAD", "--", normalized_path],
             capture_output=True, text=True, encoding="utf-8", errors="replace",
         )
         if result.returncode == 0 and result.stdout and result.stdout.strip():
-            diff_content = result.stdout
+            parts.append(result.stdout)
 
         # 2) 暂存区改动（已 git add 未 commit）
-        if not diff_content:
-            result = subprocess.run(
-                ["git", "diff", "--cached", "--", normalized_path],
-                capture_output=True, text=True, encoding="utf-8", errors="replace",
-            )
-            if result.returncode == 0 and result.stdout and result.stdout.strip():
-                diff_content = result.stdout
+        result = subprocess.run(
+            ["git", "diff", "--cached", "--", normalized_path],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+        )
+        if result.returncode == 0 and result.stdout and result.stdout.strip():
+            parts.append(result.stdout)
 
         # 3) 工作区改动（未 git add）
-        if not diff_content:
-            result = subprocess.run(
-                ["git", "diff", "--", normalized_path],
-                capture_output=True, text=True, encoding="utf-8", errors="replace",
-            )
-            if result.returncode == 0 and result.stdout and result.stdout.strip():
-                diff_content = result.stdout
+        result = subprocess.run(
+            ["git", "diff", "--", normalized_path],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+        )
+        if result.returncode == 0 and result.stdout and result.stdout.strip():
+            parts.append(result.stdout)
+
+        diff_content = "\n".join(parts)
 
     # 获取旧版本文件内容（old_content）
     old_content = run_git_safe("show", f"{old_ref}:{normalized_path}")

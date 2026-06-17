@@ -267,8 +267,10 @@ func MemoryFragmentSave(c *gin.Context) {
 	gsgin.GinResponseSuccess(c, ``, info)
 }
 
-// MemoryFragmentSaveByPath 通过相对路径更新知识片段，要求传入 task_id 并校验片段是否归属于该任务。
-func MemoryFragmentSaveByPath(c *gin.Context) {
+// MemoryFragmentCreate 创建新的知识片段。
+// folder_name 为文件夹标识名称（如 "fragments"），传入空字符串则自动归属默认文件夹。
+// title 为知识片段标题，content 为 Markdown 格式内容。
+func MemoryFragmentCreate(c *gin.Context) {
 	memoryDB, ok := memoryDBOrResponse(c)
 	if !ok {
 		return
@@ -276,41 +278,58 @@ func MemoryFragmentSaveByPath(c *gin.Context) {
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
 
-	taskID := cast.ToInt(dataMap[`task_id`])
-	if taskID <= 0 {
-		gsgin.GinResponseError(c, `任务ID不能为空`, nil)
+	folderName := strings.TrimSpace(cast.ToString(dataMap[`folder_name`]))
+	title := strings.TrimSpace(cast.ToString(dataMap[`title`]))
+	content := cast.ToString(dataMap[`content`])
+
+	if title == `` {
+		gsgin.GinResponseError(c, `片段标题不能为空`, nil)
+		return
+	}
+	if strings.TrimSpace(content) == `` {
+		gsgin.GinResponseError(c, `片段内容不能为空`, nil)
 		return
 	}
 
-	relativePath := strings.TrimSpace(cast.ToString(dataMap[`relative_path`]))
-	if relativePath == `` {
-		gsgin.GinResponseError(c, `片段路径不能为空`, nil)
-		return
-	}
-
-	// 从路径提取 fragment id（与 Python 端 memory_fragment_update_by_path 逻辑一致）
-	filename := strings.ReplaceAll(relativePath, `\`, `/`)
-	if idx := strings.LastIndex(filename, `/`); idx >= 0 {
-		filename = filename[idx+1:]
-	}
-	fragmentID := filename
-	if dotIdx := strings.LastIndex(filename, `.`); dotIdx > 0 {
-		fragmentID = filename[:dotIdx]
-	}
-
-	if fragmentID == `` || fragmentID == `0` {
-		gsgin.GinResponseError(c, `无法从路径中提取片段ID`, nil)
-		return
-	}
-
-	// 校验片段是否属于该任务
-	isOwner, err := common.DbMain.HomeTaskContainsFragmentID(taskID, fragmentID)
+	info, err := memoryDB.MemoryFragmentSave(``, title, content, nil, folderName)
 	if err != nil {
-		gsgin.GinResponseError(c, fmt.Sprintf(`校验任务归属失败: %s`, err.Error()), nil)
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	component.MemoryRuntime.ScheduleSync()
+	broadcastMemoryFragmentUpsert(info)
+	gsgin.GinResponseSuccess(c, ``, info)
+}
+
+// MemoryFragmentSaveById 通过片段ID更新知识片段，要求传入 workflow_id 并校验片段是否归属于该工作流。
+func MemoryFragmentSaveById(c *gin.Context) {
+	memoryDB, ok := memoryDBOrResponse(c)
+	if !ok {
+		return
+	}
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+
+	workflowID := cast.ToInt(dataMap[`workflow_id`])
+	if workflowID <= 0 {
+		gsgin.GinResponseError(c, `工作流ID不能为空`, nil)
+		return
+	}
+
+	fragmentID := strings.TrimSpace(cast.ToString(dataMap[`id`]))
+	if fragmentID == `` || fragmentID == `0` {
+		gsgin.GinResponseError(c, `片段ID不能为空`, nil)
+		return
+	}
+
+	// 校验片段是否属于该工作流
+	isOwner, err := common.DbMain.TaskWorkflowContainsFragmentID(workflowID, fragmentID)
+	if err != nil {
+		gsgin.GinResponseError(c, fmt.Sprintf(`校验工作流归属失败: %s`, err.Error()), nil)
 		return
 	}
 	if !isOwner {
-		gsgin.GinResponseError(c, `该知识片段不属于指定任务`, nil)
+		gsgin.GinResponseError(c, `该知识片段不属于指定工作流`, nil)
 		return
 	}
 

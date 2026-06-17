@@ -213,8 +213,7 @@ export default {
   name: 'DashboardPage',
   setup() {
     const {
-      buildLinkAccountOptionsFromEnv,
-      buildLinkEnvOptionsFromConfig,
+      buildLinkAccountOptionsFromLink,
       buildLinkRunPayload,
       getLinkRunSelection,
       hasConfiguredLinkAccounts,
@@ -254,9 +253,10 @@ export default {
     const dynamicDataCache = ref({}) // 动态数据缓存
     const activeDynamicType = ref('') // 当前激活的动态列表类型（避免异步回调串台覆盖）
     const isLoadingDynamic = ref(false) // 是否正在加载动态数据
+    const loadingDynamicTypes = ref({}) // 正在加载中的动态类型集合，防止重复请求
     const currentInputValue = ref('')
     const commandHistory = ref([]) // 命令历史记录
-    const commandHistoryIndex = ref(0) // 命令历史游标（指向“下一条”位置）
+    const commandHistoryIndex = ref(0) // 命令历史游标（指向"下一条"位置）
     const commandUsageMap = ref({}) // 命令使用次数统计（key=命令文本，value=次数）
     const commandLevelUsageMap = ref({})
     const commandHistoryCacheKey = 'dashboard_command_history_v1'
@@ -553,10 +553,10 @@ export default {
       const actionIndex = sourceStack.findIndex(item => item?.action === actionCmd.action)
       if (actionCmd.action === 'linkRun') {
         const selection = getLinkRunSelection(sourceStack)
-        if (!selection.envCmd) {
-          return '命令未完成：请选择要执行的环境'
+        if (!selection.linkCmd) {
+          return '命令未完成：请选择要执行的链接'
         }
-        if (hasConfiguredLinkAccounts(selection.envCmd) && !selection.accountCmd) {
+        if (hasConfiguredLinkAccounts(selection.linkCmd) && !selection.accountCmd) {
           return '命令未完成：请选择账号'
         }
       }
@@ -705,7 +705,7 @@ export default {
       }
     }
 
-    // 历史命令选中后进入“待自动执行”状态。
+    // 历史命令选中后进入"待自动执行"状态。
     const markPendingHistoryExecution = (rawCommandText, options = {}) => {
       pendingHistoryExecution.value = {
         active: true,
@@ -743,7 +743,7 @@ export default {
       if (!pendingHistoryExecution.value.active) {
         return
       }
-      // 同一动态类型仅重解析一次，避免“未命中候选”时持续触发循环请求。
+      // 同一动态类型仅重解析一次，避免"未命中候选"时持续触发循环请求。
       const typeKey = normalizeCommandPart(dynamicType)
       if (typeKey) {
         const reparsedMap = pendingHistoryExecution.value.reparsedTypeMap || {}
@@ -775,7 +775,7 @@ export default {
       tryAutoExecutePendingHistory()
     }
 
-    // startHistoryCommandExecution 统一处理“选中历史命令后直接执行”流程。
+    // startHistoryCommandExecution 统一处理"选中历史命令后直接执行"流程。
     const startHistoryCommandExecution = (historyCommand) => {
       loadHistoryCommandForExecution(historyCommand, { autoExecute: true })
     }
@@ -787,7 +787,7 @@ export default {
         .replace(/>/g, '&gt;')
     }
 
-    // resolveNextTargetOptions 解析“已选目标”后的下一层候选，支持多级目标命令高亮
+    // resolveNextTargetOptions 解析"已选目标"后的下一层候选，支持多级目标命令高亮
     const resolveNextTargetOptions = (parentCmd, targetCmd) => {
       if (!targetCmd) return []
       if (targetCmd.dynamicChildren) {
@@ -796,7 +796,7 @@ export default {
           return directOptions
         }
         if (targetCmd.dynamicChildren === 'linkAccountList') {
-          return buildLinkAccountOptionsFromEnv(targetCmd)
+          return buildLinkAccountOptionsFromLink(targetCmd)
         }
       }
       if (parentCmd?.nextDynamicChildren) {
@@ -805,7 +805,7 @@ export default {
           return nextOptions
         }
         if (parentCmd.nextDynamicChildren === 'linkEnvList') {
-          return buildLinkEnvOptionsFromConfig(targetCmd)
+          return buildLinkAccountOptionsFromLink(targetCmd)
         }
       }
       return []
@@ -834,7 +834,7 @@ export default {
       })
     }
 
-    // isHistoryPrefixSearchMode 判断当前是否处于“history 前缀搜索历史命令”模式。
+    // isHistoryPrefixSearchMode 判断当前是否处于"history 前缀搜索历史命令"模式。
     // 该模式下空格仅用于继续筛选，不应自动确认候选。
     const isHistoryPrefixSearchMode = () => {
       if (!Array.isArray(commandStack.value) || commandStack.value.length === 0) {
@@ -986,7 +986,7 @@ export default {
       }
     }
 
-    // 根据输出文本推断状态，并移除独立“执行成功/执行失败”行，避免重复展示
+    // 根据输出文本推断状态，并移除独立"执行成功/执行失败"行，避免重复展示
     const parseResultTextAndStatus = (rawText) => {
       let text = String(rawText || '')
       let status = ''
@@ -1133,10 +1133,10 @@ export default {
       const actionCmd = commandStack.value.find(item => item.action)
       if (actionCmd && actionCmd.action === 'linkRun') {
         const selection = getLinkRunSelection(commandStack.value)
-        if (!selection.envCmd) {
-          return '请选择要执行的环境...'
+        if (!selection.linkCmd) {
+          return '请选择要执行的链接...'
         }
-        if (hasConfiguredLinkAccounts(selection.envCmd) && !selection.accountCmd) {
+        if (hasConfiguredLinkAccounts(selection.linkCmd) && !selection.accountCmd) {
           return '请选择账号...'
         }
         return '按 Enter 执行命令'
@@ -1219,7 +1219,7 @@ export default {
         : ''
       let searchText = hasTrailingSpace ? '' : rawSearchText
 
-      // 场景：已完整输入动作词（如 git checkout），当前候选已切到“目标列表”
+      // 场景：已完整输入动作词（如 git checkout），当前候选已切到"目标列表"
       // 这时不应再用动作词过滤目标，否则会把项目列表全部过滤为空。
       if (commandStack.value.length > 0 && commands.length > 0) {
         const lastCmd = commandStack.value[commandStack.value.length - 1]
@@ -1233,7 +1233,7 @@ export default {
       
       const sortedCommands = sortCommandsByLevelUsage(commands)
 
-      // history 前缀模式：使用“history 后整段输入”做历史命令搜索，支持空格短语筛选。
+      // history 前缀模式：使用"history 后整段输入"做历史命令搜索，支持空格短语筛选。
       if (isHistoryPrefixSearchMode()) {
         const historyQuery = normalizeCommandPart(parts.slice(1).join(' ')).toLowerCase()
         if (!historyQuery) {
@@ -1551,7 +1551,7 @@ export default {
         const part = parts[i].toLowerCase()
         const isLastPart = i === parts.length - 1
 
-        // 最后一个 token 且没有尾随空格：视为“正在输入中”，仅用于筛选，不进入下一层。
+        // 最后一个 token 且没有尾随空格：视为"正在输入中"，仅用于筛选，不进入下一层。
         if (isLastPart && !hasTrailingSpace) {
           if (commandStack.value.length > 0) {
             const lastCmd = commandStack.value[commandStack.value.length - 1]
@@ -1592,14 +1592,14 @@ export default {
             loadDynamicChildren(found.dynamicChildren)
             const dynamicList = dynamicDataCache.value[found.dynamicChildren] || []
             currentChildren.value = dynamicList
-            // history 命令只做筛选，不做“空格自动确认目标”；必须通过 Tab 才选中历史项。
+            // history 命令只做筛选，不做"空格自动确认目标"；必须通过 Tab 才选中历史项。
             if (found.dynamicChildren === 'historyList') {
               break
             }
             const targetToken = parts[i + 1]
             if (targetToken) {
               const targetFound = findCommandByToken(dynamicList, targetToken)
-              // 仅在“已确认目标”的场景进入下一层：
+              // 仅在"已确认目标"的场景进入下一层：
               // 1) 有尾随空格；2) 目标后还有其他 token（例如继续输入参数）
               // 注意：仅精确命中但未按空格/Tab，不视为已确认，避免 common 被提前选中。
               const targetIsConfirmed = hasTrailingSpace || (parts.length > i + 2)
@@ -1621,7 +1621,7 @@ export default {
                       commandStack.value.push(serviceFound)
                       i += 1
                       // 支持继续向下解析第三级目标（如 link run <配置> <环境> <账号>）
-                      // 同时兼容“二级目标选中后，通过 nextDynamicChildren 进入下一级”的场景（如 git quick-create-branch）。
+                      // 同时兼容"二级目标选中后，通过 nextDynamicChildren 进入下一级"的场景（如 git quick-create-branch）。
                       const thirdDynamicKey = serviceFound.nextDynamicChildren || serviceFound.dynamicChildren
                       if (thirdDynamicKey) {
                         loadDynamicChildren(thirdDynamicKey)
@@ -1655,7 +1655,7 @@ export default {
                     const childToken = normalizeCommandPart(parts[i + 1]).toLowerCase()
                     if (childToken) {
                       const childFound = findCommandByToken(childDynamicList, childToken)
-                      // 终端目标（如账号）在“最后一个 token 精确命中”时也视为确认，无需再手动输入空格。
+                      // 终端目标（如账号）在"最后一个 token 精确命中"时也视为确认，无需再手动输入空格。
                       const childIsTerminal = !!(childFound && !childFound.dynamicChildren && !childFound.nextDynamicChildren)
                       const childIsConfirmed = hasTrailingSpace || (parts.length > i + 2) || (parts.length === i + 2 && childIsTerminal)
                       if (childFound && childIsConfirmed) {
@@ -1730,6 +1730,8 @@ export default {
         type !== 'gitRemoteBranchList' &&
         type !== 'supervisorProcessList' &&
         type !== 'linkEnvList' &&
+        type !== 'linkList' &&
+        type !== 'linkConfigList' &&
         type !== 'linkAccountList' &&
         type !== 'scriptOptionList' &&
         type !== 'historyList' &&
@@ -1740,11 +1742,17 @@ export default {
         refreshCommandDropdownVisibility()
         return
       }
+
+      // 防止同一动态类型重复请求：正在加载中时跳过，避免 keystroke 触发多次 API 调用
+      if (loadingDynamicTypes.value[type]) {
+        return
+      }
       
       // 开始异步加载前先清空旧候选，避免展示上一次命令的残留选项。
       currentChildren.value = []
       activeCommandIndex.value = 0
       isLoadingDynamic.value = true
+      loadingDynamicTypes.value[type] = true
       refreshCommandDropdownVisibility()
       
       switch (type) {
@@ -1779,10 +1787,9 @@ export default {
           loadDockerServiceList()
           break
         case 'linkConfigList':
-          loadLinkConfigList()
-          break
         case 'linkEnvList':
-          loadLinkEnvList()
+        case 'linkList':
+          loadLinkList()
           break
         case 'linkAccountList':
           loadLinkAccountList()
@@ -1930,6 +1937,7 @@ export default {
     const loadGitProjectList = () => {
       git.GitConfigList({}, (response) => {
         isLoadingDynamic.value = false
+        delete loadingDynamicTypes.value['gitProjectList']
         if (response.ErrCode === 0) {
           const groupMap = {}
           if (Array.isArray(response.Data.git_group_list)) {
@@ -1961,7 +1969,7 @@ export default {
             })
           })
           dynamicDataCache.value['gitProjectList'] = list
-          // 仅当当前仍在该动态列表上下文时，才刷新候选，避免覆盖到“下一步”列表。
+          // 仅当当前仍在该动态列表上下文时，才刷新候选，避免覆盖到"下一步"列表。
           if (activeDynamicType.value === 'gitProjectList') {
             currentChildren.value = list
             reparseForPendingHistoryExecution('gitProjectList')
@@ -1975,6 +1983,7 @@ export default {
     const loadGitGroupList = () => {
       git.GitConfigList({}, (response) => {
         isLoadingDynamic.value = false
+        delete loadingDynamicTypes.value['gitGroupList']
         if (response.ErrCode === 0) {
           const gitGroupList = Array.isArray(response.Data.git_group_list) ? response.Data.git_group_list : []
           const list = gitGroupList.map(item => ({
@@ -1993,13 +2002,14 @@ export default {
       })
     }
 
-    // loadGitRemoteBranchList 加载 quick-create-branch 的“基于分支”候选
+    // loadGitRemoteBranchList 加载 quick-create-branch 的"基于分支"候选
     const loadGitRemoteBranchList = () => {
       const actionCmd = [...commandStack.value].reverse().find(item => item?.action === 'gitQuickCreateBranch')
       if (!actionCmd) {
         dynamicDataCache.value['gitRemoteBranchList'] = []
         currentChildren.value = []
         isLoadingDynamic.value = false
+        delete loadingDynamicTypes.value['gitRemoteBranchList']
         refreshCommandDropdownVisibility()
         return
       }
@@ -2009,11 +2019,13 @@ export default {
         dynamicDataCache.value['gitRemoteBranchList'] = []
         currentChildren.value = []
         isLoadingDynamic.value = false
+        delete loadingDynamicTypes.value['gitRemoteBranchList']
         refreshCommandDropdownVisibility()
         return
       }
       git.GitRemoteBranchList({ ...projectCmd.data }, (response) => {
         isLoadingDynamic.value = false
+        delete loadingDynamicTypes.value['gitRemoteBranchList']
         if (!(response && response.ErrCode === 0)) {
           dynamicDataCache.value['gitRemoteBranchList'] = []
           if (activeDynamicType.value === 'gitRemoteBranchList') {
@@ -2068,6 +2080,7 @@ export default {
     const loadSupervisorEnvList = () => {
       supervisor.SupervisorConfigList({}, (response) => {
         isLoadingDynamic.value = false
+        delete loadingDynamicTypes.value['supervisorEnvList']
         if (response.ErrCode === 0) {
           const list = response.Data.supervisor_list.map(item => ({
             command: item.name,
@@ -2094,6 +2107,7 @@ export default {
         dynamicDataCache.value['supervisorProcessList'] = []
         currentChildren.value = []
         isLoadingDynamic.value = false
+        delete loadingDynamicTypes.value['supervisorProcessList']
         refreshCommandDropdownVisibility()
         return
       }
@@ -2108,10 +2122,12 @@ export default {
         forceRefresh: false,
         onSuccess: (list) => {
           isLoadingDynamic.value = false
+          delete loadingDynamicTypes.value['supervisorProcessList']
           applySupervisorProcessListResult(list)
         },
         onError: (response) => {
           isLoadingDynamic.value = false
+          delete loadingDynamicTypes.value['supervisorProcessList']
           if (!(response && response.ErrCode === 0)) {
             dynamicDataCache.value['supervisorProcessList'] = []
             currentChildren.value = []
@@ -2139,107 +2155,66 @@ export default {
       })
     }
 
-    // 加载自定义链接配置列表
-    const loadLinkConfigList = () => {
-      smartLinkSet.SmartLinkList((response) => {
+    // 加载自定义链接列表（新表 smart_link，每个链接一个独立行）
+    const loadLinkList = () => {
+      smartLinkSet.SmartLinkItemList((response) => {
         isLoadingDynamic.value = false
+        delete loadingDynamicTypes.value['linkList']
+        delete loadingDynamicTypes.value['linkConfigList']
+        delete loadingDynamicTypes.value['linkEnvList']
         if (!(response && response.ErrCode === 0)) {
-          dynamicDataCache.value['linkConfigList'] = []
+          dynamicDataCache.value['linkList'] = []
           currentChildren.value = []
           refreshCommandDropdownVisibility()
           return
         }
+        // 构建分组 ID -> 分组名称 映射
+        const groupMap = {}
+        const groupList = Array.isArray(response.Data?.group_list) ? response.Data.group_list : []
+        groupList.forEach(g => {
+          groupMap[g.id] = normalizeCommandPart(g.name) || `分组${g.id}`
+        })
         const smartLinkList = Array.isArray(response.Data?.smart_link_list) ? response.Data.smart_link_list : []
         const list = smartLinkList.map(item => {
-          let linkList = []
-          try {
-            linkList = Array.isArray(item.links) ? item.links : JSON.parse(item.links || '[]')
-          } catch (err) {
-            linkList = []
-          }
+          const label = normalizeCommandPart(item.label) || `链接#${item.id || ''}`
+          const groupName = groupMap[item.smart_link_group_id] || '未分组'
           return {
-            command: item.name,
-            name: item.name,
+            command: label,
+            name: label,
             aliases: [String(item.id || '')].filter(Boolean),
-            desc: `ID:${item.id || '-'} | 链接数:${linkList.length}`,
+            desc: groupName,
             id: item.id,
+            dynamicChildren: hasConfiguredLinkAccounts(item) ? 'linkAccountList' : undefined,
             data: {
               ...item,
-              __linkType: 'config',
-              linkList
+              __linkType: 'link',
+              userList: item.userList || []
             }
           }
         })
-        dynamicDataCache.value['linkConfigList'] = list
+        dynamicDataCache.value['linkList'] = list
         currentChildren.value = list
+        reparseForPendingHistoryExecution('linkList')
         refreshCommandDropdownVisibility()
       })
     }
 
-    // 加载“可执行环境”列表（将链接配置分组与环境合并为一层）
-    const loadLinkEnvList = () => {
-      smartLinkSet.SmartLinkList((response) => {
-        isLoadingDynamic.value = false
-        if (!(response && response.ErrCode === 0)) {
-          dynamicDataCache.value['linkEnvList'] = []
-          currentChildren.value = []
-          refreshCommandDropdownVisibility()
-          return
-        }
-        const smartLinkList = Array.isArray(response.Data?.smart_link_list) ? response.Data.smart_link_list : []
-        const list = []
-        smartLinkList.forEach((configItem) => {
-          let linkList = []
-          try {
-            linkList = Array.isArray(configItem.links) ? configItem.links : JSON.parse(configItem.links || '[]')
-          } catch (err) {
-            linkList = []
-          }
-          linkList.forEach((envItem, envIndex) => {
-            const envName = normalizeCommandPart(envItem?.label) || `环境${envIndex + 1}`
-            const configName = normalizeCommandPart(configItem?.name) || `配置${configItem?.id || ''}`
-            list.push({
-              command: envName,
-              name: envName,
-              insertText: `${configName}/${envName}`,
-              aliases: [configName, `${configName}/${envName}`].filter(Boolean),
-              desc: `${configName} | ${normalizeCommandPart(envItem?.link) || '未配置链接地址'}`,
-              id: `${configItem?.id || 'cfg'}_${envIndex}`,
-              dynamicChildren: hasConfiguredLinkAccounts(envItem) ? 'linkAccountList' : undefined,
-              data: {
-                __linkType: 'env',
-                env: envItem || {},
-                config: {
-                  ...configItem,
-                  linkList
-                }
-              }
-            })
-          })
-        })
-        dynamicDataCache.value['linkEnvList'] = list
-        currentChildren.value = list
-        reparseForPendingHistoryExecution('linkEnvList')
-        refreshCommandDropdownVisibility()
-      })
-    }
-
-    // 加载已选环境下的账号列表
+    // 加载已选链接下的账号列表
     const loadLinkAccountList = () => {
-      const { envCmd } = getLinkRunSelection(commandStack.value)
-      const list = buildLinkAccountOptionsFromEnv(envCmd).map((item, index) => ({
+      const { linkCmd } = getLinkRunSelection(commandStack.value)
+      const list = buildLinkAccountOptionsFromLink(linkCmd).map((item, index) => ({
         ...item,
         desc: '账号',
-        id: `${envCmd?.id || 'env'}_${index}`,
+        id: `${linkCmd?.id || 'link'}_${index}`,
         data: {
           ...(item.data || {}),
-          env: envCmd?.data?.env || {},
-          config: envCmd?.data?.config || {}
+          link: linkCmd?.data || {}
         }
       }))
       dynamicDataCache.value['linkAccountList'] = list
       currentChildren.value = list
       isLoadingDynamic.value = false
+      delete loadingDynamicTypes.value['linkAccountList']
       reparseForPendingHistoryExecution('linkAccountList')
       refreshCommandDropdownVisibility()
     }
@@ -2248,6 +2223,7 @@ export default {
     const loadScriptList = () => {
       variableSet.VariableList((response) => {
         isLoadingDynamic.value = false
+        delete loadingDynamicTypes.value['scriptList']
         if (!(response && response.ErrCode === 0)) {
           dynamicDataCache.value['scriptList'] = []
           currentChildren.value = []
@@ -2281,6 +2257,7 @@ export default {
         dynamicDataCache.value['scriptOptionList'] = []
         currentChildren.value = []
         isLoadingDynamic.value = false
+        delete loadingDynamicTypes.value['scriptOptionList']
         refreshCommandDropdownVisibility()
         return
       }
@@ -2302,6 +2279,7 @@ export default {
       dynamicDataCache.value['scriptOptionList'] = list
       currentChildren.value = list
       isLoadingDynamic.value = false
+      delete loadingDynamicTypes.value['scriptOptionList']
       reparseForPendingHistoryExecution('scriptOptionList')
       refreshCommandDropdownVisibility()
     }
@@ -2339,6 +2317,7 @@ export default {
       dynamicDataCache.value['historyList'] = list
       currentChildren.value = list
       isLoadingDynamic.value = false
+      delete loadingDynamicTypes.value['historyList']
       refreshCommandDropdownVisibility()
     }
 
@@ -2714,7 +2693,7 @@ export default {
       const tokenInfo = parseTokens(inputText.value)
       const prefix = tokenInfo.useSlash ? '/' : ''
       inputText.value = prefix + commandStack.value.map(getCommandInputToken).join(' ') + ' '
-      // 清空上一步残留输入，避免在“选择目标步骤”被误判为已输入业务参数。
+      // 清空上一步残留输入，避免在"选择目标步骤"被误判为已输入业务参数。
       currentInputValue.value = ''
       
       // 检查父命令是否有 nextDynamicChildren（用于快速重启/停止等二级选择）
@@ -2747,7 +2726,7 @@ export default {
         return
       }
 
-      // 支持“当前选择项自身声明了 nextDynamicChildren”的场景（如 git quick-create-branch 选择基线分支后切到分支类型）。
+      // 支持"当前选择项自身声明了 nextDynamicChildren"的场景（如 git quick-create-branch 选择基线分支后切到分支类型）。
       if (cmd.nextDynamicChildren) {
         loadDynamicChildren(cmd.nextDynamicChildren)
         activeCommandIndex.value = getDefaultActiveCommandIndex()
@@ -3285,7 +3264,7 @@ export default {
           } else if (renderer) {
             appendOutputResult(`${renderer}\n`)
           }
-          // 结果详情统一在“执行过程(SSE)”里查看，上方只保留成功提示
+          // 结果详情统一在"执行过程(SSE)"里查看，上方只保留成功提示
           setTimeout(() => {
             finishExecution(response)
           }, 1500)
@@ -3532,7 +3511,7 @@ export default {
       }
     }
 
-    // 执行终端输出相关动作：复用“新窗口”按钮行为
+    // 执行终端输出相关动作：复用"新窗口"按钮行为
     const executeShellAction = (action, stack, inputValue) => {
       if (action === 'run') {
         const actionIndex = stack.findIndex(item => item.action === 'shell')
@@ -3567,7 +3546,7 @@ export default {
       finishExecution()
     }
 
-    // 执行 link run：根据“环境(含配置) -> 账号”选择启动自定义链接
+    // 执行 link run：选择链接 → 账号（如有）后启动自定义链接
     const executeLinkAction = (stack) => {
       const selection = getLinkRunSelection(stack)
       if (!isLinkRunSelectionComplete(selection)) {
@@ -3583,7 +3562,7 @@ export default {
         return
       }
 
-      appendOutputResult(`正在执行环境 [${payload.label}] 的自定义网页任务...\n\n`)
+      appendOutputResult(`正在执行链接 [${payload.label}] 的自定义网页任务...\n\n`)
       smartLinkSet.SmartLinkRun(payload, (response) => {
         if (response && response.ErrCode === 0) {
           appendOutputResult('执行完成\n')

@@ -1219,20 +1219,6 @@ export default {
     loadWorkflowUnreadSummaryFallback() {
       if (this._workflowUnreadSseReceived) return
       const workflowTaskIdSet = new Set()
-      let pending = 2
-      const finalize = () => {
-        pending -= 1
-        if (pending > 0) return
-        const workflowTaskIds = Array.from(workflowTaskIdSet)
-        if (workflowTaskIds.length === 0) {
-          this.setWorkflowUnreadSummary({})
-          return
-        }
-        taskWorkflowApi.TaskWorkflowBatchNodeStatus(workflowTaskIds, (response) => {
-          if (!(response && response.ErrCode === 0 && response.Data)) return
-          this.setWorkflowUnreadSummary(response.Data.unread_count_map || {})
-        })
-      }
       const collectWorkflowTasks = (response) => {
         if (!(response && response.ErrCode === 0 && response.Data)) return
         const taskList = Array.isArray(response.Data.task_list) ? response.Data.task_list : []
@@ -1245,13 +1231,18 @@ export default {
           }
         })
       }
-      homeTaskApi.HomeTaskList(0, (response) => {
+      // 一次请求获取所有任务（is_archived=-1），无需分别请求活跃和归档
+      homeTaskApi.HomeTaskList(-1, (response) => {
         collectWorkflowTasks(response)
-        finalize()
-      })
-      homeTaskApi.HomeTaskList(1, (response) => {
-        collectWorkflowTasks(response)
-        finalize()
+        const workflowTaskIds = Array.from(workflowTaskIdSet)
+        if (workflowTaskIds.length === 0) {
+          this.setWorkflowUnreadSummary({})
+          return
+        }
+        taskWorkflowApi.TaskWorkflowBatchNodeStatus(workflowTaskIds, (response) => {
+          if (!(response && response.ErrCode === 0 && response.Data)) return
+          this.setWorkflowUnreadSummary(response.Data.unread_count_map || {})
+        })
       })
     },
     loadAgentCliUnreadSummary() {
