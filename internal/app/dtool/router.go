@@ -53,6 +53,7 @@ func InitRouter(tGin *p_gin.Gin) {
 	apiUse(tGin)
 	mcp(tGin)
 	agentCli(tGin)
+	butlerRouter(tGin)
 	webhookConfig(tGin)
 	tGin.GinPost(`/test/multiformdata`, func(c *gin.Context) {
 		// 解析 multipart/form-data
@@ -639,4 +640,19 @@ func webhookConfig(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/WebhookConfigSave`, controller.WebhookConfigSave)
 	tGin.GinPost(`/api/WebhookConfigDelete`, controller.WebhookConfigDelete)
 	tGin.GinPost(`/api/WebhookConfigTest`, controller.WebhookConfigTest)
+}
+
+// butler 管家配置路由
+func butlerRouter(tGin *p_gin.Gin) {
+	tGin.GinPost(`/api/Set/ButlerBotConfigList`, controller.SetButlerBotConfigList)
+	tGin.GinPost(`/api/Set/ButlerBotConfigAdd`, controller.SetButlerBotConfigAdd)
+	tGin.GinPost(`/api/Set/ButlerBotConfigDelete`, controller.SetButlerBotConfigDelete)
+	tGin.GinPost(`/api/Set/ButlerBotConfigTest`, controller.SetButlerBotConfigTest)
+	tGin.GinPost(`/api/Set/ButlerMessageList`, controller.SetButlerMessageList)
+	tGin.GinPost(`/api/Set/ButlerRoleList`, controller.SetButlerRoleList)
+	tGin.GinPost(`/api/Set/ButlerRoleAdd`, controller.SetButlerRoleAdd)
+	tGin.GinPost(`/api/Set/ButlerRoleDelete`, controller.SetButlerRoleDelete)
+	tGin.GinPost(`/api/Set/ButlerConfigList`, controller.SetButlerConfigList)
+	tGin.GinPost(`/api/Set/ButlerConfigAdd`, controller.SetButlerConfigAdd)
+	tGin.GinPost(`/api/Set/ButlerConfigDelete`, controller.SetButlerConfigDelete)
 }

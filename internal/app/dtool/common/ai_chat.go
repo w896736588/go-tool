@@ -191,6 +191,141 @@ func (h *CSqlite) AIChatStreamByModel(modelID int, systemPrompt, userPrompt stri
 	return strings.TrimSpace(contentBuilder.String()), modelInfo, nil
 }
 
+// AIChatStreamByModelWithMessages 使用模型发起流式 AI 请求，支持多轮对话（传入完整 messages 列表）。
+func (h *CSqlite) AIChatStreamByModelWithMessages(modelID int, messages []map[string]string, onChunk func(string)) (string, map[string]any, error) {
+	modelInfo, requestURL, apiKey, err := h.aiChatBuildRequest(modelID)
+	if err != nil {
+		return ``, nil, err
+	}
+	bodyMap := map[string]any{
+		`model`:    cast.ToString(modelInfo[`model`]),
+		`stream`:   true,
+		`messages`: messages,
+	}
+	bodyBytes, _ := json.Marshal(bodyMap)
+	request, err := http.NewRequest(http.MethodPost, requestURL, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return ``, nil, err
+	}
+	request.Header.Set(`Authorization`, `Bearer `+apiKey)
+	request.Header.Set(`Content-Type`, `application/json`)
+	client := &http.Client{Timeout: aiChatRequestTimeout}
+	startTime := time.Now()
+	response, err := client.Do(request)
+	costTimeMs := time.Since(startTime).Milliseconds()
+	if err != nil {
+		h.logAIRequest(modelInfo, requestURL, http.MethodPost, bodyMap, nil, 0, ``, err.Error(), costTimeMs)
+		return ``, nil, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode >= 300 {
+		responseBody, _ := io.ReadAll(response.Body)
+		errMsg := `AI 请求失败: ` + string(responseBody)
+		h.logAIRequest(modelInfo, requestURL, http.MethodPost, bodyMap, nil, response.StatusCode, string(responseBody), errMsg, costTimeMs)
+		return ``, nil, errors.New(errMsg)
+	}
+	reader := bufio.NewReader(response.Body)
+	contentBuilder := strings.Builder{}
+	responseBodyBuilder := strings.Builder{}
+	for {
+		line, readErr := reader.ReadString('\n')
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, `data:`) {
+			payload := strings.TrimSpace(strings.TrimPrefix(line, `data:`))
+			if payload == `[DONE]` {
+				break
+			}
+			chunk := h.aiChatExtractStreamContent(payload)
+			if chunk != `` {
+				contentBuilder.WriteString(chunk)
+				responseBodyBuilder.WriteString(payload + "\n")
+				if onChunk != nil {
+					onChunk(chunk)
+				}
+			}
+		}
+		if readErr != nil {
+			if errors.Is(readErr, io.EOF) {
+				break
+			}
+			return strings.TrimSpace(contentBuilder.String()), modelInfo, readErr
+		}
+	}
+	h.logAIRequest(modelInfo, requestURL, http.MethodPost, bodyMap, nil, response.StatusCode, responseBodyBuilder.String(), ``, costTimeMs, 0, 0)
+	return strings.TrimSpace(contentBuilder.String()), modelInfo, nil
+}
+
+// AIChatByModelWithTools 使用模型发起 AI 请求，支持 Function Calling。
+// messages 使用 []map[string]any 以支持 tool 角色（需 tool_call_id 字段）。
+// tools 为 OpenAI 格式的工具定义列表，为空时不传 tools 字段。
+// 返回 AI 回复内容、tool_calls 原始列表、模型信息、错误。
+func (h *CSqlite) AIChatByModelWithTools(modelID int, messages []map[string]any, tools []map[string]any) (string, []any, map[string]any, error) {
+	modelInfo, requestURL, apiKey, err := h.aiChatBuildRequest(modelID)
+	if err != nil {
+		return ``, nil, nil, err
+	}
+	bodyMap := map[string]any{
+		`model`:    cast.ToString(modelInfo[`model`]),
+		`messages`: messages,
+	}
+	if len(tools) > 0 {
+		bodyMap[`tools`] = tools
+	}
+	bodyBytes, _ := json.Marshal(bodyMap)
+	request, err := http.NewRequest(http.MethodPost, requestURL, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return ``, nil, nil, err
+	}
+	request.Header.Set(`Authorization`, `Bearer `+apiKey)
+	request.Header.Set(`Content-Type`, `application/json`)
+	client := &http.Client{Timeout: aiChatRequestTimeout}
+	startTime := time.Now()
+	response, err := client.Do(request)
+	costTimeMs := time.Since(startTime).Milliseconds()
+	if err != nil {
+		h.logAIRequest(modelInfo, requestURL, http.MethodPost, bodyMap, nil, 0, ``, err.Error(), costTimeMs)
+		return ``, nil, nil, err
+	}
+	defer response.Body.Close()
+	responseBody, err := io.ReadAll(response.Body)
+	if err != nil {
+		h.logAIRequest(modelInfo, requestURL, http.MethodPost, bodyMap, nil, response.StatusCode, ``, err.Error(), costTimeMs)
+		return ``, nil, nil, err
+	}
+	if response.StatusCode >= 300 {
+		errMsg := `AI 请求失败: ` + string(responseBody)
+		h.logAIRequest(modelInfo, requestURL, http.MethodPost, bodyMap, nil, response.StatusCode, string(responseBody), errMsg, costTimeMs)
+		return ``, nil, nil, errors.New(errMsg)
+	}
+	content, toolCalls := h.extractContentAndToolCalls(string(responseBody))
+	inputTokens, outputTokens := h.extractTokenUsage(string(responseBody))
+	h.logAIRequest(modelInfo, requestURL, http.MethodPost, bodyMap, nil, response.StatusCode, string(responseBody), ``, costTimeMs, inputTokens, outputTokens)
+	return content, toolCalls, modelInfo, nil
+}
+
+// extractContentAndToolCalls 从 AI 响应中提取文本内容和 tool_calls 列表。
+func (h *CSqlite) extractContentAndToolCalls(responseBody string) (string, []any) {
+	dataMap := make(map[string]any)
+	if err := json.Unmarshal([]byte(responseBody), &dataMap); err != nil {
+		return ``, nil
+	}
+	choiceList, ok := dataMap[`choices`].([]any)
+	if !ok || len(choiceList) == 0 {
+		return ``, nil
+	}
+	choiceMap, ok := choiceList[0].(map[string]any)
+	if !ok {
+		return ``, nil
+	}
+	messageMap, ok := choiceMap[`message`].(map[string]any)
+	if !ok {
+		return ``, nil
+	}
+	content := cast.ToString(messageMap[`content`])
+	toolCalls, _ := messageMap[`tool_calls`].([]any)
+	return content, toolCalls
+}
+
 // AiModelInfo 查询 AI 模型配置。
 func (h *CSqlite) AiModelInfo(id int) (map[string]any, error) {
 	info, err := h.Client.QueryBySql(`

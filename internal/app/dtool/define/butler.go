@@ -1,35 +1,42 @@
 package define
 
-// AppName 管家应用名，用于配置目录定位与日志标识。
-const AppName = `dtool-butler`
+// ButlerAppName 管家应用名，用于配置目录定位与日志标识。
+const ButlerAppName = `dtool-butler`
 
 // 消息角色常量
 const (
-	RoleUser      = `user`
-	RoleAssistant = `assistant`
-	RoleSystem    = `system`
+	ButlerRoleUser      = `user`
+	ButlerRoleAssistant = `assistant`
+	ButlerRoleSystem    = `system`
 )
 
 // 任务状态常量
 const (
-	TaskStatusPending   = `pending`
-	TaskStatusExecuting = `executing`
-	TaskStatusVerifying = `verifying`
-	TaskStatusDone      = `done`
-	TaskStatusFailed    = `failed`
+	ButlerTaskStatusPending   = `pending`
+	ButlerTaskStatusExecuting = `executing`
+	ButlerTaskStatusVerifying = `verifying`
+	ButlerTaskStatusDone      = `done`
+	ButlerTaskStatusFailed    = `failed`
+)
+
+// 机器人连接状态常量
+const (
+	ConnStatusUnknown      = 0 // 未知/未连接
+	ConnStatusConnected    = 1 // 已连接
+	ConnStatusFailed       = 2 // 连接失败
+	ConnStatusDisconnected = 3 // 连接断开
 )
 
 // BotConfigItem 钉钉机器人配置项，从共用库 tbl_butler_bot_config 读取。
+// 纯流式机器人模式，不需要 webhook_url/secret。
 type BotConfigItem struct {
-	Id         int    `json:"id"`
-	Platform   string `json:"platform"`
-	Name       string `json:"name"`
-	AppKey     string `json:"app_key"`
-	AppSecret  string `json:"app_secret"`
-	RobotCode  string `json:"robot_code"`
-	WebhookUrl string `json:"webhook_url"`
-	Secret     string `json:"secret"`
-	Status     int    `json:"status"`
+	Id        int    `json:"id"`
+	Platform  string `json:"platform"`
+	Name      string `json:"name"`
+	AppKey    string `json:"app_key"`
+	AppSecret string `json:"app_secret"`
+	RobotCode string `json:"robot_code"`
+	Status    int    `json:"status"`
 }
 
 // RoleItem 管家角色配置项，从 tbl_butler_role 读取。
@@ -60,8 +67,8 @@ type ButlerConfigItem struct {
 	Status               int    `json:"status"`
 }
 
-// HistoryMessage 历史消息记录，对应 tbl_butler_message。
-type HistoryMessage struct {
+// ButlerHistoryMessage 历史消息记录，对应 tbl_butler_message。
+type ButlerHistoryMessage struct {
 	Id        int
 	SessionId string
 	Role      string
@@ -70,8 +77,8 @@ type HistoryMessage struct {
 	CreatedAt int64
 }
 
-// Env 管家运行时环境，从 dtool config.ini 读取数据库与记忆库路径。
-type Env struct {
+// ButlerEnv 管家运行时环境，从 dtool config.ini 读取数据库与记忆库路径。
+type ButlerEnv struct {
 	RootPath      string
 	ConfigPath    string
 	ConfigFile    string

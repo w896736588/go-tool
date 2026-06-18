@@ -51,6 +51,17 @@ var LogSqliteClient *gsdb.GsSqlite
 // 这几个实例迁移到 component 作为统一入口，方便初始化和跨模块访问保持一致。
 var DbMain *common.CSqlite
 var DbLog *common.CSqlite
+
+// ButlerRuntimeInterface 管家运行时接口，避免 component 直接依赖 business 产生包循环。
+type ButlerRuntimeInterface interface {
+	Stop()
+	RestartCore()
+	DisconnectBot(botConfigId int)
+	IsBotConnected(botConfigId int) bool
+}
+
+// ButlerRuntime 管家运行时，持有所有已启用的机器人网关和管家核心实例。
+var ButlerRuntime ButlerRuntimeInterface
 var DataBaseUp DataBaseUpRunner
 var VariableClient VariableRuntime
 var ShellOutClient *common.TShellOut

@@ -25,6 +25,9 @@
       <el-tab-pane label="Schedule" name="Schedule" class="set-tab-pane">
         <cron_setting ref="cron_setting"></cron_setting>
       </el-tab-pane>
+      <el-tab-pane label="Butler" name="Butler" class="set-tab-pane">
+        <butler ref="butler"></butler>
+      </el-tab-pane>
     </el-tabs>
   </div>
 </template>
@@ -38,10 +41,11 @@ import global from '@/components/set/global.vue'
 import ai_provider from '@/components/set/ai_provider.vue'
 import memory from '@/components/set/memory.vue'
 import cron_setting from '@/components/set/cron_setting.vue'
+import butler from '@/components/set/butler.vue'
 
 // SET_ACTIVE_TABS 定义当前仍保留在配置页中的标签页，避免旧缓存命中已迁出的业务设置。
 // Keep the tabs that still belong to the settings page to avoid stale cache pointing to moved pages.
-const SET_ACTIVE_TABS = ['Ssh', 'Mysql', 'Global', 'AI', 'Config', 'Schedule']
+const SET_ACTIVE_TABS = ['Ssh', 'Mysql', 'Global', 'AI', 'Config', 'Schedule', 'Butler']
 
 export default {
   props: {
@@ -56,6 +60,7 @@ export default {
     ai_provider,
     memory,
     cron_setting,
+    butler,
   },
   data() {
     return {
@@ -116,6 +121,9 @@ export default {
           break
         case 'Schedule':
           this.$refs.cron_setting && this.$refs.cron_setting.loadConfig && this.$refs.cron_setting.loadConfig()
+          break
+        case 'Butler':
+          this.$refs.butler && this.$refs.butler.LoadData && this.$refs.butler.LoadData()
           break
         default:
           break

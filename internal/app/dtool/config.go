@@ -343,6 +343,8 @@ func initSqlite() {
 	}
 	business.StartCronScheduler()
 	component.ShellOutClient.InitGroupConfigs()
+	// 启动管家运行时（扫描并连接所有已启用的机器人）
+	business.InitButlerRuntime()
 }
 
 // initLogSqlite 初始化独立 log 库，并执行 log 库迁移。
@@ -512,6 +514,12 @@ func InitComponent() {
 func Stop() {
 	fmt.Println(`停止`)
 	gstool.FmtPrintlnLogTime(`退出流程: 开始停止服务`)
+	// 停止管家运行时
+	if component.ButlerRuntime != nil {
+		gstool.FmtPrintlnLogTime(`退出流程: 停止 ButlerRuntime`)
+		component.ButlerRuntime.Stop()
+		gstool.FmtPrintlnLogTime(`退出流程: ButlerRuntime 已停止`)
+	}
 	// 停止Shell连接状态广播器
 	if controller.ShellConnectionsBroadcasterInstance != nil {
 		gstool.FmtPrintlnLogTime(`退出流程: 停止 ShellConnectionsBroadcaster`)
