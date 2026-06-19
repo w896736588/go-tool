@@ -25,7 +25,6 @@
             <el-table-column prop="name" label="名称" min-width="120"/>
             <el-table-column prop="platform" label="平台" width="100"/>
             <el-table-column prop="app_key" label="AppKey" min-width="160"/>
-            <el-table-column prop="app_secret" label="AppSecret" min-width="160"/>
             <el-table-column prop="robot_code" label="RobotCode" min-width="140"/>
             <el-table-column prop="status" label="启用" width="70">
               <template #default="scope">
@@ -41,14 +40,23 @@
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="340">
+            <el-table-column label="操作" width="280">
               <template #default="scope">
                 <div class="set-op-group">
                   <pl-button size="small" type="success" plain @click="ShowEditBotConfig(scope.row, false)">编辑</pl-button>
-                  <pl-button size="small" type="success" plain @click="ShowEditBotConfig(scope.row, true)">复制新增</pl-button>
-                  <pl-button size="small" type="warning" plain @click="TestBotConfig(scope.row)">测试</pl-button>
-                  <pl-button size="small" type="info" plain @click="ShowBotMessageLog(scope.row)">日志</pl-button>
-                  <pl-button size="small" type="danger" plain @click="DeleteBotConfig(scope.row)">删除</pl-button>
+                  <pl-button size="small" type="primary" plain @click="ShowBotMessageLog(scope.row)">消息日志</pl-button>
+                  <el-dropdown trigger="click" @command="(cmd) => HandleBotMoreOp(cmd, scope.row)">
+                    <pl-button size="small" type="info" plain>
+                      更多操作<el-icon class="el-icon--right"><arrow-down /></el-icon>
+                    </pl-button>
+                    <template #dropdown>
+                      <el-dropdown-menu>
+                        <el-dropdown-item command="copy">复制新增</el-dropdown-item>
+                        <el-dropdown-item command="test">测试连接</el-dropdown-item>
+                        <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
+                      </el-dropdown-menu>
+                    </template>
+                  </el-dropdown>
                 </div>
               </template>
             </el-table-column>
@@ -103,6 +111,7 @@
             <el-table-column prop="agent_cli_name" label="Agent CLI" min-width="120"/>
             <el-table-column prop="bot_config_name" label="机器人配置" min-width="120"/>
             <el-table-column prop="active_timeout_minutes" label="超时(min)" width="90"/>
+            <el-table-column prop="max_loop" label="Loop上限" width="80"/>
             <el-table-column prop="max_history" label="历史上限" width="90"/>
             <el-table-column prop="auto_clean_on_new_topic" label="新题清历史" width="100">
               <template #default="scope">
@@ -118,6 +127,13 @@
                 </el-tag>
               </template>
             </el-table-column>
+            <el-table-column prop="tool_call_push_enabled" label="工具推送" width="100">
+              <template #default="scope">
+                <el-tag size="small" :type="scope.row.tool_call_push_enabled === 1 ? 'success' : 'info'" effect="light">
+                  {{ scope.row.tool_call_push_enabled === 1 ? '开启' : '关闭' }}
+                </el-tag>
+              </template>
+            </el-table-column>
             <el-table-column prop="status" label="状态" width="80">
               <template #default="scope">
                 <el-tag size="small" :type="scope.row.status === 1 ? 'success' : 'danger'" effect="light">
@@ -125,10 +141,11 @@
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="200">
+            <el-table-column label="操作" width="270">
               <template #default="scope">
                 <div class="set-op-group">
                   <pl-button size="small" type="success" plain @click="ShowEditButlerConfig(scope.row, false)">编辑</pl-button>
+                  <pl-button size="small" type="primary" plain @click="ShowConfigLoopLog(scope.row)">Loop日志</pl-button>
                   <pl-button size="small" type="success" plain @click="ShowEditButlerConfig(scope.row, true)">复制新增</pl-button>
                   <pl-button size="small" type="danger" plain @click="DeleteButlerConfig(scope.row)">删除</pl-button>
                 </div>
@@ -227,7 +244,7 @@
           <el-select v-model="state.editConfig.model_id" style="width: 100%;" placeholder="请选择模型" filterable>
             <el-option label="不指定" :value="0"/>
             <template v-for="(model, idx) in state.aiModelList" :key="idx">
-              <el-option :label="model.name + ' (' + model.model + ')'" :value="model.id"/>
+              <el-option :label="model.name + ' (' + model.provider_name + ')'" :value="model.id"/>
             </template>
           </el-select>
         </el-form-item>
@@ -235,7 +252,7 @@
           <el-select v-model="state.editConfig.fc_model_id" style="width: 100%;" placeholder="请选择 FC 模型" filterable>
             <el-option label="不指定（回落主模型）" :value="0"/>
             <template v-for="(model, idx) in state.aiModelList" :key="idx">
-              <el-option :label="model.name + ' (' + model.model + ')'" :value="model.id"/>
+              <el-option :label="model.name + ' (' + model.provider_name + ')'" :value="model.id"/>
             </template>
           </el-select>
         </el-form-item>
@@ -258,6 +275,9 @@
         <el-form-item label="激活超时(min)">
           <el-input-number v-model="state.editConfig.active_timeout_minutes" :min="5" :max="120" :step="5"/>
         </el-form-item>
+        <el-form-item label="Loop次数上限">
+          <el-input-number v-model="state.editConfig.max_loop" :min="3" :max="50" :step="1"/>
+        </el-form-item>
         <el-form-item label="历史上限">
           <el-input-number v-model="state.editConfig.max_history" :min="10" :max="500" :step="10"/>
         </el-form-item>
@@ -275,6 +295,13 @@
             <el-option label="是" :value="1"/>
             <el-option label="否" :value="0"/>
           </el-select>
+        </el-form-item>
+        <el-form-item label="工具调用推送">
+          <el-select v-model="state.editConfig.tool_call_push_enabled" style="width: 100%;">
+            <el-option label="开启" :value="1"/>
+            <el-option label="关闭" :value="0"/>
+          </el-select>
+          <div style="font-size: 11px; color: #999; margin-top: 2px;">工具执行时实时推送进度消息到机器人</div>
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="state.editConfig.status" style="width: 100%;">
@@ -323,11 +350,52 @@
         />
       </div>
     </el-dialog>
+
+    <!-- Loop日志弹窗 -->
+    <el-dialog v-model="state.dialogLoopLog" :title="'Loop日志 - ' + state.loopLogBotName" width="900" @closed="OnLoopLogClosed">
+      <el-table :data="state.loopLogList" class="set-config-table" row-key="id" size="small" max-height="450">
+        <el-table-column prop="id" label="#id" width="60"/>
+        <el-table-column prop="title" label="用户任务" min-width="160" show-overflow-tooltip/>
+        <el-table-column prop="executor" label="执行器" width="90">
+          <template #default="scope">
+            <el-tag size="small" :type="scope.row.executor === 'agent_cli' ? 'warning' : 'primary'" effect="plain">
+              {{ scope.row.executor === 'agent_cli' ? 'Agent CLI' : 'FC' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="plan" label="工具调用链" min-width="200" show-overflow-tooltip/>
+        <el-table-column prop="status" label="状态" width="80">
+          <template #default="scope">
+            <el-tag size="small" :type="scope.row.status === 'done' ? 'success' : 'danger'" effect="light">
+              {{ scope.row.status === 'done' ? '成功' : '失败' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="result" label="AI 回复" min-width="220" show-overflow-tooltip/>
+        <el-table-column prop="created_at" label="时间" width="150">
+          <template #default="scope">
+            {{ FormatMsgTime(scope.row.created_at) }}
+          </template>
+        </el-table-column>
+      </el-table>
+      <div style="margin-top: 12px; text-align: right;">
+        <el-pagination
+          v-model:current-page="state.loopLogPage"
+          v-model:page-size="state.loopLogPageSize"
+          :total="state.loopLogTotal"
+          :page-sizes="[20, 50, 100]"
+          layout="total, sizes, prev, pager, next"
+          @size-change="LoadLoopLog"
+          @current-change="LoadLoopLog"
+        />
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script>
 import {defineComponent, getCurrentInstance, reactive} from 'vue'
+import {ArrowDown} from '@element-plus/icons-vue'
 import butlerSet from '@/utils/base/butler_set'
 import aiSet from '@/utils/base/ai_set'
 import agentCli from '@/utils/base/agent_cli'
@@ -374,10 +442,12 @@ export default defineComponent({
         agent_cli_id: 0,
         bot_config_id: 0,
         active_timeout_minutes: 30,
+        max_loop: 10,
         max_history: 100,
         auto_clean_on_new_topic: 1,
         index_doc_path: '',
         auto_init_on_start: 1,
+        tool_call_push_enabled: 0,
         status: 1,
       },
       // 下拉选择数据
@@ -391,6 +461,14 @@ export default defineComponent({
       messagePage: 1,
       messagePageSize: 20,
       messageTotal: 0,
+      // Loop日志
+      dialogLoopLog: false,
+      loopLogBotId: 0,
+      loopLogBotName: '',
+      loopLogList: [],
+      loopLogPage: 1,
+      loopLogPageSize: 20,
+      loopLogTotal: 0,
     })
 
     // ========== 机器人配置 ==========
@@ -517,6 +595,71 @@ export default defineComponent({
       state.messageTotal = 0
     }
 
+    // ========== Loop日志 ==========
+    const ShowBotLoopLog = function (row) {
+      state.loopLogBotId = row.id
+      state.loopLogBotName = row.name
+      state.loopLogPage = 1
+      state.loopLogPageSize = 20
+      state.loopLogTotal = 0
+      state.loopLogList = []
+      state.dialogLoopLog = true
+      LoadLoopLog()
+    }
+
+    // ShowConfigLoopLog 管家配置列表的 Loop 日志入口，使用关联的 bot_config_id。
+    const ShowConfigLoopLog = function (row) {
+      const botConfigId = row.bot_config_id || 0
+      if (botConfigId === 0) {
+        proxy.$message.warning('该管家未关联机器人配置，无法查看 Loop 日志')
+        return
+      }
+      // 从已加载的机器人列表中查找名称
+      const botName = state.botConfigList.find(b => b.id === botConfigId)?.name || ''
+      state.loopLogBotId = botConfigId
+      state.loopLogBotName = row.name + (botName ? ' → ' + botName : '')
+      state.loopLogPage = 1
+      state.loopLogPageSize = 20
+      state.loopLogTotal = 0
+      state.loopLogList = []
+      state.dialogLoopLog = true
+      LoadLoopLog()
+    }
+
+    const LoadLoopLog = function () {
+      butlerSet.ButlerTaskList({
+        bot_config_id: state.loopLogBotId,
+        page: state.loopLogPage,
+        page_size: state.loopLogPageSize,
+      }, function (response) {
+        if (response.ErrCode === 0) {
+          const data = response.Data || {}
+          state.loopLogList = data.list || []
+          state.loopLogTotal = data.total || 0
+        }
+      })
+    }
+
+    const OnLoopLogClosed = function () {
+      state.loopLogList = []
+      state.loopLogTotal = 0
+    }
+
+    // ========== 更多操作处理 ==========
+    const HandleBotMoreOp = function (cmd, row) {
+      switch (cmd) {
+        case 'copy':
+          ShowEditBotConfig(row, true)
+          break
+        case 'test':
+          TestBotConfig(row)
+          break
+        case 'delete':
+          DeleteBotConfig(row)
+          break
+      }
+    }
+
     // 格式化消息时间
     const FormatMsgTime = function (timestamp) {
       if (!timestamp) return ''
@@ -620,8 +763,8 @@ export default defineComponent({
       state.editConfig = {
         id: 0, name: '', role_id: 0, model_id: 0, fc_model_id: 0,
         agent_cli_id: 0, bot_config_id: 0, active_timeout_minutes: 30,
-        max_history: 100, auto_clean_on_new_topic: 1, index_doc_path: '',
-        auto_init_on_start: 1, status: 1,
+        max_loop: 10, max_history: 100, auto_clean_on_new_topic: 1,
+        index_doc_path: '', auto_init_on_start: 1, tool_call_push_enabled: 0, status: 1,
       }
       state.dialogConfig = true
     }
@@ -636,10 +779,12 @@ export default defineComponent({
         agent_cli_id: row.agent_cli_id || 0,
         bot_config_id: row.bot_config_id || 0,
         active_timeout_minutes: row.active_timeout_minutes || 30,
+        max_loop: row.max_loop || 10,
         max_history: row.max_history || 100,
         auto_clean_on_new_topic: row.auto_clean_on_new_topic || 1,
         index_doc_path: row.index_doc_path || '',
         auto_init_on_start: row.auto_init_on_start || 1,
+        tool_call_push_enabled: row.tool_call_push_enabled != null ? row.tool_call_push_enabled : 0,
         status: row.status,
       }
       state.dialogConfig = true
@@ -703,10 +848,14 @@ export default defineComponent({
       ShowAddBotConfig, ShowEditBotConfig, SaveBotConfig, DeleteBotConfig, TestBotConfig,
       connStatusText, connStatusTagType,
       ShowBotMessageLog, LoadMessageLog, OnMessageLogClosed, FormatMsgTime,
+      ShowBotLoopLog, ShowConfigLoopLog, LoadLoopLog, OnLoopLogClosed, HandleBotMoreOp,
       ShowAddRole, ShowEditRole, SaveRole, DeleteRole,
       ShowAddButlerConfig, ShowEditButlerConfig, SaveButlerConfig, DeleteButlerConfig,
       HandleInnerTabChange,
     }
+  },
+  components: {
+    ArrowDown,
   },
 })
 </script>

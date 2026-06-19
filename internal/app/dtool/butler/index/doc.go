@@ -4,6 +4,7 @@ import (
 	"dev_tool/internal/app/dtool/define"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/w896736588/go-tool/gstool"
 )
@@ -16,12 +17,13 @@ const (
 )
 
 // ResolveIndexPath 解析索引文档目录路径。
-// 优先使用 config.IndexDocPath，为空时回落到 {memoryDbPath}/butler/index/。
+// 优先使用 config.IndexDocPath，为空时回落到 skills/dtool-butler/index/。
 func ResolveIndexPath(config *define.ButlerConfigItem, env *define.ButlerEnv) string {
 	if config.IndexDocPath != `` {
 		return config.IndexDocPath
 	}
-	return filepath.Join(env.MemoryDbPath, `butler`, `index`)
+	// 默认放在 skills/dtool-butler/index/，与脚本同目录，不混入知识片段
+	return filepath.Join(GetSkillsRoot(), `dtool-butler`, `index`)
 }
 
 // EnsureIndexDir 确保索引目录存在。
@@ -62,4 +64,43 @@ func IndexExists(indexPath, fileName string) bool {
 		return false
 	}
 	return info.Size() > 0
+}
+
+// CountScriptSkills 统计 scripts.md 中 skill 条目数（以 "## [" 开头的行数）。
+func CountScriptSkills(indexPath string) int {
+	content := ReadIndexFile(indexPath, ScriptsFileName)
+	if content == `` {
+		return 0
+	}
+	return strings.Count(content, "\n## [")
+}
+
+// CountCapabilitySections 统计 capabilities.md 中能力区块数（以 "## " 开头的二级标题行数）。
+func CountCapabilitySections(indexPath string) int {
+	content := ReadIndexFile(indexPath, CapabilitiesFileName)
+	if content == `` {
+		return 0
+	}
+	count := 0
+	for _, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(line, "## ") {
+			count++
+		}
+	}
+	return count
+}
+
+// CountApiRoutes 统计 apis.md 中接口路由条目数（表格中以 "| /api/" 开头的行数）。
+func CountApiRoutes(indexPath string) int {
+	content := ReadIndexFile(indexPath, ApisFileName)
+	if content == `` {
+		return 0
+	}
+	count := 0
+	for _, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "| /api/") {
+			count++
+		}
+	}
+	return count
 }

@@ -38,7 +38,7 @@ func Dispatch(db *common.CSqlite, modelId int, userMessage string, agentCliId in
 		{`role`: `system`, `content`: dispatchSystemPrompt},
 		{`role`: `user`, `content`: prompt},
 	}
-	content, _, _, err := db.AIChatByModelWithTools(modelId, messages, nil)
+	content, _, _, _, err := db.AIChatByModelWithTools(modelId, messages, nil)
 	if err != nil {
 		gstool.FmtPrintlnLogTime(`[butler-dispatch] AI 分类失败 %s，默认走 FC`, err.Error())
 		return &DispatchResult{TaskType: TaskTypeFC}

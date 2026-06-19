@@ -36,7 +36,7 @@ func Retrieve(db *common.CSqlite, modelId int, indexPath, userMessage string) *R
 		{`role`: `system`, `content`: retrieveSystemPrompt},
 		{`role`: `user`, `content`: prompt},
 	}
-	content, _, _, err := db.AIChatByModelWithTools(modelId, messages, nil)
+	content, _, _, _, err := db.AIChatByModelWithTools(modelId, messages, nil)
 	if err != nil {
 		gstool.FmtPrintlnLogTime(`[butler-retrieve] AI 检索失败 %s`, err.Error())
 		return &RetrieveResult{Found: false}

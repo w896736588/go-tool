@@ -1,7 +1,7 @@
-# AI 管家（dtool-butler）设计与实施计划
+# AI 管家（Butler）设计与实施计划
 
-> 基于流式机器人启动、能自进化的 dtool 智能管家。
-> 创建时间：2026-06-17
+> 基于流式机器人启动、能自进化的 dtool 智能管家，作为 dtool 主项目内置模块运行。
+> 创建时间：2026-06-17 | 初版实现完成：2026-06-18（`feat_ai_butler_20260617` 分支，Phase 1~8 全部完成）
 
 ---
 
@@ -65,8 +65,8 @@
 ```
 
 ### 复用与边界
-- **管家代码已合入 dtool 进程**：原来在 `internal/app/dtool-butler/` 下的代码已全部迁移到 `internal/app/dtool/butler/`，与 dtool 同进程运行，无需独立部署。
-- **配置管理在 dtool**：dtool 新增 `controller/set_butler.go` + 前端配置页，CRUD 管家配置表。管家只读这些表。
+- **管家作为 dtool 内置模块运行**：代码位于 `internal/app/dtool/butler/`，与 dtool 同进程运行，无需独立部署。
+- **配置管理在 dtool**：通过 `controller/set_butler.go` + 前端配置页 CRUD 管家配置表。管家只读这些表。
 - **migration 隔离**：管家表 SQL 放 `internal/app/dtool/database_butler/`，dtool 启动时执行，记录表为 `tbl_butler_database_up`，与 dtool 的 `tbl_database_up` 完全隔离。
 - **管家与 dtool 互调**：同进程内直接调用，无需 HTTP 互调。
 - **管家使用独立数据库文件**（butler.db），与主库（dtool.db）文件隔离，但共用同一目录。
@@ -379,7 +379,24 @@ CREATE TABLE IF NOT EXISTS "tbl_butler_task" (
 
 ---
 
-## 八、数据流（典型：用户发任务）
+## 八、实现状态总览
+
+| Phase | 模块 | 状态 | 关键产出 |
+|-------|------|------|---------|
+| 1 | 钉钉双向通信 + 管家骨架 | ✅ | Stream 收发、主循环、会话管理、消息存储 |
+| 2 | 角色系统 + 内置命令 + 历史管理 | ✅ | persona/tone 加载、`/clean` `/init` `/status` 命令、多轮 AI 对话 |
+| 3 | 意图分析 + 自动追问 | ✅ | 澄清提问、新话题自动清历史、历史溢出提示 |
+| 4 | 子管家执行层（FC 工具） | ✅ | file_read/write/modify/delete、Function Calling 循环、验收 |
+| 5 | Agent CLI 复杂任务 | ✅ | 任务路由（FC/Agent CLI 分类）、Claude/Codex 执行 |
+| 6 | 索引文档 + 自进化 | ✅ | skills/ 扫描生成索引、任务前检索、新脚本回写 |
+| 7 | dtool 端管家配置管理 | ✅ | 9 个 CRUD 接口 + 前端配置页（BotConfig/Role/Config） |
+| 8 | 索引文档补充 | ✅ | capabilities.md + apis.md 生成 |
+
+> 全部 8 个 Phase 已在 `feat_ai_butler_20260617` 分支完成编码，Go 编译通过。待钉钉凭证配置后联调验证。
+
+---
+
+## 九、数据流（典型：用户发任务）
 
 ```
 用户在钉钉发消息

@@ -268,6 +268,8 @@ func (r *ButlerRuntime) rowToButlerConfigItem(row map[string]any) *define.Butler
 		AutoCleanOnNewTopic:  cast.ToInt(row[`auto_clean_on_new_topic`]),
 		IndexDocPath:         cast.ToString(row[`index_doc_path`]),
 		AutoInitOnStart:      cast.ToInt(row[`auto_init_on_start`]),
+		MaxLoop:              cast.ToInt(row[`max_loop`]),
+		ToolCallPushEnabled:  cast.ToInt(row[`tool_call_push_enabled`]),
 		Status:               cast.ToInt(row[`status`]),
 	}
 }

@@ -110,7 +110,17 @@ func (g *DingTalkGateway) onChatBotMessage(ctx context.Context, data *chatbot.Bo
 	gstool.FmtPrintlnLogTime(`[butler-bot] 收到消息 会话=%s 发送者=%s 内容=%s`,
 		msg.ConversationId, msg.SenderNick, msg.Text)
 	go func() {
-		g.msgChan <- msg
+		defer func() {
+			if r := recover(); r != nil {
+				gstool.FmtPrintlnLogTime(`[butler-bot] 消息投递 panic（channel 可能已关闭）: %v`, r)
+			}
+		}()
+		// 非阻塞发送，避免 msgChan 满时 SDK goroutine 永久阻塞
+		select {
+		case g.msgChan <- msg:
+		default:
+			gstool.FmtPrintlnLogTime(`[butler-bot] 消息通道已满，丢弃消息 会话=%s`, msg.ConversationId)
+		}
 	}()
 	return []byte(``), nil
 }

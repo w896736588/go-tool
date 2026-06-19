@@ -104,5 +104,55 @@ func ToolDefinitions() []map[string]any {
 				},
 			},
 		},
+		{
+			`type`: `function`,
+			`function`: map[string]any{
+				`name`:        ToolRunScript,
+				`description`: `执行本地 Python 脚本，返回 stdout 和 stderr 输出。脚本路径基于 skills/ 目录。优先使用已有脚本完成用户任务。`,
+				`parameters`: map[string]any{
+					`type`: `object`,
+					`properties`: map[string]any{
+						`path`: map[string]any{
+							`type`:        `string`,
+							`description`: `脚本路径，如 skills/dtool-git/scripts/git_api.py`,
+						},
+						`args`: map[string]any{
+							`type`:        `string`,
+							`description`: `命令行参数（空格分隔），如 --repo_name common3 --branch develop`,
+						},
+						`timeout`: map[string]any{
+							`type`:        `string`,
+							`description`: `超时秒数，默认 60 秒`,
+						},
+					},
+					`required`: []string{`path`},
+				},
+			},
+		},
+		{
+			`type`: `function`,
+			`function`: map[string]any{
+				`name`:        ToolAskUser,
+				`description`: `向用户提问确认，暂停当前任务等待用户回复。仅当缺少必要信息（操作对象不明确、参数不足）或需要确认危险操作时使用。只读查询无需确认。`,
+				`parameters`: map[string]any{
+					`type`: `object`,
+					`properties`: map[string]any{
+						`question`: map[string]any{
+							`type`:        `string`,
+							`description`: `向用户提问的内容，应清晰列出选项或需要补充的信息`,
+						},
+						`options`: map[string]any{
+							`type`:        `string`,
+							`description`: `可选选项列表，用逗号分隔，如 common3-web,common3-api,common3-admin。为空则用户自由回答`,
+						},
+						`reason`: map[string]any{
+							`type`:        `string`,
+							`description`: `需要确认的原因，如 操作对象不明确、危险操作确认、参数不足`,
+						},
+					},
+					`required`: []string{`question`, `reason`},
+				},
+			},
+		},
 	}
 }

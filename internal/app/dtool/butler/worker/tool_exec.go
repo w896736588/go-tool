@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -43,12 +44,17 @@ func ExecuteTool(name string, argumentsJSON string) string {
 		return execFileDelete(args[`path`])
 	case ToolHttpCall:
 		return execHttpCall(args[`path`], args[`body`])
+	case ToolRunScript:
+		return execRunScript(args[`path`], args[`args`], args[`timeout`])
+	case ToolAskUser:
+		return execAskUser(args[`question`], args[`options`], args[`reason`])
 	default:
 		return fmt.Sprintf(`未知工具：%s`, name)
 	}
 }
 
-// resolvePath 解析文件路径：如果是相对路径且直接读取失败，尝试在 skills 目录下查找。
+// resolvePath 解析文件路径：如果是相对路径且直接读取失败，依次在 skills/dtool-butler/index/、skills/dtool-butler/scripts/ 和 skillsRoot 下查找。
+// 优先级：直接路径 > skills/dtool-butler/index/ (索引文件) > skills/dtool-butler/scripts/ (自进化脚本) > skills/*/scripts/ (内置脚本)
 func resolvePath(path string) (string, error) {
 	if path == `` {
 		return ``, fmt.Errorf(`文件路径不能为空`)
@@ -61,8 +67,18 @@ func resolvePath(path string) (string, error) {
 	if _, err := os.Stat(path); err == nil {
 		return path, nil
 	}
-	// 相对路径失败时，尝试在 skillsRoot 下查找
 	if skillsRoot != `` {
+		// 1. 优先在 skills/dtool-butler/index/ 下查找（索引文件：apis.md, scripts.md 等）
+		indexCandidate := filepath.Join(skillsRoot, `dtool-butler`, `index`, path)
+		if _, err := os.Stat(indexCandidate); err == nil {
+			return indexCandidate, nil
+		}
+		// 2. 在 skills/dtool-butler/scripts/ 下查找（自进化生成的脚本）
+		evolvedCandidate := filepath.Join(skillsRoot, `dtool-butler`, `scripts`, path)
+		if _, err := os.Stat(evolvedCandidate); err == nil {
+			return evolvedCandidate, nil
+		}
+		// 3. 回退：在 skillsRoot 下全面查找
 		candidate := filepath.Join(skillsRoot, path)
 		if _, err := os.Stat(candidate); err == nil {
 			return candidate, nil
@@ -140,6 +156,54 @@ func execFileDelete(path string) string {
 		return fmt.Sprintf(`删除文件失败：%s`, err.Error())
 	}
 	return `文件删除成功`
+}
+
+// execRunScript 执行本地 Python 脚本并返回 stdout+stderr。
+// 脚本路径会自动在 skillsRoot 下查找。
+func execRunScript(path, argsStr, timeoutStr string) string {
+	if path == `` {
+		return `错误：脚本路径不能为空`
+	}
+	// 解析路径
+	resolved, err := resolvePath(path)
+	if err != nil {
+		return fmt.Sprintf(`脚本路径解析失败：%s`, err.Error())
+	}
+	// 检查文件存在
+	if _, err := os.Stat(resolved); err != nil {
+		return fmt.Sprintf(`脚本不存在：%s`, resolved)
+	}
+	// 构建命令参数
+	cmdArgs := []string{resolved}
+	if argsStr != `` {
+		cmdArgs = append(cmdArgs, strings.Fields(argsStr)...)
+	}
+	cmd := exec.Command(`python`, cmdArgs...)
+	output, err := cmd.CombinedOutput()
+	result := string(output)
+	if err != nil {
+		return fmt.Sprintf(`脚本执行失败：%s\n输出：%s`, err.Error(), truncateForLog(result, 2000))
+	}
+	if len(result) > 3000 {
+		result = result[:3000] + `\n...(输出已截断)`
+	}
+	return result
+}
+
+// execAskUser 向用户发起确认问题。
+// 返回特殊格式的标记字符串，供 FC 循环检测并暂停等待用户回复。
+func execAskUser(question, options, reason string) string {
+	if question == `` {
+		return `错误：确认问题不能为空`
+	}
+	result := map[string]string{
+		`marker`:   AskUserMarker,
+		`question`: question,
+		`options`:  options,
+		`reason`:   reason,
+	}
+	b, _ := json.Marshal(result)
+	return string(b)
 }
 
 // execHttpCall 调用 dtool 的 HTTP API 接口。

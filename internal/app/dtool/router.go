@@ -648,6 +648,7 @@ func butlerRouter(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/Set/ButlerBotConfigAdd`, controller.SetButlerBotConfigAdd)
 	tGin.GinPost(`/api/Set/ButlerBotConfigDelete`, controller.SetButlerBotConfigDelete)
 	tGin.GinPost(`/api/Set/ButlerBotConfigTest`, controller.SetButlerBotConfigTest)
+	tGin.GinPost(`/api/Set/ButlerTaskList`, controller.SetButlerTaskList)
 	tGin.GinPost(`/api/Set/ButlerMessageList`, controller.SetButlerMessageList)
 	tGin.GinPost(`/api/Set/ButlerRoleList`, controller.SetButlerRoleList)
 	tGin.GinPost(`/api/Set/ButlerRoleAdd`, controller.SetButlerRoleAdd)
@@ -655,4 +656,5 @@ func butlerRouter(tGin *p_gin.Gin) {
 	tGin.GinPost(`/api/Set/ButlerConfigList`, controller.SetButlerConfigList)
 	tGin.GinPost(`/api/Set/ButlerConfigAdd`, controller.SetButlerConfigAdd)
 	tGin.GinPost(`/api/Set/ButlerConfigDelete`, controller.SetButlerConfigDelete)
+	tGin.GinPost(`/api/Set/ButlerApiIndex`, controller.SetButlerApiIndex)
 }

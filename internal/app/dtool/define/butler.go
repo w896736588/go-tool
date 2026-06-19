@@ -64,6 +64,8 @@ type ButlerConfigItem struct {
 	AutoCleanOnNewTopic  int    `json:"auto_clean_on_new_topic"`
 	IndexDocPath         string `json:"index_doc_path"`
 	AutoInitOnStart      int    `json:"auto_init_on_start"`
+	MaxLoop              int    `json:"max_loop"`
+	ToolCallPushEnabled  int    `json:"tool_call_push_enabled"` // 工具调用进度是否推送到机器人，1=开启 0=关闭
 	Status               int    `json:"status"`
 }
 

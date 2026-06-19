@@ -20,6 +20,11 @@ function ButlerBotConfigTest(data, callBack) {
     base.BasePost('/api/Set/ButlerBotConfigTest', data, callBack)
 }
 
+// ButlerTaskList 查询管家机器人 Loop 日志（分页）
+function ButlerTaskList(data, callBack) {
+    base.BasePost('/api/Set/ButlerTaskList', data, callBack)
+}
+
 // ButlerMessageList 查询管家机器人消息日志（分页）
 function ButlerMessageList(data, callBack) {
     base.BasePost('/api/Set/ButlerMessageList', data, callBack)
@@ -60,6 +65,7 @@ export default {
     ButlerBotConfigAdd,
     ButlerBotConfigDelete,
     ButlerBotConfigTest,
+    ButlerTaskList,
     ButlerMessageList,
     ButlerRoleList,
     ButlerRoleAdd,

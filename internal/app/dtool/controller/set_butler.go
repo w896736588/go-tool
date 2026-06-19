@@ -4,6 +4,7 @@ import (
 	"context"
 	"dev_tool/internal/app/dtool/business"
 	"dev_tool/internal/app/dtool/common"
+	"dev_tool/internal/app/dtool/component"
 	"dev_tool/internal/app/dtool/define"
 	"fmt"
 	"strings"
@@ -227,6 +228,47 @@ func SetButlerBotConfigTest(c *gin.Context) {
 	})
 }
 
+// SetButlerTaskList 查询管家机器人 Loop 日志（分页），按 bot_config_id 过滤。
+// Loop 日志记录每次工具调用、AI 决策等详细信息（对应 tbl_butler_task 表）。
+func SetButlerTaskList(c *gin.Context) {
+	dataMap := make(map[string]any)
+	_ = gsgin.GinPostBody(c, &dataMap)
+	botConfigId := cast.ToInt(dataMap[`bot_config_id`])
+	if botConfigId == 0 {
+		gsgin.GinResponseError(c, `bot_config_id不能为空`, nil)
+		return
+	}
+	page := cast.ToInt(dataMap[`page`])
+	if page <= 0 {
+		page = 1
+	}
+	pageSize := cast.ToInt(dataMap[`page_size`])
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+	// 查询总数
+	countRow, _ := common.DbMain.Client.QueryBySql(
+		`SELECT COUNT(*) as total FROM tbl_butler_task WHERE bot_config_id = ?`, botConfigId,
+	).One()
+	total := cast.ToInt(countRow[`total`])
+	// 查询分页数据（按 id 倒序，最新在前）
+	rows, err := common.DbMain.Client.QueryBySql(
+		`SELECT * FROM tbl_butler_task WHERE bot_config_id = ? ORDER BY id DESC LIMIT ? OFFSET ?`,
+		botConfigId, pageSize, offset,
+	).All()
+	if err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	gsgin.GinResponseSuccess(c, ``, gin.H{
+		`list`:      rows,
+		`total`:     total,
+		`page`:      page,
+		`page_size`: pageSize,
+	})
+}
+
 // SetButlerMessageList 查询管家机器人消息日志（分页），按 bot_config_id 过滤。
 // 同时兼容 bot_config_id=0 的旧数据（消息属于该机器人但旧版本未记录 bot_config_id）。
 func SetButlerMessageList(c *gin.Context) {
@@ -376,7 +418,7 @@ func SetButlerConfigAdd(c *gin.Context) {
 	}
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
-	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `role_id`, `model_id`, `fc_model_id`, `agent_cli_id`, `bot_config_id`, `active_timeout_minutes`, `max_history`, `auto_clean_on_new_topic`, `index_doc_path`, `auto_init_on_start`, `status`})
+	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `role_id`, `model_id`, `fc_model_id`, `agent_cli_id`, `bot_config_id`, `active_timeout_minutes`, `max_history`, `auto_clean_on_new_topic`, `index_doc_path`, `auto_init_on_start`, `max_loop`, `tool_call_push_enabled`, `status`})
 	var err error
 	now := time.Now().Unix()
 	if cast.ToInt(dataMap[`id`]) == 0 {
@@ -422,4 +464,221 @@ func SetButlerConfigDelete(c *gin.Context) {
 		go runtime.RestartCore()
 	}
 	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
+// SetButlerApiIndex 返回 dtool 所有已注册的 HTTP 路由元数据，供管家 /init 生成 apis.md。
+// 从 Gin 引擎中内省所有路由，自动生成接口路径、方法、描述信息。
+func SetButlerApiIndex(c *gin.Context) {
+	type routeItem struct {
+		Path        string `json:"path"`
+		Method      string `json:"method"`
+		Description string `json:"description"`
+	}
+	routes := make([]routeItem, 0)
+	// 从 Gin 引擎获取所有已注册路由
+	if len(component.TGins) > 0 && component.TGins[0] != nil {
+		// 通过反射访问内部 gin.Engine
+		tGin := component.TGins[0]
+		ginRoutes := tGin.GinGetRoutes()
+		for _, r := range ginRoutes {
+			desc := deriveRouteDescription(r.Path, r.Method, r.Handler)
+			routes = append(routes, routeItem{
+				Path:        r.Path,
+				Method:      r.Method,
+				Description: desc,
+			})
+		}
+	}
+	gsgin.GinResponseSuccess(c, ``, gin.H{
+		`total`:  len(routes),
+		`routes`: routes,
+	})
+}
+
+// deriveRouteDescription 根据路由路径和 Handler 名称自动生成中文描述。
+func deriveRouteDescription(path, method, handler string) string {
+	// 从 handler 名提取函数名（如 dev_tool/.../GitConfigList-fm → GitConfigList）
+	funcName := extractFuncName(handler)
+	if funcName == `` {
+		return path
+	}
+	// 按功能域分类描述
+	desc := inferDescFromPath(path, funcName)
+	if desc != `` {
+		return desc
+	}
+	return funcName
+}
+
+// extractFuncName 从 handler 字符串中提取函数名。
+// "dev_tool/internal/.../controller.GitConfigList-fm" → "GitConfigList"
+func extractFuncName(handler string) string {
+	dotIdx := -1
+	for i := len(handler) - 1; i >= 0; i-- {
+		if handler[i] == '.' {
+			dotIdx = i
+			break
+		}
+	}
+	if dotIdx < 0 {
+		return ``
+	}
+	name := handler[dotIdx+1:]
+	// 去掉 -fm 后缀
+	if idx := strings.Index(name, `-`); idx >= 0 {
+		name = name[:idx]
+	}
+	return strings.TrimSpace(name)
+}
+
+// inferDescFromPath 根据路径和函数名推断中文描述。
+func inferDescFromPath(path, funcName string) string {
+	// 按路径前缀和函数名后缀匹配常见模式
+	suffixMap := map[string]string{
+		`List`:     `列表查询`,
+		`Save`:     `新增/保存`,
+		`Add`:      `新增`,
+		`Delete`:   `删除`,
+		`Del`:      `删除`,
+		`Create`:   `创建`,
+		`Info`:     `详情查询`,
+		`Search`:   `搜索`,
+		`Query`:    `查询`,
+		`Run`:      `执行`,
+		`Status`:   `状态查询`,
+		`Config`:   `配置管理`,
+		`Restart`:  `重启`,
+		`Stop`:     `停止`,
+		`Start`:    `启动`,
+		`Test`:     `测试`,
+		`Get`:      `获取`,
+		`Check`:    `检查`,
+		`Update`:   `更新`,
+		`Sort`:     `排序`,
+		`Upload`:   `上传`,
+		`Download`: `下载`,
+		`Toggle`:   `切换`,
+		`Restore`:  `恢复`,
+		`Remove`:   `移除`,
+		`Preview`:  `预览`,
+		`Logs`:     `日志查看`,
+		`Generate`: `生成`,
+		`Fetch`:    `获取`,
+		`Organize`: `整理`,
+		`Import`:   `导入`,
+		`Export`:   `导出`,
+		`Send`:     `发送`,
+		`Continue`: `继续`,
+	}
+	for suffix, desc := range suffixMap {
+		if strings.HasSuffix(funcName, suffix) {
+			// 提取功能域前缀
+			prefix := strings.TrimSuffix(funcName, suffix)
+			if prefix != `` {
+				return prefixToChinese(prefix) + desc
+			}
+			return desc
+		}
+	}
+	return ``
+}
+
+// prefixToChinese 将功能前缀转为简短中文标签。
+func prefixToChinese(prefix string) string {
+	// 去掉重复的 Set 前缀
+	prefix = strings.TrimPrefix(prefix, `Set`)
+	knownMap := map[string]string{
+		`Git`:                     `Git`,
+		`GitLab`:                  `GitLab`,
+		`GitGroup`:                `Git分组`,
+		`GitQuick`:                `Git快捷`,
+		`GitPending`:              `Git待提交`,
+		`Mysql`:                   `MySQL`,
+		`Redis`:                   `Redis`,
+		`PgSql`:                   `PgSQL`,
+		`Docker`:                  `Docker`,
+		`DockerCompose`:           `DockerCompose`,
+		`Supervisor`:              `Supervisor`,
+		`Supervisorctl`:           `Supervisor`,
+		`Ssh`:                     `SSH`,
+		`AiProvider`:              `AI服务商`,
+		`AiModel`:                 `AI模型`,
+		`AiRequestLog`:            `AI请求日志`,
+		`AgentCli`:                `AgentCLI`,
+		`AgentCliGroup`:           `AgentCLI分组`,
+		`AgentCliPromptTemplate`:  `AgentCLI模板`,
+		`Mcp`:                     `MCP`,
+		`McpType`:                 `MCP类型`,
+		`McpBinding`:              `MCP绑定`,
+		`McpAgentTarget`:          `MCP目标`,
+		`McpChromeDevtoolsConfig`: `MCP ChromeDevTools`,
+		`McpConfig`:               `MCP配置`,
+		`Butler`:                  `管家`,
+		`ButlerBotConfig`:         `管家机器人`,
+		`ButlerMessage`:           `管家消息`,
+		`ButlerRole`:              `管家角色`,
+		`ButlerConfig`:            `管家参数`,
+		`ButlerApi`:               `管家API`,
+		`MemoryFragment`:          `记忆片段`,
+		`MemoryConfig`:            `记忆库`,
+		`Memory`:                  `记忆库`,
+		`HomeTask`:                `首页任务`,
+		`HomeTaskConfig`:          `首页任务配置`,
+		`HomeTaskDailyReport`:     `首页日报`,
+		`HomeTaskLastDevConfig`:   `首页开发配置`,
+		`HomeTaskBranchName`:      `首页分支名`,
+		`HomeTaskZcode`:           `首页Zcode`,
+		`HomeTaskPageData`:        `首页页面数据`,
+		`TaskWorkflow`:            `任务工作流`,
+		`TaskStatus`:              `任务状态`,
+		`WorkflowTemplate`:        `工作流模板`,
+		`WorkflowSkill`:           `工作流技能`,
+		`SmartLink`:               `智能链接`,
+		`SmartLinkItem`:           `智能链接项`,
+		`SmartLinkGroup`:          `智能链接分组`,
+		`SmartLinkChrome`:         `智能链接Chrome`,
+		`SmartLinkDownload`:       `智能链接下载`,
+		`SmartLinkOpen`:           `智能链接打开`,
+		`SmartLinkLocator`:        `智能链接定位器`,
+		`SmartProcess`:            `智能流程`,
+		`SmartProcessItem`:        `智能流程项`,
+		`Variable`:                `变量`,
+		`VariableGroup`:           `变量分组`,
+		`VariableCmd`:             `变量命令`,
+		`WebhookConfig`:           `Webhook`,
+		`CronConfig`:              `定时任务`,
+		`Cron`:                    `定时任务`,
+		`Global`:                  `全局配置`,
+		`Group`:                   `分组`,
+		`Account`:                 `账号`,
+		`AccountGroup`:            `账号分组`,
+		`CmdGroup`:                `命令分组`,
+		`RuntimeConfig`:           `运行时配置`,
+		`MainDB`:                  `主库`,
+		`PromptChangeLog`:         `Prompt变更`,
+		`LocalDir`:                `本地目录`,
+		`LocalBranch`:             `本地分支`,
+		`RemoteBranch`:            `远程分支`,
+		`Api`:                     `API`,
+		`ApiFolder`:               `API目录`,
+		`ApiCollection`:           `API集合`,
+		`ApiCollectionEnv`:        `API环境`,
+		`ToolPort`:                `端口进程`,
+		`ToolManaged`:             `托管进程`,
+		`Base`:                    `基础`,
+		`Markdown`:                `Markdown`,
+		`Star`:                    `收藏`,
+		`ShellOut`:                `Shell`,
+		`ShellOutRuleSet`:         `Shell规则集`,
+		`Php`:                     `PHP`,
+		`Sse`:                     `SSE`,
+		`AsyncTask`:               `异步任务`,
+		`Screenshot`:              `截图`,
+		`Collection`:              `API集合`,
+		`Archive`:                 `归档`,
+	}
+	if ch, ok := knownMap[prefix]; ok {
+		return ch
+	}
+	return prefix
 }

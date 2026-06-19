@@ -21,8 +21,9 @@ const (
 
 // AiChatUsage 记录单次 AI 请求的 token 使用量。
 type AiChatUsage struct {
-	InputTokens  int
-	OutputTokens int
+	InputTokens          int
+	OutputTokens         int
+	CacheReadInputTokens int // 输入缓存命中 token 数
 }
 
 // AIChatByModel 使用模型发起一次 AI 请求。
@@ -69,7 +70,7 @@ func (h *CSqlite) AIChatByModel(modelID int, systemPrompt, userPrompt string) (s
 		content = string(responseBody)
 	}
 	// 解析 token 使用量
-	inputTokens, outputTokens := h.extractTokenUsage(string(responseBody))
+	inputTokens, outputTokens, _ := h.extractTokenUsage(string(responseBody))
 	h.logAIRequest(modelInfo, requestURL, http.MethodPost, bodyMap, nil, response.StatusCode, string(responseBody), ``, costTimeMs, inputTokens, outputTokens)
 	return strings.TrimSpace(content), modelInfo, nil
 }
@@ -117,9 +118,13 @@ func (h *CSqlite) AIChatByModelWithUsage(modelID int, systemPrompt, userPrompt s
 	if strings.TrimSpace(content) == `` {
 		content = string(responseBody)
 	}
-	inputTokens, outputTokens := h.extractTokenUsage(string(responseBody))
+	inputTokens, outputTokens, cacheReadInputTokens := h.extractTokenUsage(string(responseBody))
 	h.logAIRequest(modelInfo, requestURL, http.MethodPost, bodyMap, nil, response.StatusCode, string(responseBody), ``, costTimeMs, inputTokens, outputTokens)
-	usage := &AiChatUsage{InputTokens: inputTokens, OutputTokens: outputTokens}
+	usage := &AiChatUsage{
+		InputTokens:          inputTokens,
+		OutputTokens:         outputTokens,
+		CacheReadInputTokens: cacheReadInputTokens,
+	}
 	return strings.TrimSpace(content), modelInfo, usage, costTimeMs, nil
 }
 
@@ -258,11 +263,11 @@ func (h *CSqlite) AIChatStreamByModelWithMessages(modelID int, messages []map[st
 // AIChatByModelWithTools 使用模型发起 AI 请求，支持 Function Calling。
 // messages 使用 []map[string]any 以支持 tool 角色（需 tool_call_id 字段）。
 // tools 为 OpenAI 格式的工具定义列表，为空时不传 tools 字段。
-// 返回 AI 回复内容、tool_calls 原始列表、模型信息、错误。
-func (h *CSqlite) AIChatByModelWithTools(modelID int, messages []map[string]any, tools []map[string]any) (string, []any, map[string]any, error) {
+// 返回 AI 回复内容、tool_calls 原始列表、token 用量、模型信息、错误。
+func (h *CSqlite) AIChatByModelWithTools(modelID int, messages []map[string]any, tools []map[string]any) (string, []any, *AiChatUsage, map[string]any, error) {
 	modelInfo, requestURL, apiKey, err := h.aiChatBuildRequest(modelID)
 	if err != nil {
-		return ``, nil, nil, err
+		return ``, nil, nil, nil, err
 	}
 	bodyMap := map[string]any{
 		`model`:    cast.ToString(modelInfo[`model`]),
@@ -274,7 +279,7 @@ func (h *CSqlite) AIChatByModelWithTools(modelID int, messages []map[string]any,
 	bodyBytes, _ := json.Marshal(bodyMap)
 	request, err := http.NewRequest(http.MethodPost, requestURL, bytes.NewReader(bodyBytes))
 	if err != nil {
-		return ``, nil, nil, err
+		return ``, nil, nil, nil, err
 	}
 	request.Header.Set(`Authorization`, `Bearer `+apiKey)
 	request.Header.Set(`Content-Type`, `application/json`)
@@ -284,23 +289,28 @@ func (h *CSqlite) AIChatByModelWithTools(modelID int, messages []map[string]any,
 	costTimeMs := time.Since(startTime).Milliseconds()
 	if err != nil {
 		h.logAIRequest(modelInfo, requestURL, http.MethodPost, bodyMap, nil, 0, ``, err.Error(), costTimeMs)
-		return ``, nil, nil, err
+		return ``, nil, nil, nil, err
 	}
 	defer response.Body.Close()
 	responseBody, err := io.ReadAll(response.Body)
 	if err != nil {
 		h.logAIRequest(modelInfo, requestURL, http.MethodPost, bodyMap, nil, response.StatusCode, ``, err.Error(), costTimeMs)
-		return ``, nil, nil, err
+		return ``, nil, nil, nil, err
 	}
 	if response.StatusCode >= 300 {
 		errMsg := `AI 请求失败: ` + string(responseBody)
 		h.logAIRequest(modelInfo, requestURL, http.MethodPost, bodyMap, nil, response.StatusCode, string(responseBody), errMsg, costTimeMs)
-		return ``, nil, nil, errors.New(errMsg)
+		return ``, nil, nil, nil, errors.New(errMsg)
 	}
 	content, toolCalls := h.extractContentAndToolCalls(string(responseBody))
-	inputTokens, outputTokens := h.extractTokenUsage(string(responseBody))
+	inputTokens, outputTokens, cacheReadInputTokens := h.extractTokenUsage(string(responseBody))
 	h.logAIRequest(modelInfo, requestURL, http.MethodPost, bodyMap, nil, response.StatusCode, string(responseBody), ``, costTimeMs, inputTokens, outputTokens)
-	return content, toolCalls, modelInfo, nil
+	usage := &AiChatUsage{
+		InputTokens:          inputTokens,
+		OutputTokens:         outputTokens,
+		CacheReadInputTokens: cacheReadInputTokens,
+	}
+	return content, toolCalls, usage, modelInfo, nil
 }
 
 // extractContentAndToolCalls 从 AI 响应中提取文本内容和 tool_calls 列表。
@@ -495,18 +505,18 @@ func (h *CSqlite) logAIRequest(
 	}()
 }
 
-// extractTokenUsage 从 OpenAI 响应中提取 token 使用量。
-func (h *CSqlite) extractTokenUsage(responseBody string) (inputTokens, outputTokens int) {
+// extractTokenUsage 从 OpenAI 响应中提取 token 使用量，包含缓存命中 token。
+func (h *CSqlite) extractTokenUsage(responseBody string) (inputTokens, outputTokens, cacheReadInputTokens int) {
 	if strings.TrimSpace(responseBody) == `` {
-		return 0, 0
+		return 0, 0, 0
 	}
 	dataMap := make(map[string]any)
 	if err := json.Unmarshal([]byte(responseBody), &dataMap); err != nil {
-		return 0, 0
+		return 0, 0, 0
 	}
 	usage, ok := dataMap[`usage`].(map[string]any)
 	if !ok {
-		return 0, 0
+		return 0, 0, 0
 	}
 	inputTokens = cast.ToInt(usage[`prompt_tokens`])
 	outputTokens = cast.ToInt(usage[`completion_tokens`])
@@ -514,5 +524,12 @@ func (h *CSqlite) extractTokenUsage(responseBody string) (inputTokens, outputTok
 	if inputTokens == 0 {
 		inputTokens = cast.ToInt(usage[`total_tokens`]) - outputTokens
 	}
-	return inputTokens, outputTokens
+	// 提取缓存命中 token：支持 Anthropic 风格 (cache_read_input_tokens) 和 OpenAI 风格 (prompt_tokens_details.cached_tokens)
+	cacheReadInputTokens = cast.ToInt(usage[`cache_read_input_tokens`])
+	if cacheReadInputTokens == 0 {
+		if details, ok := usage[`prompt_tokens_details`].(map[string]any); ok {
+			cacheReadInputTokens = cast.ToInt(details[`cached_tokens`])
+		}
+	}
+	return inputTokens, outputTokens, cacheReadInputTokens
 }

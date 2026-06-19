@@ -83,3 +83,11 @@ func (h *Gin) SseRoute(route string,
 	openFunc func(urlValues url.Values, stopC chan int, c *gin.Context) (*gsgin.Sse, error), closeFunc func(sse *gsgin.Sse)) {
 	h.gin.SseRoute(route, true, openFunc, closeFunc)
 }
+
+// GinGetRoutes 返回 Gin 引擎中所有已注册路由的列表，供 API 内省接口使用。
+func (h *Gin) GinGetRoutes() []gin.RouteInfo {
+	if h.gin == nil || h.gin.GinH == nil {
+		return nil
+	}
+	return h.gin.GinH.Routes()
+}
