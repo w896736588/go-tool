@@ -69,10 +69,10 @@ func (g *DingTalkGateway) Close() {
 	}
 }
 
-// SendText 通过钉钉 Open API 单聊消息发送接口主动推送文本消息。
+// SendMarkdown 通过钉钉 Open API 单聊消息发送接口主动推送 markdown 消息。
 // userId 为接收者内部员工 ID（senderStaffId）；为空时跳过（无法确定接收者）。
 // 用于打招呼/休眠通知等无 incoming 消息上下文的场景。
-func (g *DingTalkGateway) SendText(userId, text string) error {
+func (g *DingTalkGateway) SendMarkdown(userId, title, text string) error {
 	if g.botConfig == nil {
 		return fmt.Errorf(`机器人配置为空`)
 	}
@@ -85,7 +85,7 @@ func (g *DingTalkGateway) SendText(userId, text string) error {
 		gstool.FmtPrintlnLogTime(`[butler-bot] robot_code 未配置，跳过主动推送`)
 		return nil
 	}
-	return SendDingtalkSingleChatMsg(g.botConfig.AppKey, g.botConfig.AppSecret, robotCode, userId, text)
+	return SendDingtalkSingleChatMarkdown(g.botConfig.AppKey, g.botConfig.AppSecret, robotCode, userId, title, text)
 }
 
 // GetBotConfig 返回机器人配置。
@@ -161,21 +161,21 @@ func GetDingtalkAccessToken(appKey, appSecret string) (string, error) {
 	return token, nil
 }
 
-// SendDingtalkSingleChatMsg 通过钉钉 Open API 发送单聊文本消息。
+// SendDingtalkSingleChatMarkdown 通过钉钉 Open API 发送单聊 markdown 消息。
 // robotCode 为机器人编码，userId 为接收者内部员工 ID。
-func SendDingtalkSingleChatMsg(appKey, appSecret, robotCode, userId, text string) error {
+func SendDingtalkSingleChatMarkdown(appKey, appSecret, robotCode, userId, title, text string) error {
 	// 1. 获取 access_token
 	token, err := GetDingtalkAccessToken(appKey, appSecret)
 	if err != nil {
 		return fmt.Errorf(`获取 access_token 失败: %w`, err)
 	}
-	// 2. 调用单聊发送 API
-	msgParam := map[string]string{`content`: text}
+	// 2. 调用单聊发送 API（markdown 格式）
+	msgParam := map[string]string{`title`: title, `text`: text}
 	msgParamBytes, _ := json.Marshal(msgParam)
 	body := map[string]any{
 		`robotCode`: robotCode,
 		`userIds`:   []string{userId},
-		`msgKey`:    `sampleText`,
+		`msgKey`:    `sampleMarkdown`,
 		`msgParam`:  string(msgParamBytes),
 	}
 	bodyBytes, err := json.Marshal(body)
@@ -202,6 +202,11 @@ func SendDingtalkSingleChatMsg(appKey, appSecret, robotCode, userId, text string
 		return fmt.Errorf(`dingtalk send error: %v`, errMsg)
 	}
 	return nil
+}
+
+// SendDingtalkSingleChatMsg 通过钉钉 Open API 发送单聊纯文本消息（保留兼容）。
+func SendDingtalkSingleChatMsg(appKey, appSecret, robotCode, userId, text string) error {
+	return SendDingtalkSingleChatMarkdown(appKey, appSecret, robotCode, userId, ``, text)
 }
 
 // GetDingtalkAppAdmins 通过钉钉 Open API 获取应用管理员列表（返回 userId 列表）。

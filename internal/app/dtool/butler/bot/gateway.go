@@ -10,10 +10,10 @@ type Gateway interface {
 	Start() error
 	// Close 关闭连接。
 	Close()
-	// SendText 通过 Open API 主动发送文本消息到指定用户（单聊）。
+	// SendMarkdown 通过 Open API 主动发送 markdown 消息到指定用户（单聊）。
 	// userId 为接收者内部员工 ID（senderStaffId），为空时跳过（无法确定接收者）。
 	// 用于打招呼/休眠通知等无 incoming 消息上下文的场景。
-	SendText(userId, text string) error
+	SendMarkdown(userId, title, text string) error
 	// GetBotConfig 返回机器人配置，供外部获取 AppKey/AppSecret/RobotCode 等。
 	GetBotConfig() *define.BotConfigItem
 }

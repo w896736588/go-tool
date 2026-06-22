@@ -60,8 +60,7 @@ type ButlerConfigItem struct {
 	AgentCliId           int    `json:"agent_cli_id"`
 	BotConfigId          int    `json:"bot_config_id"`
 	ActiveTimeoutMinutes int    `json:"active_timeout_minutes"`
-	MaxHistory           int    `json:"max_history"`
-	AutoCleanOnNewTopic  int    `json:"auto_clean_on_new_topic"`
+	MaxHistoryStore      int    `json:"max_history_store"` // 历史上限，同时控制 AI 上下文窗口和 DB 存储上限，默认 100
 	IndexDocPath         string `json:"index_doc_path"`
 	AutoInitOnStart      int    `json:"auto_init_on_start"`
 	MaxLoop              int    `json:"max_loop"`

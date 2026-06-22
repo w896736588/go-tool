@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-列出任务清单中处于指定状态的任务（如“自测中”）。
+列出任务清单中处于指定状态的任务（如"自测中"）。
 
 通过调用 dtool HTTP API 实现，支持自定义基地址、Token、API路径和状态名称。
-默认使用 /api/TaskList 端点，可覆盖。
+默认使用 /api/HomeTaskList 端点。仅依赖标准库，无需安装第三方包。
 
 用法:
     python list_tasks_in_status.py --token YOUR_TOKEN
@@ -13,9 +13,12 @@
 import argparse
 import json
 import sys
+import io
 from urllib.parse import urljoin
+from urllib import request
 
-import requests
+# 解决 Windows 编码问题
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 
 def parse_args():
@@ -29,8 +32,8 @@ def parse_args():
     )
     parser.add_argument(
         "--token",
-        required=True,
-        help="API 鉴权 Token",
+        default="",
+        help="API 鉴权 Token（本机调用可留空）",
     )
     parser.add_argument(
         "--status",
@@ -39,8 +42,8 @@ def parse_args():
     )
     parser.add_argument(
         "--api-path",
-        default="/api/TaskList",
-        help="获取任务列表的 API 路径（默认 /api/TaskList）",
+        default="/api/HomeTaskList",
+        help="获取任务列表的 API 路径（默认 /api/HomeTaskList）",
     )
     return parser.parse_args()
 
@@ -48,43 +51,61 @@ def parse_args():
 def main():
     args = parse_args()
     url = urljoin(args.server, args.api_path)
-    headers = {"Authorization": f"Bearer {args.token}"}
 
     try:
-        resp = requests.get(url, headers=headers, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-    except requests.exceptions.RequestException as e:
+        # 使用 POST + Token 头（dtool API 统一鉴权方式）
+        body = json.dumps({}).encode("utf-8")
+        req = request.Request(
+            url=url,
+            data=body,
+            headers={
+                "Content-Type": "application/json; charset=utf-8",
+                "Token": args.token,
+            },
+            method="POST",
+        )
+        with request.urlopen(req, timeout=60) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
         result = {
             "error": True,
             "message": f"HTTP 请求失败: {str(e)}",
         }
         print(json.dumps(result, ensure_ascii=False, indent=2))
         sys.exit(1)
-    except json.JSONDecodeError as e:
-        result = {
-            "error": True,
-            "message": f"响应不是有效的 JSON: {str(e)}",
-        }
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-        sys.exit(1)
 
-    # 智能提取任务列表：处理常见的响应结构
+    # 智能提取任务列表：处理 dtool API 常见响应结构
     tasks = None
     if isinstance(data, list):
         tasks = data
     elif isinstance(data, dict):
-        # 尝试多种可能的 key
-        for key in ("data", "results", "items", "list", "records", "taskList"):
-            if key in data and isinstance(data[key], list):
-                tasks = data[key]
-                break
+        # dtool 标准响应: {"ErrCode":0, "Data": {"task_list": [...]}}
+        if "Data" in data and isinstance(data["Data"], dict):
+            inner = data["Data"]
+            # 优先取 task_list
+            for key in ("task_list", "list", "tasks", "items", "records"):
+                if key in inner and isinstance(inner[key], list):
+                    tasks = inner[key]
+                    break
+        # 兜底：直接在当前层级查找
         if tasks is None:
-            # 遍历所有值，寻找第一个列表
+            for key in ("data", "Data", "task_list", "results", "items", "list", "records"):
+                if key in data and isinstance(data[key], list):
+                    tasks = data[key]
+                    break
+        # 最后遍历嵌套 dict 的值
+        if tasks is None:
             for v in data.values():
                 if isinstance(v, list):
                     tasks = v
                     break
+                if isinstance(v, dict):
+                    for vv in v.values():
+                        if isinstance(vv, list):
+                            tasks = vv
+                            break
+                    if tasks is not None:
+                        break
 
     if tasks is None:
         result = {

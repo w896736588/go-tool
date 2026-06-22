@@ -112,14 +112,7 @@
             <el-table-column prop="bot_config_name" label="机器人配置" min-width="120"/>
             <el-table-column prop="active_timeout_minutes" label="超时(min)" width="90"/>
             <el-table-column prop="max_loop" label="Loop上限" width="80"/>
-            <el-table-column prop="max_history" label="历史上限" width="90"/>
-            <el-table-column prop="auto_clean_on_new_topic" label="新题清历史" width="100">
-              <template #default="scope">
-                <el-tag size="small" :type="scope.row.auto_clean_on_new_topic === 1 ? 'success' : 'info'" effect="light">
-                  {{ scope.row.auto_clean_on_new_topic === 1 ? '是' : '否' }}
-                </el-tag>
-              </template>
-            </el-table-column>
+            <el-table-column prop="max_history_store" label="历史上限" width="90"/>
             <el-table-column prop="auto_init_on_start" label="启动初始化" width="100">
               <template #default="scope">
                 <el-tag size="small" :type="scope.row.auto_init_on_start === 1 ? 'success' : 'info'" effect="light">
@@ -229,10 +222,22 @@
     <!-- 管家运行参数编辑弹窗 -->
     <el-dialog v-model="state.dialogConfig" title="编辑管家运行参数" width="560">
       <el-form label-width="120px">
-        <el-form-item label="管家名称">
+        <el-form-item>
+          <template #label>
+            管家名称
+            <el-tooltip content="管家配置的显示名称，用于标识和区分不同的管家实例" placement="top">
+              <el-icon class="form-help-icon"><QuestionFilled /></el-icon>
+            </el-tooltip>
+          </template>
           <el-input v-model="state.editConfig.name" autocomplete="off" placeholder="如：默认管家"/>
         </el-form-item>
-        <el-form-item label="关联角色">
+        <el-form-item>
+          <template #label>
+            关联角色
+            <el-tooltip content="选择管家使用的角色配置，包含定位、语气、打招呼语等设定" placement="top">
+              <el-icon class="form-help-icon"><QuestionFilled /></el-icon>
+            </el-tooltip>
+          </template>
           <el-select v-model="state.editConfig.role_id" style="width: 100%;" placeholder="请选择角色">
             <el-option label="不关联" :value="0"/>
             <template v-for="(role, idx) in state.roleList" :key="idx">
@@ -240,7 +245,13 @@
             </template>
           </el-select>
         </el-form-item>
-        <el-form-item label="主模型">
+        <el-form-item>
+          <template #label>
+            主模型
+            <el-tooltip content="AI 对话使用的主模型，处理意图分析、任务路由和最终回复" placement="top">
+              <el-icon class="form-help-icon"><QuestionFilled /></el-icon>
+            </el-tooltip>
+          </template>
           <el-select v-model="state.editConfig.model_id" style="width: 100%;" placeholder="请选择模型" filterable>
             <el-option label="不指定" :value="0"/>
             <template v-for="(model, idx) in state.aiModelList" :key="idx">
@@ -248,7 +259,13 @@
             </template>
           </el-select>
         </el-form-item>
-        <el-form-item label="FC 模型">
+        <el-form-item>
+          <template #label>
+            FC 模型
+            <el-tooltip content="Function Calling 专用模型，用于工具调用循环。为 0 时回落使用主模型" placement="top">
+              <el-icon class="form-help-icon"><QuestionFilled /></el-icon>
+            </el-tooltip>
+          </template>
           <el-select v-model="state.editConfig.fc_model_id" style="width: 100%;" placeholder="请选择 FC 模型" filterable>
             <el-option label="不指定（回落主模型）" :value="0"/>
             <template v-for="(model, idx) in state.aiModelList" :key="idx">
@@ -256,7 +273,13 @@
             </template>
           </el-select>
         </el-form-item>
-        <el-form-item label="Agent CLI">
+        <el-form-item>
+          <template #label>
+            Agent CLI
+            <el-tooltip content="复杂任务交由 Agent CLI 执行，简单任务走 FC 循环。为空时所有任务均走 FC" placement="top">
+              <el-icon class="form-help-icon"><QuestionFilled /></el-icon>
+            </el-tooltip>
+          </template>
           <el-select v-model="state.editConfig.agent_cli_id" style="width: 100%;" placeholder="请选择 Agent CLI">
             <el-option label="不指定（始终走 FC）" :value="0"/>
             <template v-for="(cli, idx) in state.agentCliList" :key="idx">
@@ -264,7 +287,13 @@
             </template>
           </el-select>
         </el-form-item>
-        <el-form-item label="机器人配置">
+        <el-form-item>
+          <template #label>
+            机器人配置
+            <el-tooltip content="关联的钉钉机器人，管家通过该机器人接收消息和发送回复" placement="top">
+              <el-icon class="form-help-icon"><QuestionFilled /></el-icon>
+            </el-tooltip>
+          </template>
           <el-select v-model="state.editConfig.bot_config_id" style="width: 100%;" placeholder="请选择机器人配置">
             <el-option label="不关联" :value="0"/>
             <template v-for="(bot, idx) in state.botConfigList" :key="idx">
@@ -272,38 +301,73 @@
             </template>
           </el-select>
         </el-form-item>
-        <el-form-item label="激活超时(min)">
+        <el-form-item>
+          <template #label>
+            激活超时(min)
+            <el-tooltip content="会话无操作超过此时间后进入休眠状态，下次发消息时重新激活并发送打招呼语" placement="top">
+              <el-icon class="form-help-icon"><QuestionFilled /></el-icon>
+            </el-tooltip>
+          </template>
           <el-input-number v-model="state.editConfig.active_timeout_minutes" :min="5" :max="120" :step="5"/>
         </el-form-item>
-        <el-form-item label="Loop次数上限">
+        <el-form-item>
+          <template #label>
+            Loop次数上限
+            <el-tooltip content="Function Calling 工具调用循环的最大迭代次数，防止 AI 陷入无限循环" placement="top">
+              <el-icon class="form-help-icon"><QuestionFilled /></el-icon>
+            </el-tooltip>
+          </template>
           <el-input-number v-model="state.editConfig.max_loop" :min="3" :max="50" :step="1"/>
         </el-form-item>
-        <el-form-item label="历史上限">
-          <el-input-number v-model="state.editConfig.max_history" :min="10" :max="500" :step="10"/>
+        <el-form-item>
+          <template #label>
+            历史上限
+            <el-tooltip content="控制 AI 上下文窗口大小。超过上限自动删除最旧消息，发送 /clean 可手动清空全部" placement="top">
+              <el-icon class="form-help-icon"><QuestionFilled /></el-icon>
+            </el-tooltip>
+          </template>
+          <el-input-number v-model="state.editConfig.max_history_store" :min="10" :max="500" :step="10"/>
         </el-form-item>
-        <el-form-item label="新话题清历史">
-          <el-select v-model="state.editConfig.auto_clean_on_new_topic" style="width: 100%;">
-            <el-option label="是" :value="1"/>
-            <el-option label="否" :value="0"/>
-          </el-select>
-        </el-form-item>
-        <el-form-item label="索引文档路径">
+        <el-form-item>
+          <template #label>
+            索引文档路径
+            <el-tooltip content="管家技能索引文档（apis.md / scripts.md / capabilities.md）的存储目录，留空使用默认路径" placement="top">
+              <el-icon class="form-help-icon"><QuestionFilled /></el-icon>
+            </el-tooltip>
+          </template>
           <el-input v-model="state.editConfig.index_doc_path" autocomplete="off" placeholder="留空则用默认 {memoryDbPath}/butler/index/"/>
         </el-form-item>
-        <el-form-item label="启动自动初始化">
+        <el-form-item>
+          <template #label>
+            启动自动初始化
+            <el-tooltip content="管家启动时自动扫描 skills/ 目录生成索引文档，索引已存在则跳过" placement="top">
+              <el-icon class="form-help-icon"><QuestionFilled /></el-icon>
+            </el-tooltip>
+          </template>
           <el-select v-model="state.editConfig.auto_init_on_start" style="width: 100%;">
             <el-option label="是" :value="1"/>
             <el-option label="否" :value="0"/>
           </el-select>
         </el-form-item>
-        <el-form-item label="工具调用推送">
+        <el-form-item>
+          <template #label>
+            工具调用推送
+            <el-tooltip content='开启后，工具执行时会实时推送进度消息（如「正在查询Git仓库...」）到钉钉机器人' placement="top">
+              <el-icon class="form-help-icon"><QuestionFilled /></el-icon>
+            </el-tooltip>
+          </template>
           <el-select v-model="state.editConfig.tool_call_push_enabled" style="width: 100%;">
             <el-option label="开启" :value="1"/>
             <el-option label="关闭" :value="0"/>
           </el-select>
-          <div style="font-size: 11px; color: #999; margin-top: 2px;">工具执行时实时推送进度消息到机器人</div>
         </el-form-item>
-        <el-form-item label="状态">
+        <el-form-item>
+          <template #label>
+            状态
+            <el-tooltip content="启用后管家开始工作，接收并处理消息；禁用后管家停止响应" placement="top">
+              <el-icon class="form-help-icon"><QuestionFilled /></el-icon>
+            </el-tooltip>
+          </template>
           <el-select v-model="state.editConfig.status" style="width: 100%;">
             <el-option label="启用" :value="1"/>
             <el-option label="禁用" :value="0"/>
@@ -395,7 +459,7 @@
 
 <script>
 import {defineComponent, getCurrentInstance, reactive} from 'vue'
-import {ArrowDown} from '@element-plus/icons-vue'
+import {ArrowDown, QuestionFilled} from '@element-plus/icons-vue'
 import butlerSet from '@/utils/base/butler_set'
 import aiSet from '@/utils/base/ai_set'
 import agentCli from '@/utils/base/agent_cli'
@@ -443,8 +507,7 @@ export default defineComponent({
         bot_config_id: 0,
         active_timeout_minutes: 30,
         max_loop: 10,
-        max_history: 100,
-        auto_clean_on_new_topic: 1,
+        max_history_store: 100,
         index_doc_path: '',
         auto_init_on_start: 1,
         tool_call_push_enabled: 0,
@@ -763,7 +826,7 @@ export default defineComponent({
       state.editConfig = {
         id: 0, name: '', role_id: 0, model_id: 0, fc_model_id: 0,
         agent_cli_id: 0, bot_config_id: 0, active_timeout_minutes: 30,
-        max_loop: 10, max_history: 100, auto_clean_on_new_topic: 1,
+        max_loop: 10, max_history_store: 100,
         index_doc_path: '', auto_init_on_start: 1, tool_call_push_enabled: 0, status: 1,
       }
       state.dialogConfig = true
@@ -780,8 +843,7 @@ export default defineComponent({
         bot_config_id: row.bot_config_id || 0,
         active_timeout_minutes: row.active_timeout_minutes || 30,
         max_loop: row.max_loop || 10,
-        max_history: row.max_history || 100,
-        auto_clean_on_new_topic: row.auto_clean_on_new_topic || 1,
+        max_history_store: row.max_history_store || 100,
         index_doc_path: row.index_doc_path || '',
         auto_init_on_start: row.auto_init_on_start || 1,
         tool_call_push_enabled: row.tool_call_push_enabled != null ? row.tool_call_push_enabled : 0,
@@ -856,6 +918,7 @@ export default defineComponent({
   },
   components: {
     ArrowDown,
+    QuestionFilled,
   },
 })
 </script>
@@ -874,5 +937,17 @@ export default defineComponent({
 }
 .set-config-inner-tabs :deep(.el-tabs__nav-wrap::after) {
   background-color: #e8e8e0;
+}
+
+/* 表单问号帮助图标 */
+.form-help-icon {
+  margin-left: 4px;
+  font-size: 14px;
+  color: #909399;
+  cursor: help;
+  vertical-align: -2px;
+}
+.form-help-icon:hover {
+  color: #4f804f;
 }
 </style>

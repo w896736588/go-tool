@@ -2,43 +2,62 @@ package worker
 
 import (
 	"dev_tool/internal/app/dtool/common"
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cast"
 	"github.com/w896736588/go-tool/gstool"
 )
 
-// fcMaxLoopIterations FC 循环最大迭代次数，防止无限循环。
-const fcMaxLoopIterations = 10
-
 // FCLoopResult FC 循环执行结果。
 type FCLoopResult struct {
-	Content  string   // 最终 AI 回复文本
-	Success  bool     // 任务是否成功完成
-	ToolUsed []string // 使用过的工具名称列表
+	Content        string   // 最终 AI 回复文本
+	Success        bool     // 任务是否成功完成
+	ToolUsed       []string // 使用过的工具名称列表
+	ScriptsRun     []string // 执行过的脚本路径（去重）
+	ScriptsCreated []string // 新建/覆盖的脚本路径（去重）
+	LLMCalls       int      // LLM 累计调用次数
+	InputTokens    int      // 累计输入 token 数
+	OutputTokens   int      // 累计输出 token 数
+	CacheTokens    int      // 累计缓存命中 token 数
 }
 
 // RunFCLoop 执行 Function Calling 循环。
-// 反复调用 AI，执行工具调用，直到 AI 返回最终文本回复（不再调用工具）或达到最大迭代次数。
-// 使用 fcModelId（Function Calling 用模型），为 0 时回落 modelId。
-func RunFCLoop(db *common.CSqlite, modelId int, systemPrompt string, historyMessages []map[string]string, userMessage string) *FCLoopResult {
+// 反复调用 AI，执行工具调用，直到 AI 返回最终文本回复（不再调用工具）或达到 maxLoop 迭代次数。
+// maxLoop 为 0 或负数时取默认值 10。
+func RunFCLoop(db *common.CSqlite, modelId int, systemPrompt string, historyMessages []map[string]string, userMessage string, maxLoop int) *FCLoopResult {
+	if maxLoop <= 0 {
+		maxLoop = 10
+	}
 	// 构建 messages 列表
 	messages := buildFCMessages(systemPrompt, historyMessages, userMessage)
 	// 获取工具定义
 	tools := ToolDefinitions()
 	toolsUsed := make([]string, 0)
+	scriptsRun := make([]string, 0)
+	scriptsCreated := make([]string, 0)
+	scriptsRunSet := make(map[string]bool)
+	scriptsCreatedSet := make(map[string]bool)
+	var totalCalls, totalInput, totalOutput, totalCache int
 
-	for i := 0; i < fcMaxLoopIterations; i++ {
+	for i := 0; i < maxLoop; i++ {
 		// 调用 AI（非流式，需解析完整 tool_calls）
-		content, toolCalls, _, err := db.AIChatByModelWithTools(modelId, messages, tools)
+		content, toolCalls, usage, _, err := db.AIChatByModelWithTools(modelId, messages, tools)
+		totalCalls++
+		if usage != nil {
+			totalInput += usage.InputTokens
+			totalOutput += usage.OutputTokens
+			totalCache += usage.CacheReadInputTokens
+		}
 		if err != nil {
 			gstool.FmtPrintlnLogTime(`[butler-fc] AI 请求失败 %s`, err.Error())
-			return &FCLoopResult{Content: fmt.Sprintf(`任务执行失败：%s`, err.Error()), Success: false}
+			return &FCLoopResult{Content: fmt.Sprintf(`任务执行失败：%s`, err.Error()), Success: false, ToolUsed: toolsUsed, ScriptsRun: scriptsRun, ScriptsCreated: scriptsCreated, LLMCalls: totalCalls, InputTokens: totalInput, OutputTokens: totalOutput, CacheTokens: totalCache}
 		}
 
 		// 没有工具调用 → AI 已给出最终回复
 		if len(toolCalls) == 0 {
-			return &FCLoopResult{Content: content, Success: true, ToolUsed: toolsUsed}
+			return &FCLoopResult{Content: content, Success: true, ToolUsed: toolsUsed, ScriptsRun: scriptsRun, ScriptsCreated: scriptsCreated, LLMCalls: totalCalls, InputTokens: totalInput, OutputTokens: totalOutput, CacheTokens: totalCache}
 		}
 
 		// 记录 assistant 消息（含 tool_calls）
@@ -60,6 +79,17 @@ func RunFCLoop(db *common.CSqlite, modelId int, systemPrompt string, historyMess
 			fnName := cast.ToString(fnMap[`name`])
 			fnArgs := cast.ToString(fnMap[`arguments`])
 
+			// 提取脚本路径用于结果追踪
+			scriptPath := extractPathFromArgs(fnArgs)
+			if fnName == ToolRunScript && scriptPath != `` && !scriptsRunSet[scriptPath] {
+				scriptsRunSet[scriptPath] = true
+				scriptsRun = append(scriptsRun, scriptPath)
+			}
+			if fnName == ToolFileWrite && scriptPath != `` && strings.HasSuffix(scriptPath, `.py`) && !scriptsCreatedSet[scriptPath] {
+				scriptsCreatedSet[scriptPath] = true
+				scriptsCreated = append(scriptsCreated, scriptPath)
+			}
+
 			gstool.FmtPrintlnLogTime(`[butler-fc] 执行工具 %s(%s)`, fnName, truncateForLog(fnArgs, 100))
 			result := ExecuteTool(fnName, fnArgs)
 			toolsUsed = append(toolsUsed, fnName)
@@ -75,8 +105,8 @@ func RunFCLoop(db *common.CSqlite, modelId int, systemPrompt string, historyMess
 	}
 
 	// 超过最大迭代次数
-	gstool.FmtPrintlnLogTime(`[butler-fc] FC 循环超过最大迭代次数 %d`, fcMaxLoopIterations)
-	return &FCLoopResult{Content: `任务执行超时：工具调用次数过多`, Success: false, ToolUsed: toolsUsed}
+	gstool.FmtPrintlnLogTime(`[butler-fc] FC 循环超过最大迭代次数 %d`, maxLoop)
+	return &FCLoopResult{Content: fmt.Sprintf(`任务执行超时：已达到最大工具调用次数 %d`, maxLoop), Success: false, ToolUsed: toolsUsed, ScriptsRun: scriptsRun, ScriptsCreated: scriptsCreated, LLMCalls: totalCalls, InputTokens: totalInput, OutputTokens: totalOutput, CacheTokens: totalCache}
 }
 
 // buildFCMessages 构建 FC 循环的初始 messages 列表。
@@ -108,4 +138,13 @@ func truncateForLog(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + `...`
+}
+
+// extractPathFromArgs 从 JSON 格式的工具参数中提取 path 字段。
+func extractPathFromArgs(argsJSON string) string {
+	var args map[string]any
+	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
+		return ``
+	}
+	return cast.ToString(args[`path`])
 }

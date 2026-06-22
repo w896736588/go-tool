@@ -93,13 +93,17 @@ func execStatus(sessionManager *SessionManager, history *History, sessionId stri
 	}
 }
 
+// builtinCommandsHelp 返回内置命令的帮助文本，供打招呼语和 /help 命令共用。
+func builtinCommandsHelp() string {
+	return `📋 内置命令：
+- /clean — 清除当前会话历史
+- /init — 重新生成索引文档
+- /status — 查询管家与当前会话状态
+- /help — 显示此帮助信息`
+}
+
 // execHelp 执行 /help 命令：显示内置命令帮助。
 func execHelp() CommandResult {
-	helpText := `内置命令：
-/clean — 清除当前会话历史
-/init — 初始化索引文档
-/status — 查询管家与当前会话状态
-/help — 显示此帮助信息
-其他消息将由 AI 管家处理。`
+	helpText := builtinCommandsHelp() + `\n其他消息将由 AI 管家处理。`
 	return CommandResult{Handled: true, Text: helpText}
 }

@@ -418,7 +418,7 @@ func SetButlerConfigAdd(c *gin.Context) {
 	}
 	dataMap := make(map[string]any)
 	_ = gsgin.GinPostBody(c, &dataMap)
-	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `role_id`, `model_id`, `fc_model_id`, `agent_cli_id`, `bot_config_id`, `active_timeout_minutes`, `max_history`, `auto_clean_on_new_topic`, `index_doc_path`, `auto_init_on_start`, `max_loop`, `tool_call_push_enabled`, `status`})
+	updateData := gstool.MapTakeKeys(&dataMap, []string{`name`, `role_id`, `model_id`, `fc_model_id`, `agent_cli_id`, `bot_config_id`, `active_timeout_minutes`, `max_history_store`, `index_doc_path`, `auto_init_on_start`, `max_loop`, `tool_call_push_enabled`, `status`})
 	var err error
 	now := time.Now().Unix()
 	if cast.ToInt(dataMap[`id`]) == 0 {

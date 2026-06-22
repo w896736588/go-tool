@@ -28,8 +28,9 @@ type Core struct {
 	msgChan         <-chan bot.IncomingMessage
 	replier         *chatbot.ChatbotReplier
 	stopCh          chan struct{}
-	indexPath       string // 索引文档目录路径
-	skillsRoot      string // skills 目录绝对路径
+	indexPath       string          // 索引文档目录路径
+	skillsRoot      string          // skills 目录绝对路径
+	greetedSessions map[string]bool // 已发送过打招呼语的会话 ID，确保每次启动后每会话仅发送一次
 }
 
 // NewCore 创建管家核心。msgChan 为机器人网关投递的消息通道。
@@ -45,6 +46,14 @@ func NewCore(
 	timeout := time.Duration(config.ActiveTimeoutMinutes) * time.Minute
 	if timeout <= 0 {
 		timeout = 30 * time.Minute
+	}
+	// 历史存储上限默认 100
+	if config.MaxHistoryStore <= 0 {
+		config.MaxHistoryStore = 100
+	}
+	// Loop 上限默认 10
+	if config.MaxLoop <= 0 {
+		config.MaxLoop = 10
 	}
 	// 预构建 system prompt，避免每条消息重复拼装
 	systemPrompt := BuildSystemPrompt(role)
@@ -69,6 +78,7 @@ func NewCore(
 		stopCh:          make(chan struct{}),
 		indexPath:       indexPath,
 		skillsRoot:      skillsRoot,
+		greetedSessions: make(map[string]bool),
 	}
 }
 
@@ -122,6 +132,15 @@ func (c *Core) sendGreeting() {
 	gstool.FmtPrintlnLogTime(`[butler-core] 打招呼语已就绪，将在首次收到消息时发送`)
 }
 
+// buildGreeting 构建完整打招呼语：角色打招呼 + 内置命令说明。
+// 每次启动后每会话仅发送一次。
+func (c *Core) buildGreeting() string {
+	if c.role == nil || c.role.InitGreeting == `` {
+		return ``
+	}
+	return c.role.InitGreeting + `\n\n` + builtinCommandsHelp()
+}
+
 // consumeLoop 消费消息通道，处理每条消息。
 func (c *Core) consumeLoop() {
 	for {
@@ -162,12 +181,16 @@ func (c *Core) handleMessage(msg bot.IncomingMessage) {
 	justActivated := c.sessions.Activate(msg.ConversationId)
 	if justActivated {
 		gstool.FmtPrintlnLogTime(`[butler-core] 会话已激活 %s`, msg.ConversationId)
-		// 首次激活时发送打招呼（纯流式模式下只能在有消息上下文时推送）
-		if c.role != nil && c.role.InitGreeting != `` {
-			if err := c.reply(msg, c.role.InitGreeting); err != nil {
-				gstool.FmtPrintlnLogTime(`[butler-core] 打招呼发送失败 %s`, err.Error())
+		// 每次启动后每会话仅发送一次打招呼语（纯流式模式下只能在有消息上下文时推送）
+		if !c.greetedSessions[msg.ConversationId] {
+			greeting := c.buildGreeting()
+			if greeting != `` {
+				if err := c.reply(msg, greeting); err != nil {
+					gstool.FmtPrintlnLogTime(`[butler-core] 打招呼发送失败 %s`, err.Error())
+				}
+				gstool.FmtPrintlnLogTime(`[butler-core] 已发送打招呼给 %s`, msg.SenderNick)
 			}
-			gstool.FmtPrintlnLogTime(`[butler-core] 已发送打招呼给 %s`, msg.SenderNick)
+			c.greetedSessions[msg.ConversationId] = true
 		}
 	}
 	// 存历史（用户消息），使用消息来源机器人的 botConfigId
@@ -179,7 +202,7 @@ func (c *Core) handleMessage(msg bot.IncomingMessage) {
 		IndexPath:  c.indexPath,
 		SkillsRoot: c.skillsRoot,
 	}
-	cmdResult := ParseCommand(msg.Text, c.sessions, c.history, msg.ConversationId, c.config.MaxHistory, cmdCtx)
+	cmdResult := ParseCommand(msg.Text, c.sessions, c.history, msg.ConversationId, c.config.MaxHistoryStore, cmdCtx)
 	if cmdResult.Handled {
 		if err := c.reply(msg, cmdResult.Text); err != nil {
 			gstool.FmtPrintlnLogTime(`[butler-core] 命令回复失败 %s`, err.Error())
@@ -200,29 +223,8 @@ func (c *Core) handleMessage(msg bot.IncomingMessage) {
 		}
 		return
 	}
-	// 3. 新话题检测 + 自动清历史
-	if intent != nil && intent.NewTopic && c.config.AutoCleanOnNewTopic == 1 {
-		gstool.FmtPrintlnLogTime(`[butler-core] 检测到新话题 topic=%s，自动清除历史`, intent.Topic)
-		if err := c.history.CleanBySession(msg.ConversationId); err != nil {
-			gstool.FmtPrintlnLogTime(`[butler-core] 自动清历史失败 %s`, err.Error())
-		}
-		// 清历史后重新存用户消息（保证 AI 能看到当前消息）
-		if err := c.history.Append(msg.ConversationId, define.ButlerRoleUser, msg.Text, msg.BotConfigId); err != nil {
-			gstool.FmtPrintlnLogTime(`[butler-core] 重新存用户消息失败 %s`, err.Error())
-		}
-	}
-	// 4. 历史溢出检查（超过 max_history → 在回复末尾附加提示）
-	historyOverflow := false
-	msgCount, _ := c.history.CountBySession(msg.ConversationId)
-	if msgCount > c.config.MaxHistory {
-		historyOverflow = true
-	}
-	// 5. FC 循环回复（支持 Function Calling 工具调用）
+	// 3. FC 循环回复（支持 Function Calling 工具调用）
 	aiReply, toolsUsed := c.fcReply(msg)
-	// 附加历史溢出提示
-	if historyOverflow {
-		aiReply += fmt.Sprintf(`\n\n💡 当前对话消息数已超过 %d 条，可能影响回复质量。发送 /clean 可清除历史。`, c.config.MaxHistory)
-	}
 	if err := c.reply(msg, aiReply); err != nil {
 		gstool.FmtPrintlnLogTime(`[butler-core] AI 回复失败 %s`, err.Error())
 		return
@@ -240,6 +242,10 @@ func (c *Core) handleMessage(msg bot.IncomingMessage) {
 		if err := c.history.UpdateTopicBySession(msg.ConversationId, intent.Topic); err != nil {
 			gstool.FmtPrintlnLogTime(`[butler-core] 回填主题失败 %s`, err.Error())
 		}
+	}
+	// 历史存储上限自动清理：超过配置上限时自动删除最旧消息
+	if err := c.history.TrimBySession(msg.ConversationId, c.config.MaxHistoryStore); err != nil {
+		gstool.FmtPrintlnLogTime(`[butler-core] 历史自动 trim 失败 %s`, err.Error())
 	}
 	// 有工具调用 → 创建任务记录
 	if len(toolsUsed) > 0 {
@@ -308,8 +314,8 @@ func (c *Core) fcReply(msg bot.IncomingMessage) (string, []string) {
 // fcLoopReply 执行 FC 循环生成回复（Phase 4 逻辑）。
 // Phase 6 增强：执行前检索索引，将匹配的脚本信息注入 system prompt。
 func (c *Core) fcLoopReply(msg bot.IncomingMessage, fcModelId int) (string, []string) {
-	// 加载历史消息（最近 maxHistory 条）
-	historyMessages, err := c.history.ListBySession(msg.ConversationId, c.config.MaxHistory)
+	// 加载历史消息（最近 MaxHistoryStore 条）
+	historyMessages, err := c.history.ListBySession(msg.ConversationId, c.config.MaxHistoryStore)
 	if err != nil {
 		gstool.FmtPrintlnLogTime(`[butler-core] 加载历史失败 %s，使用无历史对话`, err.Error())
 		historyMessages = nil
@@ -329,9 +335,23 @@ func (c *Core) fcLoopReply(msg bot.IncomingMessage, fcModelId int) (string, []st
 		gstool.FmtPrintlnLogTime(`[butler-core] 索引命中 skill=%s script=%s path=%s`, retrieveResult.SkillName, retrieveResult.ScriptName, scriptPath)
 	}
 	// 执行 FC 循环
-	result := worker.RunFCLoop(c.db, fcModelId, fcSystemPrompt, fcHistory, msg.Text)
+	result := worker.RunFCLoop(c.db, fcModelId, fcSystemPrompt, fcHistory, msg.Text, c.config.MaxLoop)
 	if result.Content == `` {
 		return `我暂时无法回复，请稍后再试。`, result.ToolUsed
+	}
+	// 附加 LLM 用量统计 + 脚本清单（markdown 用双换行分段）
+	if result.LLMCalls > 0 {
+		usageInfo := fmt.Sprintf(`\n\n---\n\n📊 LLM 调用 %d 次 ｜ 输入 %d token ｜ 输出 %d token`, result.LLMCalls, result.InputTokens, result.OutputTokens)
+		if result.CacheTokens > 0 {
+			usageInfo += fmt.Sprintf(` ｜ 缓存命中 %d token`, result.CacheTokens)
+		}
+		if len(result.ScriptsRun) > 0 {
+			usageInfo += fmt.Sprintf(`\n\n📜 执行脚本：%s`, strings.Join(result.ScriptsRun, `, `))
+		}
+		if len(result.ScriptsCreated) > 0 {
+			usageInfo += fmt.Sprintf(`\n\n📝 新建脚本：%s`, strings.Join(result.ScriptsCreated, `, `))
+		}
+		return result.Content + usageInfo, result.ToolUsed
 	}
 	return result.Content, result.ToolUsed
 }
@@ -414,7 +434,7 @@ const fcSystemPromptSuffix = `
 - 脚本工具索引：scripts.md 列出了已有的 Python 脚本工具
 - 项目根目录下的文件和目录可以直接使用相对路径访问
 
-## 工作流程（发现 → 执行 → 进化）
+## 工作流程（发现 → 执行 → 回答 → 进化）
 
 收到用户任务后，按以下顺序处理：
 
@@ -429,20 +449,24 @@ const fcSystemPromptSuffix = `
 - 再调用对应的操作接口（如 /api/GitRemoteBranchList）执行具体操作
 - http_call 调用示例：http_call("/api/GitConfigList", "{}")
 
-### 3. 结果汇总
-将执行结果以友好、清晰的格式呈现给用户。
+### 3. 结果汇总 ⚠️ 最重要
+**必须**将执行结果以友好、清晰的格式呈现给用户，这是你唯一的目标。
+无论中间经过多少工具调用，最终回复必须包含用户所问问题的具体答案。
 
-### 4. 自进化评估（任务完成后必须执行）
-任务完成后，评估此操作模式是否具有复用价值：
-- 如果本次使用了新的 API 组合或多步骤操作流程，且 scripts.md 中没有对应脚本
-- 如果此操作可能被频繁使用
-→ 使用 file_write 在 skills/ 下创建新的 SKILL.md 和 Python 脚本
-→ 脚本中应封装本次操作的完整逻辑（API 调用链）
-→ 告知用户已创建新技能脚本及其路径
+### 4. 自进化评估（完成任务后可选）
+在已经回答用户问题的基础上，如果本次操作模式具有复用价值且 scripts.md 中没有对应脚本，可简要新建脚本。
+**禁止**因为创建脚本而延迟或省略回答用户的问题。简单的一次性查询不需要创建脚本。
 
-如果只是普通对话或已有脚本可复用，跳过此步骤。`
+**⚠️ SKILL.md 修改规则：**
+- **绝对禁止**修改或覆盖已有的 SKILL.md 文件（它们已被精心维护）
+- 新增脚本时，只需在 scripts.md 中追加一行简要说明，不要动 SKILL.md
+- 只有当创建一个全新的 skill 目录时，才需要新建 SKILL.md，且应保持简洁（仅功能索引列表）
 
-// reply 通过消息携带的 SessionWebhook 回复。
+**⚠️ 脚本存放规则：**
+- **所有**新生成的脚本必须放在 skills/dtool-butler/scripts/ 目录下
+- **绝对禁止**往已有的 skill 目录（如 dtool-git/dtool-api/dtool-db 等）中新增脚本文件`
+
+// reply 通过消息携带的 SessionWebhook 以 markdown 格式回复。
 // SessionWebhook 为空时，通过消息来源机器人的 Gateway 使用 Open API 单聊发送回退。
 func (c *Core) reply(msg bot.IncomingMessage, text string) error {
 	if msg.SessionWebhook == `` {
@@ -450,10 +474,10 @@ func (c *Core) reply(msg bot.IncomingMessage, text string) error {
 		if c.gatewayProvider != nil && msg.BotConfigId > 0 {
 			gw := c.gatewayProvider.GetGateway(msg.BotConfigId)
 			if gw != nil {
-				return gw.SendText(msg.SenderStaffId, text)
+				return gw.SendMarkdown(msg.SenderStaffId, `管家回复`, text)
 			}
 		}
 		return fmt.Errorf(`SessionWebhook 为空且无可用 Gateway，无法回复`)
 	}
-	return c.replier.SimpleReplyText(context.Background(), msg.SessionWebhook, []byte(text))
+	return c.replier.SimpleReplyMarkdown(context.Background(), msg.SessionWebhook, []byte(`管家回复`), []byte(text))
 }

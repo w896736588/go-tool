@@ -66,6 +66,20 @@ func (h *History) CleanBySession(sessionId string) error {
 	return err
 }
 
+// TrimBySession 保留指定会话最新的 maxLimit 条消息，删除多余的旧消息。
+// maxLimit <= 0 时不执行任何操作。
+func (h *History) TrimBySession(sessionId string, maxLimit int) error {
+	if maxLimit <= 0 {
+		return nil
+	}
+	_, err := h.db.Client.ExecBySql(
+		`DELETE FROM tbl_butler_message WHERE session_id = ? AND id NOT IN (
+			SELECT id FROM tbl_butler_message WHERE session_id = ? ORDER BY id DESC LIMIT ?
+		)`, sessionId, sessionId, maxLimit,
+	).Exec()
+	return err
+}
+
 // ListBySession 返回指定会话的历史消息（按 id 升序），最多 limit 条。
 func (h *History) ListBySession(sessionId string, limit int) ([]define.ButlerHistoryMessage, error) {
 	if limit <= 0 {
