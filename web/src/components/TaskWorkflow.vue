@@ -1384,6 +1384,7 @@ export default {
       // 工作流文档独立表相关
       workflowDocuments: [],
       _cachedTemplateSteps: [], // 缓存原始模板步骤数据（含 step_documents）
+      _workflowPageLoading: false, // 防止 loadWorkflowPage 重复调用
       // 步骤左侧Tab相关
       stepActiveTab: '__prompt__', // 当前激活的左侧Tab，'__prompt__' 为提示词，其他为文档id/name
       promptEditMode: true, // 提示词是否为编辑模式（false为查看模式）
@@ -1652,9 +1653,13 @@ export default {
         this.errorMessage = '任务 id 不合法'
         return
       }
+      // 防止 mounted() 与 $route.params.taskId watcher 重复调用导致的竞态问题
+      if (this._workflowPageLoading) return
+      this._workflowPageLoading = true
       this.loading = true
       this.errorMessage = ''
       taskWorkflowApi.TaskWorkflowCreateOrGet(this.taskId, (response) => {
+        this._workflowPageLoading = false
         if (!(response && response.ErrCode === 0 && response.Data)) {
           this.loading = false
           this.errorMessage = response?.ErrMsg || '工作流加载失败'

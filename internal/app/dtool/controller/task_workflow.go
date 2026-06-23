@@ -164,6 +164,7 @@ func TaskWorkflowCreateOrGet(c *gin.Context) {
 		gsgin.GinResponseError(c, err.Error(), nil)
 		return
 	}
+	component.GsLog.Debugf(`获取返回的工作流程信息 %s`, gstool.JsonEncode(responseData))
 	gsgin.GinResponseSuccess(c, ``, responseData)
 }
 

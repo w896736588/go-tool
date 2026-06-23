@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/open-dingtalk/dingtalk-stream-sdk-go/chatbot"
+	"github.com/spf13/cast"
 	"github.com/w896736588/go-tool/gstool"
 )
 
@@ -31,6 +32,9 @@ type Core struct {
 	indexPath       string          // 索引文档目录路径
 	skillsRoot      string          // skills 目录绝对路径
 	greetedSessions map[string]bool // 已发送过打招呼语的会话 ID，确保每次启动后每会话仅发送一次
+	// 归档提交回调，由业务层注入。主管家任务完成后将文件+对话异步提交到归档管家。
+	archiveSubmit    func(configId, taskId int, sessionId string, files []string, conversation string)
+	lastFilesWritten []string // 最近一次 FC 循环产生的文件路径
 }
 
 // NewCore 创建管家核心。msgChan 为机器人网关投递的消息通道。
@@ -80,6 +84,11 @@ func NewCore(
 		skillsRoot:      skillsRoot,
 		greetedSessions: make(map[string]bool),
 	}
+}
+
+// SetArchiveSubmit 注入归档提交回调（由业务层调用）。仅主管家生效。
+func (c *Core) SetArchiveSubmit(fn func(configId, taskId int, sessionId string, files []string, conversation string)) {
+	c.archiveSubmit = fn
 }
 
 // Start 启动管家主循环：发打招呼 → 自动初始化索引 → 消费消息 → 定时巡检休眠。非阻塞。
@@ -247,9 +256,15 @@ func (c *Core) handleMessage(msg bot.IncomingMessage) {
 	if err := c.history.TrimBySession(msg.ConversationId, c.config.MaxHistoryStore); err != nil {
 		gstool.FmtPrintlnLogTime(`[butler-core] 历史自动 trim 失败 %s`, err.Error())
 	}
-	// 有工具调用 → 创建任务记录
+	// 有工具调用 → 创建任务记录 → 提交归档
 	if len(toolsUsed) > 0 {
-		c.saveTaskRecord(msg.ConversationId, msg.Text, aiReply, toolsUsed)
+		taskId := c.saveTaskRecord(msg.ConversationId, msg.Text, aiReply, toolsUsed)
+		// 主管家任务完成后 → 异步提交归档（将对话+文件交给归档管家评估自进化）
+		if c.config.ButlerType == define.ButlerTypeMain && c.archiveSubmit != nil {
+			conversation := c.getSessionConversation(msg.ConversationId)
+			go c.archiveSubmit(c.config.Id, taskId, msg.ConversationId, c.lastFilesWritten, conversation)
+			gstool.FmtPrintlnLogTime(`[butler-core] 已提交归档 task_id=%d files=%d`, taskId, len(c.lastFilesWritten))
+		}
 	}
 }
 
@@ -334,22 +349,27 @@ func (c *Core) fcLoopReply(msg bot.IncomingMessage, fcModelId int) (string, []st
 		fcSystemPrompt += retrieveInfo
 		gstool.FmtPrintlnLogTime(`[butler-core] 索引命中 skill=%s script=%s path=%s`, retrieveResult.SkillName, retrieveResult.ScriptName, scriptPath)
 	}
+	// 发送执行中提示（不阻塞主流程，失败仅记录日志）
+	if err := c.reply(msg, `正在执行中，请稍候...`); err != nil {
+		gstool.FmtPrintlnLogTime(`[butler-core] 发送执行中提示失败 %s`, err.Error())
+	}
 	// 执行 FC 循环
 	result := worker.RunFCLoop(c.db, fcModelId, fcSystemPrompt, fcHistory, msg.Text, c.config.MaxLoop)
+	c.lastFilesWritten = result.FilesWritten // 记录本次产生的所有文件路径（供归档提交）
 	if result.Content == `` {
 		return `我暂时无法回复，请稍后再试。`, result.ToolUsed
 	}
 	// 附加 LLM 用量统计 + 脚本清单（markdown 用双换行分段）
 	if result.LLMCalls > 0 {
-		usageInfo := fmt.Sprintf(`\n\n---\n\n📊 LLM 调用 %d 次 ｜ 输入 %d token ｜ 输出 %d token`, result.LLMCalls, result.InputTokens, result.OutputTokens)
+		usageInfo := "\n\n---\n\n" + fmt.Sprintf("📊 LLM 调用 %d 次 ｜ 输入 %d token ｜ 输出 %d token", result.LLMCalls, result.InputTokens, result.OutputTokens)
 		if result.CacheTokens > 0 {
-			usageInfo += fmt.Sprintf(` ｜ 缓存命中 %d token`, result.CacheTokens)
+			usageInfo += fmt.Sprintf(" ｜ 缓存命中 %d token", result.CacheTokens)
 		}
 		if len(result.ScriptsRun) > 0 {
-			usageInfo += fmt.Sprintf(`\n\n📜 执行脚本：%s`, strings.Join(result.ScriptsRun, `, `))
+			usageInfo += "\n\n" + fmt.Sprintf("📜 执行脚本：%s", strings.Join(result.ScriptsRun, `, `))
 		}
 		if len(result.ScriptsCreated) > 0 {
-			usageInfo += fmt.Sprintf(`\n\n📝 新建脚本：%s`, strings.Join(result.ScriptsCreated, `, `))
+			usageInfo += "\n\n" + fmt.Sprintf("📝 新建脚本：%s", strings.Join(result.ScriptsCreated, `, `))
 		}
 		return result.Content + usageInfo, result.ToolUsed
 	}
@@ -393,12 +413,12 @@ func historyToFcMessages(messages []define.ButlerHistoryMessage) []map[string]st
 }
 
 // saveTaskRecord 创建管家任务记录到 tbl_butler_task（状态为 done）。
-func (c *Core) saveTaskRecord(sessionId, title, result string, toolsUsed []string) {
-	c.saveTaskRecordWithStatus(sessionId, title, result, toolsUsed, define.ButlerTaskStatusDone, `fc`)
+func (c *Core) saveTaskRecord(sessionId, title, result string, toolsUsed []string) int {
+	return c.saveTaskRecordWithStatus(sessionId, title, result, toolsUsed, define.ButlerTaskStatusDone, `fc`)
 }
 
-// saveTaskRecordWithStatus 创建管家任务记录到 tbl_butler_task，指定状态和执行器。
-func (c *Core) saveTaskRecordWithStatus(sessionId, title, result string, toolsUsed []string, status, executor string) {
+// saveTaskRecordWithStatus 创建管家任务记录到 tbl_butler_task，指定状态和执行器。返回新记录 ID。
+func (c *Core) saveTaskRecordWithStatus(sessionId, title, result string, toolsUsed []string, status, executor string) int {
 	_, err := c.db.Client.QuickCreate(`tbl_butler_task`, map[string]any{
 		`session_id`: sessionId,
 		`title`:      title,
@@ -411,9 +431,29 @@ func (c *Core) saveTaskRecordWithStatus(sessionId, title, result string, toolsUs
 	}).Exec()
 	if err != nil {
 		gstool.FmtPrintlnLogTime(`[butler-core] 创建任务记录失败 %s`, err.Error())
-	} else {
-		gstool.FmtPrintlnLogTime(`[butler-core] 已创建任务记录 title=%s executor=%s tools=%v`, truncateForLog(title, 50), executor, toolsUsed)
+		return 0
 	}
+	// 获取自增 ID
+	one, _ := c.db.Client.QueryBySql(`SELECT last_insert_rowid() as id`).One()
+	taskId := 0
+	if len(one) > 0 {
+		taskId = cast.ToInt(one[`id`])
+	}
+	gstool.FmtPrintlnLogTime(`[butler-core] 已创建任务记录 id=%d title=%s executor=%s tools=%v`, taskId, truncateForLog(title, 50), executor, toolsUsed)
+	return taskId
+}
+
+// getSessionConversation 获取会话的完整对话历史并格式化为文本，供归档提交。
+func (c *Core) getSessionConversation(sessionId string) string {
+	messages, err := c.history.ListBySession(sessionId, 0) // 0=不限制数量
+	if err != nil || len(messages) == 0 {
+		return ``
+	}
+	var sb strings.Builder
+	for _, msg := range messages {
+		sb.WriteString(fmt.Sprintf("[%s] %s\n", msg.Role, msg.Content))
+	}
+	return sb.String()
 }
 
 // fcSystemPromptSuffix FC 循环的 system prompt 补充说明，指导 AI 使用工具。

@@ -7,6 +7,7 @@ import (
 	"dev_tool/internal/app/dtool/component"
 	"dev_tool/internal/app/dtool/define"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -64,7 +65,12 @@ func (r *ButlerRuntime) Start() error {
 
 	// 4. 创建管家核心（传入 ButlerRuntime 作为 GatewayProvider）
 	r.core = butler.NewCore(r.db, butlerConfig, r.butlerEnv, role, r, r.msgChan)
+	// 主管家注入归档提交回调
+	r.injectArchiveCallback(butlerConfig)
 	r.core.Start()
+
+	// 5. 启动归档管家（若存在启用的归档管家配置）
+	r.startArchiveButler()
 
 	gstool.FmtPrintlnLogTime(`[butler] 管家运行时已启动，已连接 %d 个机器人`, len(r.gateways))
 	return nil
@@ -99,6 +105,7 @@ func (r *ButlerRuntime) RestartCore() {
 	r.mu.Lock()
 	r.core = butler.NewCore(r.db, butlerConfig, r.butlerEnv, role, r, r.msgChan)
 	r.mu.Unlock()
+	r.injectArchiveCallback(butlerConfig)
 	r.core.Start()
 	gstool.FmtPrintlnLogTime(`[butler] RestartCore: 核心已重启，已连接 %d 个机器人`, len(r.gateways))
 }
@@ -269,6 +276,7 @@ func (r *ButlerRuntime) rowToButlerConfigItem(row map[string]any) *define.Butler
 		AutoInitOnStart:      cast.ToInt(row[`auto_init_on_start`]),
 		MaxLoop:              cast.ToInt(row[`max_loop`]),
 		ToolCallPushEnabled:  cast.ToInt(row[`tool_call_push_enabled`]),
+		ButlerType:           cast.ToInt(row[`butler_type`]),
 		Status:               cast.ToInt(row[`status`]),
 	}
 }
@@ -350,4 +358,261 @@ func DingtalkGetAccessToken(appKey, appSecret string) (string, error) {
 // DingtalkGetAppAdmins 获取钉钉应用管理员列表（供测试接口获取接收者时使用）。
 func DingtalkGetAppAdmins(accessToken, appKey string) ([]string, error) {
 	return bot.GetDingtalkAppAdmins(accessToken, appKey)
+}
+
+// ==================== 归档管线 ====================
+
+// injectArchiveCallback 向管家核心注入归档提交回调（仅主管家生效）。
+func (r *ButlerRuntime) injectArchiveCallback(config *define.ButlerConfigItem) {
+	if config.ButlerType != define.ButlerTypeMain {
+		return
+	}
+	r.core.SetArchiveSubmit(func(configId, taskId int, sessionId string, files []string, conversation string) {
+		id, err := r.db.CreateArchiveRecord(configId, taskId, sessionId, files, conversation)
+		if err != nil {
+			gstool.FmtPrintlnLogTime(`[butler-archive] 创建归档记录失败 config_id=%d session=%s err=%s`, configId, sessionId, err.Error())
+		} else if id <= 0 {
+			gstool.FmtPrintlnLogTime(`[butler-archive] 创建归档记录异常 id=%d config_id=%d session=%s`, id, configId, sessionId)
+		} else {
+			gstool.FmtPrintlnLogTime(`[butler-archive] 已创建归档记录 id=%d config_id=%d files=%d`, id, configId, len(files))
+		}
+	})
+}
+
+// startArchiveButler 启动归档管家后台协程（若存在 butler_type=2 的启用配置）。
+func (r *ButlerRuntime) startArchiveButler() {
+	archiveConfig, err := r.loadArchiveConfig()
+	if err != nil {
+		gstool.FmtPrintlnLogTime(`[butler-archive] 归档管家配置未就绪 %s`, err.Error())
+		return
+	}
+	gstool.FmtPrintlnLogTime(`[butler-archive] 归档管家已启动 config_id=%d name=%s`, archiveConfig.Id, archiveConfig.Name)
+	go r.archiveLoop(archiveConfig)
+}
+
+// loadArchiveConfig 加载启用状态的归档管家配置（butler_type=2, status=1，取第一条）。
+func (r *ButlerRuntime) loadArchiveConfig() (*define.ButlerConfigItem, error) {
+	row, err := r.db.Client.QueryBySql(
+		`SELECT * FROM tbl_butler_config WHERE butler_type = ? AND status = ? ORDER BY id ASC LIMIT 1`,
+		define.ButlerTypeArchive, 1,
+	).One()
+	if err != nil || len(row) == 0 {
+		return nil, fmt.Errorf(`未找到启用的归档管家配置`)
+	}
+	return r.rowToButlerConfigItem(row), nil
+}
+
+// archiveLoop 归档管家轮询主循环，每 30 秒检查一次待处理的归档记录。
+func (r *ButlerRuntime) archiveLoop(config *define.ButlerConfigItem) {
+	gstool.FmtPrintlnLogTime(`[butler-archive] 轮询协程已启动 config_id=%d 等待首次轮询(30s后)`, config.Id)
+
+	defer func() {
+		if rec := recover(); rec != nil {
+			gstool.FmtPrintlnLogTime(`[butler-archive] 轮询协程 panic 退出 config_id=%d panic=%v`, config.Id, rec)
+		}
+	}()
+
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		items, err := r.db.ListPendingArchives(5)
+		if err != nil {
+			gstool.FmtPrintlnLogTime(`[butler-archive] 查询待处理归档失败 %s`, err.Error())
+			continue
+		}
+		if len(items) > 0 {
+			gstool.FmtPrintlnLogTime(`[butler-archive] 发现 %d 条待处理归档记录`, len(items))
+		}
+		for _, item := range items {
+			r.processArchiveItem(config, item)
+		}
+	}
+}
+
+// processArchiveItem 处理单条归档记录：AI 评估 → 生成通用脚本 → 写入文件。
+func (r *ButlerRuntime) processArchiveItem(config *define.ButlerConfigItem, item map[string]any) {
+	archiveId := cast.ToInt(item[`id`])
+
+	defer func() {
+		if rec := recover(); rec != nil {
+			gstool.FmtPrintlnLogTime(`[butler-archive] 处理归档记录 panic id=%d panic=%v`, archiveId, rec)
+			_ = r.db.UpdateArchiveStatus(archiveId, define.ArchiveStatusIgnored,
+				fmt.Sprintf(`归档管家 panic: %v`, rec),
+				fmt.Sprintf(`panic: %v`, rec), ``, ``)
+		}
+	}()
+
+	logBuilder := &strings.Builder{}
+	logBuilder.WriteString(fmt.Sprintf("开始处理归档记录 id=%d\n", archiveId))
+
+	// 标记为处理中
+	_ = r.db.UpdateArchiveStatus(archiveId, define.ArchiveStatusProcessing, logBuilder.String(), ``, ``, ``)
+
+	conversation := cast.ToString(item[`conversation`])
+
+	// 步骤1：AI 评估是否值得自进化
+	evalModelId := config.FcModelId
+	if evalModelId <= 0 {
+		evalModelId = config.ModelId
+	}
+	if evalModelId <= 0 {
+		logBuilder.WriteString("未配置 AI 模型，标记为已忽略\n")
+		_ = r.db.UpdateArchiveStatus(archiveId, define.ArchiveStatusIgnored, logBuilder.String(), `未配置 AI 模型`, ``, ``)
+		return
+	}
+
+	evalPrompt := fmt.Sprintf(`你是归档管家（自进化评估器），负责判断主管家产生的文件+对话是否有复用价值。
+
+## 对话与文件内容
+%s
+
+请判断：
+1. 这次任务的操作模式是否具有通用复用价值？（例如：查询配置、操作数据库、调用API等）
+2. 是否适合抽象为通用 Python 脚本？
+
+输出格式（严格按此格式）：
+评估结论：[YES/NO]
+理由：[简要说明]
+脚本名建议：[如果YES，建议的脚本文件名，如 query_git_branches.py]
+脚本描述：[如果YES，一行描述]`,
+		conversation)
+
+	logBuilder.WriteString(fmt.Sprintf("AI评估中 模型=%d prompt长度=%d\n", evalModelId, len(evalPrompt)))
+	result, _, evalErr := r.db.AIChatByModel(evalModelId,
+		`你是归档管家（自进化评估器），负责判断主管家产生的文件+对话是否有复用价值。`,
+		evalPrompt)
+	if evalErr != nil {
+		logBuilder.WriteString(fmt.Sprintf("AI评估失败 %s\n", evalErr.Error()))
+		_ = r.db.UpdateArchiveStatus(archiveId, define.ArchiveStatusIgnored, logBuilder.String(), fmt.Sprintf(`AI评估失败: %s`, evalErr.Error()), ``, ``)
+		return
+	}
+
+	logBuilder.WriteString(fmt.Sprintf("AI评估结果: %s\n", strings.TrimSpace(result)))
+
+	// 判断是否值得自进化
+	if !strings.Contains(result, `评估结论：YES`) && !strings.Contains(result, `评估结论: YES`) {
+		logBuilder.WriteString("评估结论：无需自进化，标记为已忽略\n")
+		_ = r.db.UpdateArchiveStatus(archiveId, define.ArchiveStatusIgnored, logBuilder.String(), result, ``, ``)
+		return
+	}
+
+	// 步骤2：生成通用脚本
+	logBuilder.WriteString("评估结论：需要自进化，开始生成脚本\n")
+	genPrompt := fmt.Sprintf(`基于以下主管家执行记录，编写通用 Python 脚本。
+
+## 评估结论
+%s
+
+## 对话与执行详情
+%s
+
+请输出两部分（用 ===SCRIPT=== 和 ===INDEX=== 分隔）：
+===SCRIPT===
+[完整的 Python 脚本代码]
+===INDEX===
+[scripts.md 索引条目格式：## [skill名称] 描述\n- 脚本: script_name.py\n- 来源: 归档管家自进化]`,
+		result, conversation)
+
+	genResult, _, genErr := r.db.AIChatByModel(evalModelId,
+		`你是 dtool 智能管家，负责编写通用工具 Python 脚本。只输出脚本代码和索引，不输出其他内容。`,
+		genPrompt)
+	if genErr != nil {
+		logBuilder.WriteString(fmt.Sprintf("脚本生成失败 %s\n", genErr.Error()))
+		_ = r.db.UpdateArchiveStatus(archiveId, define.ArchiveStatusIgnored, logBuilder.String(), fmt.Sprintf(`脚本生成失败: %s`, genErr.Error()), ``, ``)
+		return
+	}
+
+	// 解析脚本和索引
+	scriptContent, indexEntry, scriptName := r.parseArchiveGenResult(genResult)
+	if scriptContent == `` {
+		logBuilder.WriteString("AI 未生成有效脚本内容\n")
+		_ = r.db.UpdateArchiveStatus(archiveId, define.ArchiveStatusIgnored, logBuilder.String(), genResult, ``, ``)
+		return
+	}
+
+	// 写入脚本文件
+	scriptFile, writeErr := common.WriteArchiveScript(r.butlerEnv.RootPath, scriptName, scriptContent)
+	if writeErr != nil {
+		logBuilder.WriteString(fmt.Sprintf("写脚本文件失败 %s\n", writeErr.Error()))
+		_ = r.db.UpdateArchiveStatus(archiveId, define.ArchiveStatusIgnored, logBuilder.String(), fmt.Sprintf(`写文件失败: %s`, writeErr.Error()), ``, ``)
+		return
+	}
+	logBuilder.WriteString(fmt.Sprintf("脚本已写入 %s\n", scriptFile))
+
+	// 追加索引
+	if indexEntry != `` {
+		_ = common.AppendArchiveIndex(r.butlerEnv.RootPath, `dtool-butler`, scriptName, indexEntry)
+		logBuilder.WriteString("索引已追加 scripts.md\n")
+	}
+
+	logBuilder.WriteString("自进化完成\n")
+	_ = r.db.UpdateArchiveStatus(archiveId, define.ArchiveStatusDone, logBuilder.String(), result, scriptFile, indexEntry)
+	r.notifyArchiveEvent(config, archiveId, cast.ToString(item[`session_id`]), scriptFile, define.ArchiveStatusDone, scriptName)
+}
+
+// parseArchiveGenResult 解析 AI 生成的脚本内容和索引条目。
+// 返回: 脚本内容, 索引描述, 脚本文件名
+func (r *ButlerRuntime) parseArchiveGenResult(genResult string) (scriptContent, indexEntry, scriptName string) {
+	parts := strings.SplitN(genResult, `===SCRIPT===`, 2)
+	if len(parts) < 2 {
+		return ``, ``, ``
+	}
+	remaining := parts[1]
+	scriptParts := strings.SplitN(remaining, `===INDEX===`, 2)
+	scriptContent = strings.TrimSpace(scriptParts[0])
+	if len(scriptParts) > 1 {
+		indexEntry = strings.TrimSpace(scriptParts[1])
+	}
+
+	if idx := strings.Index(indexEntry, `.py`); idx > 0 {
+		start := strings.LastIndex(indexEntry[:idx], ` `)
+		if start < 0 {
+			start = strings.LastIndex(indexEntry[:idx], `-`)
+		}
+		if start >= 0 {
+			scriptName = strings.TrimSpace(indexEntry[start:idx] + `.py`)
+		}
+	}
+	if scriptName == `` {
+		scriptName = fmt.Sprintf(`archive_%d.py`, time.Now().Unix())
+	}
+	return
+}
+
+// notifyArchiveEvent 推送归档处理通知到 Webhook。无 webhook 配置时静默跳过。
+func (r *ButlerRuntime) notifyArchiveEvent(config *define.ButlerConfigItem, archiveId int, sessionId, detail, status, reason string) {
+	webhookCfg := GetWebhookConfigByAgentCliId(config.AgentCliId)
+	if webhookCfg == nil {
+		return
+	}
+
+	var title, text string
+	switch status {
+	case define.ArchiveStatusProcessing:
+		title = fmt.Sprintf("[归档开始] #%d", archiveId)
+		text = fmt.Sprintf("会话: %s\n文件: %s", sessionId, truncateForNotify(detail, 200))
+	case define.ArchiveStatusDone:
+		title = fmt.Sprintf("[归档完成] #%d", archiveId)
+		text = fmt.Sprintf("会话: %s\n产出脚本: %s\n描述: %s", sessionId, detail, truncateForNotify(reason, 100))
+	case define.ArchiveStatusIgnored:
+		title = fmt.Sprintf("[归档忽略] #%d", archiveId)
+		text = fmt.Sprintf("会话: %s\n原因: %s", sessionId, truncateForNotify(reason, 200))
+	default:
+		return
+	}
+
+	if err := SendWebhookNotify(webhookCfg, title, text, ``); err != nil {
+		gstool.FmtPrintlnLogTime("[butler-archive] 通知发送失败 id=%d status=%s err=%s", archiveId, status, err.Error())
+	} else {
+		gstool.FmtPrintlnLogTime("[butler-archive] 通知已发送 id=%d status=%s", archiveId, status)
+	}
+}
+
+// truncateForNotify 截断字符串用于通知文本。
+func truncateForNotify(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }

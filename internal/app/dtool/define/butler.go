@@ -19,6 +19,20 @@ const (
 	ButlerTaskStatusFailed    = `failed`
 )
 
+// 管家类型常量
+const (
+	ButlerTypeMain    = 1 // 主管家：对话+FC工具调用
+	ButlerTypeArchive = 2 // 归档管家：评估主管家任务，自进化生成通用脚本
+)
+
+// 归档状态常量
+const (
+	ArchiveStatusPending    = `pending`    // 待处理（主管家提交后初始状态）
+	ArchiveStatusProcessing = `processing` // 处理中（归档管家正在处理）
+	ArchiveStatusDone       = `done`       // 已完成（有自进化产出）
+	ArchiveStatusIgnored    = `ignored`    // 已忽略（无需自进化或处理失败）
+)
+
 // 机器人连接状态常量
 const (
 	ConnStatusUnknown      = 0 // 未知/未连接
@@ -65,6 +79,7 @@ type ButlerConfigItem struct {
 	AutoInitOnStart      int    `json:"auto_init_on_start"`
 	MaxLoop              int    `json:"max_loop"`
 	ToolCallPushEnabled  int    `json:"tool_call_push_enabled"` // 工具调用进度是否推送到机器人，1=开启 0=关闭
+	ButlerType           int    `json:"butler_type"`            // 管家类型：1=主管家 2=归档管家
 	Status               int    `json:"status"`
 }
 
