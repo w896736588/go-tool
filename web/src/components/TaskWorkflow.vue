@@ -687,6 +687,17 @@
                                 <el-icon><Link /></el-icon>
                               </GitActionButton>
                             </el-tooltip>
+                            <el-tooltip content="全屏编辑" placement="top">
+                              <GitActionButton
+                                variant="info"
+                                compact
+                                class="toolbar-icon-button"
+                                @click="openActiveDocFullscreen"
+                                :disabled="!getActiveDocFileId()"
+                              >
+                                <el-icon><FullScreen /></el-icon>
+                              </GitActionButton>
+                            </el-tooltip>
                             <el-tooltip content="搜索" placement="top">
                               <GitActionButton
                                 variant="info"
@@ -1137,7 +1148,7 @@
 </template>
 
 <script>
-import { HomeFilled, View, Edit, Check, CopyDocument, MoreFilled, RefreshLeft, Link, Download, Search, Share } from '@element-plus/icons-vue'
+import { HomeFilled, View, Edit, Check, CopyDocument, MoreFilled, RefreshLeft, Link, Download, Search, Share, FullScreen } from '@element-plus/icons-vue'
 import GitActionButton from '@/components/base/GitActionButton.vue'
 import ChatHistoryButton from '@/components/shared/ChatHistoryButton.vue'
 import ChatHistoryDialog from '@/components/shared/ChatHistoryDialog.vue'
@@ -3404,6 +3415,19 @@ export default {
       const fileId = this.getActiveDocFileId()
       if (!fileId) return
       this.openFragmentInDialog(fileId, this.getActiveDocName())
+    },
+    // 全屏编辑当前文档（在新窗口中打开独立编辑页面）
+    openActiveDocFullscreen() {
+      const fileId = this.getActiveDocFileId()
+      if (!fileId) {
+        this.$helperNotify.warning('请先保存文档后再全屏编辑')
+        return
+      }
+      const url = this.$router.resolve({
+        name: 'memory-fragment-fullscreen',
+        query: { fragment_id: fileId },
+      }).href
+      window.open(url, '_blank')
     },
     // 切换到文档查看模式
     switchDocToViewMode() {
