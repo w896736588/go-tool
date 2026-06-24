@@ -1707,7 +1707,10 @@ export default {
       }
       this.parseNodeStatuses()
       // 捕获工作流文档独立表数据
-      this.workflowDocuments = data.documents || []
+      // 仅在响应中包含文档数据时才更新，避免并发请求返回空数组覆盖已加载的正确数据
+      if (data.documents && Array.isArray(data.documents) && data.documents.length > 0) {
+        this.workflowDocuments = data.documents
+      }
       if (this.workflowId !== previousWorkflowId) {
         this.unregisterWorkflowUnreadSse()
         this.ensureWorkflowUnreadSse()
