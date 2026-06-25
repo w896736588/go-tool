@@ -2059,7 +2059,7 @@ func taskWorkflowBuildDevConfigsMarkdown(homeTaskInfo map[string]any) string {
 		if cfg.MysqlID > 0 {
 			sb.WriteString(fmt.Sprintf("- **MySQL**: %s（ID: %d）\n", mysqlName, cfg.MysqlID))
 		}
-		smartLinkName := taskWorkflowQueryNameByID("tbl_smart_link", cfg.SmartLinkID)
+		smartLinkName := taskWorkflowQuerySmartLinkLabel(cfg.SmartLinkID)
 		if cfg.SmartLinkID > 0 {
 			sb.WriteString(fmt.Sprintf("- **自定义网页**: %s（ID: %d）\n", smartLinkName, cfg.SmartLinkID))
 		}
@@ -2085,7 +2085,7 @@ func taskWorkflowBuildDevConfigsFieldMarkdown(homeTaskInfo map[string]any, field
 		switch field {
 		case `smart_link`:
 			if cfg.SmartLinkID > 0 {
-				name := taskWorkflowQueryNameByID("tbl_smart_link", cfg.SmartLinkID)
+				name := taskWorkflowQuerySmartLinkLabel(cfg.SmartLinkID)
 				val = fmt.Sprintf("%s（ID: %d）", name, cfg.SmartLinkID)
 			}
 		case `smart_link_label`:
@@ -2129,6 +2129,20 @@ func taskWorkflowQueryNameByID(tableName string, id int) string {
 		return ""
 	}
 	return cast.ToString(info["name"])
+}
+
+// taskWorkflowQuerySmartLinkLabel 根据 ID 查询 smart_link 新表的 label 字段。
+func taskWorkflowQuerySmartLinkLabel(id int) string {
+	if id <= 0 {
+		return ""
+	}
+	info, err := common.DbMain.Client.QuickQuery("smart_link", "label", map[string]any{
+		"id": id,
+	}).One()
+	if err != nil || len(info) == 0 {
+		return ""
+	}
+	return cast.ToString(info["label"])
 }
 
 // TaskWorkflowRequirementFetch 执行工作流首节点：抓取需求并直接写入知识片段。

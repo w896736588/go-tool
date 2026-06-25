@@ -36,6 +36,7 @@
           </div>
           <div class="wf-template-manager__template-desc">{{ tpl.description || '无描述' }}</div>
           <div class="wf-template-manager__template-actions">
+            <el-button v-if="tpl.is_default !== 1" text size="small" type="warning" @click.stop="setTemplateDefault(tpl)">设置默认</el-button>
             <el-button text size="small" type="primary" @click.stop="openTemplateEditDialog(tpl)">编辑</el-button>
             <el-button text size="small" type="success" @click.stop="exportTemplate(tpl)">导出</el-button>
             <el-button v-if="tpl.is_default !== 1" text size="small" type="danger" @click.stop="deleteTemplateConfirm(tpl)">删除</el-button>
@@ -655,6 +656,27 @@ export default {
       })
     },
 
+    setTemplateDefault(tpl) {
+      ElMessageBox.confirm(`确定将"${tpl.name}"设为默认模板吗？`, '设置默认模板', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }).then(() => {
+        workflowTemplateApi.WorkflowTemplateSetDefault(tpl.id, (response) => {
+          if (response && response.ErrCode === 0) {
+            // 更新所有模板的 is_default 状态
+            this.templates.forEach(t => {
+              t.is_default = t.id === tpl.id ? 1 : 0
+            })
+            ElMessage.success(`已将"${tpl.name}"设为默认模板`)
+            this.$emit('templates-loaded', this.templates)
+          } else {
+            ElMessage.error(response.ErrMsg || '设置失败')
+          }
+        })
+      }).catch(() => {})
+    },
+
     // ===== 步骤 CRUD =====
     addStep() {
       if (!this.selectedTemplateId) {
@@ -1197,6 +1219,11 @@ export default {
   display: flex;
   gap: 0;
   justify-content: flex-end;
+}
+
+.wf-template-manager__template-actions .el-button {
+  padding-left: 5px;
+  padding-right: 5px;
 }
 
 /* 右侧步骤编辑区域 */

@@ -52,10 +52,18 @@ function WorkflowTemplateImport(data, callBack) {
   base.BasePost('/api/workflow/template/import', data, callBack)
 }
 
+// WorkflowTemplateSetDefault 设置默认模板。
+function WorkflowTemplateSetDefault(id, callBack) {
+  base.BasePost('/api/workflow/template/set-default', {
+    id: id,
+  }, callBack)
+}
+
 export default {
   WorkflowTemplateList,
   WorkflowTemplateSave,
   WorkflowTemplateDelete,
+  WorkflowTemplateSetDefault,
   WorkflowTemplateStepSave,
   WorkflowTemplateStepDelete,
   WorkflowTemplateStepSort,

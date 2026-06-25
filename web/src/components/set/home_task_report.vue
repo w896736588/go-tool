@@ -112,12 +112,11 @@
         </div>
         <el-table :data="requirementFetchConfigs" border style="width: 100%; margin-top: 12px;">
           <el-table-column prop="name" label="名称" min-width="120" />
-          <el-table-column label="自定义网页" min-width="140">
+          <el-table-column label="自定义网页" min-width="200">
             <template #default="scope">
               {{ getSmartLinkNameById(scope.row.smart_link_id) || '-' }}
             </template>
           </el-table-column>
-          <el-table-column prop="link_label" label="网页链接" min-width="140" />
           <el-table-column prop="css_selector" label="CSS选择器" min-width="140" />
           <el-table-column prop="wait_seconds" label="等待秒数" width="100" align="center" />
           <el-table-column label="操作" width="140" align="center" fixed="right">
@@ -144,36 +143,18 @@
             <el-input v-model="fetchConfigForm.name" placeholder="如：TAPD、禅道、飞书需求" maxlength="50" />
           </el-form-item>
           <el-form-item label="自定义网页" required>
-            <el-select
-              v-model="fetchConfigForm.smart_link_id"
+            <el-autocomplete
+              v-model="smartLinkSearchKeyword"
+              :fetch-suggestions="filterSmartLinks"
               clearable
-              filterable
               style="width: 100%;"
-              placeholder="请选择自定义网页"
+              placeholder="输入关键词搜索自定义网页"
+              @select="onSmartLinkSelect"
             >
-              <el-option
-                v-for="item in smartLinkList"
-                :key="item.id"
-                :label="item.name"
-                :value="item.id"
-              />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="网页链接" required>
-            <el-select
-              v-model="fetchConfigForm.link_label"
-              clearable
-              filterable
-              style="width: 100%;"
-              placeholder="请选择具体链接"
-            >
-              <el-option
-                v-for="(link, idx) in currentFetchConfigLinkOptions"
-                :key="idx"
-                :label="link.label"
-                :value="link.label"
-              />
-            </el-select>
+              <template #default="{ item }">
+                <div class="smart-link-option">{{ item.value }}</div>
+              </template>
+            </el-autocomplete>
           </el-form-item>
           <el-form-item label="CSS选择器" required>
             <el-input v-model="fetchConfigForm.css_selector" placeholder="如 .content-wrapper 或 #main" />
@@ -296,6 +277,7 @@ export default {
       fetchConfigDialogVisible: false,
       fetchConfigForm: this.createEmptyFetchConfigForm(),
       editingFetchConfigIndex: -1,
+      smartLinkSearchKeyword: '',
       promptEditorToolbars: PROMPT_EDITOR_TOOLBARS,
       skillList: [],
     }
@@ -325,9 +307,6 @@ export default {
       }))
       return base.concat(skillPlaceholders)
     },
-    currentFetchConfigLinkOptions() {
-      return this.getSmartLinkOptions(this.fetchConfigForm.smart_link_id)
-    },
   },
   mounted() {
     this.loadAiModelList()
@@ -341,16 +320,6 @@ export default {
       const model = item.name || item.model || `模型#${item.id}`
       return `${provider} / ${model}`
     },
-    getSmartLinkOptions(smartLinkId) {
-      if (!smartLinkId) return []
-      const smartLink = this.smartLinkList.find(item => item.id === smartLinkId)
-      if (!smartLink || !smartLink.links) return []
-      try {
-        return JSON.parse(smartLink.links)
-      } catch {
-        return []
-      }
-    },
     loadAiModelList() {
       AiSetApi.AiModelList({ model_type: 'llm' }, (response) => {
         if (response.ErrCode !== 0) {
@@ -360,7 +329,7 @@ export default {
       })
     },
     loadSmartLinkList() {
-      SmartLinkSet.SmartLinkList((response) => {
+      SmartLinkSet.SmartLinkItemList((response) => {
         if (response.ErrCode !== 0 || !response.Data) {
           return
         }
@@ -412,12 +381,14 @@ export default {
     openFetchConfigDialog(row) {
       this.fetchConfigForm = this.createEmptyFetchConfigForm()
       this.editingFetchConfigIndex = -1
+      this.smartLinkSearchKeyword = ''
       if (row) {
         // 编辑模式：找到现有配置索引并回填
         const idx = this.requirementFetchConfigs.indexOf(row)
         if (idx >= 0) {
           this.editingFetchConfigIndex = idx
           this.fetchConfigForm = { ...row }
+          this.smartLinkSearchKeyword = row.link_label || ''
         }
       }
       this.fetchConfigDialogVisible = true
@@ -432,16 +403,14 @@ export default {
         this.$helperNotify.error('请选择自定义网页')
         return
       }
-      if (!cfg.link_label || !cfg.link_label.trim()) {
-        this.$helperNotify.error('请选择网页链接')
-        return
-      }
       if (!cfg.css_selector || !cfg.css_selector.trim()) {
         this.$helperNotify.error('请输入CSS选择器')
         return
       }
       cfg.name = cfg.name.trim()
-      cfg.link_label = cfg.link_label.trim()
+      // 从新表 smart_link 自动获取 link_label
+      const selected = this.smartLinkList.find(s => s.id === cfg.smart_link_id)
+      cfg.link_label = selected ? selected.label : ''
       cfg.css_selector = cfg.css_selector.trim()
       if (!cfg.type) {
         cfg.type = this.generateFetchConfigType()
@@ -466,7 +435,16 @@ export default {
     getSmartLinkNameById(id) {
       if (!id) return ''
       const item = this.smartLinkList.find(s => s.id === id)
-      return item ? item.name : ''
+      return item ? item.label : ''
+    },
+    filterSmartLinks(queryString, cb) {
+      const list = this.smartLinkList
+        .filter(s => !queryString || s.label.toLowerCase().includes(queryString.toLowerCase()))
+        .map(s => ({ value: s.label, id: s.id }))
+      cb(list)
+    },
+    onSmartLinkSelect(item) {
+      this.fetchConfigForm.smart_link_id = item.id
     },
     saveRequirementFetchConfig() {
       const payload = this.buildFullPayload()
