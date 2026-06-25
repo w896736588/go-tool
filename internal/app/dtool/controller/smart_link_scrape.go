@@ -181,25 +181,16 @@ func buildAbsoluteDownloadURL(c *gin.Context, downloadPath string) string {
 	return scheme + "://" + host + downloadURL.RequestURI()
 }
 
-// getFirstAccountFromSmartLink 根据 smartLinkID 和 label 找到对应 link 的 account_list 配置，
+// getFirstAccountFromSmartLink 根据 smartLinkID 查 smart_link 新表获取 account_list 配置，
 // 取关联账号组中的第一个账号返回。
 func getFirstAccountFromSmartLink(smartLinkID int, label string) (string, string) {
-	smartLink, err := common.DbMain.Client.QueryBySql(`select links from tbl_smart_link where id = ?`, smartLinkID).One()
-	if err != nil || len(smartLink) == 0 {
+	newItem, err := common.DbMain.Client.QueryBySql(`select * from smart_link where id = ? and status = ?`, smartLinkID, define.SmartLinkStatusNormal).One()
+	if err != nil || len(newItem) == 0 {
 		return "", ""
 	}
-	linkList := make([]map[string]any, 0)
-	if decodeErr := gstool.JsonDecode(cast.ToString(smartLink["links"]), &linkList); decodeErr != nil {
-		return "", ""
-	}
-	for _, link := range linkList {
-		if cast.ToString(link["label"]) == label {
-			accountList := getAccountListByName(link)
-			if len(accountList) > 0 {
-				return accountList[0]["user_name"], accountList[0]["password"]
-			}
-			break
-		}
+	accountList := getAccountListByName(newItem)
+	if len(accountList) > 0 {
+		return accountList[0]["user_name"], accountList[0]["password"]
 	}
 	return "", ""
 }

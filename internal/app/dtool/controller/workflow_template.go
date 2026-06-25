@@ -55,6 +55,25 @@ func WorkflowTemplateSave(c *gin.Context) {
 	})
 }
 
+// WorkflowTemplateSetDefault 设置默认模板。
+func WorkflowTemplateSetDefault(c *gin.Context) {
+	if common.DbMain == nil || common.DbMain.Client == nil {
+		gsgin.GinResponseError(c, `主库未初始化`, nil)
+		return
+	}
+	request := _struct.WorkflowTemplateSetDefaultRequest{}
+	_ = gsgin.GinPostBody(c, &request)
+	if request.ID <= 0 {
+		gsgin.GinResponseError(c, `模板id不能为空`, nil)
+		return
+	}
+	if err := common.DbMain.WorkflowTemplateSetDefault(request.ID); err != nil {
+		gsgin.GinResponseError(c, err.Error(), nil)
+		return
+	}
+	gsgin.GinResponseSuccess(c, ``, nil)
+}
+
 // WorkflowTemplateDelete 删除工作流程模板。
 func WorkflowTemplateDelete(c *gin.Context) {
 	if common.DbMain == nil || common.DbMain.Client == nil {

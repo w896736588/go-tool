@@ -29,6 +29,11 @@ type WorkflowTemplateDeleteRequest struct {
 	ID int `json:"id"`
 }
 
+// WorkflowTemplateSetDefaultRequest 设置默认模板请求。
+type WorkflowTemplateSetDefaultRequest struct {
+	ID int `json:"id"`
+}
+
 // WorkflowTemplateStepSaveRequest 创建/更新模板步骤请求。
 type WorkflowTemplateStepSaveRequest struct {
 	ID            int    `json:"id"`

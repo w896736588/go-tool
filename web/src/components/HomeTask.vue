@@ -413,7 +413,7 @@
             <el-form-item :label="fetchTypeLabel">
               <el-input
                 v-model="homeTaskForm.requirement_url"
-                :placeholder="'例如：' + (getFetchConfigByType(homeTaskForm.fetch_type) ? getFetchConfigByType(homeTaskForm.fetch_type).link_label : '')"
+                :placeholder="'请输入需求文档网页地址'"
               />
             </el-form-item>
           </el-col>
