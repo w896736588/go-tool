@@ -75,7 +75,7 @@ func (h *GsRedis) createConnDirect() error {
 		Addr:            fmt.Sprintf(`%s:%d`, h.RedisConfig.Host, h.RedisConfig.Port),
 		Password:        h.RedisConfig.Password,
 		DB:              h.RedisConfig.Default,
-		PoolSize:        h.RedisConfig.MaxIdleConns,
+		PoolSize:        h.RedisConfig.MaxOpenConns,
 		MaxIdleConns:    h.RedisConfig.MaxIdleConns,
 		ConnMaxLifetime: time.Second * time.Duration(h.RedisConfig.MaxLifetimeSecond),
 		Username:        h.RedisConfig.Username,
@@ -99,7 +99,7 @@ func (h *GsRedis) dbOpen(options *redis.Options) error {
 	}
 	options.PoolSize = maxOpenConn
 	options.MaxIdleConns = MaxIdleConns
-	options.ConnMaxLifetime = time.Minute * time.Duration(maxLifeTimeSecond)
+	options.ConnMaxLifetime = time.Second * time.Duration(maxLifeTimeSecond)
 	h.Client = redis.NewClient(options)
 	if pingErr := h.Client.Ping(context.Background()).Err(); nil != pingErr {
 		return pingErr

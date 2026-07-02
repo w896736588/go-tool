@@ -138,30 +138,6 @@ func (h *GsMysql) dbOpen(dns string) error {
 	return nil
 }
 
-func (h *GsMysql) connInit() error {
-	maxOpenConn := h.MysqlConfig.MaxOpenConns
-	MaxIdleConns := h.MysqlConfig.MaxIdleConns
-	maxLifeTimeSecond := h.MysqlConfig.MaxLifetimeSecond
-	if maxOpenConn == 0 {
-		maxOpenConn = 1
-	}
-	if MaxIdleConns == 0 {
-		MaxIdleConns = 1
-	}
-	if maxLifeTimeSecond == 0 || maxLifeTimeSecond < 30 {
-		maxLifeTimeSecond = 60
-	}
-
-	h.db.SetMaxOpenConns(maxOpenConn)
-	h.db.SetMaxIdleConns(MaxIdleConns)
-	h.db.SetConnMaxLifetime(time.Minute * time.Duration(maxLifeTimeSecond))
-	pingErr := h.db.Ping()
-	if pingErr != nil {
-		return pingErr
-	}
-	return nil
-}
-
 // QuickQuery 快速查询数据
 func (h *GsMysql) QuickQuery(tableName, fields string, where map[string]interface{}) *SqlQuick {
 	return h.getQuick().QuickQuery(tableName, fields, where)

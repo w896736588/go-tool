@@ -144,30 +144,6 @@ func (h *GsPgsql) dbOpen(dns string) error {
 	return nil
 }
 
-func (h *GsPgsql) connInit() error {
-	maxOpenConn := h.PgsqlConfig.MaxOpenConns
-	MaxIdleConns := h.PgsqlConfig.MaxIdleConns
-	maxLifeTimeSecond := h.PgsqlConfig.MaxLifetimeSecond
-	if maxOpenConn == 0 {
-		maxOpenConn = 1
-	}
-	if MaxIdleConns == 0 {
-		MaxIdleConns = 1
-	}
-	if maxLifeTimeSecond == 0 || maxLifeTimeSecond < 30 {
-		maxLifeTimeSecond = 60
-	}
-
-	h.db.SetMaxOpenConns(maxOpenConn)
-	h.db.SetMaxIdleConns(MaxIdleConns)
-	h.db.SetConnMaxLifetime(time.Minute * time.Duration(maxLifeTimeSecond))
-	pingErr := h.db.Ping()
-	if pingErr != nil {
-		return pingErr
-	}
-	return nil
-}
-
 // QuickQuery 快速查询数据
 func (h *GsPgsql) QuickQuery(tableName, fields string, where map[string]interface{}) *SqlQuick {
 	return h.getQuick().QuickQuery(tableName, fields, where)

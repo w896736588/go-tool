@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"runtime/debug"
 	"strings"
 
 	"github.com/spf13/cast"
@@ -241,7 +240,9 @@ func (h *SqlQuick) _getSql(sql string, params []any) string {
 				replaceValues = append(replaceValues, cast.ToString(value))
 			}
 		}
-		sql = fmt.Sprintf(sql, replaceValues...)
+		for _, rv := range replaceValues {
+			sql = strings.Replace(sql, `%s`, cast.ToString(rv), 1)
+		}
 	}
 	return sql
 }
@@ -267,7 +268,7 @@ func (h *SqlQuick) _queryBySql(tx *sql.Tx, sqlStr string, params ...interface{})
 	defer func(rows *sql.Rows) {
 		errClose := rows.Close()
 		if errClose != nil {
-			gstool.FmtPrintlnLogTime(`关闭查询失败  %s %s %#v`, err.Error(), sqlStr, debug.Stack(), params)
+			gstool.FmtPrintlnLogTime(`关闭查询失败  %s %s %#v`, errClose.Error(), sqlStr, params)
 		}
 	}(rows)
 	var columns []string
@@ -487,7 +488,7 @@ func (h *SqlQuick) ToSlice(key string, txs ...*sql.Tx) (gstool.SliceAny, error) 
 	if err != nil {
 		return nil, err
 	}
-	slice := make(gstool.SliceAny, len(list))
+	slice := make(gstool.SliceAny, 0, len(list))
 	for _, item := range list {
 		if keyValue, exists := item[key]; exists {
 			slice = append(slice, keyValue)

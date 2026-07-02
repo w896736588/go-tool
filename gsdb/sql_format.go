@@ -221,7 +221,7 @@ func (h *SqlFormat) getOpTypeParams(field string, customList []any) (string, []a
 
 }
 
-// 拿到表字段类型列表
+// 拿到表字段类型列表（内部方法，调用方需自行加锁）
 func (h *SqlFormat) getTableFieldTypeList(tableName string) error {
 	if _, ok := h.tableMap[tableName]; !ok {
 		var err error
@@ -241,21 +241,19 @@ func (h *SqlFormat) getTableFieldTypeList(tableName string) error {
 
 // 转换类型
 func (h *SqlFormat) transValue(tableName, fieldName string, value any) (any, error) {
-	h.lock.Lock()
-	defer h.lock.Unlock()
 	if !h.boolTransType {
 		return value, nil
 	}
+	h.lock.Lock()
+	defer h.lock.Unlock()
 	if _, ok := h.tableMap[tableName]; !ok {
-		getError := h.getTableFieldTypeList(tableName)
-		if getError != nil {
+		if getError := h.getTableFieldTypeList(tableName); getError != nil {
 			return nil, getError
 		}
 	}
 	if _, ok := h.tableMap[tableName][strings.ToLower(fieldName)]; !ok {
 		delete(h.tableMap, tableName)
-		getError := h.getTableFieldTypeList(tableName)
-		if getError != nil {
+		if getError := h.getTableFieldTypeList(tableName); getError != nil {
 			return nil, getError
 		}
 	}
