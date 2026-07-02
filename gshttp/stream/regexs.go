@@ -1,7 +1,6 @@
 package stream
 
 import (
-	"bufio"
 	"net/http"
 	"regexp"
 )
@@ -17,33 +16,13 @@ func (h *Reges) ReceiveSplit(response *http.Response, responseByte *[]byte) {
 	if h.CallFunc == nil {
 		return
 	}
-	reader := bufio.NewScanner(response.Body)
-	//data 当前缓冲区的数据
-	//atEOF 是否到达末尾
-	//advance 告诉 Scanner 跳过多少字节（即已经处理了多少）
-	//token Scan返回的数据
-	var splitRE = regexp.MustCompile(h.Reges)
-	reader.Split(func(data []byte, atEOF bool) (advance int, token []byte, err error) {
-		if atEOF && len(data) == 0 {
-			return 0, nil, nil
-		}
-		loc := splitRE.FindIndex(data)
-		if loc != nil {
-			return loc[1], data[:loc[1]], nil
-		}
-		if atEOF {
-			return len(data), data, nil
-		}
-		return 0, nil, nil
-	})
-
-	for reader.Scan() {
-		resBytes := reader.Bytes()
-		h.CallFunc(string(resBytes), nil)
-		if h.FormatFunc != nil {
-			*responseByte = append(*responseByte, h.FormatFunc(resBytes)...)
-		} else {
-			*responseByte = append(*responseByte, resBytes...)
-		}
-	}
+	splitRE := regexp.MustCompile(h.Reges)
+	readAndSplit(response.Body, h.CallFunc, h.FormatFunc, responseByte,
+		func(data []byte) int {
+			if loc := splitRE.FindIndex(data); loc != nil {
+				return loc[1]
+			}
+			return -1
+		},
+	)
 }

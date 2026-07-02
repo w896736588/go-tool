@@ -1,7 +1,6 @@
 package stream
 
 import (
-	"bufio"
 	"bytes"
 	"net/http"
 )
@@ -17,31 +16,12 @@ func (h *Byts) ReceiveSplit(response *http.Response, responseByte *[]byte) {
 	if h.CallFunc == nil {
 		return
 	}
-	reader := bufio.NewScanner(response.Body)
-	//data 当前缓冲区的数据
-	//atEOF 是否到达末尾
-	//advance 告诉 Scanner 跳过多少字节（即已经处理了多少）
-	//token Scan返回的数据
-	reader.Split(func(data []byte, atEOF bool) (advance int, token []byte, err error) {
-		if atEOF && len(data) == 0 {
-			return 0, nil, nil
-		}
-		if i := bytes.Index(data, h.Byts); i >= 0 {
-			return i + len(h.Byts), data[0 : i+len(h.Byts)], nil
-		}
-		if atEOF {
-			return len(data), data, nil
-		}
-		return 0, nil, nil
-	})
-
-	for reader.Scan() {
-		resBytes := reader.Bytes()
-		h.CallFunc(string(resBytes), nil)
-		if h.FormatFunc != nil {
-			*responseByte = append(*responseByte, h.FormatFunc(resBytes)...)
-		} else {
-			*responseByte = append(*responseByte, resBytes...)
-		}
-	}
+	readAndSplit(response.Body, h.CallFunc, h.FormatFunc, responseByte,
+		func(data []byte) int {
+			if idx := bytes.Index(data, h.Byts); idx >= 0 {
+				return idx + len(h.Byts)
+			}
+			return -1
+		},
+	)
 }
