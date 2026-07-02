@@ -14,6 +14,9 @@ type Byts struct {
 }
 
 func (h *Byts) ReceiveSplit(response *http.Response, responseByte *[]byte) {
+	if h.CallFunc == nil {
+		return
+	}
 	reader := bufio.NewScanner(response.Body)
 	//data 当前缓冲区的数据
 	//atEOF 是否到达末尾

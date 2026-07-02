@@ -31,10 +31,11 @@ type Client struct {
 	disableKeepAlive bool  //true禁止keep-alive，默认开启
 	body             *bytes.Buffer
 	response         *http.Response
-	streamFactory    []StreamInterface //流式输出字节数 如果为0 那么按照streamBytesEnd进行分割
+	streamFac        StreamInterface //流式输出处理器，仅支持一个
 	responseByte     []byte
 	err              error
 	mw               *multipart.Writer
+	httpClient       *http.Client //复用HTTP客户端，支持keep-alive
 }
 
 func Get(url string) *Client {
@@ -102,10 +103,11 @@ func PostMultiForm(url string) *Client {
 }
 
 func (h *Client) SetStreamFac(fac StreamInterface) *Client {
-	if len(h.streamFactory) == 0 {
-		h.streamFactory = make([]StreamInterface, 0)
+	if h.streamFac != nil {
+		h.err = errors.New("streamFac只能设置一个，重复设置无效")
+		return h
 	}
-	h.streamFactory = append(h.streamFactory, fac)
+	h.streamFac = fac
 	return h
 }
 
@@ -295,14 +297,16 @@ func (h *Client) Request(timeoutSecond int) *Client {
 	for _, v := range h.cookieList {
 		req.AddCookie(v)
 	}
-	client := &http.Client{
-		Timeout: time.Duration(timeoutSecond) * time.Second,
-		Transport: &http.Transport{
-			DisableKeepAlives: h.disableKeepAlive,
-		},
+	if h.httpClient == nil {
+		h.httpClient = &http.Client{
+			Transport: &http.Transport{
+				DisableKeepAlives: h.disableKeepAlive,
+			},
+		}
 	}
+	h.httpClient.Timeout = time.Duration(timeoutSecond) * time.Second
 	var responseErr error
-	h.response, responseErr = client.Do(req)
+	h.response, responseErr = h.httpClient.Do(req)
 	if responseErr != nil {
 		h.err = responseErr
 		return h
@@ -313,10 +317,8 @@ func (h *Client) Request(timeoutSecond int) *Client {
 			//TODO
 		}
 	}(h.response.Body)
-	if len(h.streamFactory) > 0 { //流式输出处理
-		for _, fac := range h.streamFactory {
-			fac.ReceiveSplit(h.response, &h.responseByte)
-		}
+	if h.streamFac != nil { //流式输出处理
+		h.streamFac.ReceiveSplit(h.response, &h.responseByte)
 	} else {
 		responseData, responseDataErr := io.ReadAll(h.response.Body)
 		if responseDataErr != nil {

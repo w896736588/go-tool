@@ -14,6 +14,9 @@ type Reges struct {
 }
 
 func (h *Reges) ReceiveSplit(response *http.Response, responseByte *[]byte) {
+	if h.CallFunc == nil {
+		return
+	}
 	reader := bufio.NewScanner(response.Body)
 	//data 当前缓冲区的数据
 	//atEOF 是否到达末尾

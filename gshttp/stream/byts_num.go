@@ -15,6 +15,12 @@ type BytsNum struct {
 }
 
 func (h *BytsNum) ReceiveSplit(response *http.Response, responseByte *[]byte) {
+	if h.Num <= 0 {
+		if h.CallFunc != nil {
+			h.CallFunc(``, errors.New("BytsNum.Num必须大于0"))
+		}
+		return
+	}
 	reader := io.Reader(response.Body)
 	buffer := make([]byte, h.Num)
 	for {
