@@ -238,12 +238,12 @@ gshttp.Get(`http://xxxx/api`).Result()
 ```go
 //1.第一种方法 通过多次执行BodyMap()方法 可以给同一个key设置多个值 自动转为数组
 gshttp.PostForm(`http://xxxx.api`).
-	BodyMap(map[string]any{}).BodyMap(map[string]any{}).Request(5).Result()
+	BodyMap(map[string]any{}).BodyMap(map[string]any{}).Request(5 * time.Second).Result()
 //2.第二种方法 通过设置数组参数，将自动转为数组
 gshttp.PostForm(`http://xxxx.api`).
 	BodyMap(map[string]any{
 	`params` : []string{`a`, `b`}
-}).Request(5).Result()
+}).Request(5 * time.Second).Result()
 ```
 
 #### application/json请求
@@ -257,7 +257,7 @@ gshttp.PostJson(`http://xxxx.api`).
 
 ```go
 gshttp.PostForm(`http://xxxx.api`).
-	BodyMap(map[string]any{}).Request(5).Result()
+	BodyMap(map[string]any{}).Request(5 * time.Second).Result()
 ```
 
 #### multipart/form-data方式提交 支持上传多个文件
@@ -265,7 +265,7 @@ gshttp.PostForm(`http://xxxx.api`).
 ```go
 gshttp.PostMultiForm(`http://xxxx.api`).BodyMap(map[string]any{}).
 	BodyFile(`file` , `本地地址` , `xxx.png`).
-	BodyFile(`file` , `本地地址` , `xxx.png`).Request(5).Result()
+	BodyFile(`file` , `本地地址` , `xxx.png`).Request(5 * time.Second).Result()
 ```
 
 #### 示例微信上传文件获取素材id
@@ -300,7 +300,7 @@ func HttpWxPostFile(url, body string) (map[string]any,error) {
     if crErr != nil {
         return nil,crErr
     }
-    ret, err := gshttp.PostMultiForm(url).BodyFile(`media`, localFilePath, fileName).Request(20).ResultStr()
+    ret, err := gshttp.PostMultiForm(url).BodyFile(`media`, localFilePath, fileName).Request(20 * time.Second).ResultStr()
     if err != nil {
         return nil,err
     }
@@ -315,9 +315,23 @@ func HttpWxPostFile(url, body string) (map[string]any,error) {
 
 #### 允许非200的状态码
 
+通过 `SetAllowHttpStatus` 设置允许的 HTTP 状态码列表，响应状态码不在列表中时将返回 error。
+默认为仅允许 200。如果设置了 `allowHttpStatus`，则响应状态码在列表内时正常解析返回数据，不报错。
+
 ```go
-gshttp.Get(`http://xxxx/api`).SetAllowHttpStatus(200 , 204).Result()
-//keep-alive开启或者关闭 开启后 目标IP和端口相同时复用连接，不再需要三次握手 默认关闭
+// 允许 200、204 状态码，返回 204 时也不会报错，正常返回空 body
+gshttp.Get(`http://xxxx/api`).SetAllowHttpStatus(200, 204).Result()
+// 允许 404，此时即便资源不存在也不会报错，可自行解析错误响应体
+gshttp.Get(`http://xxxx/api`).SetAllowHttpStatus(200, 404).Result()
+// 不调用 SetAllowHttpStatus 时，默认只允许 200
+gshttp.Get(`http://xxxx/api`).Result()
+```
+
+#### keep-alive
+
+开启后，目标 IP 和端口相同时复用连接，不再需要三次握手。默认关闭。
+
+```go
 gshttp.Get(`http://xxxx/api`).OpenKeepAlive().Result()
 ```
 
@@ -339,7 +353,7 @@ fac := &stream.Byts{
         }
     },
 }
-result, err = gshttp.Get(`http://xxxx.api`).SetStreamFac(fac).Request(200).Result()
+result, err = gshttp.Get(`http://xxxx.api`).SetStreamFac(fac).Request(200 * time.Second).Result()
 ```
 
 ##### 按正则作为分割
@@ -358,7 +372,7 @@ fac := &stream.Reges{
         }
     },
 }
-result, err = gshttp.Get(`http://xxxx.api`).SetStreamFac(fac).Request(200).Result()
+result, err = gshttp.Get(`http://xxxx.api`).SetStreamFac(fac).Request(200 * time.Second).Result()
 ```
 
 ##### 按固定字节长度分割
@@ -377,7 +391,7 @@ fac := &stream.BytsNum{
         }
     },
 }
-result, err = gshttp.Get(`http://xxxx.api`).SetStreamFac(fac).Request(200).Result()
+result, err = gshttp.Get(`http://xxxx.api`).SetStreamFac(fac).Request(200 * time.Second).Result()
 ```
 
 ## 三、并发执行通道

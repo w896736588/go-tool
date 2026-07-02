@@ -238,12 +238,12 @@ gshttp.Get(`http://xxxx/api`).Result()
 ```go
 // 1. First method: call BodyMap() multiple times to set multiple values for the same key; it will be converted to an array automatically
 gshttp.PostForm(`http://xxxx.api`).
-	BodyMap(map[string]any{}).BodyMap(map[string]any{}).Request(5).Result()
+	BodyMap(map[string]any{}).BodyMap(map[string]any{}).Request(5 * time.Second).Result()
 // 2. Second method: set an array parameter and it will be converted automatically
 gshttp.PostForm(`http://xxxx.api`).
 	BodyMap(map[string]any{
 	`params` : []string{`a`, `b`}
-}).Request(5).Result()
+}).Request(5 * time.Second).Result()
 ```
 
 #### `application/json` request
@@ -257,7 +257,7 @@ gshttp.PostJson(`http://xxxx.api`).
 
 ```go
 gshttp.PostForm(`http://xxxx.api`).
-	BodyMap(map[string]any{}).Request(5).Result()
+	BodyMap(map[string]any{}).Request(5 * time.Second).Result()
 ```
 
 #### Submit as `multipart/form-data`, with support for uploading multiple files
@@ -265,7 +265,7 @@ gshttp.PostForm(`http://xxxx.api`).
 ```go
 gshttp.PostMultiForm(`http://xxxx.api`).BodyMap(map[string]any{}).
 	BodyFile(`file` , `local path` , `xxx.png`).
-	BodyFile(`file` , `local path` , `xxx.png`).Request(5).Result()
+	BodyFile(`file` , `local path` , `xxx.png`).Request(5 * time.Second).Result()
 ```
 
 #### Example: upload a file to WeChat and get the material ID
@@ -300,7 +300,7 @@ func HttpWxPostFile(url, body string) (map[string]any,error) {
     if crErr != nil {
         return nil,crErr
     }
-    ret, err := gshttp.PostMultiForm(url).BodyFile(`media`, localFilePath, fileName).Request(20).ResultStr()
+    ret, err := gshttp.PostMultiForm(url).BodyFile(`media`, localFilePath, fileName).Request(20 * time.Second).ResultStr()
     if err != nil {
         return nil,err
     }
@@ -315,9 +315,23 @@ func HttpWxPostFile(url, body string) (map[string]any,error) {
 
 #### Allow non-200 status codes
 
+Use `SetAllowHttpStatus` to specify a list of allowed HTTP status codes. If the response status code is not in the list, an error will be returned.
+Default behavior: only 200 is allowed. When `allowHttpStatus` is set, response status codes within the list will not produce an error, and the response body will be parsed normally.
+
 ```go
-gshttp.Get(`http://xxxx/api`).SetAllowHttpStatus(200 , 204).Result()
-// Turn keep-alive on or off. When enabled, connections to the same target IP and port are reused, avoiding another TCP handshake. Disabled by default.
+// Allow 200 and 204 status codes; returning 204 will not cause an error and will return an empty body as usual
+gshttp.Get(`http://xxxx/api`).SetAllowHttpStatus(200, 204).Result()
+// Allow 404; even if the resource does not exist, no error will be thrown, and you can parse the error response body yourself
+gshttp.Get(`http://xxxx/api`).SetAllowHttpStatus(200, 404).Result()
+// Without SetAllowHttpStatus, only 200 is allowed by default
+gshttp.Get(`http://xxxx/api`).Result()
+```
+
+#### keep-alive
+
+When enabled, connections to the same target IP and port are reused, avoiding another TCP handshake. Disabled by default.
+
+```go
 gshttp.Get(`http://xxxx/api`).OpenKeepAlive().Result()
 ```
 
@@ -339,7 +353,7 @@ fac := &stream.Byts{
         }
     },
 }
-result, err = gshttp.Get(`http://xxxx.api`).SetStreamFac(fac).Request(200).Result()
+result, err = gshttp.Get(`http://xxxx.api`).SetStreamFac(fac).Request(200 * time.Second).Result()
 ```
 
 ##### Split by regular expression
@@ -358,7 +372,7 @@ fac := &stream.Reges{
         }
     },
 }
-result, err = gshttp.Get(`http://xxxx.api`).SetStreamFac(fac).Request(200).Result()
+result, err = gshttp.Get(`http://xxxx.api`).SetStreamFac(fac).Request(200 * time.Second).Result()
 ```
 
 ##### Split by fixed byte length
@@ -377,7 +391,7 @@ fac := &stream.BytsNum{
         }
     },
 }
-result, err = gshttp.Get(`http://xxxx.api`).SetStreamFac(fac).Request(200).Result()
+result, err = gshttp.Get(`http://xxxx.api`).SetStreamFac(fac).Request(200 * time.Second).Result()
 ```
 
 ## 3. Concurrent execution channel

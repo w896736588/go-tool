@@ -116,6 +116,16 @@ func (h *Client) SetAllowHttpStatus(statusCode ...int) *Client {
 	return h
 }
 
+func (h *Client) isAllowHttpStatus() bool {
+	if h.response == nil {
+		return true
+	}
+	if len(h.allowHttpStatus) == 0 {
+		return h.response.StatusCode == 200
+	}
+	return gstool.ArrayExistValue(&h.allowHttpStatus, h.response.StatusCode)
+}
+
 func (h *Client) OpenKeepAlive() *Client {
 	h.disableKeepAlive = false
 	return h
@@ -317,6 +327,10 @@ func (h *Client) Request(timeout time.Duration) *Client {
 			//TODO
 		}
 	}(h.response.Body)
+	if !h.isAllowHttpStatus() {
+		h.err = errors.New("http状态码: " + cast.ToString(h.response.StatusCode) + " 不在允许列表内")
+		return h
+	}
 	if h.streamFac != nil { //流式输出处理
 		h.streamFac.ReceiveSplit(h.response, &h.responseByte)
 	} else {
