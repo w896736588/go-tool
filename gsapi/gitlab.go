@@ -3,6 +3,7 @@ package gsapi
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/spf13/cast"
 	"github.com/w896736588/go-tool/gshttp"
@@ -27,7 +28,7 @@ func (h *GsGitLab) GetProjects(param GsGitLabParam) ([]map[string]any, error) {
 	urlProjects := fmt.Sprintf(h.BaseUrl+"/projects%s", h.getSqlParams(param))
 	projectLists, resErr := gshttp.Get(urlProjects).Headers(map[string]string{
 		`PRIVATE-TOKEN`: h.AccessToken,
-	}).Request(20).Result()
+	}).Request(20 * time.Second).Result()
 	if resErr != nil {
 		return nil, resErr
 	}
@@ -43,7 +44,7 @@ func (h *GsGitLab) GetProjectCommits(projectId string, param GsGitLabParam) ([]m
 	urlProjectCommits := fmt.Sprintf(h.BaseUrl+"/projects/%s/repository/commits%s", projectId, h.getSqlParams(param))
 	commitLists, resErr := gshttp.Get(urlProjectCommits).Headers(map[string]string{
 		`PRIVATE-TOKEN`: h.AccessToken,
-	}).Request(20).Result()
+	}).Request(20 * time.Second).Result()
 	if resErr != nil {
 		return nil, resErr
 	}
@@ -59,7 +60,7 @@ func (h *GsGitLab) GetMerges(projectId string, param GsGitLabParam) ([]map[strin
 	urlMerges := fmt.Sprintf(h.BaseUrl+"/projects/%s/merge_requests%s", projectId, h.getSqlParams(param))
 	mergeLists, resErr := gshttp.Get(urlMerges).Headers(map[string]string{
 		`PRIVATE-TOKEN`: h.AccessToken,
-	}).Request(10).Result()
+	}).Request(10 * time.Second).Result()
 	if resErr != nil {
 		return nil, resErr
 	}

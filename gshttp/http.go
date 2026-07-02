@@ -75,16 +75,16 @@ func PostJson(url string) *Client {
 	}
 }
 
-func QuickGet(url string, timeoutSecond int) ([]byte, error) {
-	return Get(url).Request(timeoutSecond).Result()
+func QuickGet(url string, timeout time.Duration) ([]byte, error) {
+	return Get(url).Request(timeout).Result()
 }
 
-func QuickPostJson(url, body string, timeoutSecond int) ([]byte, error) {
-	return PostJson(url).BodyStr(body).Request(timeoutSecond).Result()
+func QuickPostJson(url, body string, timeout time.Duration) ([]byte, error) {
+	return PostJson(url).BodyStr(body).Request(timeout).Result()
 }
 
-func QuickPostBuffer(url string, buffer *bytes.Buffer, timeoutSecond int) ([]byte, error) {
-	return PostMultiForm(url).BodyBuffer(buffer).Request(timeoutSecond).Result()
+func QuickPostBuffer(url string, buffer *bytes.Buffer, timeout time.Duration) ([]byte, error) {
+	return PostMultiForm(url).BodyBuffer(buffer).Request(timeout).Result()
 }
 
 func PostMultiForm(url string) *Client {
@@ -261,7 +261,7 @@ func (h *Client) BodyFile(formKey, filePath, fileName string) *Client {
 	return h
 }
 
-func (h *Client) Request(timeoutSecond int) *Client {
+func (h *Client) Request(timeout time.Duration) *Client {
 	if h.err != nil {
 		return h
 	}
@@ -304,7 +304,7 @@ func (h *Client) Request(timeoutSecond int) *Client {
 			},
 		}
 	}
-	h.httpClient.Timeout = time.Duration(timeoutSecond) * time.Second
+	h.httpClient.Timeout = timeout
 	var responseErr error
 	h.response, responseErr = h.httpClient.Do(req)
 	if responseErr != nil {
