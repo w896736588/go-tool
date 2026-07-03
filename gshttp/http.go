@@ -327,11 +327,8 @@ func (h *Client) Request(timeout time.Duration) *Client {
 			//TODO
 		}
 	}(h.response.Body)
-	if !h.isAllowHttpStatus() {
-		h.err = errors.New("http状态码: " + cast.ToString(h.response.StatusCode) + " 不在允许列表内")
-		return h
-	}
-	if h.streamFac != nil { //流式输出处理
+	// 读取响应体内容
+	if h.streamFac != nil {
 		h.streamFac.ReceiveSplit(h.response, &h.responseByte)
 	} else {
 		responseData, responseDataErr := io.ReadAll(h.response.Body)
@@ -340,6 +337,11 @@ func (h *Client) Request(timeout time.Duration) *Client {
 			return h
 		}
 		h.responseByte = responseData
+	}
+	// 校验http状态码
+	if !h.isAllowHttpStatus() {
+		h.err = errors.New(cast.ToString(h.response.StatusCode) + " " + string(h.responseByte))
+		return h
 	}
 
 	return h
