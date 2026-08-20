@@ -19,6 +19,11 @@ const (
 	ContentTypePostMultiForm
 	ContentTypePostForm
 	ContentTypePostJson
+	ContentTypePutJson
+	ContentTypePutForm
+	ContentTypeDelete
+	ContentTypePatchJson
+	ContentTypePatchForm
 )
 
 type Client struct {
@@ -87,6 +92,18 @@ func QuickPostBuffer(url string, buffer *bytes.Buffer, timeout time.Duration) ([
 	return PostMultiForm(url).BodyBuffer(buffer).Request(timeout).Result()
 }
 
+func QuickPutJson(url, body string, timeout time.Duration) ([]byte, error) {
+	return PutJson(url).BodyStr(body).Request(timeout).Result()
+}
+
+func QuickPatchJson(url, body string, timeout time.Duration) ([]byte, error) {
+	return PatchJson(url).BodyStr(body).Request(timeout).Result()
+}
+
+func QuickDelete(url string, timeout time.Duration) ([]byte, error) {
+	return Delete(url).Request(timeout).Result()
+}
+
 func PostMultiForm(url string) *Client {
 	client := &Client{
 		sourceUrl:        url,
@@ -100,6 +117,70 @@ func PostMultiForm(url string) *Client {
 	headers["Content-Type"] = client.mw.FormDataContentType()
 	client.headerMap = headers
 	return client
+}
+
+func PutJson(url string) *Client {
+	headers := make(map[string]string)
+	headers["Content-Type"] = "application/json"
+	return &Client{
+		sourceUrl:        url,
+		contentType:      ContentTypePutJson,
+		headerMap:        headers,
+		body:             &bytes.Buffer{},
+		cookieList:       []*http.Cookie{},
+		disableKeepAlive: true,
+	}
+}
+
+func PutForm(sourceUrl string) *Client {
+	headers := make(map[string]string)
+	headers["Content-Type"] = "application/x-www-form-urlencoded"
+	return &Client{
+		sourceUrl:        sourceUrl,
+		contentType:      ContentTypePutForm,
+		headerMap:        headers,
+		body:             &bytes.Buffer{},
+		cookieList:       []*http.Cookie{},
+		urlValues:        &url.Values{},
+		disableKeepAlive: true,
+	}
+}
+
+func Delete(url string) *Client {
+	return &Client{
+		sourceUrl:        url,
+		contentType:      ContentTypeDelete,
+		cookieList:       []*http.Cookie{},
+		headerMap:        make(map[string]string),
+		disableKeepAlive: true,
+	}
+}
+
+func PatchJson(url string) *Client {
+	headers := make(map[string]string)
+	headers["Content-Type"] = "application/json"
+	return &Client{
+		sourceUrl:        url,
+		contentType:      ContentTypePatchJson,
+		headerMap:        headers,
+		body:             &bytes.Buffer{},
+		cookieList:       []*http.Cookie{},
+		disableKeepAlive: true,
+	}
+}
+
+func PatchForm(sourceUrl string) *Client {
+	headers := make(map[string]string)
+	headers["Content-Type"] = "application/x-www-form-urlencoded"
+	return &Client{
+		sourceUrl:        sourceUrl,
+		contentType:      ContentTypePatchForm,
+		headerMap:        headers,
+		body:             &bytes.Buffer{},
+		cookieList:       []*http.Cookie{},
+		urlValues:        &url.Values{},
+		disableKeepAlive: true,
+	}
 }
 
 func (h *Client) SetStreamFac(fac StreamInterface) *Client {
@@ -136,10 +217,10 @@ func (h *Client) BodyMap(pM map[string]any) *Client {
 		return h
 	}
 	switch h.contentType {
-	case ContentTypePostJson:
+	case ContentTypePostJson, ContentTypePutJson, ContentTypePatchJson:
 		_, copyErr := io.Copy(h.body, bytes.NewReader([]byte(gstool.JsonEncode(pM))))
 		h.err = copyErr
-	case ContentTypePostForm:
+	case ContentTypePostForm, ContentTypePutForm, ContentTypePatchForm:
 		for k, v := range pM {
 			// 检查是否为数组/切片
 			if arr, ok := v.([]interface{}); ok {
@@ -197,11 +278,12 @@ func (h *Client) BodyStr(body string) *Client {
 		return h
 	}
 	switch h.contentType {
-	case ContentTypePostJson, ContentTypePostForm, ContentTypePostMultiForm:
+	case ContentTypePostJson, ContentTypePostForm, ContentTypePostMultiForm,
+		ContentTypePutJson, ContentTypePutForm, ContentTypePatchJson, ContentTypePatchForm:
 		_, copyErr := io.Copy(h.body, bytes.NewReader([]byte(body)))
 		h.err = copyErr
 	default:
-		h.err = errors.New(`不支持向get请求写入body`)
+		h.err = errors.New(`不支持向get/delete请求写入body`)
 	}
 	return h
 }
@@ -211,10 +293,11 @@ func (h *Client) BodyBuffer(body *bytes.Buffer) *Client {
 		return h
 	}
 	switch h.contentType {
-	case ContentTypePostJson, ContentTypePostForm, ContentTypePostMultiForm:
+	case ContentTypePostJson, ContentTypePostForm, ContentTypePostMultiForm,
+		ContentTypePutJson, ContentTypePutForm, ContentTypePatchJson, ContentTypePatchForm:
 		h.body = body
 	default:
-		h.err = errors.New(`不支持向get请求写入body`)
+		h.err = errors.New(`不支持向get/delete请求写入body`)
 	}
 	return h
 }
@@ -286,6 +369,12 @@ func (h *Client) Request(timeout time.Duration) *Client {
 	switch h.contentType {
 	case ContentTypePostJson, ContentTypePostForm, ContentTypePostMultiForm:
 		req, reqErr = http.NewRequest("POST", h.sourceUrl, h.body)
+	case ContentTypePutJson, ContentTypePutForm:
+		req, reqErr = http.NewRequest("PUT", h.sourceUrl, h.body)
+	case ContentTypeDelete:
+		req, reqErr = http.NewRequest("DELETE", h.sourceUrl, nil)
+	case ContentTypePatchJson, ContentTypePatchForm:
+		req, reqErr = http.NewRequest("PATCH", h.sourceUrl, h.body)
 	case ContentTypeGet:
 		req, reqErr = http.NewRequest("GET", h.sourceUrl, nil)
 	default:
