@@ -26,6 +26,11 @@ const (
 	ContentTypePatchForm
 )
 
+const (
+	jsonContentType = "application/json"
+	formContentType = "application/x-www-form-urlencoded"
+)
+
 type Client struct {
 	sourceUrl        string
 	urlValues        *url.Values
@@ -43,41 +48,36 @@ type Client struct {
 	httpClient       *http.Client //复用HTTP客户端，支持keep-alive
 }
 
-func Get(url string) *Client {
-	return &Client{
-		sourceUrl:        url,
-		contentType:      ContentTypeGet,
+func newClient(sourceUrl string, ct int, contentType string, withBody bool) *Client {
+	headers := make(map[string]string)
+	client := &Client{
+		sourceUrl:        sourceUrl,
+		contentType:      ct,
+		headerMap:        headers,
 		cookieList:       []*http.Cookie{},
-		headerMap:        make(map[string]string),
 		disableKeepAlive: true,
 	}
+	if contentType != "" {
+		headers["Content-Type"] = contentType
+	}
+	if withBody {
+		client.body = &bytes.Buffer{}
+	}
+	return client
+}
+
+func Get(url string) *Client {
+	return newClient(url, ContentTypeGet, "", false)
 }
 
 func PostForm(sourceUrl string) *Client {
-	headers := make(map[string]string)
-	headers["Content-Type"] = "application/x-www-form-urlencoded"
-	return &Client{
-		sourceUrl:        sourceUrl,
-		contentType:      ContentTypePostForm,
-		headerMap:        headers,
-		body:             &bytes.Buffer{},
-		cookieList:       []*http.Cookie{},
-		urlValues:        &url.Values{},
-		disableKeepAlive: true,
-	}
+	client := newClient(sourceUrl, ContentTypePostForm, formContentType, true)
+	client.urlValues = &url.Values{}
+	return client
 }
 
 func PostJson(url string) *Client {
-	headers := make(map[string]string)
-	headers["Content-Type"] = "application/json"
-	return &Client{
-		sourceUrl:        url,
-		contentType:      ContentTypePostJson,
-		headerMap:        headers,
-		body:             &bytes.Buffer{},
-		cookieList:       []*http.Cookie{},
-		disableKeepAlive: true,
-	}
+	return newClient(url, ContentTypePostJson, jsonContentType, true)
 }
 
 func QuickGet(url string, timeout time.Duration) ([]byte, error) {
@@ -104,83 +104,41 @@ func QuickDelete(url string, timeout time.Duration) ([]byte, error) {
 	return Delete(url).Request(timeout).Result()
 }
 
+func QuickDeleteBody(url, body string, timeout time.Duration) ([]byte, error) {
+	return Delete(url).BodyStr(body).Request(timeout).Result()
+}
+
 func PostMultiForm(url string) *Client {
-	client := &Client{
-		sourceUrl:        url,
-		contentType:      ContentTypePostMultiForm,
-		body:             &bytes.Buffer{},
-		cookieList:       []*http.Cookie{},
-		disableKeepAlive: true,
-	}
+	client := newClient(url, ContentTypePostMultiForm, "", true)
 	client.mw = multipart.NewWriter(client.body)
-	headers := make(map[string]string)
-	headers["Content-Type"] = client.mw.FormDataContentType()
-	client.headerMap = headers
+	client.headerMap["Content-Type"] = client.mw.FormDataContentType()
 	return client
 }
 
 func PutJson(url string) *Client {
-	headers := make(map[string]string)
-	headers["Content-Type"] = "application/json"
-	return &Client{
-		sourceUrl:        url,
-		contentType:      ContentTypePutJson,
-		headerMap:        headers,
-		body:             &bytes.Buffer{},
-		cookieList:       []*http.Cookie{},
-		disableKeepAlive: true,
-	}
+	return newClient(url, ContentTypePutJson, jsonContentType, true)
 }
 
 func PutForm(sourceUrl string) *Client {
-	headers := make(map[string]string)
-	headers["Content-Type"] = "application/x-www-form-urlencoded"
-	return &Client{
-		sourceUrl:        sourceUrl,
-		contentType:      ContentTypePutForm,
-		headerMap:        headers,
-		body:             &bytes.Buffer{},
-		cookieList:       []*http.Cookie{},
-		urlValues:        &url.Values{},
-		disableKeepAlive: true,
-	}
+	client := newClient(sourceUrl, ContentTypePutForm, formContentType, true)
+	client.urlValues = &url.Values{}
+	return client
 }
 
 func Delete(url string) *Client {
-	return &Client{
-		sourceUrl:        url,
-		contentType:      ContentTypeDelete,
-		cookieList:       []*http.Cookie{},
-		headerMap:        make(map[string]string),
-		disableKeepAlive: true,
-	}
+	// 不预置Content-Type，避免无body的DELETE也带上application/json，
+	// 真正写入body时由Request()补上
+	return newClient(url, ContentTypeDelete, "", true)
 }
 
 func PatchJson(url string) *Client {
-	headers := make(map[string]string)
-	headers["Content-Type"] = "application/json"
-	return &Client{
-		sourceUrl:        url,
-		contentType:      ContentTypePatchJson,
-		headerMap:        headers,
-		body:             &bytes.Buffer{},
-		cookieList:       []*http.Cookie{},
-		disableKeepAlive: true,
-	}
+	return newClient(url, ContentTypePatchJson, jsonContentType, true)
 }
 
 func PatchForm(sourceUrl string) *Client {
-	headers := make(map[string]string)
-	headers["Content-Type"] = "application/x-www-form-urlencoded"
-	return &Client{
-		sourceUrl:        sourceUrl,
-		contentType:      ContentTypePatchForm,
-		headerMap:        headers,
-		body:             &bytes.Buffer{},
-		cookieList:       []*http.Cookie{},
-		urlValues:        &url.Values{},
-		disableKeepAlive: true,
-	}
+	client := newClient(sourceUrl, ContentTypePatchForm, formContentType, true)
+	client.urlValues = &url.Values{}
+	return client
 }
 
 func (h *Client) SetStreamFac(fac StreamInterface) *Client {
@@ -202,7 +160,13 @@ func (h *Client) isAllowHttpStatus() bool {
 		return true
 	}
 	if len(h.allowHttpStatus) == 0 {
-		return h.response.StatusCode == 200
+		switch h.contentType {
+		case ContentTypePutJson, ContentTypePutForm, ContentTypeDelete, ContentTypePatchJson, ContentTypePatchForm:
+			// PUT/PATCH/DELETE 常返回 204 No Content，默认视为成功
+			return h.response.StatusCode == 200 || h.response.StatusCode == 204
+		default:
+			return h.response.StatusCode == 200
+		}
 	}
 	return gstool.ArrayExistValue(&h.allowHttpStatus, h.response.StatusCode)
 }
@@ -217,7 +181,7 @@ func (h *Client) BodyMap(pM map[string]any) *Client {
 		return h
 	}
 	switch h.contentType {
-	case ContentTypePostJson, ContentTypePutJson, ContentTypePatchJson:
+	case ContentTypePostJson, ContentTypePutJson, ContentTypePatchJson, ContentTypeDelete:
 		_, copyErr := io.Copy(h.body, bytes.NewReader([]byte(gstool.JsonEncode(pM))))
 		h.err = copyErr
 	case ContentTypePostForm, ContentTypePutForm, ContentTypePatchForm:
@@ -279,11 +243,11 @@ func (h *Client) BodyStr(body string) *Client {
 	}
 	switch h.contentType {
 	case ContentTypePostJson, ContentTypePostForm, ContentTypePostMultiForm,
-		ContentTypePutJson, ContentTypePutForm, ContentTypePatchJson, ContentTypePatchForm:
+		ContentTypePutJson, ContentTypePutForm, ContentTypeDelete, ContentTypePatchJson, ContentTypePatchForm:
 		_, copyErr := io.Copy(h.body, bytes.NewReader([]byte(body)))
 		h.err = copyErr
 	default:
-		h.err = errors.New(`不支持向get/delete请求写入body`)
+		h.err = errors.New(`不支持向get请求写入body`)
 	}
 	return h
 }
@@ -294,10 +258,10 @@ func (h *Client) BodyBuffer(body *bytes.Buffer) *Client {
 	}
 	switch h.contentType {
 	case ContentTypePostJson, ContentTypePostForm, ContentTypePostMultiForm,
-		ContentTypePutJson, ContentTypePutForm, ContentTypePatchJson, ContentTypePatchForm:
+		ContentTypePutJson, ContentTypePutForm, ContentTypeDelete, ContentTypePatchJson, ContentTypePatchForm:
 		h.body = body
 	default:
-		h.err = errors.New(`不支持向get/delete请求写入body`)
+		h.err = errors.New(`不支持向get请求写入body`)
 	}
 	return h
 }
@@ -372,7 +336,7 @@ func (h *Client) Request(timeout time.Duration) *Client {
 	case ContentTypePutJson, ContentTypePutForm:
 		req, reqErr = http.NewRequest("PUT", h.sourceUrl, h.body)
 	case ContentTypeDelete:
-		req, reqErr = http.NewRequest("DELETE", h.sourceUrl, nil)
+		req, reqErr = http.NewRequest("DELETE", h.sourceUrl, h.body)
 	case ContentTypePatchJson, ContentTypePatchForm:
 		req, reqErr = http.NewRequest("PATCH", h.sourceUrl, h.body)
 	case ContentTypeGet:
@@ -384,6 +348,11 @@ func (h *Client) Request(timeout time.Duration) *Client {
 	if reqErr != nil {
 		h.err = reqErr
 		return h
+	}
+	if h.contentType == ContentTypeDelete && h.body != nil && h.body.Len() > 0 {
+		if _, ok := h.headerMap["Content-Type"]; !ok {
+			h.headerMap["Content-Type"] = jsonContentType
+		}
 	}
 	for k, v := range h.headerMap {
 		req.Header.Add(k, v)
